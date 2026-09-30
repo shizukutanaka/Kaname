@@ -1,5 +1,257 @@
 ## [Unreleased]
 
+### Security — D1954: `Received:` の `for` 節の `|` を検出 — `Envelope` に `received_for_pipe` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&`/`#`/`"`/`'`/`:`/`,` は D1804–D1950)。
+### Security — D1953: `Received:` の `with` 節の `^` を検出 — `Envelope` に `received_with_caret` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$` は D1825–D1949)。
+### Security — D1952: `Received:` の `via` 節の `^` を検出 — `Envelope` に `received_via_caret` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"` は D1766–D1948)。
+### Security — D1951: `Received:` の `id` 節の `:` を検出 — `Envelope` に `received_id_colon` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|`/`^`/`~`/`$`/`'`/`?`/`,` は D1785–D1947)。
+### Security — D1950: `Received:` の `for` 節の `,` を検出 — `Envelope` に `received_for_comma` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&`/`#`/`"`/`'`/`:` は D1804–D1946)。
+### Security — D1949: `Received:` の `with` 節の `$` を検出 — `Envelope` に `received_with_dollar` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|` は D1825–D1945)。
+### Security — D1948: `Received:` の `via` 節の `"` を検出 — `Envelope` に `received_via_quote` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,` は D1766–D1944)。
+### Security — D1947: `Received:` の `id` 節の `,` を検出 — `Envelope` に `received_id_comma` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|`/`^`/`~`/`$`/`'`/`?` は D1785–D1943)。
+### Security — D1946: `Received:` の `for` 節の `:` を検出 — `Envelope` に `received_for_colon` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&`/`#`/`"`/`'` は D1804–D1942)。
+### Security — D1945: `Received:` の `with` 節の `|` を検出 — `Envelope` に `received_with_pipe` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~` は D1825–D1941)。
+### Security — D1944: `Received:` の `via` 節の `,` を検出 — `Envelope` に `received_via_comma` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:` は D1766–D1940)。
+### Security — D1943: `Received:` の `id` 節の `?` を検出 — `Envelope` に `received_id_qmark` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|`/`^`/`~`/`$`/`'` は D1785–D1939)。
+### Security — D1942: `Received:` の `for` 節の `'` を検出 — `Envelope` に `received_for_apos` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&`/`#`/`"` は D1804–D1936)。
+### Security — D1941: `Received:` の `with` 節の `~` を検出 — `Envelope` に `received_with_tilde` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"` は D1825–D1938)。
+### Security — D1940: `Received:` の `via` 節の `:` を検出 — `Envelope` に `received_via_colon` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?` は D1766–D1937)。
+### Security — D1939: `Received:` の `id` 節の `'` を検出 — `Envelope` に `received_id_apos` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|`/`^`/`~`/`$` は D1785–D1933)。
+### Security — D1938: `Received:` の `with` 節の `"` を検出 — `Envelope` に `received_with_quote` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,` は D1825–D1932)。
+### Security — D1937: `Received:` の `via` 節の `?` を検出 — `Envelope` に `received_via_qmark` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&` は D1766–D1925)。
+### Security — D1936: `Received:` の `for` 節の `"` を検出 — `Envelope` に `received_for_quote` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&`/`#` は D1804–D1931)。
+### Security — D1935: `Received:` の `by` 節の `:` を検出 — `Envelope` に `received_by_colon` を追加 (`by` の `<`/`>`/`=`/`%`/`@`/`#`/`\`/`|`/`&`/`$`/`?`/`,` は D1773–D1934)。
+### Security — D1934: `Received:` の `by` 節の `,` を検出 — `Envelope` に `received_by_comma` を追加 (`by` の `<`/`>`/`=`/`%`/`@`/`#`/`\`/`|`/`&`/`$`/`?` は D1773–D1924)。
+### Security — D1933: `Received:` の `id` 節の `$` を検出 — `Envelope` に `received_id_dollar` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|`/`^`/`~` は D1785–D1928)。
+### Security — D1932: `Received:` の `with` 節の `,` を検出 — `Envelope` に `received_with_comma` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?` は D1825–D1927)。
+### Security — D1931: `Received:` の `for` 節の `#` を検出 — `Envelope` に `received_for_hash` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&` は D1804–D1929)。
+### Security — D1930: `Received:` の `from` 節の `'` を検出 — `Envelope` に `received_from_apos` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|` は D1781–D1923)。
+### Security — D1929: `Received:` の `for` 節の `&` を検出 — `Envelope` に `received_for_amp` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$` は D1804–D1926)。
+### Security — D1928: `Received:` の `id` 節の `~` を検出 — `Envelope` に `received_id_tilde` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|`/`^` は D1785–D1922)。
+### Security — D1927: `Received:` の `with` 節の `?` を検出 — `Envelope` に `received_with_qmark` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&` は D1825–D1921)。
+### Security — D1926: `Received:` の `for` 節の `$` を検出 — `Envelope` に `received_for_dollar` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^` は D1804–D1918)。
+### Security — D1925: `Received:` の `via` 節の `&` を検出 — `Envelope` に `received_via_amp` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$` は D1766–D1917)。
+### Security — D1924: `Received:` の `by` 節の `?` を検出 — `Envelope` に `received_by_qmark` を追加 (`by` の `<`/`>`/`=`/`%`/`@`/`#`/`\`/`|`/`&`/`$` は D1773–D1920)。
+### Security — D1923: `Received:` の `from` 節の `|` を検出 — `Envelope` に `received_from_pipe` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~` は D1781–D1919)。
+### Security — D1922: `Received:` の `id` 節の `^` を検出 — `Envelope` に `received_id_caret` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|` は D1785–D1914)。
+### Security — D1921: `Received:` の `with` 節の `&` を検出 — `Envelope` に `received_with_amp` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:` は D1825–D1905)。
+### Security — D1920: `Received:` の `by` 節の `$` を検出 — `Envelope` に `received_by_dollar` を追加 (`by` の `<`/`>`/`=`/`%`/`@`/`#`/`\`/`|`/`&` は D1773–D1916)。
+### Security — D1919: `Received:` の `from` 節の `~` を検出 — `Envelope` に `received_from_tilde` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$` は D1781–D1915)。
+### Security — D1918: `Received:` の `for` 節の `^` を検出 — `Envelope` に `received_for_caret` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~` は D1804–D1911)。
+### Security — D1917: `Received:` の `via` 節の `$` を検出 — `Envelope` に `received_via_dollar` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~` は D1766–D1913)。
+### Security — D1916: `Received:` の `by` 節の `&` を検出 — `Envelope` に `received_by_amp` を追加 (`by` の `<`/`>`/`=`/`%`/`@`/`#`/`\`/`|` は D1773–D1912)。
+### Security — D1915: `Received:` の `from` 節の `$` を検出 — `Envelope` に `received_from_dollar` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,` は D1781–D1906)。
+### Security — D1914: `Received:` の `id` 節の `|` を検出 — `Envelope` に `received_id_pipe` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#` は D1785–D1910)。
+### Security — D1913: `Received:` の `via` 節の `~` を検出 — `Envelope` に `received_via_tilde` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'` は D1766–D1909)。
+### Security — D1912: `Received:` の `by` 節の `|` を検出 — `Envelope` に `received_by_pipe` を追加 (`by` の `<`/`>`/`=`/`%`/`@`/`#`/`\` は D1773–D1908)。
+### Security — D1911: `Received:` の `for` 節の `~` を検出 — `Envelope` に `received_for_tilde` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/` は D1804–D1907)。
+### Security — D1910: `Received:` の `id` 節の `#` を検出 — `Envelope` に `received_id_hash` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"` は D1785–D1902)。
+### Security — D1909: `Received:` の `via` 節の `'` を検出 — `Envelope` に `received_via_apos` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#` は D1766–D1904)。
+### Security — D1908: `Received:` の `by` 節の `\` を検出 — `Envelope` に `received_by_bslash` を追加 (`by` の `<`/`>`/`=`/`%`/`@`/`#` は D1773–D1901)。
+### Security — D1907: `Received:` の `for` 節の `/` を検出 — `Envelope` に `received_for_slash` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?` は D1804–D1903)。
+### Security — D1906: `Received:` の `from` 節の `,` を検出 — `Envelope` に `received_from_comma` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?` は D1781–D1900)。
+### Security — D1905: `Received:` の `with` 節の `:` を検出 — `Envelope` に `received_with_colon` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@` は D1825–D1898)。
+### Security — D1904: `Received:` の `via` 節の `#` を検出 — `Envelope` に `received_via_hash` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@` は D1766–D1893)。
+### Security — D1903: `Received:` の `for` 節の `?` を検出 — `Envelope` に `received_for_qmark` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@` は D1804–D1894)。
+### Security — D1902: `Received:` の `id` 節の `"` を検出 — `Envelope` に `received_id_quote` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/複数は D1785–D1897)。
+### Security — D1901: `Received:` の `by` 節の `#` を検出 — `Envelope` に `received_by_hash` を追加 (`by` の `<`/`>`/`=`/`%`/`@` は D1773–D1890)。
+### Security — D1900: `Received:` の `from` 節の `?` を検出 — `Envelope` に `received_from_qmark` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@` は D1781–D1889)。
+### Security — D1899: `;file<name=x` の param 名 `<` を検出 — `Envelope` に `param_lt_name` を追加 (`>` は D1895)。
+### Security — D1898: `Received:` の `with` 節の `>` を検出 — `Envelope` に `received_with_gt` を追加 (`with` の `<` は D1881)。
+### Security — D1897: `Received:` の `id` 節の `>` を検出 — `Envelope` に `received_id_gt` を追加 (`id` の `<` は D1873)。
+### Security — D1896: `Content-Transfer-Encoding: base"64` の値内 `"` を検出 — `Envelope` に `cte_quote` を追加 (`'`/`$`/`#`/`*`/`{`/`}`/`[`/`]`/`|`/`^`/`~` は D1860–D1892)。
+### Security — D1895: `;file>name=x` の param 名 `>` を検出 — `Envelope` に `param_gt_name` を追加 (`(`/`)` は D1887/D1891)。
+### Security — D1894: `Received:` の `for` 節の `>` を検出 — `Envelope` に `received_for_gt` を追加 (`for` の `<` は D1885)。
+### Security — D1893: `Received:` の `via` 節の `>` を検出 — `Envelope` に `received_via_gt` を追加 (`via` の `<` は D1869)。
+### Security — D1892: `Content-Transfer-Encoding: base'64` の値内 `'` を検出 — `Envelope` に `cte_apos` を追加 (`$`/`#`/`*`/`{`/`}`/`[`/`]`/`|`/`^`/`~` は D1860–D1888)。
+### Security — D1891: `;file)name=x` の param 名 `)` を検出 — `Envelope` に `param_rparen_name` を追加 (`(` は D1887)。
+### Security — D1890: `Received:` の `by` 節の `>` を検出 — `Envelope` に `received_by_gt` を追加 (`by` の `<` は D1865)。
+### Security — D1889: `Received:` の `from` 節の `>` を検出 — `Envelope` に `received_from_gt` を追加 (`from` の `<` は D1877)。
+### Security — D1888: `Content-Transfer-Encoding: base$64` の値内 `$` を検出 — `Envelope` に `cte_dollar` を追加 (`#`/`*`/`{`/`}`/`[`/`]`/`|`/`^`/`~` は D1860–D1884)。
+### Security — D1887: `;file(name=x` の param 名 `(` を検出 — `Envelope` に `param_lparen_name` を追加 (孤立 `(` は ct_paren/cd_paren D1605 と共発火)。
+### Security — D1886: `;file+name=x` の param 名 `+` を検出 — `Envelope` に `param_plus_name` を追加 (`'`/`#` は D1883/D1879)。
+### Security — D1885: `Received:` の `for` 節の `<` を検出 — `Envelope` に `received_for_lt` を追加 (`for` の `!`/`%`/`@`/`=`/複数は D1777–D1853)。
+### Security — D1884: `Content-Transfer-Encoding: base#64` の値内 `#` を検出 — `Envelope` に `cte_hash` を追加 (`*`/`{`/`}`/`[`/`]`/`|`/`^`/`~` は D1860–D1880)。
+### Security — D1883: `;file'name=x` の param 名 `'` を検出 — `Envelope` に `param_apos_name` を追加 (`#` は D1879)。
+### Security — D1882: `Message-ID: _<a>` 等の `_` 先立ちを検出 — `Envelope` に `msgid_uscore_lead` を追加 (lead-sep 系は D1755–D1878)。
+### Security — D1881: `Received:` の `with` 節の `<` を検出 — `Envelope` に `received_with_lt` を追加 (`with` の `%`/`!`/`@`/`=` は D1825–D1857)。
+### Security — D1880: `Content-Transfer-Encoding: base*64` の値内 `*` を検出 — `Envelope` に `cte_star` を追加 (`{`/`}`/`[`/`]`/`|`/`^`/`~` は D1860–D1876)。
+### Security — D1879: `;file#name=x` の param 名 `#` を検出 — `Envelope` に `param_hash_name` を追加 (`$`/`~`/`^`/`|`/`}` は D1875–D1859)。
+### Security — D1878: `Message-ID: }<a>` 等の `}` 先立ちを検出 — `Envelope` に `msgid_rbrace_lead` を追加 (lead-sep 系は D1755–D1874)。
+### Security — D1877: `Received:` の `from` 節の `<` を検出 — `Envelope` に `received_from_lt` を追加 (`from` の `!`/`%`/`@`/`=`/クオートは D1781–D1861)。
+### Security — D1876: `Content-Transfer-Encoding: base~64` の値内 `~` を検出 — `Envelope` に `cte_tilde` を追加 (`{`/`}`/`[`/`]`/`|`/`^` は D1860–D1872)。
+### Security — D1875: `;file$name=x` の param 名 `$` を検出 — `Envelope` に `param_dollar_name` を追加 (`~`/`^`/`|`/`}` は D1871–D1859)。
+### Security — D1874: `Message-ID: {<a>` 等の `{` 先立ちを検出 — `Envelope` に `msgid_lbrace_lead` を追加 (lead-sep 系は D1755–D1870)。
+### Security — D1873: `Received:` の `id` 節の `<` を検出 — `Envelope` に `received_id_lt` を追加 (`id` の `!`/`%`/`@`/`=`/複数は D1785–D1849)。
+### Security — D1872: `Content-Transfer-Encoding: base^64` の値内 `^` を検出 — `Envelope` に `cte_caret` を追加 (`{`/`}`/`[`/`]`/`|` は D1860–D1868)。
+### Security — D1871: `;file~name=x` の param 名 `~` を検出 — `Envelope` に `param_tilde_name` を追加 (`^`/`|`/`}` は D1867/D1863/D1859)。
+### Security — D1870: `Message-ID: ]<a>` 等の `]` 先立ちを検出 — `Envelope` に `msgid_rbrack_lead` を追加 (lead-sep 系は D1755–D1866)。
+### Security — D1869: `Received:` の `via` 節の `<` を検出 — `Envelope` に `received_via_lt` を追加 (`via` の `!`/`@`/`=`/`%` は D1709系–D1841)。
+### Security — D1868: `Content-Transfer-Encoding: base|64` の値内 `|` を検出 — `Envelope` に `cte_pipe` を追加 (`{`/`}`/`[`/`]` は D1860–D1856)。
+### Security — D1867: `;file^name=x` の param 名 `^` を検出 — `Envelope` に `param_caret_name` を追加 (`|`/`}` は D1863/D1859)。
+### Security — D1866: `Message-ID: [<a>` 等の `[` 先立ちを検出 — `Envelope` に `msgid_lbrack_lead` を追加 (lead-sep 系は D1755–D1862)。
+### Security — D1865: `Received:` の `by` 節の `<` を検出 — `Envelope` に `received_by_lt` を追加 (`by` の `!`/`%`/`@`/`=` は D1709系–D1845)。
+### Security — D1864: `Content-Transfer-Encoding: base}64` の値内 `}` を検出 — `Envelope` に `cte_rbrace` を追加 (`{`/`[`/`]` は D1860/D1852/D1856)。
+### Security — D1863: `;file|name=x` の param 名 `|` を検出 — `Envelope` に `param_pipe_name` を追加 (`}` は D1859)。
+### Security — D1862: `Message-ID: -<a>` 等の `-` 先立ちを検出 — `Envelope` に `msgid_minus_lead` を追加 (lead-sep 系は D1755–D1858)。
+### Security — D1861: `Received:` の `from` 節の `=` を検出 — `Envelope` に `received_from_eq` を追加 (`via`/`by`/`id`/`for`/`with` の `=` は D1841–D1857)。
+### Security — D1860: `Content-Transfer-Encoding: base{64` の値内 `{` を検出 — `Envelope` に `cte_lbrace` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`%`/`!`/`?`/`/`/`[`/`]` は D1756–D1856)。
+### Security — D1859: `;file}name=x` の param 名 `}` を検出 — `Envelope` に `param_rbrace_name` を追加 (`@`/`/`/`` ` ``/`?`/`!`/`&`/`:`/`%`/`,`/`[`/`]`/`{` は D1713–D1855)。
+### Security — D1858: `Message-ID: "<a>` 等の `"` 先立ちを検出 — `Envelope` に `msgid_dquote_lead` を追加 (lead-sep 系は D1755–D1854)。
+### Security — D1857: `Received:` の `with` 節の `=` を検出 — `Envelope` に `received_with_eq` を追加 (`with` の `%`/`!`/`@` は D1825/D1833/D1837、`via`/`by`/`id`/`for` の `=` は D1841–D1853)。
+### Security — D1856: `Content-Transfer-Encoding: base]64` の値内 `]` を検出 — `Envelope` に `cte_rbrack` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`%`/`!`/`?`/`/`/`[` は D1756–D1852)。
+### Security — D1855: `;file{name=x` の param 名 `{` を検出 — `Envelope` に `param_lbrace_name` を追加 (`@`/`/`/`` ` ``/`?`/`!`/`&`/`:`/`%`/`,`/`[`/`]` は D1713–D1851)。
+### Security — D1854: `Message-ID: +<a>` 等の `+` 先立ちを検出 — `Envelope` に `msgid_plus_lead` を追加 (lead-sep 系は D1755–D1850)。
+### Security — D1853: `Received:` の `for` 節の `=` を検出 — `Envelope` に `received_for_eq` を追加 (`for` の `!`/`%`/`@@` は D1821/D1804/D1777、`via`/`by`/`id` の `=` は D1841/D1845/D1849)。
+### Security — D1852: `Content-Transfer-Encoding: base[64` の値内 `[` を検出 — `Envelope` に `cte_lbrack` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`%`/`!`/`?`/`/` は D1756–D1848)。
+### Security — D1851: `;file]name=x` の param 名 `]` を検出 — `Envelope` に `param_rbrack_name` を追加 (`@`/`/`/`` ` ``/`?`/`!`/`&`/`:`/`%`/`,`/`[` は D1713–D1847)。
+### Security — D1850: `Message-ID: '<a>` 等の `'` 先立ちを検出 — `Envelope` に `msgid_squote_lead` を追加 (lead-sep 系は D1755–D1846)。
+### Security — D1849: `Received:` の `id` 節の `=` を検出 — `Envelope` に `received_id_eq` を追加 (`id` の `!`/`%`/`@` は D1785/D1800/D1827)。
+### Security — D1848: `Content-Transfer-Encoding: base/64` の値内 `/` を検出 — `Envelope` に `cte_slash` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`%`/`!`/`?` は D1756–D1844)。
+### Security — D1847: `;file[name=x` の param 名 `[` を検出 — `Envelope` に `param_lbrack_name` を追加 (`@`/`/`/`` ` ``/`?`/`!`/`&`/`:`/`%`/`,` は D1713–D1843)。
+### Security — D1846: `Message-ID: (<a>` 等の `(` 先立ち (識別子がコメント内) を検出 — `Envelope` に `msgid_lparen_lead` を追加 (lead-sep 系は D1755–D1842、合法 `(note)<a>` は不発火)。
+### Security — D1845: `Received:` の `by` 節の `=` を検出 — `Envelope` に `received_by_eq` を追加 (`by` の `!`/`%`/`@` は D1813/D1793/D1773、`via` の `=` は D1841)。
+### Security — D1844: `Content-Transfer-Encoding: base?64` の値内 `?` を検出 — `Envelope` に `cte_qmark` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`%`/`!` は D1756–D1840)。
+### Security — D1843: `;file,name=x` の param 名 `,` を検出 — `Envelope` に `param_comma_name` を追加 (`@`/`/`/`` ` ``/`?`/`!`/`&`/`:`/`%` は D1713–D1839)。
+### Security — D1842: `Message-ID: )<a>` 等の `)` 先立ちを検出 — `Envelope` に `msgid_rparen_lead` を追加 (lead-sep 系は D1755–D1838)。
+### Security — D1841: `Received:` の `via` 節の `=` を検出 — `Envelope` に `received_via_eq` を追加 (`via` の `!`/`@` は D1817/D1789)。
+### Security — D1840: `Content-Transfer-Encoding: base!64` の値内 `!` を検出 — `Envelope` に `cte_bang` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`%` は D1756–D1836)。
+### Security — D1839: `;file%name=x` の param 名 `%` を検出 — `Envelope` に `param_pct_name` を追加 (`@`/`/`/`` ` ``/`?`/`!`/`&`/`:` は D1713–D1835)。
+### Security — D1838: `Message-ID: $<a>` 等の `$` 先立ちを検出 — `Envelope` に `msgid_dollar_lead` を追加 (lead-sep 系は D1755–D1834)。
+### Security — D1837: `Received:` の `with` 節の `@` を検出 — `Envelope` に `received_with_at` を追加 (`with` の `%`/`!` は D1825/D1833)。
+### Security — D1836: `Content-Transfer-Encoding: base%64` の値内 `%` を検出 — `Envelope` に `cte_pct` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@` は D1756–D1832)。
+### Security — D1835: `;file:name=x` の param 名 `:` を検出 — `Envelope` に `param_colon_name` を追加 (`@`/`/`/`` ` ``/`?`/`!`/`&` は D1713–D1831)。
+### Security — D1834: `Message-ID: ^<a>` 等の `^` 先立ちを検出 — `Envelope` に `msgid_caret_lead` を追加 (lead-sep 系は D1755–D1830)。
+### Security — D1833: `Received:` の `with` 節の `!` を検出 — `Envelope` に `received_with_bang` を追加 (`with` の `%` は D1825)。
+### Security — D1832: `Content-Transfer-Encoding: base@64` の値内 `@` を検出 — `Envelope` に `cte_at` を追加 (`=`/`:`/括弧/`\`/`>`/`<` は D1756–D1805)。
+### Security — D1831: `;file&name=x` の param 名 `&` を検出 — `Envelope` に `param_amp_name` を追加 (`@`/`/`/`` ` ``/`?`/`!` は D1713–D1828)。
+### Security — D1830: `Message-ID: `<a>` 等の反転符先立ちを検出 — `Envelope` に `msgid_backtick_lead` を追加 (lead-sep 系は D1755–D1826)。
+### Security — D1829: `Content-Disposition: attach@ment` の型本体内 `@` を検出 — `Envelope` に `cd_at_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<` は D1759–D1801、CT 側は D1808)。
+### Security — D1828: `;file!name=x` の param 名 `!` を検出 — `Envelope` に `param_bang_name` を追加 (`@`/`/`/`` ` ``/`?` は D1713/D1716/D1782/D1810)。
+### Security — D1827: `Received:` の `id` 節の `@` を検出 — `Envelope` に `received_id_at` を追加 (`id` の `!`/`%` は D1785/D1800)。
+### Security — D1826: `Message-ID: |<a>` 等の `|` 先立ちを検出 — `Envelope` に `msgid_pipe_lead` を追加 (lead-sep 系は D1755–D1822)。
+### Security — D1825: `Received:` の `with` 節の `%` を検出 — `Envelope` に `received_with_pct` を追加 (`by`/`via`/`for` の `%`/`!` は D1793/D1809/D1804/D1817/D1821)。
+### Security — D1824: `Content-Type: text]plain` の型本体内 `]` を検出 — `Envelope` に `ct_rbracket_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`?`/`,`/`[` は D1758–D1820)。
+### Security — D1823: `To: a'b@c` のローカル部 `'` を検出 — `Envelope` に `addr_apos_local` を追加 (`*` D1819、`#` D1815、`%` D1811、`$` D1806、`|` D1802、`&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
+### Security — D1822: `Message-ID: ~<a>` 等の `~` 先立ちを検出 — `Envelope` に `msgid_tilde_lead` を追加 (lead-sep 系は D1755–D1818)。
+### Security — D1821: `Received:` の `for` 節の `!` を検出 — `Envelope` に `received_for_bang` を追加 (`from`/`by`/`id`/`via` の `!` は D1781/D1813/D1785/D1817)。
+### Security — D1820: `Content-Type: text[plain` の型本体内 `[` を検出 — `Envelope` に `ct_lbracket_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`?`/`,` は D1758–D1816)。
+### Security — D1819: `To: a*b@c` のローカル部 `*` を検出 — `Envelope` に `addr_star_local` を追加 (`#` D1815、`%` D1811、`$` D1806、`|` D1802、`&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
+### Security — D1818: `Message-ID: &<a>` 等の `&` 先立ちを検出 — `Envelope` に `msgid_amp_lead` を追加 (lead-sep 系は D1755–D1814)。
+### Security — D1817: `Received:` の `via` 節の `!` を検出 — `Envelope` に `received_via_bang` を追加 (`by` の `!` は D1813、`via` の `@`/`%` は D1789/D1809)。
+### Security — D1816: `Content-Type: text,plain` の型本体内 `,` を検出 — `Envelope` に `ct_comma_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`?` は D1758–D1812)。
+### Security — D1815: `To: a#b@c` のローカル部 `#` を検出 — `Envelope` に `addr_hash_local` を追加 (`%` D1811、`$` D1806、`|` D1802、`&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
+### Security — D1814: `Message-ID: #<a>` 等の `#` 先立ちを検出 — `Envelope` に `msgid_hash_lead` を追加 (lead-sep 系は D1755–D1807)。
+### Security — D1813: `Received:` の `by` 節の `!` を検出 — `Envelope` に `received_by_bang` を追加 (`from`/`id` の `!` は D1781/D1785、`by` の `@`/`%` は D1773/D1793)。
+### Security — D1812: `Content-Type: text?plain` の型本体内 `?` を検出 — `Envelope` に `ct_qmark_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@` は D1758–D1808)。
+### Security — D1811: `To: a%b@c` のローカル部 `%` を検出 — `Envelope` に `addr_pct_local` を追加 (UUCP 旧式パーセント経路。`$` D1806、`|` D1802、`&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
+### Security — D1810: `;file?name=x` の param 名 `?` を検出 — `Envelope` に `param_qmark_name` を追加 (`@` は D1713、`/` は D1716、反転符は D1782)。
+### Security — D1809: `Received:` の `via` 節の `%` を検出 — `Envelope` に `received_via_pct` を追加 (`via` の `@` は D1789、`from`/`by`/`id`/`for` の `%` は D1797/D1793/D1800/D1804)。
+### Security — D1808: `Content-Type: text@plain` の型本体内 `@` を検出 — `Envelope` に `ct_at_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<` は D1758–D1796)。
+### Security — D1807: `Message-ID: /<a>` 等の `/` 先立ちを検出 — `Envelope` に `msgid_slash_lead` を追加 (lead-sep 系は D1755–D1803)。
+### Security — D1806: `To: a$b@c` のローカル部 `$` を検出 — `Envelope` に `addr_dollar_local` を追加 (`|` D1802、`&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
+### Security — D1805: `Content-Transfer-Encoding: base<64` の値内 `<` を検出 — `Envelope` に `cte_lt` を追加 (`>` は D1798、`=` は D1780、`\` は D1788)。
+### Security — D1804: `Received:` の `for` 節の `%` を検出 — `Envelope` に `received_for_pct` を追加 (`for` の `@` 二つは D1777、`id`/`by`/`from` の `%` は D1800/D1793/D1797)。
+### Security — D1803: `Message-ID: !<a>` 等の `!` 先立ちを検出 — `Envelope` に `msgid_bang_lead` を追加 (lead-sep 系は D1755–D1799)。
+### Security — D1802: `To: a|b@c` のローカル部 `|` を検出 — `Envelope` に `addr_pipe_local` を追加 (`&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
+### Security — D1801: `Content-Disposition: attach<ment` の型本体内 `<` を検出 — `Envelope` に `cd_lt_type` を追加 (`>` は D1794、`:` は D1765、`\` は D1786)。
+### Security — D1800: `Received:` の `id` 節の `%` を検出 — `Envelope` に `received_id_pct` を追加 (`id` の `!` は D1785、`by`/`from` の `%` は D1793/D1797)。
+### Security — D1799: `Message-ID: @<a>` 等の `@` 先立ちを検出 — `Envelope` に `msgid_at_lead` を追加 (lead-sep 系は D1755–D1795)。
+### Security — D1798: `Content-Transfer-Encoding: base>64` の値内 `>` を検出 — `Envelope` に `cte_gt` を追加 (`=` は D1780、`\` は D1788、`,` は D1734)。
+### Security — D1797: `Received:` の `from` 節の `%` を検出 — `Envelope` に `received_from_pct` を追加 (`by` の `%` は D1793、`from` の `!` は D1781、`@` は D1710)。
+### Security — D1796: `Content-Type: text<plain` の型本体内 `<` を検出 — `Envelope` に `ct_lt_type` を追加 (`>` は D1792、`:` は D1761、`\` は D1784)。
+### Security — D1795: `Message-ID: ?<a>` 等の `?` 先立ちを検出 — `Envelope` に `msgid_qmark_lead` を追加 (lead-sep 系は D1755–D1791)。
+### Security — D1794: `Content-Disposition: attach>ment` の型本体内 `>` を検出 — `Envelope` に `cd_gt_type` を追加 (`:` は D1765、`=` は D1759、`\` は D1786)。
+### Security — D1793: `Received:` の `by` 節の `%` を検出 — `Envelope` に `received_by_pct` を追加 (`by` の `@` は D1773、`from` の `!` は D1781)。
+### Security — D1792: `Content-Type: text>plain` の型本体内 `>` を検出 — `Envelope` に `ct_gt_type` を追加 (`:` は D1761、`=` は D1758、`\` は D1784)。
+### Security — D1791: `Message-ID: ><a>` 等の `>` 先立ちを検出 — `Envelope` に `msgid_gt_lead` を追加 (References 側は D1757、`<<` は D1787)。
+### Security — D1790: `<a\b@c>` 等、msgid 系額縁内の逆斜線を検出 — `Envelope` に `msgid_inner_bslash` を追加 (額縁内空白は D1772、宛名の `\` は local_backslash)。
+### Security — D1789: `Received:` の `via` 節の `@` を検出 — `Envelope` に `received_via_at` を追加 (`by` 節の `@` は D1773、`for` 節の `@` 二つは D1777)。
+### Security — D1788: `Content-Transfer-Encoding: base\64` の値内逆斜線を検出 — `Envelope` に `cte_bslash` を追加 (`=` は D1780、`;` 先立ちは D1756、`,` は D1734)。
+### Security — D1787: `Message-ID: <<a>` 等の二重 `<` 先立ちを検出 — `Envelope` に `msgid_lt_lead` を追加 (`;`/`,`/`=`/`%`/`:` 先立ちは D1755–D1783)。
+### Security — D1786: `Content-Disposition: attach\ment` の型本体内逆斜線を検出 — `Envelope` に `cd_bslash_type` を追加 (`:` は D1765、`=` は D1759、孤立括弧は D1766)。
+### Security — D1785: `Received:` の `id` 節の `!` を検出 — `Envelope` に `received_id_bang` を追加 (`from` 節の `!` は D1781、id 節重複は D1715)。
+### Security — D1784: `Content-Type: text\plain` の型本体内逆斜線を検出 — `Envelope` に `ct_bslash_type` を追加 (`:` は D1761、`=` は D1758、孤立括弧は D1764)。
+### Security — D1783: `Message-ID: :<a>` 等の `:` 先立ちを検出 — `Envelope` に `msgid_colon_lead` を追加 (`;` は D1755、`,` は D1769、`=` は D1774、`%` は D1779)。
+### Security — D1782: `;file`name=x` の param 名の反転符を検出 — `Envelope` に `param_backtick_name` を追加 (`@` は D1713、`/` は D1716、`*` 先頭は D1735)。
+### Security — D1781: `Received:` の `from` 節の `!` を検出 — `Envelope` に `received_from_bang` を追加 (from 節の `@` は D1710、for 節の `@` 二つは D1777)。
+### Security — D1780: `Content-Transfer-Encoding: base=64` の値内 `=` を検出 — `Envelope` に `cte_eq` を追加 (`;` 先立ちは D1756、`,` は D1734、孤立括弧は D1768)。
+### Security — D1779: `Message-ID: %<a>` 等の `%` 先立ちを検出 — `Envelope` に `msgid_pct_lead` を追加 (`;` は D1755、`,` は D1769、`=` は D1774)。
+### Security — D1778: `To: : a@b;` の無名グループを検出 — `Envelope` に `addr_noname_group` を追加 (`:` だけは D1750、`label:;` 空要素は empty_group_syntax)。
+### Security — D1777: `Received:` の `for` 節の `@` 二つを検出 — `Envelope` に `received_for_two_at` を追加 (`by` 節の `@` は D1773)。
+### Security — D1776: `Content-Disposition: *` のワイルドカード型を検出 — `Envelope` に `cd_star_type` を追加。
+### Security — D1775: `boundary="a;b"` クオート境界値内の `;` を検出 — `Envelope` に `boundary_quoted_semi` を追加 (非クオートは boundary_semicolon)。
+### Security — D1774: `Message-ID:`/`List-Id:`/`Content-ID:` 系の `=` 先立ちを検出 — `Envelope` に `msgid_eq_lead` を追加 (`;` は D1755、`,` は D1769)。
+### Security — D1773: `Received:` の `by` 節の `@` `by user@host` を検出 — `Envelope` に `received_by_at` を追加 (`from` 節の `@` は D1710)。
+### Security — D1772: `List-Id:`/`Content-ID:` を含む msgid 系の額縁内空白 `<a b@l>` を検出 — `Envelope` に `msgid_ws_inner` を追加 (`spaced_msgid` D1516 の上位互換 — 4欄→6欄)。
+### Security — D1771: 宛名ローカル部の `` ` `` ``a`b@c`` を検出 — `Envelope` に `addr_backtick_local` を追加 (`^`/`{}`/`&`/`~` は D1770/D1767/D1760/D1763)。
+### Security — D1770: 宛名ローカル部の `^` `a^b@c` を検出 — `Envelope` に `addr_caret_local` を追加 (`{}` は D1767、`&`/`~` は D1760/D1763)。
+### Security — D1769: `Message-ID:`/`List-Id:`/`Content-ID:` 系の `,` 先立ちを検出 — `Envelope` に `msgid_comma_lead` を追加 (`;` 先立ちは D1755、References 系は D1751)。
+### Security — D1768: `Content-Transfer-Encoding:` 値本体内の孤立括弧 `base64(x`/`7bit)` を検出 — `Envelope` に `cte_paren` を追加 (CT 側は D1764、CD 側は D1766)。
+### Security — D1767: 宛名ローカル部の `{`/`}` `a{b@c`/`a}b@c` を検出 — `Envelope` に `addr_brace_local` を追加 (表示名とクオート内は除外)。
+### Security — D1766: `Content-Disposition:` 型本体内の孤立括弧 `attachment(x`/`attachment)` を検出 — `Envelope` に `cd_paren` を追加 (型二語案は既存 `spaced_media_type` D1512 と重複判明のため差替、CT 側は D1764)。あわせて `spaced_media_type` が合法コメント `text/plain (note)` で誤発火する件を修正。
+### Security — D1765: `Content-Disposition:` 型本体内の `:` `attachment:x` を検出 — `Envelope` に `cd_colon_type` を追加 (CT 側は D1761、`=` は D1759)。
+### Security — D1764: `Content-Type:` 型本体内の孤立括弧 `text(plain` を検出 — `Envelope` に `ct_paren` を追加 (合法コメント `(…)` は除外)。
+### Security — D1763: 宛名ローカル部の `~` `a~b@c` を検出 — `Envelope` に `addr_tilde_local` を追加 (`&` は D1760、その他特殊字は D1557)。
+### Security — D1762: 宛名欄の同一アドレス重複 `To: a@b, a@b` を検出 — `Envelope` に `same_addr_dup` を追加 (同名欄の重複は D1605 系、識別子重複は D1742)。
+### Security — D1761: `Content-Type:` 型本体内の `:` `text:plain` を検出 — `Envelope` に `ct_colon_type` を追加 (`=` は D1758)。
+### Security — D1760: 宛名ローカル部の `&` `a&b@c` を検出 — `Envelope` に `addr_amp_local` を追加 (表示名の `&` とクオート内は除外)。
+### Security — D1759: `Content-Disposition:` 型本体内の `=` `attachment=x` を検出 — `Envelope` に `cd_eq_type` を追加 (CT 側は D1758)。
+### Security — D1758: `Content-Type:` 型本体内の `=` `text=plain` を検出 — `Envelope` に `ct_eq_type` を追加 (クオートドメイン案は既存 `msgid_quoted_local` と重複判明のため差替)。
+### Security — D1757: `References:`/`In-Reply-To:` の `>` 先立ち `><a>` を検出 — `Envelope` に `ref_gt_lead` を追加 (宛名側は D1753、`<` 無し `>` は D1635)。
+### Security — D1756: `CTE:` の `;` 先立ち `;base64` を検出 — `Envelope` に `cte_semi_lead` を追加 (Received の `;` 先立ちは D1743)。
+### Security — D1755: `Message-ID:`/`List-Id:`/`Content-ID:` 系の `;` 先立ちを検出 — `Envelope` に `msgid_semi_lead` を追加 (References/In-Reply-To は D1751)。
+### Security — D1754: msgid 系の `<@b>`/`<a@>` 側欠落を検出 — `Envelope` に `msgid_empty_side` を追加 (宛名側は D1560 系、`@` 無しは D1746)。
+### Security — D1753: 宛名欄の `>` 先立ち `To: >a@b` を検出 — `Envelope` に `addr_gt_lead` を追加 (末尾孤立 `>` は D1685; `/plain` 案は既存 `edge_slash_ct` と重複判明のため差替)。
+### Security — D1752: msgid 系の `<…>` 隣接コメント `(x)<a>`/`<a>(x)` を検出 — `Envelope` に `msgid_paren` を追加 (額の中のコメントは D1619、空白隔ては正規形で不発火)。
+### Security — D1751: `References:`/`In-Reply-To:` の先頭 `;`/`,` を検出 — `Envelope` に `ref_lead_sep` を追加 (宛名の `;` のみは D1730)。
+### Security — D1750: 宛名欄の `:` のみ値 `To: :` を検出 — `Envelope` に `addr_colon_only` を追加 (`;` のみは D1730、`,` のみは D1732)。
+### Security — D1749: `boundary=` 裸値の内部空白 `boundary=a b` を検出 — `Envelope` に `boundary_inner_ws` を追加 (端点空白は D1658、端点ドットは D1740)。
+### Security — D1748: `Content-Type:` の `//` 空セグメント `text//plain` を検出 — `Envelope` に `ct_double_slash` を追加 (`/` 無しは D1705、サブ型欠落は D1733)。
+### Security — D1747: 宛名欄の `@` 二つ `a@b@c` を検出 — `Envelope` に `two_at_addr` を追加 (msgid 系の `@` 二つは D1722、クオート内の `@` は除外; `multi_at_addr` の上位互換で Return-Path/コメント位置も拾う)。
+### Security — D1746: `Message-ID:` 系の `@` 無し識別子 `<abc>` を検出 — `Envelope` に `msgid_no_at` を追加 (`<>` 空は D1625)。
+### Security — D1745: 宛名欄の `<…>` 二組 `From: <a> <b>`/`, ` 無し `To: <a> <b>` を検出 — `Envelope` に `addr_two_angle` を追加 (異名グループは D1738)。
+### Security — D1744: `CTE:` 値の大文字 `BASE64` を検出 — `Envelope` に `cte_upper` を追加 (CT 型の大文字は D1613)。
+### Security — D1743: `Received:` の `;` 先立ち `; date` を検出 — `Envelope` に `received_semi_lead` を追加 (`;` のみ値は D1690、日付節の空は D1737)。
+### Security — D1742: `References:`/`In-Reply-To:` の同一識別子重複 `<a@x> <a@x>` を検出 — `Envelope` に `msgid_ref_dup` を追加 (異名二識別子は D1666)。
+### Security — D1741: `Received:` 節値の `:` `from mx:25` を検出 — `Envelope` に `received_port` を追加 (節の空値・重複・欠落は D1691/D1707/D1720 系)。
+### Security — D1740: `boundary=` 値の端点ドット `boundary=.abc`/`boundary=abc.` を検出 — `Envelope` に `boundary_dot_edge` を追加 (空白端点は D1658、英数字なしは D1718)。
+### Security — D1739: `Message-ID:` 系のドメイン端点ドット `<a@.b>`/`<a@b.>` を検出 — `Envelope` に `msgid_edge_dot_domain` を追加 (宛名欄の先頭ドットは D1603 系)。
+### Security — D1738: 宛名欄の二つの異名グループ `To: a: x@h; b: y@h;` を検出 — `Envelope` に `addr_two_groups` を追加 (同名グループ重複は D1667)。
+### Security — D1737: `Received:` の `;` 後日付節欠落 `from a by b;` を検出 — `Envelope` に `received_date_empty` を追加 (`;` 自体の欠落は D1586、欄全体の空値は D1687)。
+### Security — D1736: `Resent-*` 欄の規格外順序 (`Resent-To:` が `Resent-From:` より先) を検出 — `Envelope` に `resent_out_of_order` を追加 (同名重複は D1676)。(同名重複は既存 D1676 `dup_resent_headers` と重複判明のため差替)
+### Security — D1735: param 名の `*` 先頭 `;*file=x` を検出 — `Envelope` に `param_star_name` を追加 (name*= の形崩れは D1614)。
+### Security — D1734: `Content-Transfer-Encoding:` の `,` 区切り `base64,7bit` を検出 — `Envelope` に `cte_comma` を追加 (空白区切り二値は D1717)。
+### Security — D1733: `Content-Type:` のサブ型欠落 `text/` を検出 — `Envelope` に `ct_empty_subtype` を追加 (`/` 無しは D1705、型本体欠落は D1649)。
+### Security — D1732: 宛名欄の `,` のみ値 `To: ,` を検出 — `Envelope` に `addr_comma_only` を追加 (`;` のみは D1730、空値は D1681)。
+### Security — D1731: `References:`/`In-Reply-To:` の識別子列の `;` `<a>;<b>` を検出 — `Envelope` に `msgid_ref_semicolon` を追加 (列の `,` は D1729)。
+### Security — D1730: 宛名欄の `;` のみ値 `To: ;` を検出 — `Envelope` に `addr_semicolon_only` を追加 (空値は D1681)。
+### Security — D1729: `References:`/`In-Reply-To:` の識別子列の `,` `<a>,<b>` を検出 — `Envelope` に `msgid_ref_comma` を追加 (識別子内 `%`/`!` は D1626)。
+### Security — D1728: 同一欄内の同名 param 重複 `;charset=a; charset=b` を検出 — `Envelope` に `param_name_dup` を追加 (boundary 限定の重複は D1725)。(裸名札は既存 D1504 `has_bare_param` と重複判明のため差替)
+### Security — D1727: `Received:` の `via` 節空値 `via;` を検出 — `Envelope` に `received_via_empty` を追加 (空 for 節は D1726)。
+### Security — D1726: `Received:` の `for` 節空値 `for;` を検出 — `Envelope` に `received_for_empty` を追加 (for 節重複は D1712、空 id 節は D1724)。(クオート符丁は既存 D1474 と重複判明のため差替)
+### Security — D1725: 同一欄内の `boundary=` 重複 `boundary=a; boundary=b` を検出 — `Envelope` に `boundary_param_dup` を追加 (欄またぎの大小写衝突は D1701)。
+### Security — D1724: `Received:` の `id` 節空値 `id;` を検出 — `Envelope` に `received_id_empty` を追加 (id 節重複は D1715、空 by 節は D1720)。
+### Security — D1723: `Received:` の `with` 節空値 `with;` を検出 — `Envelope` に `received_with_empty` を追加 (空 by 節は D1720)。
+### Security — D1722: 識別子 `<…>` 内の `@` 2つ `<a@b@c>` を検出 — `Envelope` に `msgid_two_at` を追加 (識別子内 `:`/`\\` は `has_msgid_bad_char`)。
+### Security — D1721: `Content-Disposition:` の型トークン2つ `attachment inline` を検出 — `Envelope` に `cd_two_types` を追加 (型欠落は D1708、CT 二重型は D1621)。
+### Security — D1720: `Received:` の `by` 節空値 `from a by;` を検出 — `Envelope` に `received_by_empty` を追加 (空 from 節は D1703)。
+### Security — D1719: `Received:` の `via` 節重複を検出 — `Envelope` に `received_multi_via` を追加 (id 節は D1715)。
+### Security — D1718: 英数字を含まない `boundary=` 値を検出 — `Envelope` に `alnumless_boundary` を追加 (bchars 外は D1317、`-` 始まりは `has_dash_boundary`)。
+### Security — D1717: `Content-Transfer-Encoding:` の値トークン2つを検出 — `Envelope` に `two_cte_values` を追加 (余分な空白は D1714、`;` 混入は D1655)。
+### Security — D1716: param 名の `/` `;file/name=x` を検出 — `Envelope` に `slash_param_name` を追加 (名の `@` は D1713、値の `/` は D1704)。
+### Security — D1715: `Received:` の `id` 節重複を検出 — `Envelope` に `received_multi_id` を追加 (with 節は D1711、for 節は D1712)。
+### Security — D1714: `Content-Transfer-Encoding:` 値の余分な空白を検出 — `Envelope` に `padded_cte` を追加 (欄の `;` 混入は D1655)。
+### Security — D1713: param 名の `@` `;file@name=x` を検出 — `Envelope` に `at_param_name` を追加 (名の空白は D1656、名なしは `has_empty_param_name`)。
+### Security — D1712: `Received:` の `for` 節重複を検出 — `Envelope` に `received_multi_for` を追加。
+### Security — D1711: `Received:` の `with` 節重複を検出 — `Envelope` に `received_multi_with` を追加 (`from` 節重複は D1688、`by` 節重複は D1707)。
+### Security — D1710: `Received:` の `from` 節の裸 `@` `from user@host` を検出 — `Envelope` に `received_from_at` を追加 (from 節欠落は D1673、空 from 節は D1703)。
+### Security — D1709: `Received:` の `from` 節クオート名 `from "mx"` を検出 — `Envelope` に `received_from_quoted` を追加。
+### Security — D1708: `Content-Disposition: ; x=y` の型欠落を検出 — `Envelope` に `cd_empty_type` を追加 (型本体の空値は D1645、CT 型欠落は D1649)。
+### Security — D1707: `Received:` の `by` 節重複を検出 — `Envelope` に `received_multi_by` を追加 (`from` 節重複は D1688)。
+### Security — D1706: 識別子 `<a@localhost>` のドット無しドメインを検出 — `Envelope` に `msgid_dotless_domain` を追加 (宛名欄側は D1697)。
+### Security — D1705: `Content-Type: text` のサブ型欠落を検出 — `Envelope` に `ct_no_subtype` を追加 (型本体の欠落は D1649、空値は D1645、二重 `/` は D1356)。
+### Security — D1704: param 裸値の `/` `;charset=utf/8` を検出 — `Envelope` に `slash_param_value` を追加 (値内 `:` は D1659、第二 `=` は D1647)。
+### Security — D1703: `Received:` の空 `from` 節を検出 — `Envelope` に `received_from_empty` を追加 (`from` 節欠落は D1673、`by` 節欠落は D1691)。
 ### Security — D1702: `List-Id:` の二識別子 `<a> <b>` を検出 — `Envelope` に `two_list_ids` を追加 (Message-ID 側は D1666)。
 ### Security — D1701: 大小写のみ異なる複数 `boundary=` 値を検出 — `Envelope` に `boundary_case_collide` を追加 (同一値再利用は D1669)。
 ### Security — D1700: param 引用値内の `=` `;charset="a=b"` を検出 — `Envelope` に `param_quoted_eq` を追加 (クオート内 `;` は D1609)。

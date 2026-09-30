@@ -5780,6 +5780,762 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.two_list_ids {
         render_risks.push("List-Id 欄に識別子が二つあります—先採用と後採用でML判定がずれます".to_string());
     }
+    if env.received_from_empty {
+        render_risks.push("Received 欄の from 節に値がありません—次の語をホスト名と読む実装と空節と読む実装で経路がずれます".to_string());
+    }
+    if env.slash_param_value {
+        render_risks.push("パラメータの値に「/」があります—値ごと採る実装とparamを捨てる実装で読みがずれます".to_string());
+    }
+    if env.ct_no_subtype {
+        render_risks.push("Content-Type にサブ型がありません—既定値で丸める実装と欄を捨てる実装で読みがずれます".to_string());
+    }
+    if env.msgid_dotless_domain {
+        render_risks.push("識別子のドメインにドットがありません—FQDNを要求する実装と受理する実装で照合がずれます".to_string());
+    }
+    if env.received_multi_by {
+        render_risks.push("Received 欄に by 節が二つあります—先採用と後採用で経路がずれます".to_string());
+    }
+    if env.cd_empty_type {
+        render_risks.push("Content-Disposition に型がありません—attachment扱いする実装と欄を捨てる実装で添付判定がずれます".to_string());
+    }
+    if env.received_from_quoted {
+        render_risks.push("Received 欄の from 節がクオートされています—剥がす実装とそのまま読む実装で経路がずれます".to_string());
+    }
+    if env.received_from_at {
+        render_risks.push("Received 欄の from 節にアドレス形があります—ホスト名と採る実装とローカル部を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_multi_with {
+        render_risks.push("Received 欄に with 節が二つあります—先採用と後採用で経路がずれます".to_string());
+    }
+    if env.received_multi_for {
+        render_risks.push("Received 欄に for 節が二つあります—先採用と後採用で配送先がずれます".to_string());
+    }
+    if env.at_param_name {
+        render_risks.push("パラメータの名に「@」があります—名を区切りまで読む実装と欄を捨てる実装で読みがずれます".to_string());
+    }
+    if env.padded_cte {
+        render_risks.push("符号化の値に余分な空白があります—空白を除く実装とそのまま比較する実装でデコードがずれます".to_string());
+    }
+    if env.received_multi_id {
+        render_risks.push("Received 欄に id 節が二つあります—先採用と後採用で識別子がずれます".to_string());
+    }
+    if env.slash_param_name {
+        render_risks.push("パラメータの名に「/」があります—名を区切りまで読む実装と欄を捨てる実装で読みがずれます".to_string());
+    }
+    if env.two_cte_values {
+        render_risks.push("符号化の値が二つあります—先採用と欄破棄で本文のデコードがずれます".to_string());
+    }
+    if env.alnumless_boundary {
+        render_risks.push("boundary に英数字がありません—区切り行の綴りが実装ごとにずれます".to_string());
+    }
+    if env.received_multi_via {
+        render_risks.push("Received 欄に via 節が二つあります—先採用と後採用で経路がずれます".to_string());
+    }
+    if env.received_by_empty {
+        render_risks.push("Received 欄の by 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます".to_string());
+    }
+    if env.cd_two_types {
+        render_risks.push("Content-Disposition の型が二つあります—先採用と欄破棄で添付判定がずれます".to_string());
+    }
+    if env.msgid_two_at {
+        render_risks.push("識別子の中にアットが二つあります—先で分ける実装と後で分ける実装で照合がずれます".to_string());
+    }
+    if env.received_with_empty {
+        render_risks.push("Received 欄の with 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます".to_string());
+    }
+    if env.received_id_empty {
+        render_risks.push("Received 欄の id 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます".to_string());
+    }
+    if env.boundary_param_dup {
+        render_risks.push("同じ欄に boundary が二度あります—先採用と後採用で区切りがずれます".to_string());
+    }
+    if env.received_for_empty {
+        render_risks.push("Received 欄の for 節が空です—次の語を継ぐ実装と空節とする実装で配送先がずれます".to_string());
+    }
+    if env.received_via_empty {
+        render_risks.push("Received 欄の via 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます".to_string());
+    }
+    if env.param_name_dup {
+        render_risks.push("同じ欄に同名のパラメータが二度あります—先採用と後採用で値がずれます".to_string());
+    }
+    if env.msgid_ref_comma {
+        render_risks.push("識別子の列にコンマがあります—区切る実装と識別子の一部と読む実装で照合がずれます".to_string());
+    }
+    if env.addr_semicolon_only {
+        render_risks.push("宛名欄が区切りだけです—欄を破棄する実装と空集合とする実装で宛先がずれます".to_string());
+    }
+    if env.msgid_ref_semicolon {
+        render_risks.push("識別子の列にセミコロンがあります—区切る実装と識別子の一部と読む実装で照合がずれます".to_string());
+    }
+    if env.addr_comma_only {
+        render_risks.push("宛名欄がコンマだけです—欄を破棄する実装と空要素とする実装で宛先がずれます".to_string());
+    }
+    if env.ct_empty_subtype {
+        render_risks.push("Content-Type の型が斜線だけです—既定値と読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.cte_comma {
+        render_risks.push("符号化の値にコンマがあります—区切って先を採る実装と欄を捨てる実装でデコードがずれます".to_string());
+    }
+    if env.param_star_name {
+        render_risks.push("パラメータ名が星で始まります—名に含める実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.resent_out_of_order {
+        render_risks.push("再送欄の並びが規格と逆です—順序を見ない実装と欄順から転送を推す実装で経路がずれます".to_string());
+    }
+    if env.received_date_empty {
+        render_risks.push("経過印の日付節が空です—無視する実装と欄を捨てる実装で日時記録がずれます".to_string());
+    }
+    if env.addr_two_groups {
+        render_risks.push("宛名欄に二つのグループがあります—結合する実装と先だけ採る実装で宛先がずれます".to_string());
+    }
+    if env.msgid_edge_dot_domain {
+        render_risks.push("識別子のドメインがドットで始まるか終わります—剥く実装と捨てる実装で照合がずれます".to_string());
+    }
+    if env.boundary_dot_edge {
+        render_risks.push("区切りの値がドットで始まるか終わります—削る実装と生採用の実装でパート区切りがずれます".to_string());
+    }
+    if env.received_port {
+        render_risks.push("経過印の節の値にコロンがあります—切る実装と生採用の実装で経路解析がずれます".to_string());
+    }
+    if env.msgid_ref_dup {
+        render_risks.push("同じ識別子が二度あります—捨てる実装と連結する実装で照合がずれます".to_string());
+    }
+    if env.received_semi_lead {
+        render_risks.push("経過印が区切りで始まります—空の節を無視する実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.cte_upper {
+        render_risks.push("符号化の値が大文字です—厳密比較の実装は拾えずデコード経路がずれます".to_string());
+    }
+    if env.addr_two_angle {
+        render_risks.push("宛名欄に額縁が二組あります—結合する実装と先だけ採る実装で宛先がずれます".to_string());
+    }
+    if env.msgid_no_at {
+        render_risks.push("識別子にアットマークがありません—受理する実装と捨てる実装で照合がずれます".to_string());
+    }
+    if env.two_at_addr {
+        render_risks.push("宛名にアットマークが二つあります—先で割る実装と後で割る実装で宛先がずれます".to_string());
+    }
+    if env.ct_double_slash {
+        render_risks.push("Content-Type の型に二重の斜線があります—読み飛ばす実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.boundary_inner_ws {
+        render_risks.push("区切りの裸値の内側に空白があります—切る実装と生採用の実装でパート区切りがずれます".to_string());
+    }
+    if env.addr_colon_only {
+        render_risks.push("宛名欄がコロンだけです—欄を破棄する実装と空のグループと読む実装で宛先がずれます".to_string());
+    }
+    if env.ref_lead_sep {
+        render_risks.push("識別子列が区切り字で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.msgid_paren {
+        render_risks.push("識別子の額縁にコメントが隣接しています—剥がす実装と結合する実装で照合がずれます".to_string());
+    }
+    if env.addr_gt_lead {
+        render_risks.push("宛名欄が閉じ額で始まっています—先頭語を捨てる実装と住所の一部と読む実装で宛先がずれます".to_string());
+    }
+    if env.msgid_empty_side {
+        render_risks.push("識別子のアットマークの片側が空です—受理する実装と捨てる実装で照合がずれます".to_string());
+    }
+    if env.msgid_semi_lead {
+        render_risks.push("識別子欄が仕切り字で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.cte_semi_lead {
+        render_risks.push("符号化欄が仕切り字で始まっています—読み飛ばす実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.ref_gt_lead {
+        render_risks.push("識別子列が閉じ額で始まっています—捨てる実装と識別子の一部と読む実装で照合がずれます".to_string());
+    }
+    if env.ct_eq_type {
+        render_risks.push("Content-Type の型に等号があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.cd_eq_type {
+        render_risks.push("Content-Disposition の型に等号があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
+    }
+    if env.addr_amp_local {
+        render_risks.push("宛名のローカル部に連結号があります—拒否する実装と採用する実装で宛先がずれます".to_string());
+    }
+    if env.ct_colon_type {
+        render_risks.push("Content-Type の型に二重連があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.same_addr_dup {
+        render_risks.push("宛名欄に同じアドレスが二度書かれています—重複を除く実装と採用する実装で宛先がずれます".to_string());
+    }
+    if env.addr_tilde_local {
+        render_risks.push("宛名のローカル部に波線があります—拒否する実装と採用する実装で宛先がずれます".to_string());
+    }
+    if env.ct_paren {
+        render_risks.push("Content-Type の型に括弧があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.cd_colon_type {
+        render_risks.push("Content-Disposition の型に二重連があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
+    }
+    if env.cd_paren {
+        render_risks.push("Content-Disposition の型に括弧があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
+    }
+    if env.addr_brace_local {
+        render_risks.push("宛名のローカル部に波括弧があります—拒否する実装と採用する実装で宛先がずれます".to_string());
+    }
+    if env.cte_paren {
+        render_risks.push("符号化欄に括弧があります—値として読む実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.msgid_comma_lead {
+        render_risks.push("識別子欄が連結で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.addr_caret_local {
+        render_risks.push("宛名のローカル部に山形があります—拒否する実装と採用する実装で宛先がずれます".to_string());
+    }
+    if env.addr_backtick_local {
+        render_risks.push("宛名のローカル部に反転符があります—拒否する実装と採用する実装で宛先がずれます".to_string());
+    }
+    if env.msgid_ws_inner {
+        render_risks.push("識別子の額縁の内側に空白があります—削る実装と残す実装で照合がずれます".to_string());
+    }
+    if env.received_by_at {
+        render_risks.push("Received の受け取り節が宛名形です—ホスト名と読む実装と宛名と読む実装で経路がずれます".to_string());
+    }
+    if env.msgid_eq_lead {
+        render_risks.push("識別子欄が等号で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.boundary_quoted_semi {
+        render_risks.push("引用された境界値の内側に仕切り記号があります—引用内を許す実装と規格文字を検査する実装で区切りがずれます".to_string());
+    }
+    if env.cd_star_type {
+        render_risks.push("添付扱い欄の型がワイルドカードです—受理する実装と欄を捨てる実装で添付判定がずれます".to_string());
+    }
+    if env.received_for_two_at {
+        render_risks.push("Received の届け先節にアットが二つあります—先で割る実装と後で割る実装で配送先がずれます".to_string());
+    }
+    if env.addr_noname_group {
+        render_risks.push("宛名欄に名のないグループがあります—受理する実装と要素を捨てる実装で宛先がずれます".to_string());
+    }
+    if env.msgid_pct_lead {
+        render_risks.push("識別子欄がパーセント記号で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.cte_eq {
+        render_risks.push("符号化欄の値に等号が含まれています—先で割る実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_from_bang {
+        render_risks.push("Received の差出節に感嘆符があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.param_backtick_name {
+        render_risks.push("パラメータの名札に反転符があります—名として読む実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.msgid_colon_lead {
+        render_risks.push("識別子欄がコロンで始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.ct_bslash_type {
+        render_risks.push("種類欄の型に逆斜線があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.received_id_bang {
+        render_risks.push("Received の識別子節に感嘆符があります—識別子と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.cd_bslash_type {
+        render_risks.push("添付扱い欄の型に逆斜線があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
+    }
+    if env.msgid_lt_lead {
+        render_risks.push("識別子欄が二重の開き括弧で始まっています—剥がす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.cte_bslash {
+        render_risks.push("符号化欄の値に逆斜線があります—値として読む実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_via_at {
+        render_risks.push("Received の便り節が宛名形です—手段と読む実装と宛名と読む実装で経路がずれます".to_string());
+    }
+    if env.msgid_inner_bslash {
+        render_risks.push("識別子の額縁の内側に逆斜線があります—外す実装と字とする実装で照合がずれます".to_string());
+    }
+    if env.msgid_gt_lead {
+        render_risks.push("識別子欄が閉じ括弧で始まっています—語を捨てる実装と含める実装で照合がずれます".to_string());
+    }
+    if env.ct_gt_type {
+        render_risks.push("種類欄の型に閉じ括弧があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.received_by_pct {
+        render_risks.push("Received の受け取り節に百分率があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.cd_gt_type {
+        render_risks.push("添付扱い欄の型に閉じ括弧があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
+    }
+    if env.msgid_qmark_lead {
+        render_risks.push("識別子欄が疑問符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.ct_lt_type {
+        render_risks.push("種類欄の型に開き括弧があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.received_from_pct {
+        render_risks.push("Received の差出節に百分率があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.cte_gt {
+        render_risks.push("符号化欄の値に閉じ括弧があります—値として読む実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.msgid_at_lead {
+        render_risks.push("識別子欄がアットマークで始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.received_id_pct {
+        render_risks.push("Received の荷印節に百分率があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.cd_lt_type {
+        render_risks.push("添付扱い欄の型に開き括弧があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
+    }
+    if env.addr_pipe_local {
+        render_risks.push("宛名の手前側に縦線があります—拒否する実装と採用する実装で宛名がずれます".to_string());
+    }
+    if env.msgid_bang_lead {
+        render_risks.push("識別子欄が感嘆符で始まっています—bang経路と読む実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.received_for_pct {
+        render_risks.push("Received の届け先節に百分率があります—旧式経路と読む実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.cte_lt {
+        render_risks.push("符号化欄の値に開き括弧があります—値として読む実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.addr_dollar_local {
+        render_risks.push("宛名の手前側にドル符があります—拒否する実装と採用する実装で宛名がずれます".to_string());
+    }
+    if env.msgid_slash_lead {
+        render_risks.push("識別子欄が斜線で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.ct_at_type {
+        render_risks.push("種類欄の型にアットマークがあります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.received_via_pct {
+        render_risks.push("Received の便り節に百分率があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.param_qmark_name {
+        render_risks.push("パラメータ名に疑問符があります—名を読む実装と値を捨てる実装で値がずれます".to_string());
+    }
+    if env.addr_pct_local {
+        render_risks.push("宛名の手前側に百分率があります—旧式経路と読む実装と拒否する実装で宛名がずれます".to_string());
+    }
+    if env.ct_qmark_type {
+        render_risks.push("種類欄の型に疑問符があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.received_by_bang {
+        render_risks.push("Received の受け口節に嘆き符があります—bang 経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_hash_lead {
+        render_risks.push("識別子欄が井桁で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.addr_hash_local {
+        render_risks.push("宛名の手前側に井桁があります—拒否する実装と採用する実装で宛名がずれます".to_string());
+    }
+    if env.ct_comma_type {
+        render_risks.push("種類欄の型に句読点があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.received_via_bang {
+        render_risks.push("Received の便り節に嘆き符があります—bang 経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_amp_lead {
+        render_risks.push("識別子欄が連結符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.addr_star_local {
+        render_risks.push("宛名の手前側に星印があります—拒否する実装と採用する実装で宛名がずれます".to_string());
+    }
+    if env.ct_lbracket_type {
+        render_risks.push("種類欄の型に開き角括弧があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.received_for_bang {
+        render_risks.push("Received の届け先節に嘆き符があります—bang 経路と読む実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.msgid_tilde_lead {
+        render_risks.push("識別子欄が波線で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.addr_apos_local {
+        render_risks.push("宛名の手前側に引用符があります—拒否する実装と採用する実装で宛名がずれます".to_string());
+    }
+    if env.ct_rbracket_type {
+        render_risks.push("種類欄の型に閉じ角括弧があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.received_with_pct {
+        render_risks.push("Received の渡し方節に百分率があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_pipe_lead {
+        render_risks.push("識別子欄が縦線で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.received_id_at {
+        render_risks.push("Received の荷印節にアットがあります—宛名と読む実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.param_bang_name {
+        render_risks.push("引数欄の名に嘆き符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cd_at_type {
+        render_risks.push("荷印欄の型にアットがあります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
+    }
+    if env.msgid_backtick_lead {
+        render_risks.push("識別子欄が反転符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_amp_name {
+        render_risks.push("引数欄の名に連結符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_at {
+        render_risks.push("符丁欄にアットがあります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_with_bang {
+        render_risks.push("Received の渡し方節に嘆き符があります—bang 経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_caret_lead {
+        render_risks.push("識別子欄が曲折符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_colon_name {
+        render_risks.push("引数欄の名に二点があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_pct {
+        render_risks.push("符丁欄に百分率符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_with_at {
+        render_risks.push("Received の渡し方節にアットがあります—宛名と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_dollar_lead {
+        render_risks.push("識別子欄がドル符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_pct_name {
+        render_risks.push("引数欄の名に百分率符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_bang {
+        render_risks.push("符丁欄に嘆き符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_via_eq {
+        render_risks.push("Received の便り節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_rparen_lead {
+        render_risks.push("識別子欄が閉じ括弧で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_comma_name {
+        render_risks.push("引数欄の名に句読点があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_qmark {
+        render_risks.push("符丁欄に疑問符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_by_eq {
+        render_risks.push("Received の受け口節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_lparen_lead {
+        render_risks.push("識別子欄が開き括弧で始まっています—コメントと読む実装と識別子を拾う実装で照合がずれます".to_string());
+    }
+    if env.param_lbrack_name {
+        render_risks.push("引数欄の名に角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_slash {
+        render_risks.push("符丁欄に斜線があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_id_eq {
+        render_risks.push("Received の識票節に等号があります—代入式と読む実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.msgid_squote_lead {
+        render_risks.push("識別子欄が引用符で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_rbrack_name {
+        render_risks.push("引数欄の名に閉じ角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_lbrack {
+        render_risks.push("符丁欄に角括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_for_eq {
+        render_risks.push("Received の届け先節に等号があります—代入式と読む実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.msgid_plus_lead {
+        render_risks.push("識別子欄が加符で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_lbrace_name {
+        render_risks.push("引数欄の名に波括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_rbrack {
+        render_risks.push("符丁欄に閉じ角括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_with_eq {
+        render_risks.push("Received の渡し方節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_dquote_lead {
+        render_risks.push("識別子欄が二重引用符で始まっています—引用字列と読む実装と識別子を拾う実装で照合がずれます".to_string());
+    }
+    if env.param_rbrace_name {
+        render_risks.push("引数欄の名に閉じ波括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_lbrace {
+        render_risks.push("符丁欄に波括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_from_eq {
+        render_risks.push("Received の差出節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_minus_lead {
+        render_risks.push("識別子欄が連結符で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_pipe_name {
+        render_risks.push("引数欄の名に縦線があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_rbrace {
+        render_risks.push("符丁欄に閉じ波括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_by_lt {
+        render_risks.push("Received の受け口節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_lbrack_lead {
+        render_risks.push("識別子欄が角括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_caret_name {
+        render_risks.push("引数欄の名に曲折符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_pipe {
+        render_risks.push("符丁欄に縦線があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_via_lt {
+        render_risks.push("Received の便り節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_rbrack_lead {
+        render_risks.push("識別子欄が閉じ角括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_tilde_name {
+        render_risks.push("引数欄の名に波線があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_caret {
+        render_risks.push("符丁欄に曲折符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_id_lt {
+        render_risks.push("Received の識別子節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.msgid_lbrace_lead {
+        render_risks.push("識別子欄が開き波括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_dollar_name {
+        render_risks.push("引数欄の名に通貨符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_tilde {
+        render_risks.push("符丁欄に波線があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_from_lt {
+        render_risks.push("Received の差出節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_rbrace_lead {
+        render_risks.push("識別子欄が閉じ波括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_hash_name {
+        render_risks.push("引数欄の名に井桁があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_star {
+        render_risks.push("符丁欄に星があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_with_lt {
+        render_risks.push("Received の渡し方節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.msgid_uscore_lead {
+        render_risks.push("識別子欄が下線で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+    }
+    if env.param_apos_name {
+        render_risks.push("引数欄の名に単一引用符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_hash {
+        render_risks.push("符丁欄に井桁があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_for_lt {
+        render_risks.push("Received の届け先節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.param_plus_name {
+        render_risks.push("引数欄の名に加符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.param_lparen_name {
+        render_risks.push("引数欄の名に開き括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_dollar {
+        render_risks.push("符丁欄に通貨符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_from_gt {
+        render_risks.push("Received の差出節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_gt {
+        render_risks.push("Received の受け口節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.param_rparen_name {
+        render_risks.push("引数欄の名に閉じ括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_apos {
+        render_risks.push("符丁欄に単一引用符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_via_gt {
+        render_risks.push("Received の便り節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_for_gt {
+        render_risks.push("Received の届け先節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.param_gt_name {
+        render_risks.push("引数欄の名に閉じ角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.cte_quote {
+        render_risks.push("符丁欄に二重引用符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+    }
+    if env.received_id_gt {
+        render_risks.push("Received の識別子節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_with_gt {
+        render_risks.push("Received の渡し方節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.param_lt_name {
+        render_risks.push("引数欄の名に開き角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.received_from_qmark {
+        render_risks.push("Received の差出節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_hash {
+        render_risks.push("Received の受け口節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_id_quote {
+        render_risks.push("Received の識別子節に二重引用符があります—引用字列と読む実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_for_qmark {
+        render_risks.push("Received の届け先節に疑問符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.received_via_hash {
+        render_risks.push("Received の便り節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_colon {
+        render_risks.push("Received の渡し方節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_from_comma {
+        render_risks.push("Received の差出節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_for_slash {
+        render_risks.push("Received の届け先節に斜線があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.received_by_bslash {
+        render_risks.push("Received の受け口節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_apos {
+        render_risks.push("Received の便り節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_id_hash {
+        render_risks.push("Received の識別子節に井桁があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_for_tilde {
+        render_risks.push("Received の届け先節に波線があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.received_by_pipe {
+        render_risks.push("Received の受け口節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_tilde {
+        render_risks.push("Received の便り節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_id_pipe {
+        render_risks.push("Received の識別子節に縦線があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_from_dollar {
+        render_risks.push("Received の差出節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_amp {
+        render_risks.push("Received の受け口節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_dollar {
+        render_risks.push("Received の便り節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_for_caret {
+        render_risks.push("Received の届け先節に曲折符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.received_from_tilde {
+        render_risks.push("Received の差出節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_dollar {
+        render_risks.push("Received の受け口節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_amp {
+        render_risks.push("Received の渡し方節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_id_caret {
+        render_risks.push("Received の識別子節に曲折符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_from_pipe {
+        render_risks.push("Received の差出節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_qmark {
+        render_risks.push("Received の受け口節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_amp {
+        render_risks.push("Received の便り節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_for_dollar {
+        render_risks.push("Received の届け先節に通貨符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.received_with_qmark {
+        render_risks.push("Received の渡し方節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_id_tilde {
+        render_risks.push("Received の識別子節に波線があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_for_amp {
+        render_risks.push("Received の届け先節に連結符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.received_from_apos {
+        render_risks.push("Received の差出節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_for_hash {
+        render_risks.push("Received の届け先節に井桁があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.received_with_comma {
+        render_risks.push("Received の渡し方節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_id_dollar {
+        render_risks.push("Received の識別子節に通貨符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_by_comma {
+        render_risks.push("Received の受け口節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_colon {
+        render_risks.push("Received の受け口節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_for_quote {
+        render_risks.push("Received の届け先節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.received_via_qmark {
+        render_risks.push("Received の便り節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_quote {
+        render_risks.push("Received の渡し方節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_id_apos {
+        render_risks.push("Received の識別子節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_via_colon {
+        render_risks.push("Received の便り節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_tilde {
+        render_risks.push("Received の渡し方節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_for_apos {
+        render_risks.push("Received の届け先節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.received_id_qmark {
+        render_risks.push("Received の識別子節に疑問符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_via_comma {
+        render_risks.push("Received の便り節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_pipe {
+        render_risks.push("Received の渡し方節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_for_colon {
+        render_risks.push("Received の届け先節に二点があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.received_id_comma {
+        render_risks.push("Received の識別子節に句読点があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_via_quote {
+        render_risks.push("Received の便り節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_dollar {
+        render_risks.push("Received の渡し方節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_for_comma {
+        render_risks.push("Received の届け先節に句読点があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
+    if env.received_id_colon {
+        render_risks.push("Received の識別子節に二点があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_via_caret {
+        render_risks.push("Received の便り節に曲折符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_caret {
+        render_risks.push("Received の渡し方節に曲折符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_for_pipe {
+        render_risks.push("Received の届け先節に縦線があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
