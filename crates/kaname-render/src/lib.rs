@@ -1342,6 +1342,14 @@ pub struct Envelope {
     pub received_via_bang: bool,
     /// msgid 系の `&` 先立ち (D1818 — 識別子照合ずれ)。
     pub msgid_amp_lead: bool,
+    /// 宛名ローカル部の `*` (D1819 — 宛名ずれ)。
+    pub addr_star_local: bool,
+    /// `Content-Type:` 型本体内の `[` (D1820 — 型ずれ)。
+    pub ct_lbracket_type: bool,
+    /// `Received:` の `for` 節の `!` (D1821 — 配送先ずれ)。
+    pub received_for_bang: bool,
+    /// msgid 系の `~` 先立ち (D1822 — 識別子照合ずれ)。
+    pub msgid_tilde_lead: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4118,6 +4126,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ct_comma_type = has_ct_comma_type(bytes);
     let received_via_bang = has_received_via_bang(bytes);
     let msgid_amp_lead = has_msgid_amp_lead(bytes);
+    let addr_star_local = has_addr_star_local(bytes);
+    let ct_lbracket_type = has_ct_lbracket_type(bytes);
+    let received_for_bang = has_received_for_bang(bytes);
+    let msgid_tilde_lead = has_msgid_tilde_lead(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4694,6 +4706,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ct_comma_type,
         received_via_bang,
         msgid_amp_lead,
+        addr_star_local,
+        ct_lbracket_type,
+        received_for_bang,
+        msgid_tilde_lead,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -30988,6 +31004,230 @@ pub fn has_msgid_amp_lead(raw: &[u8]) -> bool {
     false
 }
 
+/// 宛名欄のローカル部に `*` があるか判定する (D1819)。
+///
+/// `a*b@c` — `*` は atext 上は合法だがワイルドカード紛いとして
+/// 拒否する実装と採用する実装で宛名がずれる (`#` D1815、`%` D1811、
+/// `$` D1806、`|` D1802、`&` D1760、`~` D1763、`{}` D1767、
+/// `^` D1770、`` ` `` D1771 と同族)。
+#[must_use]
+pub fn has_addr_star_local(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: [&str; 14] = [
+        "from", "to", "cc", "bcc", "reply-to", "sender", "resent-from",
+        "resent-to", "resent-cc", "resent-bcc", "resent-sender",
+        "return-path", "delivered-to", "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !ADDR_HEADERS.contains(&name) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let bs = v.as_bytes();
+        let mut in_q = false;
+        let mut in_c = false;
+        let mut esc = false;
+        for (i, &b) in bs.iter().enumerate() {
+            if esc {
+                esc = false;
+                continue;
+            }
+            if b == b'\\' {
+                esc = true;
+                continue;
+            }
+            if in_c {
+                if b == b')' {
+                    in_c = false;
+                }
+                continue;
+            }
+            if b == b'(' && !in_q {
+                in_c = true;
+                continue;
+            }
+            if b == b'"' {
+                in_q = !in_q;
+                continue;
+            }
+            if b == b'@' && !in_q {
+                let seg = if let Some(lt) = v[..i].rfind('<') {
+                    &v[lt + 1..i]
+                } else {
+                    &v[..i]
+                };
+                let local = seg.trim_end().rsplit(
+                    |c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':',
+                ).next().unwrap_or("");
+                if local.contains('*') {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の型本体に `[` が含まれるか判定する (D1820)。
+///
+/// `Content-Type: text[plain` — `[` は tspecial で型トークンには
+/// 書けない。括弧を継続とみなす実装と欄ごと捨てる実装で型がずれる
+/// (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`?`/`,` は D1758–D1816)。
+#[must_use]
+pub fn has_ct_lbracket_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-type:") else { continue };
+        let ty = v.split(';').next().unwrap_or("");
+        let mut scrub = String::with_capacity(ty.len());
+        let mut depth = 0i32;
+        for c in ty.chars() {
+            if depth > 0 {
+                if c == '(' { depth += 1 } else if c == ')' { depth -= 1 }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.contains('[') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `for` 節の値に `!` が含まれるか判定する (D1821)。
+///
+/// `Received: … for a!b` — `!` は UUCP bang 経路の区切り。
+/// bang 経路として読む実装と欄ごと捨てる実装で配送先がずれる
+/// (`from`/`by`/`id`/`via` の `!` は D1781/D1813/D1785/D1817、
+/// `for` の 2`@`/`%` は D1777/D1804)。
+#[must_use]
+pub fn has_received_for_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("for") && i + 1 < toks.len()
+                && toks[i + 1].contains('!')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// msgid 系欄の値が `~` 先立ちか判定する (D1822)。
+///
+/// `Message-ID: ~<a@b>` — `~` 先立ちを読み飛ばす実装と欄ごと捨てる
+/// 実装で識別子照合がずれる (`;`/`,`/`=`/`%`/`:`/`>`/`?`/`@`/`<<`/`!`/`/`/`#`/`&`
+/// は D1755–D1818)。
+#[must_use]
+pub fn has_msgid_tilde_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.starts_with('~') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -52397,6 +52637,78 @@ mod tests {
             b"Subject: a&b\r\n\r\nb"
         ));
         assert!(!has_msgid_amp_lead(b""));
+    }
+
+    #[test]
+    fn addr_star_local_ローカル部の星印を検出する() {
+        // D1819 — `a*b@c`
+        assert!(has_addr_star_local(b"To: a*b@x.com\r\n\r\nb"));
+        assert!(has_addr_star_local(b"From: <u*v@y.com>\r\n\r\nb"));
+        // 表示名・ドメイン側の `*` は対象外 — 不発火
+        assert!(!has_addr_star_local(
+            b"To: \"a * b\" <u@x.com>\r\n\r\nb"
+        ));
+        assert!(!has_addr_star_local(b"To: u@x.*com\r\n\r\nb"));
+        assert!(!has_addr_star_local(b"To: u@x.com\r\n\r\nb"));
+        assert!(!has_addr_star_local(b""));
+    }
+
+    #[test]
+    fn ct_lbracket_type_型の開き角括弧を検出する() {
+        // D1820 — `Content-Type: text[plain`
+        assert!(has_ct_lbracket_type(
+            b"Content-Type: text[plain\r\n\r\nb"
+        ));
+        assert!(has_ct_lbracket_type(
+            b"Content-Type: text[plain; charset=utf-8\r\n\r\nb"
+        ));
+        // コメント内の `[` は対象外 — 不発火
+        assert!(!has_ct_lbracket_type(
+            b"Content-Type: text/plain (a[b)\r\n\r\nb"
+        ));
+        assert!(!has_ct_lbracket_type(
+            b"Content-Type: text/plain\r\n\r\nb"
+        ));
+        assert!(!has_ct_lbracket_type(b""));
+    }
+
+    #[test]
+    fn received_for_bang_for節の嘆き符を検出する() {
+        // D1821 — `Received: … for a!b` UUCP bang 経路
+        assert!(has_received_for_bang(
+            b"Received: from m for a!b; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(has_received_for_bang(
+            b"Received: from m for u!v@x.com\r\n\r\nx"
+        ));
+        // 節なし・他節の `!` は対象外 — 不発火
+        assert!(!has_received_for_bang(
+            b"Received: from m via a!b for u@x.com; Tue\r\n\r\nx"
+        ));
+        assert!(!has_received_for_bang(
+            b"Received: from m for u@x.com; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_for_bang(b""));
+    }
+
+    #[test]
+    fn msgid_tilde_lead_識別子の波線先立ちを検出する() {
+        // D1822 — `Message-ID: ~<a@b>`
+        assert!(has_msgid_tilde_lead(
+            b"Message-ID: ~<a@b.com>\r\n\r\nb"
+        ));
+        assert!(has_msgid_tilde_lead(
+            b"List-Id: ~<l.b.com>\r\n\r\nb"
+        ));
+        // 値なし・通常形は不発火
+        assert!(!has_msgid_tilde_lead(b"Message-ID: ~\r\n\r\nb"));
+        assert!(!has_msgid_tilde_lead(
+            b"Message-ID: <a@b.com>\r\n\r\nb"
+        ));
+        assert!(!has_msgid_tilde_lead(
+            b"Subject: ~wave\r\n\r\nb"
+        ));
+        assert!(!has_msgid_tilde_lead(b""));
     }
 
     #[test]
