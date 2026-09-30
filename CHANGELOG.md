@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1910: `Received:` の `id` 節の `#` を検出 — `Envelope` に `received_id_hash` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"` は D1785–D1902)。
+### Security — D1909: `Received:` の `via` 節の `'` を検出 — `Envelope` に `received_via_apos` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#` は D1766–D1904)。
+### Security — D1908: `Received:` の `by` 節の `\` を検出 — `Envelope` に `received_by_bslash` を追加 (`by` の `<`/`>`/`=`/`%`/`@`/`#` は D1773–D1901)。
+### Security — D1907: `Received:` の `for` 節の `/` を検出 — `Envelope` に `received_for_slash` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?` は D1804–D1903)。
 ### Security — D1906: `Received:` の `from` 節の `,` を検出 — `Envelope` に `received_from_comma` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?` は D1781–D1900)。
 ### Security — D1905: `Received:` の `with` 節の `:` を検出 — `Envelope` に `received_with_colon` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@` は D1825–D1898)。
 ### Security — D1904: `Received:` の `via` 節の `#` を検出 — `Envelope` に `received_via_hash` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@` は D1766–D1893)。
