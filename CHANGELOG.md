@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1267: 購読型 URI (webcal:/feed:) がリンク評価を素通り
+
+- **問題**: `webcal:`/`feed:`/`feeds:` URI は「開く」ではなく「購読する」— 悪意あるカレンダー購読 (calendar spam キャンペーン) は以後イベント・通知の形でメール検査の外から届き続ける。`extract_urls_from_text` は http(s) のみ抽出するためこの誘導経路は未検査だった。
+- **修正**: `has_subscription_uri` を追加し `analyze` で検出 → render_risks に警告 (アプリ起動型 D1262 とは性質が異なるため別検査)。
+- **教訓**: ペイロードは一度届くものだけではない — 継続的に届くチャンネルを確立させる URI も誘導経路と数えよ。
+
+### Security — D1268: vCard 添付の外部 URI 参照 (PHOTO/URL 等) が未検査
+
+- **問題**: `.vcf` (RFC 6350) の URI 値プロパティ — `PHOTO`/`LOGO`/`SOUND`/`SOURCE`/`URL`/`GEO`/`IMPP`/`ORG-DIRECTORY` — はインポート・表示時にリモートからフェッチされる。連絡先の体裁で任意 URL を載せられ、ICS の `ATTACH;VALUE=URI` (D1264)・`message/external-body` (D1266) と同型の死角だった。
+- **修正**: `detect_vcard_external_refs` を追加し `scan_attachment_bytes` で検査 — URI プロパティの値部が http(s)/ftp で始まる行を警告 (data: inline・CID: 埋め込みは対象外)。
+- **教訓**: 「連絡先に見える添付」も外部を引きにいく形を持ち得る — 表示時フェッチの形状は形式を問わず数えよ。
+
 ### Security — D1265: 添付ファイル名の異常形状 (制御文字・末尾ドット・ホモグリフ) が未検査
 
 - **問題**: IRONSCALES (2026-04) が観測した nested RFC822 キャンペーンは、添付ファイル名に CR/LF 制御文字を注入し、ツールごとのファイル名終端解釈の差でスキャナと実際の保存名を食い違わせていた。加えて `evil.exe.` のように末尾ピリオド/空白を付けると `ends_with(".exe")` 系の拡張子検査を素通りしつつ Windows は除去して保存するため表示名と実体がずれ、キリル/ギリシャ文字混在のホモグリフ名 (`invoiсe.pdf` — キリル с) も検査されなかった。
