@@ -694,3 +694,425 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1278 | ~~**Date ヘッダの欠落/不正値が未検査**~~ **(解消済み)** | P2 | RFC 5322 必須の orig date 欠落は手作り生成品の兆候 (同 SANS 事例 "Date: None")。修正: `env.date.is_none()` → render_risks | パーサが Option で返す未使用フィールドを点検せよ |
 | D1279 | ~~**入れ子メール添付の内側差出人偽装が未可視化**~~ **(解消済み)** | P1 | IRONSCALES 2026-01 — 空本文+認証通過+.eml の内側 From が受信者ドメインを騙る。D1250 は一般注意のみ。修正: `extract_nested_email_identity` → inner_sender/inner_subject 提示 + 宛先/自組織ドメイン一致で警告 | 認証の届かない層の自称値は提示するまでが検出 |
 | D1280 | ~~**空本文 + メール添付のみの相関が未検査**~~ **(解消済み)** | P2 | 「外側は無害・内側に集中」の形状。修正: 空本文 × 入れ子メール添付 → render_risks | 「何も書かない」も形状として数える |
+| D1281 | ~~**Content-Type の boundary= 重複 (MIME パーサ差異) が未検査**~~ **(解消済み)** | P1 | `boundary=safe; boundary=evil` — 先/後で読む実装で構造差異。修正: `has_ambiguous_boundary` (FWS 展開) → `ambiguous_boundary` → render_risks | パラメータ重複は parser differential の最も安い兆候 |
+| D1282 | ~~**件名の不可視文字検査に soft hyphen 系が抜けていた**~~ **(解消済み)** | P2 | SANS ISC 32428 — encoded-word 件名に U+00AD soft hyphen。修正: `has_suspicious_subject_chars` に SOFT HYPHEN/WORD JOINER/CGJ/ALM/Mongolian VS/Hangul filler 追加 | 不可視文字は網羅リストで維持せよ |
+| D1283 | ~~**ヘッダの malformed encoded-word が未検査**~~ **(解消済み)** | P2 | `=?UTF-8?B?...` (閉じ無し) 等はパーサ差異偽装の入口 (CVE-2026-63435 系)。修正: `has_malformed_encoded_word` (From/To/Cc/Reply-To/Subject) → `malformed_encoded_word` → render_risks | 形の破損自体が兆候 |
+| D1284 | ~~**Content-Location のリモート参照が未検査**~~ **(解消済み)** | P1 | MHTML/related パートで `Content-Location: https://…` → 表示時リモートフェッチ (MHTML smuggling)。修正: `has_remote_content_location` → render_risks | 空パートは参照値を見よ |
+| D1285 | ~~**MIME 制御ヘッダの重複・不正 CTE が未検査**~~ **(解消済み)** | P1 | 重複 Content-Type/CTE/Disposition・非標準 CTE 値 — 実装間で採用値がずれる (draft-chen MIME ambiguity/noxxi)。修正: `has_conflicting_mime_headers` → render_risks | 同名ヘッダの回数自体が兆候 |
+| D1286 | ~~**インライン uuencode ペイロードが未検査**~~ **(解消済み)** | P2 | `begin 644 x` ブロックは MIME 構造の外 — パート走査を素通り。修正: `has_uuencode_payload` → render_risks | 構造がないこと自体が兆候 |
+| D1287 | ~~**非 multipart Content-Type の bogus boundary= が未検査**~~ **(解消済み)** | P1 | `text/plain; boundary=fake` で外側 boundary を無効化 (mailsplit AIKIDO-2026-785486)。修正: `has_bogus_boundary_param` → render_risks | 型に無関係なパラメータは差異の種 |
+| D1288 | ~~**プリアンブル/エピローグ内のパート構造が未検査**~~ **(解消済み)** | P1 | boundary の外のパート様ヘッダは無視系スキャナに不可視。修正: `has_orphaned_part_content` → render_risks | 範囲外のヘッダ構造も兆候 |
+| D1289 | ~~**MIME-Version 欠落が未検査**~~ **(解消済み)** | P2 | MIME 構造を使うのに宣言無し — 解釈が実装間でずれる。修正: `has_missing_mime_version` → render_risks | 欠落は存在でも測る |
+| D1290 | ~~**宣言 boundary の不使用・未終了 multipart が未検査**~~ **(解消済み)** | P1 | `--b` 無使用/`--b--` 無し — 残り本文の解釈がずれる (mailsplit 未終了と同型)。修正: `has_unterminated_multipart` → render_risks | 宣言と実際の不一致は双方向に測る |
+| D1291 | ~~**Date タイムスタンプ異常が未検査**~~ **(解消済み)** | P2 | 未来日はソート先頭に張り付く戦術、遠過去は手作り生成品の兆候。修正: `is_anomalous_date` → `anomalous_date` → render_risks | 存在の次は値域を測る |
+| D1292 | ~~**一意ヘッダ重複が未検査**~~ **(解消済み)** | P1 | Subject/From/Message-ID が複数 — 先頭/末尾採用が実装で分かれるパーサ差異。修正: `has_duplicate_identity_headers` → render_risks | 「最大1個」の制約も攻撃面 |
+| D1293 | ~~**multipart コンテナへの非 identity CTE が未検査**~~ **(解消済み)** | P1 | multipart/* + base64/QP は RFC 2045 §6.4 禁止 — decode 順序で構造がずれる。修正: `has_encoded_multipart_container` → render_risks | 禁止組合せは型との対で測る |
+| D1294 | ~~**boundary= 値の前後空白混入が未検査**~~ **(解消済み)** | P1 | `boundary="x "` — trim する/しないで別区切り (mail-parser trailing-ws)。修正: `has_whitespace_boundary` → render_risks | 値の体裁も攻撃面 |
+| D1295 | ~~**RFC 2231 添付名パラメータが未検査**~~ **(解消済み)** | P1 | `filename*=utf-8''x`/`filename*0=` — 再構成しないスキャナで拡張子検査を素通り。修正: `has_rfc2231_attachment_params` → render_risks | 別表記の存在自体が兆候 |
+| D1296 | ~~**boundary= のエスケープ/閉じないクオートが未検査**~~ **(解消済み)** | P1 | `boundary="a\"b"`/閉じない `"` — 展開方法で別区切り。修正: `has_escaped_boundary_quote` → render_risks | quoted-string の健全性まで測る |
+| D1297 | ~~**boundary 値の使い回し (境界衝突) が未検査**~~ **(解消済み)** | P1 | 同一 boundary を外側/入れ子で再利用 — `--b--` の閉じるレベルが実装差。修正: `has_reused_boundary` → render_risks | 値の一意性も測る |
+| D1298 | ~~**ヘッダ部の CRLF/裸 LF 混在が未検査**~~ **(解消済み)** | P1 | 裸 LF を認めない実装はヘッダ行を結合 → ヘッダ差異工作。修正: `has_mixed_line_endings` → render_risks | 区切りの一貫性も攻撃面 |
+| D1299 | ~~**アドレスドメインの FQDN 末尾ドットが未検査**~~ **(解消済み)** | P1 | `user@example.com.` — DNS 的に同一ホストだが文字列照合は別ドメイン。修正: `has_fqdn_trailing_dot` → render_risks | 同一を指す別表記は照合をすり抜ける |
+| D1300 | ~~**アドレスヘッダのコメント内アドレス/URL が未検査**~~ **(解消済み)** | P1 | `From: a@x (billing@y)` — コメント表示実装で見える差出人がずれる。修正: `has_address_comment` → render_risks | 稀な構文の中身まで読む |
+| D1301 | ~~**MIME charset= の危険文字コードが未検査**~~ **(解消済み)** | P1 | `charset=utf-7` 本文は ASCII のまま照合をすり抜ける (D978 は meta のみ)。修正: `has_dangerous_charset` → render_risks | 同じ穴は別の書ける場所に残る |
+| D1302 | ~~**件名の bidi override/isolate が未検査**~~ **(解消済み)** | P1 | 件名中の RLO/isolate で表示順反転 (trojan-source 系)。修正: has_suspicious_subject_chars に U+202A–202E・U+2066–2069 追加 | 「見え方をずらす」は不可視だけでなく順序改変も含む |
+| D1303 | ~~**生メッセージ内の NUL バイトが未検査**~~ **(解消済み)** | P1 | C 文字列実装で以降が切断され見えなくなる。修正: `has_raw_nul_bytes` → render_risks | 全域禁止バイトの存在自体が安い差異指標 |
+| D1304 | ~~**ヘッダ部の非 UTF-8 バイト列が未検査**~~ **(解消済み)** | P1 | lossy 置換 vs 生バイト保持で照合結果がずれる。修正: `has_non_utf8_headers` → render_risks | デコード可能性自体が異常信号 |
+| D1305 | ~~**ヘッダ名とコロン間の空白混入が未検査**~~ **(解消済み)** | P1 | `Subject : x` — ヘッダ/無名行の解釈分岐。修正: `has_spaced_header_name` → render_risks | 小さな構文違反が解釈分岐を生む |
+| D1306 | ~~**一意ヘッダ重複が宛先・日付系を未カバー**~~ **(解消済み)** | P1 | Date/To/Cc/Bcc/Sender/Reply-To 重複で採用値がずれる。修正: has_duplicate_identity_headers 対象拡張 | 同種違反は仕様表の全列をカバー |
+| D1307 | ~~**ヘッダ部の裸 CR (\r 単独) が未検査**~~ **(解消済み)** | P1 | Mac クラシック行終端で行分割が実装間でずれる (D1298 の残欠)。修正: `has_bare_cr` → render_risks | 改行変種は CRLF/LF/CR の3種 — 全種カバーが要る |
+| D1308 | ~~**mbox 形式 `From ` 行の混入が未検査**~~ **(解消済み)** | P1 | 先頭 `From ` 行を区切り/無名ヘッダで解釈が分かれ以降全部ずれる。修正: `has_mbox_from_line` → render_risks | 格納形式と伝送形式の混在は全体を割る |
+| D1309 | ~~**CT/CD パラメータキー重複が未検査**~~ **(解消済み)** | P1 | `filename=a; filename=b` で採用値がずれる (D1281 一般化)。修正: `has_duplicate_mime_params` → render_risks | 特定キーの検査は全キーに一般化する |
+| D1310 | ~~**CT の name= ありで Content-Disposition 無しが未検査**~~ **(解消済み)** | P1 | CD のみ添付判定するスキャナが name= を素通り。修正: `has_ct_name_no_disposition` → render_risks | 判定に使う欄と効く欄の齟齬は差異の温床 |
+| D1311 | ~~**boundary= の空値が未検査**~~ **(解消済み)** | P1 | `boundary=""` で区切りが `--` に退化、構造解釈が完全にずれる。修正: `has_empty_boundary` → render_risks | 退化形は値域端で見落としやすい |
+| D1312 | ~~**MIME-Version の値が 1.0 以外が未検査**~~ **(解消済み)** | P2 | 欠落 (D1289) は検査済みだが `2.0` 等の異常値は未検査 — 厳格実装は MIME として扱わない。修正: `has_odd_mime_version` → render_risks | 有無だけでなく宣言値も見る |
+| D1313 | ~~**添付名のパストラバーサル成分が未検査**~~ **(解消済み)** | P1 | `filename="../../evil.exe"` 等で保存先をずらす書込み意図。修正: `has_traversal_filename` → render_risks | ファイル名検査は書込み先の指定も見る |
+| D1314 | ~~**998 バイト超のヘッダ行が未検査**~~ **(解消済み)** | P2 | RFC 5322 上限超過で切り詰める実装と全文読む実装がずれる。修正: `has_overlong_header` → render_risks | 規格の数値上限は差異の発生点 |
+| D1315 | ~~**QP 本文の不正エスケープが未検査**~~ **(解消済み)** | P2 | `=xy` 等を残す/捨てるデコーダで本文がずれる。修正: `has_invalid_qp_escapes` → render_risks | 符号字句違反は復号差異の直撃点 |
+| D1316 | ~~**base64 本文のアルファベット外文字が未検査**~~ **(解消済み)** | P2 | 読み飛ばす/止めるデコーダで添付内容がずれる。修正: `has_invalid_base64_body` → render_risks | 符号化本文の検査は宣言 CTE に追随する |
+| D1317 | ~~**boundary の bchars 外文字が未検査**~~ **(解消済み)** | P2 | `boundary="a<b>"` 等で受理/拒否が分かれる字句差異。修正: `has_invalid_boundary_chars` → render_risks (`_` は実運用で広いため許容) | 規格と実態の差を両方知る |
+| D1318 | ~~**Windows 予約デバイス名の添付名が未検査**~~ **(解消済み)** | P2 | `NUL.exe` 等は Windows で保存不能 → 環境間で保存挙動がずれる。修正: `has_device_filename` → render_risks | 名が何を指すかは OS 依存 |
+| D1319 | ~~**退化添付名が未検査**~~ **(解消済み)** | P2 | `filename=""` 等で自動命名/空欄表示がずれる。修正: `has_degenerate_filename` → render_risks | 実質無名は採番・表示・保存でずれを生む |
+| D1320 | ~~**Content-Type の subtype 欠落が未検査**~~ **(解消済み)** | P2 | `Content-Type: text` で既定値適用/非受理が分かれる。修正: `has_typeless_content_type` → render_risks | 「型/種別」は両方必須 — 主値だけはずれる |
+| D1321 | ~~**boundary 区切りの前方一致曖昧行が未検査**~~ **(解消済み)** | P2 | `--b`+junk で厳密/prefix 一致がずれる。修正: `has_ambiguous_boundary_line` → render_risks | 区切り一致は行全体の契約 |
+| D1322 | ~~**TNEF (winmail.dat) 添付の検査死角**~~ **(解消済み)** | P2 | 本体が独自バイナリ内にあり MIME 検査が届かない。修正: `has_tnef_attachment` → render_risks | 独自カプセル化は検査器に構造的盲点を作る |
+| D1323 | ~~**非正規形 IP リテラルホストが未検査**~~ **(解消済み)** | P2 | DWORD/hex/octal/短縮 IP はドメイン評判の対象外。修正: `is_numeric_ip_host` → Suspicious | ドメイン名の形をしていない宛先は評判照合が効かない |
+| D1324 | ~~**encoded-word 復号後の制御文字が未検査**~~ **(解消済み)** | P2 | 復号で CR/LF が出ると改行注入。修正: `has_control_encoded_word` → render_risks | 符号化欄は復号後の値まで検査する |
+| D1325 | ~~**From の複数アドレス/obs-route 形が未検査**~~ **(解消済み)** | P2 | 複数 mailbox・`<@r:u@h>` で採用アドレスがずれる。修正: `has_multi_addr_from` → render_risks | 一意であるべき欄が「並び」になること自体が兆候 |
+| D1326 | ~~**実行形式メディア型の添付宣言が未検査**~~ **(解消済み)** | P2 | x-msdownload/hta/jar 等の CT 値は拡張子検査を素通り。修正: `has_executable_content_type` → render_risks | 「何が入っているか」の宣言は拡張子と別経路 |
+| D1327 | ~~**ヘッダ内の非許可制御バイトが未検査**~~ **(解消済み)** | P2 | FF/VT/DEL は表示側で改頁・改行・不可視化 → 件名/差出人欄偽装。修正: `has_ctl_bytes_in_headers` → render_risks | 制御文字は「見えない改行」— 欄の表示形そのものを偽装 |
+| D1328 | ~~**7bit 宣言と矛盾する高位バイト本文が未検査**~~ **(解消済み)** | P2 | 明示 7bit 宣言パートの ≥0x80 バイトで高位ビット処理が実装間ずれ。修正: `has_8bit_body_with_7bit_cte` → render_risks | 宣言値と実バイトの不一致は読み手ごとの解釈差分 |
+| D1329 | ~~**charset 宣言と本文実バイトの矛盾が未検査**~~ **(解消済み)** | P2 | us-ascii+高位バイト/utf-8+不正列で置換方針がずれる。修正: `has_charset_body_mismatch` → render_risks | charset は「本文の読み方」の宣言 — 実バイトとの不一致は解釈差分 |
+| D1330 | ~~**`Name:` 形を持たないヘッダ行が未検査**~~ **(解消済み)** | P2 | コロン無し・空名・名前中非許可文字でヘッダ終端の解釈がずれる。修正: `has_malformed_header_line` → render_risks | 欄の形の崩れは「どこまでが欄か」の読み手間差分 |
+| D1331 | ~~**受信メッセージの Bcc 残存が未検査**~~ **(解消済み)** | P2 | 配送時除去の欄が届く = 手作り生成/経路異常 + Bcc 露出。修正: `has_bcc_header` → render_risks | 「届くはずのない欄」が届いていること自体が兆候 |
+| D1332 | ~~**Content-Base のリモート URL が未検査**~~ **(解消済み)** | P2 | Content-Location と同型の MHTML リモートフェッチ経路。修正: `has_remote_content_base` → render_risks | 同型ヘッダは対で見る — 片方だけ塞ぐと経路が残る |
+| D1333 | ~~**読了通知請求ヘッダが未検査**~~ **(解消済み)** | P2 | MDN/Return-Receipt 系は開封通知の偵察経路 (トラッカーと同型)。修正: `has_receipt_request` → render_risks | 「見たことを送信側が知る」経路はヘッダ形態も兆候 |
+| D1334 | ~~**addr-spec を持たない From が未検査**~~ **(解消済み)** | P2 | 表示名のみ/空 From で差出人欄の表示がずれる。修正: `has_degenerate_from_addr` → render_risks | 一意欄の欠落形は「多い」だけでなく「無い」も |
+| D1335 | ~~**表示名がメールアドレス形で実アドレスと不一致でも未検査**~~ **(解消済み)** | P2 | `"security@apple.com" <evil@x>` — 表示名のみ表示の実装で差出人誤認。修正: `has_address_display_name` → render_risks | 表示名/実値不一致は文字種だけでなく「表示名自体がアドレス形」でも |
+| D1336 | ~~**Message-ID 欠落・形の崩れが未検査**~~ **(解消済み)** | P2 | SHOULD 欄の欠落/不正形は手作り生成品の兆候。修正: `has_odd_message_id` → render_risks | 必須級だけでなく SHOULD 級の欠落も兆候 |
+| D1337 | ~~**Content-Disposition の非標準型が未検査**~~ **(解消済み)** | P2 | inline/attachment 以外の型・空値は添付扱いが実装間でずれる。修正: `has_odd_disposition_type` → render_risks | 実装依存の解釈を生む標準外の値自体が兆候 |
+| D1338 | ~~**In-Reply-To/References の非 msgid 値が未検査**~~ **(解消済み)** | P2 | 参照できない識別子で「続きの体裁」を作る偽スレッド工作。修正: `has_malformed_thread_refs` → render_risks | 「続きの体裁」は件名の Re: だけでなく参照欄の値でも偽装される |
+| D1339 | ~~**宛先欄の全欠落が未検査**~~ **(解消済み)** | P2 | To/Cc 一切無しは宛先を見せない BCC 一斉送信の形。修正: `has_no_recipient_headers` → render_risks | 値の異常だけでなく欄の無い配送形状自体も兆候 |
+| D1340 | ~~**緊急性の自称ヘッダが未検査**~~ **(解消済み)** | P2 | X-Priority/Importance/MSMail-Priority の高優先度は「急げ」の自称 = BEC の圧力手段。修正: `has_urgency_claim` → render_risks (DMARC 時沈静) | 心理的圧力もヘッダで自称される |
+| D1341 | ~~**encoded-word 復号後の構文文字が未検査**~~ **(解消済み)** | P2 | `<>"()\`・アドレス欄の `@` を含む復号結果で欄構造がずれる。修正: `has_structural_encoded_word` → render_risks | 復号は防御の終点ではなく再解釈の起点 |
+| D1342 | ~~**メッセージ先頭の BOM が未検査**~~ **(解消済み)** | P2 | BOM を剥がす実装と第1行に載せる実装で全ヘッダ解釈がずれる。修正: `has_leading_bom` → render_risks | 先頭1バイト目は全ヘッダの原点 |
+| D1343 | ~~**multipart/alternative 内の添付メンバーが未検査**~~ **(解消済み)** | P2 | 代替表現の場に attachment 形メンバー → メンバー扱いが実装間でずれる。修正: `has_alternative_attachment` → render_risks | 場違いのパートは構造の誤用 |
+| D1344 | ~~**HTTP フレーミングヘッダが未検査**~~ **(解消済み)** | P2 | Content-Length/Transfer-Encoding/Host/Connection → 手作り生成・経路異常の兆候。修正: `has_http_framing_headers` → render_risks | プロトコル違いの欄は届け方が偽物の印 |
+| D1345 | ~~**text/rfc822-headers パートが未検査**~~ **(解消済み)** | P2 | ヘッダのみ内容型はヘッダ走査が届かない死角。修正: `has_rfc822_headers_part` → render_risks | 内容としてのヘッダと構造のヘッダは別物 |
+| D1346 | ~~**CT/CD パラメータ値内コメントが未検査**~~ **(解消済み)** | P2 | コメント剥がし/値として読むで boundary・filename がずれる。修正: `has_param_value_comment` → render_risks | 値中の注釈は解釈を割く |
+| D1347 | ~~**パート宣言の message/* サブタイプが未検査**~~ **(解消済み)** | P2 | 添付側 D1266 のみでパート宣言位置は死角。修正: `has_message_subtype_part` → render_risks | 同じ型でも通る場所が違う |
+| D1348 | ~~**multipart/x-mixed-replace が未検査**~~ **(解消済み)** | P2 | push 型で後続パートが表示を置き換える。修正: `has_mixed_replace` → render_risks | 時間と共に変わる文書は静止検査で見えない |
+| D1349 | ~~**暗号化内容の検査不能が未通知**~~ **(解消済み)** | P2 | multipart/encrypted・PGP ブロックは一切の走査を素通り。修正: `has_opaque_encrypted_content` → render_risks | 検査できない事実自体が検査結果 |
+| D1350 | ~~**Content-Type 無宣言パートが未検査**~~ **(解消済み)** | P2 | 既定値適用とスニッフィングで読み手がずれる。修正: `has_missing_part_content_type` → render_risks | 書かれていない型は解釈が割れる |
+| D1351 | ~~**パラメータ値内 encoded-word が未検査**~~ **(解消済み)** | P2 | RFC 2047 を値に混ぜると復号/非復号で添付名がずれる。修正: `has_param_encoded_word` → render_risks | 正規方式の別の場に別方式を混ぜる |
+| D1352 | ~~**multipart/digest が未検査**~~ **(解消済み)** | P2 | メンバー既定 message/rfc822 を知らない検査は入れ子を見逃す。修正: `has_digest_container` → render_risks | 既定の中身は宣言されずに届く |
+| D1353 | ~~**アドレス dot-atom 違反が未検査**~~ **(解消済み)** | P2 | 厳格実装は拒否・寛容実装は正規化で照合がずれる。修正: `has_malformed_addr_spec` → render_risks | 形の崩れた宛名は読み手で受取人が変わる |
+| D1354 | ~~**アドレス欄の < > 不対応が未検査**~~ **(解消済み)** | P2 | route-addr の開閉ずれで抽出される差出人が分かれる。修正: `has_unbalanced_route` → render_risks | 括弧の対応は構造の約束 |
+| D1355 | ~~**稀な multipart サブタイプが未検査**~~ **(解消済み)** | P2 | parallel/byteranges 等はパート扱いが実装間でずれる。修正: `has_exotic_multipart_subtype` → render_risks | 珍しい器は開け方が係ごとに違う |
+| D1356 | ~~**メディア型トークンの形の崩れが未検査**~~ **(解消済み)** | P2 | text/a/b・text/・空白混入で型解釈がずれる。修正: `has_malformed_media_type` → render_risks | 型名の形が崩れれば読み手次第 |
+| D1357 | ~~**添付名の %XX 断片が未検査**~~ **(解消済み)** | P2 | filename= 値の %XX は復号有無で添付名がずれる。修正: `has_percent_encoded_filename` → render_risks | 復号する係としない係で別名になる |
+| D1358 | ~~**無名 attachment パートが未検査**~~ **(解消済み)** | P2 | 自動命名と空表示で添付名がずれる。修正: `has_unnamed_attachment` → render_risks | 名無しの荷物は係ごとに別の札が付く |
+| D1359 | ~~**アドレスドメインの非 ASCII が未検査**~~ **(解消済み)** | P2 | Unicode 表示と punycode/拒否で差出人が違う顔。修正: `has_non_ascii_addr_domain` → render_risks | 異字の町名は読み手で別の町に見える |
+| D1360 | ~~**filename / filename* 不一致が未検査**~~ **(解消済み)** | P2 | * 優先と無視で添付名がずれる。修正: `has_conflicting_filename` → render_risks | 二枚の名札は読む係で別名になる |
+| D1361 | ~~**偽返信 (Re: だが threading 無し) が未検査**~~ **(解消済み)** | P2 | 続きの体裁を偽装する手作り品。修正: `has_fake_reply_claim` → render_risks | 綴じ紐の無い「続き」は別物 |
+| D1362 | ~~**非宣言 base64 本文ブロックが未検査**~~ **(解消済み)** | P2 | 宣言だけ復号する検査にペイロードが見えない。修正: `has_undeclared_base64_block` → render_risks | 「平文です」の箱に暗号の束 |
+| D1363 | ~~**空・未終端グループ構文が未検査**~~ **(解消済み)** | P2 | `To: label:;` は宛先を見せない一斉送信形 (D1339 回避)。修正: `has_empty_group_syntax` → render_risks | 宛先の名札が空なら誰にも読めない |
+| D1364 | ~~**Usenet 制御ヘッダ混入が未検査**~~ **(解消済み)** | P3 | Control:/Supersedes: 等はメールで意味を持たず制度混在の兆候。修正: `has_usenet_control_header` → render_risks | 別制度の消印が貼られた封筒 |
+| D1365 | ~~**添付名のコロン (Windows ADS) が未検査**~~ **(解消済み)** | P2 | `名:型` は ADS 書込みで格納先偽装。修正: `filename_anomalies` に ads_stream | 二つの名前を重ね書きした荷物 |
+| D1366 | ~~**非クオート boundary 値内の `;` 混入が未検査**~~ **(解消済み)** | P2 | `boundary=a;b` で区切り解釈がずれる。修正: `has_boundary_semicolon` → render_risks | 途中に切れ目のある区切り札 |
+| D1367 | ~~**本文の ANSI/ターミナル制御列が未検査**~~ **(解消済み)** | P2 | ESC 制御列で表示器の内容改竄・OSC52 クリップボード。修正: `has_ansi_escape_body` → render_risks | 見せられた文字が消える手紙 |
+| D1368 | ~~**本文の bidi 上書き制御文字が未検査**~~ **(解消済み)** | P2 | 本文中 U+202A-E で表示順を反転 (件名 D1302 の本文版)。修正: `has_bidi_override_body` → render_risks | 文字順を裏返す墨 |
+| D1369 | ~~**Content-ID/Content-Location 重複が未検査**~~ **(解消済み)** | P2 | cid 衝突で参照解決が実装間でずれ別内容を差し込める。修正: `has_duplicate_content_id` → render_risks | 同じ札番号の二つの荷物 |
+| D1370 | ~~**差出人欄のドメインリテラルが未検査**~~ **(解消済み)** | P2 | `@[ip]` はドメイン評判の対象外の自称。修正: `has_literal_domain_sender` → render_risks | 座標で住処を名乗る差出人 |
+| D1371 | ~~**宣言 base64 の 76 字超行が未検査**~~ **(解消済み)** | P2 | 行長超過で復号結果が実装間でずれる。修正: `has_overlong_base64_line` → render_risks | 規格外の長い帯 |
+| D1372 | ~~**同一欄の encoded-word charset 混在が未検査**~~ **(解消済み)** | P2 | 欄内で文字コード混在は復号結果がずれる。修正: `has_mixed_encoded_charset` → render_risks | 二つの文字体系の名札 |
+| D1373 | ~~**深すぎる multipart 入れ子が未検査**~~ **(解消済み)** | P2 | 4 階層以上は再帰パーサへのリソース消費工作。修正: `has_deep_multipart_nesting` → render_risks | 箱を開けるたび箱が出る梱包 |
+| D1374 | ~~**パートヘッダ内の MIME-Version が未検査**~~ **(解消済み)** | P2 | 外側専用の欄の混入で MIME 判定がずれる。修正: `has_part_mime_version` → render_risks | 荷物の札に便の規格番号 |
+| D1375 | ~~**カレンダー非招待系 METHOD (CANCEL 等) が未検査**~~ **(解消済み)** | P2 | 偽 CANCEL で実在会議を削除、偽 REPLY で応答捏造。修正: `detect_method_spoof` → CalendarRisk::MethodSpoof | 「無かったことにせよ」の口上 |
+| D1376 | ~~**text/enriched/richtext が未検査**~~ **(解消済み)** | P3 | 廃止済み簡易マークアップで表示器間の見え方がずれる。修正: `has_enriched_text_type` → render_risks | 誰も使わない書式の書類 |
+| D1377 | ~~**message/* の base64/QP CTE が未検査**~~ **(解消済み)** | P2 | RFC 2046 §5.2.1 違反 — 符号化 .eml はスキャナに内側が見えない。修正: `has_encoded_message_part` → render_risks | 密封した封筒に入った書類束 |
+| D1378 | ~~**multipart/signed の署名パート欠落が未検査**~~ **(解消済み)** | P2 | signed を名乗るのに署名パートが無い検証不能構造。修正: `has_unsigned_signed_container` → render_risks | 「封印済み」だが封印が無い箱 |
+| D1379 | ~~**In-Reply-To/References の自己参照が未検査**~~ **(解消済み)** | P2 | 自分の Message-ID を参照する偽造スレッド。修正: `has_self_reply_ref` → render_risks | 自分への返信を名乗る葉書 |
+| D1380 | ~~**期限自称ヘッダ (Expires/Reply-By 等) が未検査**~~ **(解消済み)** | P3 | 日付で急かせる圧力表示 (X-Priority の期限版)。修正: `has_deadline_claim` → render_risks | 催促を印字した封筒 |
+| D1381 | ~~**SA 判定欄 (X-Spam-Status 等) の自称が未検査**~~ **(解消済み)** | P2 | 「無害と判定済み」を送信側が書き込む。修正: `has_spam_verdict_claim` → render_risks | 無害印を自分で捺す書類 |
+| D1382 | ~~**廃止整合性欄 (Content-MD5 等) の自称が未検査**~~ **(解消済み)** | P3 | 「照合済み」の体裁を内容側が書き込む。修正: `has_integrity_claim` → render_risks | 検査済み印を出品側が捺す箱 |
+| D1383 | ~~**記録抑制要求ヘッダ (X-No-Archive 等) が未検査**~~ **(解消済み)** | P2 | 「痕跡を残すな」の要求 — 証拠隠滅の兆候。修正: `has_suppression_claim` → render_risks | 読んだら捨てろの葉書 |
+| D1384 | ~~**addr-spec 位置の encoded-word が未検査**~~ **(解消済み)** | P2 | アドレス内 `=?…?=` で抽出がずれる。修正: `has_encoded_word_addr_spec` → render_risks | 住所の途中に暗号の宛名 |
+| D1385 | ~~**ヘッダ先頭の孤児継続行 (WSP 始まり) が未検査**~~ **(解消済み)** | P2 | 親を持たない折りたたみで欄解釈がずれる。修正: `has_leading_continuation` → render_risks | 上の行を持たない続き行の書類 |
+| D1386 | ~~**本文冒頭のヘッダ形連続行が未検査**~~ **(解消済み)** | P2 | 再取り込みで後続ヘッダとして復活する格納差異。修正: `has_body_header_block` → render_risks | 本文の顔をした第二の表紙 |
+| D1387 | ~~**RFC 1421 PEM ヘッダ (Proc-Type 等) が未検査**~~ **(解消済み)** | P2 | 現行スキャナが暗号化と認識しない死角。修正: `has_pem_markers` → render_risks | 誰も読めなくなった旧規格の封印 |
+| D1388 | ~~**下書き残渣ヘッダ (X-Unsent 等) が未検査**~~ **(解消済み)** | P3 | エクスポート品・手作り生成の兆候 (Bcc 露出も)。修正: `has_draft_residue` → render_risks | 机の中の控えが届いた葉書 |
+| D1389 | ~~**Exchange 組織内記録欄 (Organization-* 等) の自称が未検査**~~ **(解消済み)** | P2 | AuthAs: Internal で社内発信の体裁を偽造。修正: `has_exchange_org_claim` → render_risks | 来客が自署する構内通行証 |
+| D1390 | ~~**配送記録欄 (Return-Path/Delivered-To) の重複が未検査**~~ **(解消済み)** | P3 | 再注入ループ・系統重複の残渣。修正: `has_dup_delivery_headers` → render_risks | 二度捺された配達証印 |
+| D1391 | ~~**添付名のドット・空白始まり (隠れ名) が未検査**~~ **(解消済み)** | P2 | dotfile は一覧に現れない添付。修正: `has_hidden_filename` → render_risks | 透明インクの名札の添付 |
+| D1392 | ~~**CT/CD パラメータのクオート不対応が未検査**~~ **(解消済み)** | P2 | 未終端クオートで添付名境界がずれる。修正: `has_unbalanced_param_quote` → render_risks | 閉じられない引用符の書類 |
+| D1393 | ~~**添付名の Windows 非合法文字 (* ? \| < >) が未検査**~~ **(解消済み)** | P2 | 保存不能文字で宣言名と保存名がずれる。修正: `has_invalid_filename_chars` → render_risks | 使えない文字の宛名 |
+| D1394 | ~~**RFC 2231 連番パラメータの欠番が未検査**~~ **(解消済み)** | P2 | *0/*2 で *1 欠番 — 連結実装差で添付名ずれ。修正: `has_rfc2231_gap` → render_risks | 欠巻の分冊百科 |
+| D1395 | ~~**パート Content-ID の角括弧欠落が未検査**~~ **(解消済み)** | P2 | cid: 参照解決が実装間でずれる。修正: `has_unbracketed_content_id` → render_risks | 額縁に入らない図版番号 |
+| D1396 | ~~**符号化添付名の制御文字パーセント符号化が未検査**~~ **(解消済み)** | P2 | `filename*=…%0a` で復号後改行を含む名。修正: `has_encoded_control_filename` → render_risks | 名札の裏の第二の名前 |
+| D1397 | ~~**Errors-To/Return-Error-To バウンス転送指示が未検査**~~ **(解消済み)** | P3 | 不達通知を盗み見る旧来欄。修正: `has_bounce_directive` → render_risks | 転送先自書の案内 |
+| D1398 | ~~**同一パート run 内の CT/CD/CTE/Content-ID 重複が未検査**~~ **(解消済み)** | P2 | 採用値が実装間でずれる。修正: `has_part_header_dup` → render_risks | 箱に二枚のラベル |
+| D1399 | ~~**charset 無し text/* + 高位バイト本文が未検査**~~ **(解消済み)** | P2 | 文字コード推測が実装間でずれる。修正: `has_missing_charset_hibit` → render_risks | 言語不明記の手紙 |
+| D1400 | ~~**旧式 Encrypted:/Decryptable: 欄の自称が未検査**~~ **(解消済み)** | P3 | 意味を持たない暗号化自称。修正: `has_legacy_encrypted_header` → render_risks | 「封印済」と書かれた透ける封筒 |
+| D1401 | ~~**外側 Content-Type/CD/CTE の重複が未検査**~~ **(解消済み)** | P2 | メディア型採用が実装間でずれる。修正: `has_dup_mime_headers` → render_risks | 二度記入の種類欄 |
+| D1402 | ~~**boundary パラメータの 70 文字超過が未検査**~~ **(解消済み)** | P2 | 切り詰め実装と区切り解釈がずれる。修正: `has_long_boundary` → render_risks | 枠からはみ出す見出し線 |
+| D1403 | ~~**表示名中の URL 文字列が未検査**~~ **(解消済み)** | P2 | 表示名リンク化で誘導経路に。修正: `has_url_display_name` → render_risks | URL を刷った名刺 |
+| D1404 | ~~**アドレスドメインのアンダースコア混入が未検査**~~ **(解消済み)** | P3 | 非合法ラベル文字で名指しがずれる。修正: `has_underscore_domain` → render_risks | 区画外記号の宛名 |
+| D1405 | Content-Transfer-Encoding の値が単一トークンでない | base64; x 等は先頭読みと未知値扱いで復号がずれる | 値が単一クリーントークンでない CTE を検出 | kaname-render |
+| D1406 | Deliver-To/Deliver-Date/X-Deliver-To 等の裸到着記録欄 | 送信側が「配送済み」の体裁を自称 | 外側ヘッダの裸到着記録欄を検出 | kaname-render |
+| D1407 | msgid のドメイン部が […] リテラル | 手作り生成品の兆候 (MUA は生成しない) | msgid 欄の @ 直後が [ で始まる形を検出 | kaname-render |
+| D1408 | アドレスのローカル/ドメイン部が空 (a@/@b/a@@b) | 抽出と拒否で宛名がずれる | クオート/コメント外 @ の両側 atom 空を検出 | kaname-render |
+| D1409 | multipart の preamble に非空内容 | 規格上表示されない領域に注記/ペイロード潜伏 | 宣言 boundary より前の非空行を検出 | kaname-render |
+| D1410 | multipart の epilogue に非空内容 | 閉じ boundary の向こうへの潜伏 | 外側閉じ boundary 以降の非空行を検出 | kaname-render |
+| D1411 | 非 text/* 型への charset= パラメータ | 無視と適用で解釈がずれる | CT 主型が text/message 以外で charset= を検出 | kaname-render |
+| D1412 | Newsgroups/Path/Xref/NNTP-* 経路欄 | メールに無い制度の欄の混入 | 外側ヘッダの NNTP 経路欄を検出 | kaname-render |
+| D1413 | Sensitivity: 自称機密度欄 | 「機密案件」の体裁を送信側が自称 | 外側ヘッダの sensitivity 系欄を検出 | kaname-render |
+| D1414 | Message-ID/Resent-Message-ID に <…> が複数 | 採用識別子が実装間でずれる | msgid 欄の < 個数を検査 | kaname-render |
+| D1415 | From/Sender/Return-Path が mailer-daemon 等の役割名 | 偽配送失敗通知の形 | 差出人欄 addr-spec ローカル部を検査 | kaname-render |
+| D1416 | Apparently-From/X-Apparently-Sender 等差出人側見せかけ欄 | 「見せかけ差出人」の体裁を自称 | 外側ヘッダの差出人側 Apparently-* を検出 | kaname-render |
+| D1417 | Content-Type メディア型がクオート | 引用符の剥がし/拒否で型解釈がずれる | CT 値先頭の引用符を検出 | kaname-render |
+| D1418 | List-* 便益欄があるのに List-Id 無し | 偽 unsubscribe 誘導の体裁 | List-* 欄と List-Id の有無を突き合わせ | kaname-render |
+| D1419 | 添付名が 255 バイト超 | 保存名と表示名がずれる | CT/CD 添付名値の長さを検査 | kaname-render |
+| D1420 | CT/CD に空名パラメータ (;= / ; =) | 以降パラメータ解釈がずれる | ; 直後の = を検出 | kaname-render |
+| D1421 | 本文に単独 `.` 行 (SMTP DATA 終端形) | 切り捨て/表示で以降の見え方がずれる | 本文の孤立ドット行を検出 | kaname-render |
+| D1422 | 本文中の mbox `From ` 区切り行 | mbox 格納で第2メッセージが潜む | `From `+`@`+4桁年の行を検出 | kaname-render |
+| D1423 | `Reply-To:` の複数アドレス | 返信の見えない分流 | 引用・コメント外の @ 個数とカンマを検査 | kaname-render |
+| D1424 | 外側ヘッダの `Content-Disposition:` | メール全体を添付扱いする実装とずれる | 外側ヘッダの CD 行を検出 | kaname-render |
+| D1425 | 外側ヘッダに Received: 皆無 | 配送を経ていない手作り生成品の兆候 | 外側ヘッダの received: 行の有無を検査 | kaname-render |
+| D1426 | start=<cid> が指す Content-ID 無し | ルート部品の選び方が実装間でずれる | start= 値と宣言 Content-ID を突き合わせ | kaname-render |
+| D1427 | List-Id: が <label.host> 形でない | 厳格実装でリスト識別不能・手作り品の兆候 | <…> と内部ドットを検査 | kaname-render |
+| D1428 | Resent-Bcc: 欄の残存 | 再送ブロックの隠し宛先露出 | 外側ヘッダの resent-bcc: を検出 | kaname-render |
+| D1429 | boundary*= / boundary*0= 拡張記法 | 区切りを読める実装と見失う実装で構造ずれ | CT 行の boundary* 形を検出 | kaname-render |
+| D1430 | 添付名が URL 形 (:// 含有) | リンク表示と保存名で添付の顔がずれる | CT/CD 添付名値の :// を検査 | kaname-render |
+| D1431 | 緊急度欄の矛盾併記 (急げ+不急) | 優先度表示が実装間でずれる | X-Priority/Priority/Importance の高低両立を検査 | kaname-render |
+| D1432 | 外側ヘッダに From: 皆無 | 必須欄欠落で差出人の読みがずれる | from:/resent-from: 行の有無を検査 | kaname-render |
+| D1433 | dkim=pass を名乗るのに DKIM-Signature 欄が無い | 検証済み体裁の自称印 | 署名欄不在と dkim=pass 判定の矛盾を検査 | kaname-render |
+| D1434 | multipart/signed|encrypted に protocol= 無し | 署名・暗号方式が特定不能 | 両型 CT 行の protocol= 有無を検査 | kaname-render |
+| D1435 | Thread-Index/Topic が参照欄無しで存在 | 参照できない「続きの体裁」(偽スレッド) | thread 印と参照欄の不一致を検査 | kaname-render |
+| D1436 | addr-spec の %-hack/UUCP ! 経路構文 | 経路解釈する実装としない実装で宛名ずれ | アドレス欄 @ トークン内 %/! を検査 | kaname-render |
+| D1437 | Subject が encoded-word 復号で re: 始まり・参照欄無し | 生読み偽返信検査 (D1361) の符号化回避 | 先頭 encoded-word を Q/B 復号し re: 始まり+参照欠落を検査 | kaname-render |
+| D1438 | multipart/report に report-type= 無し | 報告種別が特定不能 | CT 行の report-type= 有無を検査 | kaname-render |
+| D1439 | 裸の Charset:/Encoding: 宣言欄 (RFC 2978/1154 廃止) | 尊重/無視で本文の読みがずれる | 外側ヘッダの charset:/encoding: 行を検査 | kaname-render |
+| D1440 | 非 message/* パートヘッダに From/Subject 等のメッセージ級欄 | パート属性と読む実装と飾り扱いでずれ | パートヘッダ run 内のメッセージ級欄を検査 | kaname-render |
+| D1441 | HTTP 応答欄 (Set-Cookie/Location/Refresh/ETag/CSP 等) の混入 | 別制度の記録=連結ミスor誘導の兆候 | 外側ヘッダの HTTP 応答欄を検査 | kaname-render |
+| D1442 | multipart/related に type= 無し | ルート部品の型が特定不能 (RFC 2387) | CT 行の type= 有無を検査 | kaname-render |
+| D1443 | In-Reply-To に複数 msgid 併記 | 単一返信先欄の統合体裁偽造 | 値内の msgid 数を検査 | kaname-render |
+| D1444 | 添付名の末尾 . / 空白 | Windows が保存時に剥がし宣言名とずれる | CT/CD 添付名値の末尾を検査 | kaname-render |
+| D1445 | 緊急度欄 (X-Priority/Priority/Importance/X-MSMail-Priority) の規格外値 | 手書き生成の形跡・読み手で強弱ずれ | 値を既定集合と照合 | kaname-render |
+| D1446 | From/Sender 等 mailbox 欄のグループ構文 | 先頭メンバを差出人に読む/欄捨てるでずれ | クオート・コメント除去後 `:`…`;` を検査 | kaname-render |
+| D1447 | ヘッダ run に `:` を欠く壊れ行混入 | 打ち切り/読み飛ばし/継続で以降全行ずれ | 外側ヘッダ物理行の `:` 有無を検査 | kaname-render |
+| D1448 | ヘッダ名に非印刷文字・空白・非ASCII | 厳格実装は欄ごと拒否で読みずれ | 名前部バイト種 (33–126) を検査 | kaname-render |
+| D1449 | In-Reply-To/References の重複 | 一意欄の重複で先頭/末尾読みがずれる (D1306 は参照欄対象外) | 外側ヘッダの参照欄行数を検査 | kaname-render |
+| D1450 | 識別欄 (From/To/Subject/Message-ID 等) の空値 | 空値と欠落で読みがずれる | 外側ヘッダの識別欄空値を検査 | kaname-render |
+| D1451 | MIME 欄 (Content-Type/Disposition/CTE 等) の空値 | 既定値適用 vs 欄捨てで型・添付判定がずれる | 外側+パート全 run の空値を検査 | kaname-render |
+| D1452 | charset= 空値 | 既定 charset vs 空文字名で文字解釈がずれる | CT 行の charset パラメータ空値を検査 | kaname-render |
+| D1453 | HTTP 要求欄 (Cookie/Authorization/Referer/Accept-* 等) の混入 | 資格情報漏洩・別制度記録の混入 | 外側ヘッダの HTTP 要求欄を検査 | kaname-render |
+| D1454 | multipart/alternative の忠実度逆順 (plain が html より後) | 先頭/末尾採用で表示・検査対象がずれる | メンバー CT 並びを検査 | kaname-render |
+| D1455 | Content-Disposition 行の boundary= 混入 | boundary を拾う実装が構造を誤読 | CD 行の boundary= を検査 | kaname-render |
+| D1456 | From/Sender 値に @ を含む宛名が無い | 名のみ読む/欄捨てるで差出人がずれる | クオート・コメント除去後の @ 有無を検査 | kaname-render |
+| D1457 | boundary 値が - 終わり/内部に -- を含む | 開き区切りが閉じ形と紛らわしく構造誤読 | boundary 値の末尾 -/内部 -- を検査 | kaname-render |
+| D1458 | Received に節・コメント・日付のいずれも無い | 手書き偽装消印 | Received 値の節/コメント/日付有無を検査 | kaname-render |
+| D1459 | 外側 MIME-Version の重複 | 一意欄重複で版解釈がずれる | 外側 MIME-Version 行数を検査 | kaname-render |
+| D1460 | 宣言 boundary が本文で不使用 (部品ゼロ multipart) | 全本文が preamble 扱いになるずれ | 宣言 boundary の本文使用を検査 | kaname-render |
+| D1461 | In-Reply-To/References に <…> 形 msgid が無い | 厳格実装で参照欄ごと捨てられる | 参照欄値の < 欠落を検査 | kaname-render |
+| D1462 | multipart/signed で protocol あり・micalg 無し | ハッシュ方式不明で検証不能の署名体裁 | signed 器の micalg= 欠落を検査 | kaname-render |
+| D1463 | 本文 text/* 部品が CD: attachment | 本文が添付として隠れる | text/* 部品の attachment 宣言を検査 | kaname-render |
+| D1464 | ヘッダ/本文の区切り空行が無い | 全文がヘッダ/本文のみかで構造がずれる | ヘッダ形行+空行欠落の併存を検査 | kaname-render |
+| D1465 | multipart/related の type= が実在メンバー型を指さない | ルート部品解決が実装間でずれる | type= とメンバー CT の一致を検査 | kaname-render |
+| D1466 | 添付名の拡張子と宣言 CT の意味的矛盾 (exe+image 等) | 名札偽装で添付の顔がずれる | パート単位の CT/拡張子矛盾を検査 | kaname-render |
+| D1467 | 本文 cid: 参照に合う Content-ID 部品が無い | 埋め込み解決失敗で見え方ずれ | cid: 参照と宣言 ID の照合 | kaname-render |
+| D1468 | List-Id 無しの List-Post/Subscribe/Help/Archive/Owner | 名乗らぬ偽 ML 窓口 | List-Id 欠落下の ML 欄を検査 | kaname-render |
+| D1469 | 添付名が `-` で始まる (RFC2231 %2d 含む) | 保存後オプション誤読 | 先頭ハイフン検査 | kaname-render |
+| D1470 | 添付名に $()/${}/バッククォート等シェル式 | 保存名のシェル展開工作 | シェル式混入検査 | kaname-render |
+| D1471 | X-Face/Face/X-Image-URL 送信者指定顔写真 | 偽アバターで差出人信用偽装 | 顔写真欄の存在検査 | kaname-render |
+| D1472 | boundary 値に空白混入 | 区切り照合の実装間ずれ | 引用符内空白検査 | kaname-render |
+| D1473 | ハイフン欠落した標準欄名の綴り違い (MessageID 等) | 欄名正規化で解釈ずれ | 綴り違い欄名の検査 | kaname-render |
+| D1474 | CTE 値が引用符付き ("base64") | 剥がす実装と拒否で復号ずれ | 引用符始まり検査 | kaname-render |
+| D1475 | Content-Description 値に URL 混入 | 説明欄経由の誘導リンク | URL 存在検査 | kaname-render |
+| D1476 | Resent-* 欄が Resent-From/Date を欠く | 体裁だけの転送履歴 | 必須ペア欠落検査 | kaname-render |
+| D1477 | X-Original-Message-ID/From/Subject/Date 等の元の値欄 | 真の値露出・元体裁捏造 | X-Original-* 欄検査 | kaname-render |
+| D1478 | DomainKey-Signature/X-DKIM 系の廃止・模倣署名欄 | 検証不能な封印体裁 | 旧式署名欄検査 | kaname-render |
+| D1479 | Archived-At/X-Archived-At 等の原本参照 URL | 原本体裁の誘導リンク | アーカイブ欄検査 | kaname-render |
+| D1480 | Message-ID/参照欄の <<…>> 入れ子括弧 | 括弧層差で照合ずれ | 入れ子括弧検査 | kaname-render |
+| D1481 | text/plain 本文の HTML マークアップ混入 | 推測描画 vs 厳守表示のずれ |
+| D1482 | filename= が CT / name= が CD の逆配置 | 欄正規 param 読み vs 横断読みのずれ |
+| D1483 | boundary が閉じ区切りのみ (部品ゼロ) | 開き無し容器の構造解釈ずれ |
+| D1484 | ヘッダ値の encoded-word 外 =XX | QP 復号の有無で表示ずれ |
+| D1485 | 本文区切り行が boundary と大小写のみ違う | 厳密比較 vs 正規化の構造ずれ |
+| D1486 | CT/CD の `;` が行末裸・連続 | エラー vs 読み飛ばしの型解釈ずれ |
+| D1487 | `= 値` の空白挟みパラメータ | 空白を含める実装 vs 飛ばす実装 |
+| D1488 | List-Unsubscribe 無しの -Post 欄 | 修飾欄単独の機構偽装 |
+| D1489 | パート本文先頭の BOM | BOM 優先 vs charset 優先の解釈ずれ |
+| D1490 | `*=`/`name*foo=` 異常連番 param | 厳格捨て vs 寛容拾い |
+| D1491 | 閉じ区切り `--b--` の重複・先行 | 閉じで止める vs 拾い続ける構造ずれ |
+| D1492 | msgid `<…>` 内の非 ASCII | 識別子採用 vs 棄却のずれ |
+| D1493 | param 名と = の間の空白 (`name =v`) | trim する実装 vs 未知キー化 |
+| D1494 | alternative の同型メンバー重複 | 最初採用 vs 最後採用のずれ |
+| D1495 | 大文字混じり param 名 | 畳む実装 vs 畳まない実装 |
+| D1496 | alternative に text/* メンバー無し | 部品描画 vs 添付落としのずれ |
+| D1497 | 同名 param の素/拡張併記 (`filename=` + `filename*=`) | 採用規則差で名札がずれる |
+| D1498 | Message-ID `<abc>`/`<a@>`/`<>` の住所欠落 | 厳格実装が識別子を捨てる |
+| D1499 | obs-route `<@r,@r:u@h>` 経路指定 | 経路解釈の有無で宛名がずれる |
+| D1500 | アドレス欄の `<<a@b>>` 入れ子括弧 | 剥がし方の差で宛名がずれる |
+| D1501 | CT/CD の空白区切り param 継ぎ (`text/plain charset=…`) | `;` 区切り実装が param を見失う |
+| D1502 | CTE の規定外符号化名 (uuencode/binhex 等) | 素通し vs 既定扱いで本文がずれる |
+| D1503 | alternative 内の alternative メンバー | 降下 vs 部品扱いで本文がずれる |
+| D1504 | `;` 区切りの `=` 無し裸トークン | 値なし param vs ゴミ扱いのずれ |
+| D1505 | text/plain+base64 部品の復号 HTML | 復号表示 vs 推測描画でずれる |
+| D1506 | filename/name 値の生制御バイト | 除去 vs 残存で名札がずれる |
+| D1507 | 差出人ドメインのドット欠落 (a@localhost) | 拒否 vs 組織内推測でずれる |
+| D1508 | アドレス欄の空 `<>` | 括弧採用実装で宛先が消える |
+| D1509 | text/plain+QP 部品の復号 HTML | 復号表示 vs 推測描画でずれる |
+| D1510 | filename/name の生非 ASCII | charset 推測で名札がずれる |
+| D1511 | 空の型/サブタイプ (text/, /plain) | 既定値 vs 破棄でずれる |
+| D1512 | 型トークン内空白 (text /plain) | 除去 vs 破棄でずれる |
+| D1513 | CTE の大文字形 (BASE64) | 厳密比較実装が復号しない |
+| D1514 | msgid `<a@b@c>` 複数 @ | 切断位置で識別子がずれる |
+| D1515 | パラメータ値内の裸 = | 名値切り分けがずれる |
+| D1516 | msgid 括弧内空白 | trim/保持で識別子がずれる |
+| D1517 | 宛名ローカル部の非 ASCII | SMTPUTF8 vs ASCII のみでずれる |
+| D1518 | 本文の `..` 始まり行 | dot-stuffing 復元差異 |
+| D1519 | CD の大文字形 (Attachment) | 厳密比較実装が添付を見逃す |
+| D1520 | CTE 値内空白 (base 64) | 除去 vs 破棄で復号有無がずれる |
+| D1521 | 宛名欄の未終端コメント | 行末読み vs 破棄でずれる |
+| D1522 | msgid の未終端 `<` | 識別子の読み終わりがずれる |
+| D1523 | 宛名欄の裸 `;` | 分割 vs 構文エラーでずれる |
+| D1524 | `*=` の危険 charset (utf-16/utf-7) | 復号器で名札がずれる |
+| D1525 | 宛名欄の未終端クオート | 行末読み vs 破棄でずれる |
+| D1526 | 宛名欄の `<`/`>` 崩れ | 行末読み vs 構文エラーでずれる |
+| D1527 | encoded-word の危険 charset | 復号器で表示がずれる |
+| D1528 | 宛名欄の `@` 無し `<…>` | 括弧採用 vs 全体読みでずれる |
+| D1529 | msgid 欄内の encoded-word | 復号照合 vs 生採用でずれる |
+| D1530 | `*N=` と `*N*=` の混在 | 連結方法で名札がずれる |
+| D1531 | 宛名欄の空白継ぎ裸宛名 | 分割方法で宛先数がずれる |
+| D1532 | `Content-ID: <abc>` の @ 無し | cid 厳密照合で解決不能 |
+| D1533 | `From::` 二重コロン欄名 | 構文エラー vs 許容で全欄ずれ |
+| D1534 | `… JST` 名前付きゾーン | 既知名解釈 vs 破棄で時刻ずれ |
+| D1535 | `25 Sep 25` 2桁年 | ピボット規則で世紀ずれ |
+| D1536 | `From: (notes)` 注釈のみ | 宛名空 vs 注釈流用でずれ |
+| D1537 | `a@b，c@d` 全角区切り | ASCIIのみ切る実装で宛先ずれ |
+| D1538 | `<a@b> junk` 括弧後ゴミ | 括弧のみ採用で宛名ずれ |
+| D1539 | `<a@b> <c@d>` 連続括弧 | 宛名数の解釈ずれ |
+| D1540 | `*/*` ワイルドカード型 | 既定値 vs 破棄で本文ずれ |
+| D1541 | `List-Unsubscribe: <javascript:…>` | 解除ボタンで任意スキーム実行 |
+| D1542 | `From: "a@b"` クオートのみ | 宛名抽出 vs 流用でずれ |
+| D1543 | `To: team: a@b` 未閉鎖グループ | 構文エラー vs 自動閉で宛先ずれ |
+| D1544 | `CTE: base64, quoted-printable` | 複数値の採用位置で復号ずれ |
+| D1545 | `<a@b> junk` msgid 後ゴミ | 識別子の終端がずれる |
+| D1546 | `a@[name]` 非 IP リテラル | 受理 vs 拒否で宛名ずれ |
+| D1547 | ゾーン無し Date | ローカル時刻 vs エラーでずれ |
+| D1548 | `Content.Type:` ドット欄名 | 欄名許容 vs 拒否でずれ |
+| D1549 | `〈a@b〉` 全角括弧宛名 | 正規化 vs 生読みでずれ |
+| D1550 | `a@b@c` 二重 @ | 切断位置で宛名ずれ |
+| D1551 | `<a@b..c>` 連続ドット | 受理 vs 破棄で照合ずれ |
+| D1552 | CT/CD 値中 `=?…?=` | 復号 vs 生採用で型ずれ |
+| D1553 | `.a@x`/`a.@x` 端ドット | 拒否 vs 受理で宛名ずれ |
+| D1554 | `a@b..c` ドメイン空ラベル | 受理 vs 拒否で宛名ずれ |
+| D1555 | `25 Foo 2025` 未知月名 | 月解釈で日付ずれ |
+| D1556 | `a..b@x` ローカル空 atom | 拒否 vs 受理で宛名ずれ |
+| D1557 | `a/b@x` 裸特殊文字ローカル | 拒否 vs 受理で宛名ずれ |
+| D1558 | `a@b.123` 数値 TLD | フィルタ vs 受理で宛名ずれ |
+| D1559 | `25:00` 範囲外時刻 | 丸め vs エラーで日付ずれ |
+| D1560 | `a@-b.x` 端ハイフンラベル | 拒否 vs 受理で宛名ずれ |
+| D1561 | `32 Sep` 範囲外の日 | 丸め vs エラーで日付ずれ |
+| D1562 | `a@.b.c` 先頭ドット | 拒否 vs 受理で宛名ずれ |
+| D1563 | `<a@.b>` msgid 先頭ドット | 識別子破棄で照合ずれ |
+| D1564 | `a@[999.1.1.1]` 範囲外 octet | 拒否 vs 受理で宛名ずれ |
+| D1565 | `+2560` 範囲外 TZ | 丸め vs エラーで日付ずれ |
+| D1566 | `25 09 2025` 数字月 | 旧式のみ受理でずれ |
+| D1567 | `<a..b@x>` msgid 連続ドット | 識別子破棄で照合ずれ |
+| D1568 | `a＠b.x` 全角＠ | 正規化 vs 生読みでずれ |
+| D1569 | 曜日と日付不一致 | 検証 vs 無視で評価ずれ |
+| D1570 | `20x5` 非数字年 | エラー vs 拾いで日付ずれ |
+| D1571 | `+0000 EXTRA` ゾーン後 | エラー vs 無視で日付ずれ |
+| D1572 | `List-Id: abc` 裸形 | 欄破棄 vs 拾いで ML ずれ |
+| D1573 | `text/plain/extra` 二重区切り | 型解釈がずれる |
+| D1574 | `a@1.2.3.4` 裸 IPv4 | ドメイン vs リテラルでずれ |
+| D1575 | `a。b@x` 全角ピリオド | 正規化 vs 生読みでずれ |
+| D1576 | `<.a@x>` ローカル端ドット | 識別子破棄で照合ずれ |
+| D1577 | `Sep 25 2025` 月先頭 | 並びずれで日付ずれ |
+| D1578 | `"<a@b>"` クオート msgid | 剥がし vs 含めで照合ずれ |
+| D1579 | ローカル部 64 字超 | 検査 vs 受理で宛名ずれ |
+| D1580 | ドメインラベル 63 字超 | 拒否 vs 受理で宛名ずれ |
+| D1581 | `From：x` 全角コロン区切り | 欄なし vs 欄ありでずれ |
+| D1582 | `Monday, 25 Sep` 非3文字曜日 | エラー vs 読み飛ばしでずれ |
+| D1583 | `a@b　c@d` 全角スペース | 1宛名 vs 2宛名でずれ |
+| D1584 | `a@b,,c@d` 空要素 | 無視 vs 欄破棄で宛先ずれ |
+| D1585 | ヘッダのコロン無し行 | 打ち切り vs 読み飛ばしでずれ |
+| D1586 | Received `;` 日時印無し | 欄破棄 vs 拾いで経過記録ずれ |
+| D1587 | `Message_ID:` `_` 綴り欄名 | 文字通り vs 正規化で欄種別ずれ |
+| D1588 | `wednesday/midnight` 未知主型 | octet-stream 既定 vs 拒否でずれ |
+| D1589 | `From:`/`Date:`/`Subject:` 重複欄 | 先読み vs 後読みで同一性ずれ |
+| D1590 | `a@b <c@d>` 額縁前の裸宛名 | 先採用 vs 額縁採用で宛名ずれ |
+| D1591 | `Thu 25 Sep` コンマ無し曜日 | エラー vs 読み飛ばしで日付ずれ |
+| D1592 | `Sub ject:` 非 ftext 欄名 | 欄破棄 vs 読みで欄構成ずれ |
+| D1593 | CT/CD 型本体の `,` | 先採用 vs 欄破棄で型ずれ |
+| D1594 | `；`/`＝` 全角 param 句読点 | 潰れ vs 正規化で param ずれ |
+| D1595 | `Content-ID` 重複 | cid 解決の先読み/後読みずれ |
+| D1596 | `<a b@c>` 識別子内空白 | 込み読み vs 切詰で照合ずれ |
+| D1597 | ヘッダ全域 LF のみ改行 | CRLF 必須 vs 寛容で欄構成ずれ |
+| D1598 | `To:`/`Cc:`/`Bcc:`/`Reply-To:` 重複 | 結合 vs 先/後採用で宛先ずれ |
+| D1599 | ヘッダ内の空白のみ行 | 継続行 vs 終端で欄構成ずれ |
+| D1600 | CT/CD param 未終端 `"` | 行末読み vs 破棄で境界/charset ずれ |
+| D1601 | `List-*` 欄の裸 URL | `<>` 必須 vs 寛容で解除欄ずれ |
+| D1602 | 表示名 `"a@b"` + 別額縁宛名 | 引用部を宛名と誤読する偽装 |
+| D1603 | `<a(x)@b>` 識別子内コメント | 剥がす vs 保持で照合ずれ |
+| D1604 | `From: John Doe` 語句のみ宛名欄 | 拒否 vs 推測で差出人ずれ |
+| D1605 | 先頭行が継続行のみ | ヘッダ起点ずれで欄構成が崩れる |
+| D1606 | 非クオート表示名内 `,` | 宛名区切り vs 表示名で宛先集合ずれ |
+| D1607 | `List-*` 欄重複 | 先読み/後読みで ML 同一性ずれ |
+| D1608 | `List-*` の `<`/`>` 不一致 | 行末読み vs 欄破棄で解除欄ずれ |
+| D1609 | クオート値内 `;` | `;` 単純分割で boundary/filename がずれる |
+| D1610 | 時刻無き日付欄 | 深夜扱い vs 構文エラーで並びずれ |
+| D1611 | アドレス欄の入れ子コメント | 浅い除去器が内側を残す |
+| D1612 | encoded-word 連接 | 間の空白を落とす vs 残すで表示ずれ |
+| D1613 | メディア型の大文字形 | 厳密比較で型を見逃しずれ |
+| D1614 | `filename*=` の `'` 欠落 | 厳格実装破棄 vs 素通しで名札ずれ |
+| D1615 | 識別子内の非 IP リテラル | 厳格実装が識別子を捨て照合ずれ |
+| D1616 | 空クオート表示名 `""` | 捨てる vs 空採用で差出人表示ずれ |
+| D1617 | コメント内のアドレス構造 | 注釈走査で別住所を拾いずれ |
+| D1618 | クオート内の `;` | クオート非読み実装で宛名分割ずれ |
+| D1619 | `<…>` 内のコメント | 剥がす vs 保持で宛名ずれ |
+| D1620 | 空ドメインリテラル `a@[]` | 受理 vs 構文エラーで宛名ずれ |
+| D1621 | 空白継ぎの二重メディア型 | 先/後採用で型解釈ずれ |
+| D1622 | ドメイン部の DNS 外文字 | 厳格実装拒否で宛名ずれ |
+| D1623 | 識別子の全角額縁 | ASCII のみ実装が識別子を見失う |
+| D1624 | 裸 param 値の `\` | エスケープ vs 生採用で名札ずれ |
+| D1625 | 識別子の空額縁 `<>` | 捨てる vs 残すで照合ずれ |
+| D1626 | 識別子 `<…>` 内の %/! | 経路解釈で照合キーずれ |
+| D1627 | 額縁の外の裸 `@word` | 表示名の採用ずれ |
+| D1628 | 識別子 `<…>` 内の `;` | 区切り優先で照合ずれ |
+| D1629 | 宛名区切りの全角 `；` | ASCII のみ分割で宛名が一つに |
+| D1630 | 識別子 `<…>` 内の生非 ASCII | 正規化 vs 拒否で照合ずれ |
+| D1631 | 識別子 `<…>` 内のクオート | 剥がす vs 生採用でずれ |
+| D1632 | Date の1桁時刻 | 丸め vs 構文エラーで日付ずれ |
+| D1633 | 宛名 `<…>` 内の `,` | 内側区切り vs 壊れた単一宛名でずれ |
+| D1634 | 宛名トークン途中の `"` | クオート開始 vs 字で宛名ずれ |
+| D1635 | 識別子の `<` 無し `>` | 字として残す vs 捨てるでずれ |
+| D1636 | CT/CD の `;;` 空節 | 無視 vs 欄破棄で読みずれ |
+| D1637 | 識別子 `<…>` 内の残存非合法字 | 厳格実装が識別子を捨てる |
+| D1638 | 宛名 `<…>` 内の `;` | 区切り vs 壊れた宛名でずれ |
+| D1639 | Date の4節時刻 | 切捨て vs 構文エラーで日付ずれ |
+| D1640 | 宛名 `<…>` 内途中の `"` | クオート開始 vs 字でずれ |
+| D1641 | Sender ありで From 無し | Sender採用 vs 欄破棄で差出人ずれ |
+| D1642 | パート側 MIME-Version | パート版を拾う vs 外側のみで判定ずれ |
+| D1643 | ローカル部の裸 `\` | エスケープ vs 字で宛名ずれ |
+| D1644 | 名札以外 param の生非 ASCII | 生読み vs 破棄で param ずれ |
+| D1645 | MIME 欄 (CT/CD/CTE) の空値 | 既定値丸め vs 欄破棄でずれ |
+| D1646 | 宛名のクオート付きドメイン `a@"b.c"` | 受理 vs 構文エラーで宛名ずれ |
+| D1647 | 名札以外 param の裸の第二 `=` | 値残し vs 破棄で param ずれ |
+| D1648 | 4字以上の月名 `September` | 先頭3字受理 vs 全体一致で日付ずれ |
+| D1649 | Content-Type の型トークン欠落 | 既定値 vs 欄破棄で本文ずれ |
+| D1650 | ドメイン部の空白 `a@b .c` | 継続 vs 終端で宛名ずれ |
+| D1651 | param 値の直後空白 `charset= x` | 含める vs 除くで値ずれ |
+| D1652 | 空白分断ゾーン `+09 00` | ゾーン終了 vs 継続で日付ずれ |
+| D1653 | Date の年欠落 `25 Sep` | 当年みなし vs 構文エラーでずれ |
+| D1654 | `-` 区切り日付 `25-Sep-2025` | 分割 vs トークン破棄でずれ |
+| D1655 | CTE 値の `;` param | 値の一部 vs `;` で切るで符号化ずれ |
+| D1656 | param キーの非 token 文字 | 欄破棄 vs 生読みで値ずれ |
+| D1657 | Date の二時刻 `12:00 13:00` | 先読み/後読みで日付ずれ |
+| D1658 | クオート boundary の端空白 | 保持 vs trim で区切りずれ |
+| D1659 | param 裸値の `:` | 値切断 vs 残存で param ずれ |
+| D1660 | Date の二曜日名 | 先採用/後採用で整合ずれ |
+| D1661 | `Message-ID:` の `<>` 欠落 | 括弧省略 vs 欄破棄で照合ずれ |
+| D1662 | `12:00 0900` 符号なしゾーン | ゾーン採用 vs 余分語で日付ずれ |
+| D1663 | `;x="a"b` クオート閉じ後の続き文字 | 読み切り vs 残存で値ずれ |
+| D1664 | `2025 Sep 25` 年先頭日付 | 読める vs 読めないで日付ずれ |
+| D1665 | `12:00 PM` AM/PM 記号 | 捨てる vs 12時間表記で日付ずれ |
+| D1666 | `Message-ID:` の二識別子 | 先採用/後採用で照合ずれ |
+| D1667 | `team: a@b; team: c@d;` 重複グループ名 | 結合 vs 上書きで宛先ずれ |
+| D1668 | `25/09/2025` `/` 区切り日付 | 読める vs 読めないで日付ずれ |
+| D1669 | 親子 multipart の同一 boundary 再利用 | 区切り帰属が実装ごとに揺れる |
+| D1670 | `+090`/`+9` ゾーン桁異常 | 丸め vs 破棄で日付ずれ |
+| D1671 | `25.09.2025` `.` 区切り日付 | 読める vs 読めないで日付ずれ |
+| D1672 | `+0900 -0500` 二数値ゾーン | 先採用/後採用で日付ずれ |
+| D1673 | `Received:` の `from` 節欠落 | 欄破棄 vs 残節読みで経路ずれ |
+| D1674 | Date 欄ゾーンの `+HH:MM` コロン形 | コロン除去 vs 包含で時差ずれ |
+| D1675 | Date 欄の二つの4桁年 | 先採用 vs 後採用で日付ずれ |
+| D1676 | `Resent-*` 欄の同名重複 | 先読み vs 後読みで再送経路ずれ |
+| D1677 | Date 欄ゾーンの二重符号 `+-0900` | 1符号読み vs 欄破棄で時差ずれ |
+| D1678 | Date 欄が時刻のみ | 時刻読み vs 欄破棄で日付ずれ |
+| D1679 | 宛名の `@` 終端 | 拒否 vs 名前残しで宛先ずれ |
+| D1680 | `boundary=` の空白のみ値 | trim で空値 vs 生採用で区切りずれ |
+| D1681 | 宛名欄の空値 | 宛先なし vs 欄無視で宛先ずれ |
+| D1682 | 宣言なき `--boundary` 本文区切り行 | 区切り vs 本文文字列で構造ずれ |
+| D1683 | Date 欄ゾーンの `+ABCD` 符号英字 | 英字読み vs 欄破棄で時差ずれ |
+| D1684 | Date 欄ゾーンの符号のみ `+` | 壊れたゾーン vs 無視で時差ずれ |
+| D1685 | 宛名欄の `<` 無し `>` | 残す vs 語破棄で宛先ずれ |
+| D1686 | Date 欄の数字+英字融合語 | 分解読み vs 欄破棄で日付ずれ |
+| D1687 | `Received:` の空値 | 破棄 vs ホップ数えで経路ずれ |
+| D1688 | `Received:` の `from` 節重複 | 最初採用 vs 最後採用で経路ずれ |
+| D1689 | Date 欄の二つの日 | 先採用 vs 後採用で日付ずれ |
+| D1690 | `Received:` の `;` のみ値 | 空欄破棄 vs 節読みで経路ずれ |
+| D1691 | `Received:` の `by` 節欠落 | 必須読み vs 任意読みで経路ずれ |
+| D1692 | Date 欄の二つの月名 | 先採用 vs 後採用で日付ずれ |
+| D1693 | CT/CD 欄の末尾 `;` | 無視 vs 構文エラーで読みずれ |
+| D1694 | `Received:` の `;` 複数 | 先切り vs 後切りで日時印ずれ |
+| D1695 | Date 欄の数字曜日 `4,` | 曜日捨て vs 日番号読みで日付ずれ |
+| D1696 | CT/CD param の空値 `;charset=` | 空文字採用 vs 破棄で読みずれ |
+| D1697 | 宛名の単ラベルドメイン `a@localhost` | FQDN 要求 vs 受理で宛先ずれ |
+| D1698 | param `=` 直前の空白 `;key =v` | キー含有 vs 除去で読みずれ |
+| D1699 | Date 欄の5桁以上の年 | 4桁切り vs 生採用で日付ずれ |
+| D1700 | param 引用値内の `=` | 先=切り vs 引用読みで値ずれ |
+| D1701 | 大小写のみ異なる boundary 値 | 区別 vs 同一視で区切りずれ |
+| D1702 | `List-Id:` の二識別子 | 先採用 vs 後採用で ML 判定ずれ |
