@@ -678,7 +678,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1262 | ~~**アプリ起動型 URI スキーム (ms-msdt:/search-ms:/ms-appinstaller:) が本文検査を素通り**~~ **(解消済み)** | P1 | `extract_urls_from_text` は http(s) のみ抽出するため、OS プロトコルハンドラ起動 URI (Follina `ms-msdt:`、`search-ms:`、`ms-appinstaller:`、`itms-appss:`) はリンク評価対象外だった。修正: `has_external_protocol_uri` で本文検出 → `render_risks` | URL でない URI も誘導経路 — 抽出器の外側の起動経路を列挙せよ |
 | D1265 | ~~**添付ファイル名の異常形状が未検査**~~ **(解消済み)** | P1 | IRONSCALES (2026-04) の nested RFC822 キャンペーンはファイル名に CR/LF を注入しパーサ間の終端解釈差でスキャナと保存名を食い違わせた。`evil.exe.` 末尾ドットは拡張子チェックを素通りし Windows が除去して保存。キリル/ギリシャ混在のホモグリフ名も未検査。修正: `filename_anomalies` + 除去後名での危険拡張子再評価 | 名前は表示されるものでなく保存されるものを検査せよ |
 | D1266 | ~~**特殊 message/* サブタイプが未検査**~~ **(解消済み)** | P1 | `message/external-body` (表示時リモートフェッチ)・`message/partial` (断片化で各片が検査を素通り)・`delivery-status`/`disposition-notification` (解析死角) が注意喚起なし。修正: `is_exotic_message_subtype` → Caution | 中身を持たない/持てないサブタイプはスキャン不能前提で兆候として数えよ |
-||||||| cd3333d| D1263 | ~~**意図的に壊された ICS 構造が未検査**~~ **(解消済み)** | P1 | Mimecast (2026-06) の 4k+ quishing キャンペーン — .ics を RFC 5545 違反の形に壊し QR 抽出をパース段階で失敗させる: BEGIN:VCALENDAR 前の X- ジャンク行、`name=value` を欠く malformed X- プロパティ。修正: `CalendarRisk::MalformedStructure` で両形状を検出 → Caution 報告 | パースを失敗させる壊れ方は、成否でなく形の逸脱として数えよ |
+| D1263 | ~~**意図的に壊された ICS 構造が未検査**~~ **(解消済み)** | P1 | Mimecast (2026-06) の 4k+ quishing キャンペーン — .ics を RFC 5545 違反の形に壊し QR 抽出をパース段階で失敗させる: BEGIN:VCALENDAR 前の X- ジャンク行、`name=value` を欠く malformed X- プロパティ。修正: `CalendarRisk::MalformedStructure` で両形状を検出 → Caution 報告 | パースを失敗させる壊れ方は、成否でなく形の逸脱として数えよ |
 | D1264 | ~~**ICS の ATTACH 外部 URI 参照 (QR 配送経路) が未検査**~~ **(解消済み)** | P1 | `ATTACH;VALUE=URI:` は招待表示時にリモート内容をフェッチ — スキャン時点で中身がなく、宛先が正当ドメインなら URL 評価も素通り。修正: `CalendarRisk::ExternalAttachUri` で VALUE=URI / http 値部の ATTACH を検出 (CID: は対象外) | 表示時フェッチはスキャンの外で動く — 外部を引きにいく形自体を数えよ |
 | D1267 | ~~**購読型 URI (webcal:/feed:) がリンク評価を素通り**~~ **(解消済み)** | P2 | webcal:/feed: は「購読」チャンネル確立 — 悪意あるカレンダー購読 (calendar spam) は以後イベント通知としてメール検査の外から届き続ける。http(s) 抽出器では検出不能。修正: `has_subscription_uri` で本文検出 → render_risks | 継続的に届くチャンネルを確立する URI も誘導経路と数えよ |
 | D1268 | ~~**vCard 添付の外部 URI 参照が未検査**~~ **(解消済み)** | P1 | .vcf の PHOTO/LOGO/SOUND/SOURCE/URL/GEO/IMPP/ORG-DIRECTORY はインポート・表示時にリモートフェッチされ得る — ICS ATTACH;VALUE=URI と同型の死角。修正: `detect_vcard_external_refs` で http/ftp 値を警告 (data:/CID: 対象外) | 表示時フェッチの形状は形式を問わず数えよ |
@@ -1368,3 +1368,83 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1952 | `Received:` の `via` 節の `^` | 語継続 vs 欄破棄で経路ずれ |
 | D1953 | `Received:` の `with` 節の `^` | 語継続 vs 欄破棄で経路ずれ |
 | D1954 | `Received:` の `for` 節の `|` | 語継続 vs 欄破棄で配送先ずれ |
+| D1955 | `Received:` の `id` 節の `&` | 語継続 vs 欄破棄で識別子ずれ |
+| D1956 | `Received:` の `via` 節の `|` | 語継続 vs 欄破棄で経路ずれ |
+| D1957 | `Received:` の `with` 節の `#` | 語継続 vs 欄破棄で経路ずれ |
+| D1958 | `Received:` の `by` 節の `~` | 語継続 vs 欄破棄で経路ずれ |
+| D1959 | `Received:` の `from` 節の `#` | 語継続 vs 欄破棄で経路ずれ |
+| D1960 | `Received:` の `via` 節の `/` | 語継続 vs 欄破棄で経路ずれ |
+| D1961 | `Received:` の `with` 節の `'` | 語継続 vs 欄破棄で経路ずれ |
+| D1962 | `Received:` の `by` 節の `'` | 語継続 vs 欄破棄で経路ずれ |
+| D1963 | `Received:` の `from` 節の `"` | 語継続 vs 欄破棄で経路ずれ |
+| D1964 | `Received:` の `via` 節の `\` | 語継続 vs 欄破棄で経路ずれ |
+| D1965 | `Received:` の `from` 節の `&` | 語継続 vs 欄破棄で経路ずれ |
+| D1966 | `Received:` の `by` 節の `"` | 語継続 vs 欄破棄で経路ずれ |
+| D1967 | `Received:` の `from` 節の `^` | 語継続 vs 欄破棄で経路ずれ |
+| D1968 | `Received:` の `with` 節の `*` | 語継続 vs 欄破棄で経路ずれ |
+| D1969 | `Received:` の `by` 節の `*` | 語継続 vs 欄破棄で経路ずれ |
+| D1970 | `Received:` の `via` 節の `[` | 語継続 vs 欄破棄で経路ずれ |
+| D1971 | `Received:` の `from` 節の `:` | 語継続 vs 欄破棄で経路ずれ |
+| D1972 | `Received:` の `with` 節の `+` | 語継続 vs 欄破棄で経路ずれ |
+| D1973 | `Received:` の `by` 節の `+` | 語継続 vs 欄破棄で経路ずれ |
+| D1974 | `Received:` の `via` 節の `]` | 語継続 vs 欄破棄で経路ずれ |
+| D1975 | `Received:` の `from` 節の `/` | 語継続 vs 欄破棄で経路ずれ |
+| D1976 | `Received:` の `with` 節の `{` | 語継続 vs 欄破棄で経路ずれ |
+| D1977 | `Received:` の `by` 節の `[` | 語継続 vs 欄破棄で経路ずれ |
+| D1978 | `Received:` の `via` 節の `*` | 語継続 vs 欄破棄で経路ずれ |
+| D1979 | `Received:` の `from` 節の `\` | 語継続 vs 欄破棄で経路ずれ |
+| D1980 | `Received:` の `with` 節の `}` | 語継続 vs 欄破棄で経路ずれ |
+| D1981 | `Received:` の `by` 節の `]` | 語継続 vs 欄破棄で経路ずれ |
+| D1982 | `Received:` の `via` 節の `+` | 語継続 vs 欄破棄で経路ずれ |
+| D1983 | `Received:` の `via` 節の `{` | 語継続 vs 欄破棄で経路ずれ |
+| D1984 | `Received:` の `via` 節の `}` | 語継続 vs 欄破棄で経路ずれ |
+| D1985 | `Received:` の `with` 節の `[` | 語継続 vs 欄破棄で経路ずれ |
+| D1986 | `Received:` の `with` 節の `]` | 語継続 vs 欄破棄で経路ずれ |
+| D1987 | `Received:` の `with` 節の `\` | 語継続 vs 欄破棄で経路ずれ |
+| D1988 | `Received:` の `by` 節の `{` | 語継続 vs 欄破棄で経路ずれ |
+| D1989 | `Received:` の `by` 節の `}` | 語継続 vs 欄破棄で経路ずれ |
+| D1990 | `References:`/`In-Reply-To:` の `(` 始まり値 | コメント内識別子読み vs 欄破棄で糸参照ずれ |
+| D1991 | `References:`/`In-Reply-To:` の値頭の `!` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D1992 | `References:`/`In-Reply-To:` の値頭の `=` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D1993 | `References:`/`In-Reply-To:` の値頭の `:` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D1994 | `References:`/`In-Reply-To:` の値頭の `*` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D1995 | `References:`/`In-Reply-To:` の値頭の `#` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D1996 | `References:`/`In-Reply-To:` の値頭の `$` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D1997 | `References:`/`In-Reply-To:` の値頭の `@` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D1998 | `References:`/`In-Reply-To:` の値頭の `?` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D1999 | `References:`/`In-Reply-To:` の値頭の `&` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2000 | `References:`/`In-Reply-To:` の値頭の `'` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2001 | `References:`/`In-Reply-To:` の値頭の `+` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2002 | `References:`/`In-Reply-To:` の値頭の `/` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2003 | `References:`/`In-Reply-To:` の値頭の `%` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2004 | `References:`/`In-Reply-To:` の値頭の `-` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2005 | `References:`/`In-Reply-To:` の値頭の `[` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2006 | `References:`/`In-Reply-To:` の値頭の `]` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2007 | `References:`/`In-Reply-To:` の値頭の `^` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2008 | `References:`/`In-Reply-To:` の値頭の `_` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2009 | `References:`/`In-Reply-To:` の値頭の `` ` `` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2010 | `References:`/`In-Reply-To:` の値頭の `~` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2011 | `References:`/`In-Reply-To:` の値頭の `{` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2012 | `References:`/`In-Reply-To:` の値頭の `\|` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2013 | `References:`/`In-Reply-To:` の値頭の `}` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2014 | `References:`/`In-Reply-To:` の値頭の `.` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2015 | `References:`/`In-Reply-To:` の値頭の `\\` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2016 | `References:`/`In-Reply-To:` の `<` 前の英数字語 | 語継続読み vs 角括弧拾いで糸参照ずれ |
+| D2017 | `References:`/`In-Reply-To:` の識別子前の閉じコメント | コメント剥がし読み vs 欄破棄で糸参照ずれ |
+| D2018 | `References:` の `<a><b>` 連結識別子 | 境目読み vs 一語読みで糸参照ずれ |
+| D2019 | `Message-ID:` 系欄の値頭の `*` | 欄名継続読み vs 識別子拾いで識別子ずれ |
+| D2020 | `Message-ID:` 系欄の値頭の `\\` | 欄名継続読み vs 識別子拾いで識別子ずれ |
+| D2021 | `Message-ID:` 系欄の `<` 前の英数字語 | 語継続読み vs 角括弧拾いで識別子ずれ |
+| D2022 | `Message-ID:` 系欄の `<` を欠く値 | 原子読み vs 欄破棄で識別子ずれ |
+| D2023 | `Message-ID:` 系欄の `<…>` 内側の `!` | 厳密弾き vs 緩い受理で識別子ずれ |
+| D2024 | `Message-ID:` 系欄の `<…>` 内側の `#` | 厳密弾き vs 緩い受理で識別子ずれ |
+| D2025 | `Message-ID:` 系欄の `<…>` 内側の `$` | 厳密弾き vs 緩い受理で識別子ずれ |
+| D2026 | `Message-ID:` 系欄の `<…>` 内側の `*` | 厳密弾き vs 緩い受理で識別子ずれ |
+| D2027 | `Message-ID:` 系欄の `<…>` 内側の `%` | 厳密弾き vs 緩い受理で識別子ずれ |
+| D2028 | `Message-ID:` 系欄の `<…>` 内側の `^` | 厳密弾き vs 緩い受理で識別子ずれ |
+| D2029 | `Message-ID:` 系欄の `<…>` 内側の `` ` `` | 厳密弾き vs 緩い受理で識別子ずれ |
+| D2030 | `Message-ID:` 系欄の `<…>` 内側の `~` | 厳密弾き vs 緩い受理で識別子ずれ |
+| D2031 | `Message-ID:` 系欄の `<…>` 内側の `{` | 厳密弾き vs 緩い受理で識別子ずれ |
+| D2032 | `Message-ID:` 系欄の `<…>` 内側の `}` | 厳密弾き vs 緩い受理で識別子ずれ |
+| D2033 | `Message-ID:` 系欄の `<…>` 内側の `;` | 厳密弾き vs 緩い受理で識別子ずれ |
+| D2034 | `Message-ID:` 系欄の `<…>` 内側の非隣接 `<` | 厳密弾き vs 緩い受理で識別子ずれ (`<<` は `nested_msgid`) |

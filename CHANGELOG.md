@@ -1,5 +1,85 @@
 ## [Unreleased]
 
+### Security — D2034: `Message-ID:` 系欄の `<…>` 内側の非隣接 `<` を検出 — `Envelope` に `msgid_inner_lt` を追加 (`<<` 直結は `nested_msgid`)。
+### Security — D2033: `Message-ID:` 系欄の `<…>` 内側の `;` を検出 — `Envelope` に `msgid_inner_semi` を追加 (内側の `|`/`\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`)。
+### Security — D2032: `Message-ID:` 系欄の `<…>` 内側の `}` を検出 — `Envelope` に `msgid_inner_rbrace` を追加 (同上)。
+### Security — D2031: `Message-ID:` 系欄の `<…>` 内側の `{` を検出 — `Envelope` に `msgid_inner_lbrace` を追加 (同上)。
+### Security — D2030: `Message-ID:` 系欄の `<…>` 内側の `~` を検出 — `Envelope` に `msgid_inner_tilde` を追加 (内側の `|`/`\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`、`!`/`#`/`$`/`*` は D2023–D2026)。
+### Security — D2029: `Message-ID:` 系欄の `<…>` 内側の `` ` `` を検出 — `Envelope` に `msgid_inner_backtick` を追加 (同上)。
+### Security — D2028: `Message-ID:` 系欄の `<…>` 内側の `^` を検出 — `Envelope` に `msgid_inner_caret` を追加 (同上)。
+### Security — D2027: `Message-ID:` 系欄の `<…>` 内側の `%` を検出 — `Envelope` に `msgid_inner_pct` を追加 (同上)。
+### Security — D2026: `Message-ID:` 系欄の `<…>` 内側の `*` を検出 — `Envelope` に `msgid_inner_star` を追加 (内側の `|`/`\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`)。
+### Security — D2025: `Message-ID:` 系欄の `<…>` 内側の `$` を検出 — `Envelope` に `msgid_inner_dollar` を追加 (同上)。
+### Security — D2024: `Message-ID:` 系欄の `<…>` 内側の `#` を検出 — `Envelope` に `msgid_inner_hash` を追加 (同上)。
+### Security — D2023: `Message-ID:` 系欄の `<…>` 内側の `!` を検出 — `Envelope` に `msgid_inner_bang` を追加 (同上)。
+### Security — D2022: `Message-ID:` 系欄 (`message-id`/`resent-message-id`/`list-id`/`content-id`) の `<` を欠く値を検出 — `Envelope` に `msgid_no_angle` を追加 (`In-Reply-To`/`References` の裸値は `bare_msgid_ref`)。
+### Security — D2021: `Message-ID:` 系欄の最初の `<` より前の英数字語を検出 — `Envelope` に `msgid_junk_before_angle` を追加 (`References`/`In-Reply-To` 側は `refs_junk_before_angle`)。
+### Security — D2020: `Message-ID:` 系欄の値頭の `\` を検出 — `Envelope` に `msgid_bslash_lead` を追加 (これで値頭の表示可能な特殊字は `msgid_*_lead` 系で全網羅)。
+### Security — D2019: `Message-ID:` 系欄の値頭の `*` を検出 — `Envelope` に `msgid_star_lead` を追加。
+### Security — D2018: `References:` の識別子直後に続く `<…>` を検出 — `Envelope` に `refs_adjacent_angles` を追加 (`<<`/`>>` 入れ子は `nested_msgid`、`In-Reply-To` の複数識別子は `multi_inreply`)。
+### Security — D2017: `References:`/`In-Reply-To:` の識別子より前に閉じたコメントを検出 — `Envelope` に `refs_comment_before_msgid` を追加 (`)<` 直結は `msgid_paren`、コメント内識別子は `refs_comment_lead`)。
+### Security — D2016: `References:`/`In-Reply-To:` の最初の `<` より前の英数字語を検出 — `Envelope` に `refs_junk_before_angle` を追加 (前置特殊字は `refs_*_lead` 系)。
+### Security — D2015: `References:`/`In-Reply-To:` の値頭の `\` を検出 — `Envelope` に `refs_bslash_lead` を追加 (これで値頭の表示可能な特殊字は D1991–D2015 で全網羅)。
+### Security — D2014: `References:`/`In-Reply-To:` の値頭の `.` を検出 — `Envelope` に `refs_dot_lead` を追加 (値頭の `;`/`,`/`>`/`(`/`"`/`!`/`=`/`:`/`*`/`#`/`$`/`@`/`?`/`&`/`'`/`+`/`/`/`%`/`-`/`[`/`]`/`^`/`_`/`` ` ``/`~` は `ref_lead_sep`/`ref_gt_lead`/`refs_comment_lead` 及び D1991–D2010)。
+### Security — D2013: `References:`/`In-Reply-To:` の値頭の `}` を検出 — `Envelope` に `refs_rbrace_lead` を追加 (同上)。
+### Security — D2012: `References:`/`In-Reply-To:` の値頭の `|` を検出 — `Envelope` に `refs_pipe_lead` を追加 (同上)。
+### Security — D2011: `References:`/`In-Reply-To:` の値頭の `{` を検出 — `Envelope` に `refs_lbrace_lead` を追加 (同上)。
+### Security — D2010: `References:`/`In-Reply-To:` の値頭の `~` を検出 — `Envelope` に `refs_tilde_lead` を追加 (値頭の `;`/`,`/`>`/`(`/`"`/`!`/`=`/`:`/`*`/`#`/`$`/`@`/`?`/`&`/`'`/`+`/`/`/`%`/`-`/`[`/`]` は `ref_lead_sep`/`ref_gt_lead`/`refs_comment_lead` 及び D1991–D2006)。
+### Security — D2009: `References:`/`In-Reply-To:` の値頭の `` ` `` を検出 — `Envelope` に `refs_backtick_lead` を追加 (同上)。
+### Security — D2008: `References:`/`In-Reply-To:` の値頭の `_` を検出 — `Envelope` に `refs_uscore_lead` を追加 (同上)。
+### Security — D2007: `References:`/`In-Reply-To:` の値頭の `^` を検出 — `Envelope` に `refs_caret_lead` を追加 (同上)。
+### Security — D2006: `References:`/`In-Reply-To:` の値頭の `]` を検出 — `Envelope` に `refs_rbrack_lead` を追加 (値頭の `;`/`,`/`>`/`(`/`"`/`!`/`=`/`:`/`*`/`#`/`$`/`@`/`?`/`&`/`'`/`+`/`/` は `ref_lead_sep`/`ref_gt_lead`/`refs_comment_lead` 及び D1991–D2002)。
+### Security — D2005: `References:`/`In-Reply-To:` の値頭の `[` を検出 — `Envelope` に `refs_lbrack_lead` を追加 (同上)。
+### Security — D2004: `References:`/`In-Reply-To:` の値頭の `-` を検出 — `Envelope` に `refs_minus_lead` を追加 (同上)。
+### Security — D2003: `References:`/`In-Reply-To:` の値頭の `%` を検出 — `Envelope` に `refs_pct_lead` を追加 (同上)。
+### Security — D2002: `References:`/`In-Reply-To:` の値頭の `/` を検出 — `Envelope` に `refs_slash_lead` を追加 (値頭の `;`/`,`/`>`/`(`/`"`/`!`/`=`/`:`/`*`/`#`/`$`/`@`/`?` は `ref_lead_sep`/`ref_gt_lead`/`refs_comment_lead` 及び D1991–D1998)。
+### Security — D2001: `References:`/`In-Reply-To:` の値頭の `+` を検出 — `Envelope` に `refs_plus_lead` を追加 (同上)。
+### Security — D2000: `References:`/`In-Reply-To:` の値頭の `'` を検出 — `Envelope` に `refs_apos_lead` を追加 (同上)。
+### Security — D1999: `References:`/`In-Reply-To:` の値頭の `&` を検出 — `Envelope` に `refs_amp_lead` を追加 (同上)。
+### Security — D1998: `References:`/`In-Reply-To:` の値頭の `?` を検出 — `Envelope` に `refs_qmark_lead` を追加 (値頭の `;`/`,`/`>`/`(`/`"`/`!`/`=`/`:`/`*` は D1931 前後の `ref_lead_sep`/`ref_gt_lead`/`refs_comment_lead` 及び D1991–D1994)。
+### Security — D1997: `References:`/`In-Reply-To:` の値頭の `@` を検出 — `Envelope` に `refs_at_lead` を追加 (同上)。
+### Security — D1996: `References:`/`In-Reply-To:` の値頭の `$` を検出 — `Envelope` に `refs_dollar_lead` を追加 (同上)。
+### Security — D1995: `References:`/`In-Reply-To:` の値頭の `#` を検出 — `Envelope` に `refs_hash_lead` を追加 (同上)。
+### Security — D1994: `References:`/`In-Reply-To:` の値頭の `*` を検出 — `Envelope` に `refs_star_lead` を追加 (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`)。
+### Security — D1993: `References:`/`In-Reply-To:` の値頭の `:` を検出 — `Envelope` に `refs_colon_lead` を追加 (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`)。
+### Security — D1992: `References:`/`In-Reply-To:` の値頭の `=` を検出 — `Envelope` に `refs_eq_lead` を追加 (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`)。
+### Security — D1991: `References:`/`In-Reply-To:` の値頭の `!` を検出 — `Envelope` に `refs_bang_lead` を追加 (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`)。
+### Security — D1990: `References:`/`In-Reply-To:` が `(` 始まりで識別子がコメント内になる異形を検出 — `Envelope` に `refs_comment_lead` を追加 (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`)。
+### Security — D1989: `Received:` の `by` 節の `}` を検出 — `Envelope` に `received_by_rbrace` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'`/`"`/`*`/`+`/`[`/`]`/`{` は D1845–D1988)。
+### Security — D1988: `Received:` の `by` 節の `{` を検出 — `Envelope` に `received_by_lbrace` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'`/`"`/`*`/`+`/`[`/`]` は D1845–D1981)。
+### Security — D1987: `Received:` の `with` 節の `\` を検出 — `Envelope` に `received_with_bslash` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#`/`'`/`*`/`+`/`{`/`}`/`[`/`]` は D1825–D1986)。
+### Security — D1986: `Received:` の `with` 節の `]` を検出 — `Envelope` に `received_with_rbracket` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#`/`'`/`*`/`+`/`{`/`}`/`[` は D1825–D1985)。
+### Security — D1985: `Received:` の `with` 節の `[` を検出 — `Envelope` に `received_with_lbracket` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#`/`'`/`*`/`+`/`{`/`}` は D1825–D1980)。
+### Security — D1984: `Received:` の `via` 節の `}` を検出 — `Envelope` に `received_via_rbrace` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/`/`\`/`[`/`]`/`*`/`+`/`{` は D1766–D1983)。
+### Security — D1983: `Received:` の `via` 節の `{` を検出 — `Envelope` に `received_via_lbrace` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/`/`\`/`[`/`]`/`*`/`+` は D1766–D1982)。
+### Security — D1982: `Received:` の `via` 節の `+` を検出 — `Envelope` に `received_via_plus` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/`/`\`/`[`/`]`/`*` は D1766–D1978)。
+### Security — D1981: `Received:` の `by` 節の `]` を検出 — `Envelope` に `received_by_rbracket` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'`/`"`/`*`/`+`/`[` は D1845–D1977)。
+### Security — D1980: `Received:` の `with` 節の `}` を検出 — `Envelope` に `received_with_rbrace` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#`/`'`/`*`/`+`/`{` は D1825–D1976)。
+### Security — D1979: `Received:` の `from` 節の `\` を検出 — `Envelope` に `received_from_bslash` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|`/`'`/`#`/`"`/`&`/`^`/`:`/`/` は D1837–D1975)。
+### Security — D1978: `Received:` の `via` 節の `*` を検出 — `Envelope` に `received_via_star` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/`/`\`/`[`/`]` は D1766–D1974)。
+### Security — D1977: `Received:` の `by` 節の `[` を検出 — `Envelope` に `received_by_lbracket` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'`/`"`/`*`/`+` は D1845–D1973)。
+### Security — D1976: `Received:` の `with` 節の `{` を検出 — `Envelope` に `received_with_lbrace` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#`/`'`/`*`/`+` は D1825–D1972)。
+### Security — D1975: `Received:` の `from` 節の `/` を検出 — `Envelope` に `received_from_slash` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|`/`'`/`#`/`"`/`&`/`^`/`:` は D1837–D1971)。
+### Security — D1974: `Received:` の `via` 節の `]` を検出 — `Envelope` に `received_via_rbracket` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/`/`\`/`[` は D1766–D1970)。
+### Security — D1973: `Received:` の `by` 節の `+` を検出 — `Envelope` に `received_by_plus` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'`/`"`/`*` は D1845–D1969)。
+### Security — D1972: `Received:` の `with` 節の `+` を検出 — `Envelope` に `received_with_plus` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#`/`'`/`*` は D1825–D1968)。
+### Security — D1971: `Received:` の `from` 節の `:` を検出 — `Envelope` に `received_from_colon` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|`/`'`/`#`/`"`/`&`/`^` は D1837–D1967)。
+### Security — D1970: `Received:` の `via` 節の `[` を検出 — `Envelope` に `received_via_lbracket` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/`/`\` は D1766–D1964)。
+### Security — D1969: `Received:` の `by` 節の `*` を検出 — `Envelope` に `received_by_star` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'`/`"` は D1845–D1966)。
+### Security — D1968: `Received:` の `with` 節の `*` を検出 — `Envelope` に `received_with_star` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#`/`'` は D1825–D1961)。
+### Security — D1967: `Received:` の `from` 節の `^` を検出 — `Envelope` に `received_from_caret` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|`/`'`/`#`/`"`/`&` は D1837–D1965)。
+### Security — D1966: `Received:` の `by` 節の `"` を検出 — `Envelope` に `received_by_quote` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'` は D1845–D1962)。
+### Security — D1965: `Received:` の `from` 節の `&` を検出 — `Envelope` に `received_from_amp` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|`/`'`/`#`/`"` は D1837–D1963)。
+### Security — D1964: `Received:` の `via` 節の `\` を検出 — `Envelope` に `received_via_bslash` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/` は D1766–D1960)。
+### Security — D1963: `Received:` の `from` 節の `"` を検出 — `Envelope` に `received_from_quote` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|`/`'`/`#` は D1837–D1959)。
+### Security — D1962: `Received:` の `by` 節の `'` を検出 — `Envelope` に `received_by_apos` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~` は D1845–D1958)。
+### Security — D1961: `Received:` の `with` 節の `'` を検出 — `Envelope` に `received_with_apos` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#` は D1825–D1957)。
+### Security — D1960: `Received:` の `via` 節の `/` を検出 — `Envelope` に `received_via_slash` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|` は D1766–D1956)。
+### Security — D1959: `Received:` の `from` 節の `#` を検出 — `Envelope` に `received_from_hash` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|`/`'` は D1837–D1930)。
+### Security — D1958: `Received:` の `by` 節の `~` を検出 — `Envelope` に `received_by_tilde` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:` は D1845–D1950)。
+### Security — D1957: `Received:` の `with` 節の `#` を検出 — `Envelope` に `received_with_hash` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^` は D1825–D1953)。
+### Security — D1956: `Received:` の `via` 節の `|` を検出 — `Envelope` に `received_via_pipe` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^` は D1766–D1952)。
+### Security — D1955: `Received:` の `id` 節の `&` を検出 — `Envelope` に `received_id_amp` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|`/`^`/`~`/`$`/`'`/`?`/`,`/`:` は D1785–D1951)。
 ### Security — D1954: `Received:` の `for` 節の `|` を検出 — `Envelope` に `received_for_pipe` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&`/`#`/`"`/`'`/`:`/`,` は D1804–D1950)。
 ### Security — D1953: `Received:` の `with` 節の `^` を検出 — `Envelope` に `received_with_caret` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$` は D1825–D1949)。
 ### Security — D1952: `Received:` の `via` 節の `^` を検出 — `Envelope` に `received_via_caret` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"` は D1766–D1948)。
@@ -2577,7 +2657,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **修正**: `magic_bytes::is_exotic_message_subtype` を追加し `scan_attachment_bytes` で注意喚起 (パラメータ付き宣言も判定)。Caution 級。
 - **教訓**: 「中身を持たない/持てない」サブタイプはスキャン不能を前提に兆候として数えよ。
 
-||||||| cd3333d### Security — D1263: 意図的に壊された ICS 構造 (malformed calendar invite) が未検査
+### Security — D1263: 意図的に壊された ICS 構造 (malformed calendar invite) が未検査
 
 - **問題**: Mimecast (2026-06) が観測した 4 千件超の quishing キャンペーンは、.ics 招待を RFC 5545 に違反する形で意図的に壊し、QR 抽出ツールをパース段階で失敗させていた: (a) `BEGIN:VCALENDAR` の前に大量の X- ジャンク行、(b) `X-GENERATION; FUTURE:` 型 — `;` 後のパラメータが `name=value` 形を取らない — の無意味な X- プロパティ行。正当な ICS 生成器はどちらも出力しないが、kaname-render の CalendarGuard は構造異常を一切見ていなかった。
 - **修正**: `CalendarRisk::MalformedStructure { leading_lines, malformed_x_props }` を追加し `analyze` で検査 (継続行・正規 X- プロパティは対象外)。Caution 扱いで兆候として報告。

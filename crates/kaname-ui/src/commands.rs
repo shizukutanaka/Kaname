@@ -6536,6 +6536,246 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.received_for_pipe {
         render_risks.push("Received の届け先節に縦線があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
     }
+    if env.received_id_amp {
+        render_risks.push("Received の識別子節に連結符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+    }
+    if env.received_via_pipe {
+        render_risks.push("Received の便り節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_hash {
+        render_risks.push("Received の渡し方節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_tilde {
+        render_risks.push("Received の受け口節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_from_hash {
+        render_risks.push("Received の差出節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_slash {
+        render_risks.push("Received の便り節に斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_apos {
+        render_risks.push("Received の渡し方節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_apos {
+        render_risks.push("Received の受け口節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_from_quote {
+        render_risks.push("Received の差出節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_bslash {
+        render_risks.push("Received の便り節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_from_amp {
+        render_risks.push("Received の差出節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_quote {
+        render_risks.push("Received の受け口節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_from_caret {
+        render_risks.push("Received の差出節に曲折符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_star {
+        render_risks.push("Received の渡し方節に星があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_star {
+        render_risks.push("Received の受け口節に星があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_lbracket {
+        render_risks.push("Received の便り節に開き角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_from_colon {
+        render_risks.push("Received の差出節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_plus {
+        render_risks.push("Received の渡し方節に加符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_plus {
+        render_risks.push("Received の受け口節に加符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_rbracket {
+        render_risks.push("Received の便り節に閉じ角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_from_slash {
+        render_risks.push("Received の差出節に斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_lbrace {
+        render_risks.push("Received の渡し方節に開き波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_lbracket {
+        render_risks.push("Received の受け口節に開き角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_star {
+        render_risks.push("Received の便り節に星があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_from_bslash {
+        render_risks.push("Received の差出節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_rbrace {
+        render_risks.push("Received の渡し方節に閉じ波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_rbracket {
+        render_risks.push("Received の受け口節に閉じ角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_plus {
+        render_risks.push("Received の便り節に加符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_lbrace {
+        render_risks.push("Received の便り節に開き波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_via_rbrace {
+        render_risks.push("Received の便り節に閉じ波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_lbracket {
+        render_risks.push("Received の渡し方節に開き角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_rbracket {
+        render_risks.push("Received の渡し方節に閉じ角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_with_bslash {
+        render_risks.push("Received の渡し方節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_lbrace {
+        render_risks.push("Received の受け口節に開き波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.received_by_rbrace {
+        render_risks.push("Received の受け口節に閉じ波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.refs_comment_lead {
+        render_risks.push("References/In-Reply-To が開き括弧で始まります—コメント内識別子読みと欄破棄で糸参照がずれます".to_string());
+    }
+    if env.refs_bang_lead {
+        render_risks.push("References/In-Reply-To が感嘆符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_eq_lead {
+        render_risks.push("References/In-Reply-To が等号で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_colon_lead {
+        render_risks.push("References/In-Reply-To が二点で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_star_lead {
+        render_risks.push("References/In-Reply-To が星で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_hash_lead {
+        render_risks.push("References/In-Reply-To が井桁で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_dollar_lead {
+        render_risks.push("References/In-Reply-To が通貨符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_at_lead {
+        render_risks.push("References/In-Reply-To が渦巻符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_qmark_lead {
+        render_risks.push("References/In-Reply-To が疑問符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_amp_lead {
+        render_risks.push("References/In-Reply-To が連結符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_apos_lead {
+        render_risks.push("References/In-Reply-To が単一引用符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_plus_lead {
+        render_risks.push("References/In-Reply-To が加符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_slash_lead {
+        render_risks.push("References/In-Reply-To が斜線で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_pct_lead {
+        render_risks.push("References/In-Reply-To が百分符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_minus_lead {
+        render_risks.push("References/In-Reply-To が連結線で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_lbrack_lead {
+        render_risks.push("References/In-Reply-To が開き角括弧で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_rbrack_lead {
+        render_risks.push("References/In-Reply-To が閉じ角括弧で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_caret_lead {
+        render_risks.push("References/In-Reply-To が曲折符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_uscore_lead {
+        render_risks.push("References/In-Reply-To が下線で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_backtick_lead {
+        render_risks.push("References/In-Reply-To が逆引用符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_tilde_lead {
+        render_risks.push("References/In-Reply-To が波線で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_lbrace_lead {
+        render_risks.push("References/In-Reply-To が開き波括弧で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_pipe_lead {
+        render_risks.push("References/In-Reply-To が縦線で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_rbrace_lead {
+        render_risks.push("References/In-Reply-To が閉じ波括弧で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_dot_lead {
+        render_risks.push("References/In-Reply-To が句読点で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_bslash_lead {
+        render_risks.push("References/In-Reply-To が逆斜線で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_junk_before_angle {
+        render_risks.push("References/In-Reply-To の識別子の前に英数字の語があります—語継続読みと角括弧拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_comment_before_msgid {
+        render_risks.push("References/In-Reply-To の識別子の前にコメントがあります—コメント剥がし読みと欄破棄で糸参照がずれます".to_string());
+    }
+    if env.refs_adjacent_angles {
+        render_risks.push("References の識別子が区切りなく連結しています—境目読みと一語読みで糸参照がずれます".to_string());
+    }
+    if env.msgid_star_lead {
+        render_risks.push("Message-ID 系欄が星で始まります—欄名継続読みと識別子拾いで識別子がずれます".to_string());
+    }
+    if env.msgid_bslash_lead {
+        render_risks.push("Message-ID 系欄が逆斜線で始まります—欄名継続読みと識別子拾いで識別子がずれます".to_string());
+    }
+    if env.msgid_junk_before_angle {
+        render_risks.push("Message-ID 系欄の識別子の前に英数字の語があります—語継続読みと角括弧拾いで識別子がずれます".to_string());
+    }
+    if env.msgid_no_angle {
+        render_risks.push("Message-ID 系欄に角括弧の識別子がありません—原子読みと欄破棄で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_bang {
+        render_risks.push("Message-ID 系欄の識別子内に感嘆符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_hash {
+        render_risks.push("Message-ID 系欄の識別子内に井桁があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_dollar {
+        render_risks.push("Message-ID 系欄の識別子内に通貨符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_star {
+        render_risks.push("Message-ID 系欄の識別子内に星があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_pct {
+        render_risks.push("Message-ID 系欄の識別子内に百分符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_caret {
+        render_risks.push("Message-ID 系欄の識別子内に曲折符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_backtick {
+        render_risks.push("Message-ID 系欄の識別子内に逆引用符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_tilde {
+        render_risks.push("Message-ID 系欄の識別子内に波線があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_lbrace {
+        render_risks.push("Message-ID 系欄の識別子内に開き波括弧があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_rbrace {
+        render_risks.push("Message-ID 系欄の識別子内に閉じ波括弧があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_semi {
+        render_risks.push("Message-ID 系欄の識別子内に半コロンがあります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_lt {
+        render_risks.push("Message-ID 系欄の識別子内に開き角括弧が重なります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
