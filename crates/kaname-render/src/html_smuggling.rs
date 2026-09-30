@@ -47,6 +47,8 @@ pub enum SmugglingSignal {
     ClipboardWrite,
     /// 「Win+R」「貼り付け」「エクスプローラのアドレスバー」等の実行誘導文言 (D1248)
     RunDialogLure,
+    /// ファイル容量の大半を `<!-- -->` コメントが占める水増し (D1277)
+    CommentPadding,
 }
 
 /// HTML スマグリングスキャン結果。
@@ -218,6 +220,29 @@ impl HtmlSmugglingDetector {
         ];
         if run_lure_phrases.iter().any(|p| lower.contains(p)) {
             signals.push(SmugglingSignal::RunDialogLure);
+        }
+
+        // 10. コメントスタッフィングによるサイズ水増し (D1277)
+        // SANS ISC (2026-07-10): AI/シグネチャ系走査の入力上限や解析
+        // トークン上限を超えさせるため、HTML 添付を大量の `<!-- -->`
+        // コメントで水増しするキャンペーンが観測された。正規メールの
+        // MSO 条件付きコメント (<!--[if mso]>) はごく一部で、容量の
+        // 半分を占めることはない。16KB 以上でコメントが 50% 超の
+        // ときのみ発火する。
+        const MIN_PADDED_BYTES: usize = 16 * 1024;
+        let mut comment_bytes = 0usize;
+        let mut rest = html;
+        while let Some(start) = rest.find("<!--") {
+            let Some(end) = rest[start + 4..].find("-->") else {
+                // 閉じられないコメント — 以降すべてをコメント扱い
+                comment_bytes += rest.len() - start;
+                break;
+            };
+            comment_bytes += 4 + end + 3; // "<!--" + 内容 + "-->"
+            rest = &rest[start + 4 + end + 3..];
+        }
+        if html.len() >= MIN_PADDED_BYTES && comment_bytes * 2 >= html.len() {
+            signals.push(SmugglingSignal::CommentPadding);
         }
 
         let risk = Self::calculate_risk(&signals);
@@ -638,5 +663,27 @@ mod tests {
         let html = "<p>詳細はファイル名を指定して実行から確認してください</p>";
         let s = d.analyze(html);
         assert_eq!(s.risk, SmugglingRisk::Caution);
+    }
+
+    #[test]
+    fn detects_comment_padding() {
+        let d = detector();
+        // D1277 — SANS ISC 2026-07-10: 走査入力上限を超えるための
+        // コメント水増し。16KB 以上でコメントが 50% 超を占めると発火。
+        let comment = format!("<!--{}-->", "x".repeat(18 * 1024));
+        let html = format!("{comment}<html><body><p>login</p></body></html>");
+        let s = d.analyze(&html);
+        assert!(s.signals.contains(&SmugglingSignal::CommentPadding));
+        // 小さなファイルでコメント比率が高くても不発火
+        let small = "<!-- pad -->".repeat(20);
+        let s = d.analyze(&small);
+        assert!(!s.signals.contains(&SmugglingSignal::CommentPadding));
+        // 大きいがコメントが半分未満 (正規の MSO 条件付きコメント想定)
+        let benign = format!(
+            "<!--[if mso]>x<![endif]--><html><body>{}</body></html>",
+            "a".repeat(20 * 1024)
+        );
+        let s = d.analyze(&benign);
+        assert!(!s.signals.contains(&SmugglingSignal::CommentPadding));
     }
 }

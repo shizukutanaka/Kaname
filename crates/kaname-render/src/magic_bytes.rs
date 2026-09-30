@@ -416,6 +416,10 @@ pub fn has_bidi_override_filename(filename: &str) -> bool {
 ///   実体は `evil.exe` として書き込まれる。
 /// - **キリル/ギリシャ文字とラテン文字の混在**: `pаypal.pdf` (キリル а) 型の
 ///   ホモグリフで、表示上のファイル名を別物に見せかける。
+/// - **コロン含有**: `evil.txt:hidden.exe` の `名:型` は Windows で
+///   Alternate Data Stream として別名に書き込まれる — 拡張子検査を
+///   素通りする格納先偽装 (D1365)。`:` は Windows/macOS の正規
+///   ファイル名に使えないため、メール添付名としては常に異常。
 #[must_use]
 pub fn filename_anomalies(filename: &str) -> Vec<&'static str> {
     let mut out = Vec::new();
@@ -424,6 +428,9 @@ pub fn filename_anomalies(filename: &str) -> Vec<&'static str> {
         .any(|c| c.is_control() || ('\u{0080}'..='\u{009F}').contains(&c))
     {
         out.push("control_chars");
+    }
+    if filename.contains(':') {
+        out.push("ads_stream");
     }
     if filename.ends_with(['.', ' ']) {
         out.push("trailing_dot_or_space");

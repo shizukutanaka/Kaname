@@ -396,6 +396,17 @@ impl QuishingDefense {
             return UrlReputation::Trusted;
         }
 
+        // 2.3 IP リテラルホストの非正規形 (D1323)
+        //    `http://2130706433/` (DWORD)・`http://0x7f000001/` (hex)・
+        //    `http://0177.0.0.1/` (octal)・`http://127.1/` (短縮)・
+        //    `http://192.0.2.1/` (裸 IPv4) はブラウザと inet_aton 系が
+        //        そのまま IP に解釈するが、ドメイン文字列の評判リストには
+        //        載らない — 「ドメイン名の形をしていない宛先」は評価系の
+        //        盲点となる (SSRF 回避の定式をメールリンクに転用した形)。
+        if is_numeric_ip_host(&domain) {
+            return UrlReputation::Suspicious;
+        }
+
         // 2.5 IDN / Punycode ドメイン (D1255 — ホモグラフ攻撃)
         //    `xn--` ラベルはブラウザが Unicode 化して表示するため、
         //    ASCII 文字列として読む利用者・スキャナには別ドメインに見える
@@ -564,6 +575,32 @@ fn has_dangerous_scheme(payload: &str) -> bool {
     const DANGEROUS: [&str; 3] = ["blob:", "data:", "javascript:"];
     let lower = payload.trim_start().to_lowercase();
     DANGEROUS.iter().any(|s| lower.starts_with(s))
+}
+
+/// ホストが IP リテラル (非正規形を含む) かを判定する (D1323)。
+///
+/// 全ラベルが「十進数字のみ」または「`0x`+hex」で構成されるホストは
+/// ブラウザ・inet_aton 系に IP アドレスとして解釈される:
+/// `2130706433` (DWORD)・`0x7f000001` (hex)・`0177.0.0.1` (octal)・
+/// `127.1` / `10.1` (短縮形)・`192.0.2.1` (通常の dotted quad)。
+/// メール中のリンク先が IP リテラルの場合はドメイン評判が働かない
+/// ため、形として Suspicious 扱いする。
+fn is_numeric_ip_host(domain: &str) -> bool {
+    if domain.is_empty() {
+        return false;
+    }
+    domain.split('.').all(|l| {
+        if l.is_empty() {
+            return false;
+        }
+        if l.bytes().all(|b| b.is_ascii_digit()) {
+            return true;
+        }
+        // `0x` + hex ラベル
+        l.len() > 2
+            && l[..2].eq_ignore_ascii_case("0x")
+            && l[2..].bytes().all(|b| b.is_ascii_hexdigit())
+    })
 }
 
 fn has_digit_substitution(domain: &str) -> bool {
@@ -1828,6 +1865,35 @@ mod tests {
         let d = QuishingDefense::new();
         assert_eq!(
             d.evaluate_url("https://example.org/x"),
+            UrlReputation::Neutral
+        );
+    }
+
+    #[test]
+    fn numeric_ip_host_is_suspicious() {
+        let d = QuishingDefense::new();
+        // D1323 — DWORD・hex・octal・短縮・裸 IPv4 の IP リテラルホスト
+        for u in [
+            "https://2130706433/",
+            "https://0x7f000001/",
+            "https://0x7f.0x0.0x0.0x1/",
+            "https://0177.0.0.1/",
+            "https://127.1/",
+            "https://10.0.0.1/internal",
+        ] {
+            assert_eq!(
+                d.evaluate_url(u),
+                UrlReputation::Suspicious,
+                "IP リテラルホストが素通し: {u}"
+            );
+        }
+        // 通常ドメイン・数字入りサブドメインの正当形は不発火
+        assert_eq!(
+            d.evaluate_url("https://example.org/x"),
+            UrlReputation::Neutral
+        );
+        assert_eq!(
+            d.evaluate_url("https://3com.example.org/"),
             UrlReputation::Neutral
         );
     }
