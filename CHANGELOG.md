@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1870: `Message-ID: ]<a>` 等の `]` 先立ちを検出 — `Envelope` に `msgid_rbrack_lead` を追加 (lead-sep 系は D1755–D1866)。
+### Security — D1869: `Received:` の `via` 節の `<` を検出 — `Envelope` に `received_via_lt` を追加 (`via` の `!`/`@`/`=`/`%` は D1709系–D1841)。
+### Security — D1868: `Content-Transfer-Encoding: base|64` の値内 `|` を検出 — `Envelope` に `cte_pipe` を追加 (`{`/`}`/`[`/`]` は D1860–D1856)。
+### Security — D1867: `;file^name=x` の param 名 `^` を検出 — `Envelope` に `param_caret_name` を追加 (`|`/`}` は D1863/D1859)。
 ### Security — D1866: `Message-ID: [<a>` 等の `[` 先立ちを検出 — `Envelope` に `msgid_lbrack_lead` を追加 (lead-sep 系は D1755–D1862)。
 ### Security — D1865: `Received:` の `by` 節の `<` を検出 — `Envelope` に `received_by_lt` を追加 (`by` の `!`/`%`/`@`/`=` は D1709系–D1845)。
 ### Security — D1864: `Content-Transfer-Encoding: base}64` の値内 `}` を検出 — `Envelope` に `cte_rbrace` を追加 (`{`/`[`/`]` は D1860/D1852/D1856)。
