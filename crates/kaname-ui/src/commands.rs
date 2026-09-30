@@ -6752,6 +6752,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.msgid_inner_star {
         render_risks.push("Message-ID 系欄の識別子内に星があります—厳密弾きと緩い受理で識別子がずれます".to_string());
     }
+    if env.msgid_inner_pct {
+        render_risks.push("Message-ID 系欄の識別子内に百分符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_caret {
+        render_risks.push("Message-ID 系欄の識別子内に曲折符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_backtick {
+        render_risks.push("Message-ID 系欄の識別子内に逆引用符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
+    if env.msgid_inner_tilde {
+        render_risks.push("Message-ID 系欄の識別子内に波線があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

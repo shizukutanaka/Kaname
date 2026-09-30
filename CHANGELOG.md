@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D2030: `Message-ID:` 系欄の `<…>` 内側の `~` を検出 — `Envelope` に `msgid_inner_tilde` を追加 (内側の `|`/`\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`、`!`/`#`/`$`/`*` は D2023–D2026)。
+### Security — D2029: `Message-ID:` 系欄の `<…>` 内側の `` ` `` を検出 — `Envelope` に `msgid_inner_backtick` を追加 (同上)。
+### Security — D2028: `Message-ID:` 系欄の `<…>` 内側の `^` を検出 — `Envelope` に `msgid_inner_caret` を追加 (同上)。
+### Security — D2027: `Message-ID:` 系欄の `<…>` 内側の `%` を検出 — `Envelope` に `msgid_inner_pct` を追加 (同上)。
 ### Security — D2026: `Message-ID:` 系欄の `<…>` 内側の `*` を検出 — `Envelope` に `msgid_inner_star` を追加 (内側の `|`/`\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`)。
 ### Security — D2025: `Message-ID:` 系欄の `<…>` 内側の `$` を検出 — `Envelope` に `msgid_inner_dollar` を追加 (同上)。
 ### Security — D2024: `Message-ID:` 系欄の `<…>` 内側の `#` を検出 — `Envelope` に `msgid_inner_hash` を追加 (同上)。
