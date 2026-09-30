@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1966: `Received:` の `by` 節の `"` を検出 — `Envelope` に `received_by_quote` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'` は D1845–D1962)。
+### Security — D1965: `Received:` の `from` 節の `&` を検出 — `Envelope` に `received_from_amp` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|`/`'`/`#`/`"` は D1837–D1963)。
+### Security — D1964: `Received:` の `via` 節の `\` を検出 — `Envelope` に `received_via_bslash` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/` は D1766–D1960)。
+### Security — D1963: `Received:` の `from` 節の `"` を検出 — `Envelope` に `received_from_quote` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|`/`'`/`#` は D1837–D1959)。
 ### Security — D1962: `Received:` の `by` 節の `'` を検出 — `Envelope` に `received_by_apos` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~` は D1845–D1958)。
 ### Security — D1961: `Received:` の `with` 節の `'` を検出 — `Envelope` に `received_with_apos` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#` は D1825–D1957)。
 ### Security — D1960: `Received:` の `via` 節の `/` を検出 — `Envelope` に `received_via_slash` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|` は D1766–D1956)。
