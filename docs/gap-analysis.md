@@ -1248,3 +1248,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1832 | `Content-Transfer-Encoding:` 値内の `@` | 値継続 vs 欄破棄で復号ずれ |
 | D1833 | `Received:` の `with` 節の `!` | bang 経路読み vs 欄破棄で経路ずれ |
 | D1834 | msgid 系の `^` 先立ち | 読み飛ばし vs 欄破棄で照合ずれ |
+| D1835 | param 名の `:` | 名継続 vs 欄破棄で param ずれ |
+| D1836 | `Content-Transfer-Encoding:` 値内の `%` | 値継続 vs 欄破棄で復号ずれ |
+| D1837 | `Received:` の `with` 節の `@` | 宛名読み vs 欄破棄で経路ずれ |
+| D1838 | msgid 系の `$` 先立ち | 読み飛ばし vs 欄破棄で照合ずれ |
