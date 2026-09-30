@@ -8,6 +8,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1275: 表示名のホモグリフ/混在スクリプト解析が配線されていなかった
+
+- **問題**: `kaname_bec::idn_homograph::analyze_display_name` は定義済みだったが解析経路に一度も配線されておらず (呼出元ゼロ)、既存の表示名詐称検査は「既知連絡先と一致した場合のみ」発火する設計 — 連絡先にない名前の混在スクリプト (例: `Аdmin` キリル込み) は無条件に素通りだった。
+- **修正**: analyze で `env.from[].display_name` に `analyze_display_name` を適用 → render_risks 警告。全角ラテンのみの構成は日本語メールで正規使用のため対象外に限定。
+- **教訓**: 作った検査は配線までが実装 — 定義の存在は検出の存在を意味しない。
+
+### Security — D1276: 件名の回避文字 (タグ文字・装飾英数字・ホモグリフ) が未検査
+
+- **問題**: D1257/D1273 の文字種変換検査は本文のみを対象 — 件名はキーワード照合対象でありながら検査の外にあった (`𝐈nvoice` 型の件名偽装・不可視文字分割は素通り)。
+- **修正**: `has_suspicious_subject_chars` を追加 — 件名のタグ文字・装飾英数字・ゼロ幅・ラテン混在キリル/ギリシャを検出 → render_risks 注意喚起。日本語件名・全角英数は対象外。
+- **教訓**: フィルタ対象の全フィールドに同じ文字種検査を適用せよ — 本文だけ磨くと件名が抜け道になる。
+
+### Security — D1273: 装飾英数字 (囲み文字・太字斜体 Unicode) によるキーワード回避が未検査
+
+- **問題**: フィッシング対策協議会 2026 年報告 — 「〇」「□」等の囲み文字や Mathematical Alphanumeric Symbols (`𝐀𝐦𝐚𝐳𝐨𝐧`) を本文に混ぜると、表示上は通常語でも文字列・正規表現照合が効かない。D1257 の混在検査はキリル/ギリシャのみで装飾英数ブロックは対象外だった。
+- **修正**: `ExtractedBodyText.styled_alphanum` を追加 — U+1D400–U+1D7FF・囲みラテン U+24B6–U+24E9・二乗/反転ラテン U+1F130–U+1F189 を検出 → render_risks 注意喚起。全角英数・囲み数字・通常絵文字は対象外。
+- **教訓**: 装飾で書かれた字は別の字 — 見た目でなく符号位置で照合せよ。
+
+### Security — D1274: Google 翻訳リダイレクト (translate?u= / translate.goog) が未剥がし
+
+- **問題**: 同上報告 — Google 翻訳 URL をリダイレクト元に使い URL スキャンを回避。`translate.google.com/translate?u=` と `<宛先>.translate.goog` (宛先ドメインがホスト名に埋込) の2形があるが、評判判定は translate.goog (Google) を見て実宛先を見逃す。
+- **修正**: `unwrap_protected_url` に2経路追加 — `/translate?` の `u=` パラメータ復元、および `*.translate.goog` ホスト名から宛先ドメインを復元 (`-`→`.`、`--`→`-`) して評価へ回す。
+- **教訓**: 信頼ドメインの「中継」は宛先を剥がして評価せよ — 中継者の評判は宛先の無罪を証明しない。
+
 ### Security — D1271: 空 Return-Path エンベロープ (Direct Send バイパス) が未検査
 
 - **問題**: ReliaQuest (2026-09) — 空の SMTP エンベロープ差出人 (`Return-Path: <>`) は Microsoft 365 の RejectDirectSend 制御を素通りし、内部ユーザー偽装に使われる。Kaname は不正形 (D281) は見ていたが「空 `<>` + 通常差出人」の組み合わせは未検査だった。

@@ -13485,6 +13485,13 @@ pub struct ExtractedBodyText {
     /// ではないが、参照の存在自体が開封確認トラッキング (生存確認の
     /// 偵察) の兆候として報告する価値がある。
     pub remote_resource: bool,
+    /// 太字/斜体/囲み/二重線等の装飾英数字 (Mathematical Alphanumeric
+    /// Symbols U+1D400–U+1D7FF、囲みラテン U+24B6–U+24E9、二乗/反転
+    /// ラテン U+1F130–U+1F189) が本文中にあるか — 見た目は「Amazon」
+    /// 等のブランド語だがキーワード照合が効かない文字種変換回避
+    /// (フィッシング対策協議会 2026 報告: 囲み文字・Unicode 装飾文字の
+    /// 混入) の兆候 (D1273)。正規メールでこの文字種は使われない。
+    pub styled_alphanum: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -13701,7 +13708,24 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         unicode_tag_chars: text.chars().any(|c| ('\u{E0000}'..='\u{E007F}').contains(&c)),
         confusable_script_mix: has_confusable_script_mix(&text),
         remote_resource: has_remote_resource(html),
+        styled_alphanum: has_styled_alphanum(&text),
     }
+}
+
+/// 装飾英数字 (太字/斜体/フラクチャ/二重線/囲みラテン等) が本文にあるか (D1273)。
+///
+/// `𝐀𝐦𝐚𝐳𝐨𝐧` のように表示上は通常文字列に見えるが、キーワード/
+/// 正規表現照合では別文字列になる。Mathematical Alphanumeric Symbols
+/// と囲み・二乗ラテン各ブロックを対象とする (全角英数 U+FF21– は
+/// 日本語ビジネスメールで正規使用のため対象外)。
+fn has_styled_alphanum(text: &str) -> bool {
+    text.chars().any(|c| {
+        ('\u{1D400}'..='\u{1D7FF}').contains(&c) // Mathematical Alphanumeric Symbols
+            || ('\u{24B6}'..='\u{24E9}').contains(&c) // 囲みラテン Ⓐ–ⓩ
+            || ('\u{1F130}'..='\u{1F14F}').contains(&c) // 二乗ラテン 🄰–🅏
+            || ('\u{1F150}'..='\u{1F169}').contains(&c) // 反転囲みラテン
+            || ('\u{1F170}'..='\u{1F189}').contains(&c) // 反転二乗ラテン
+    })
 }
 
 /// HTML 本文に外部 (http/https) リソース参照があるか (D1270)。
@@ -15560,6 +15584,21 @@ mod tests {
         assert!(!html_to_text(r#"<img src="data:image/png;base64,iVBOR">"#).remote_resource);
         assert!(!html_to_text(r#"<a href="https://example.com">link</a>"#).remote_resource);
         assert!(!html_to_text("<p>plain text</p>").remote_resource);
+    }
+
+    #[test]
+    fn html_to_text_flags_styled_alphanum() {
+        // D1273 — Mathematical Alphanumeric Symbols で書いた "Amazon"
+        let styled = "<p>Your \u{1D400}mazon account</p>";
+        assert!(html_to_text(styled).styled_alphanum);
+        // 囲みラテン Ⓐ
+        assert!(html_to_text("<p>\u{24B6}mazon</p>").styled_alphanum);
+        // 二乗ラテン 🄰
+        assert!(html_to_text("<p>\u{1F130}mazon</p>").styled_alphanum);
+        // 正規テキスト・全角英数・絵文字一般は対象外
+        assert!(!html_to_text("<p>Amazon アカウント</p>").styled_alphanum);
+        assert!(!html_to_text("<p>ＡＢＣ社の件</p>").styled_alphanum); // 全角
+        assert!(!html_to_text("<p>①②③の手順</p>").styled_alphanum); // 囲み数字は対象外
     }
 
     #[test]
