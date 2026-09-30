@@ -6656,6 +6656,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.refs_star_lead {
         render_risks.push("References/In-Reply-To が星で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
     }
+    if env.refs_hash_lead {
+        render_risks.push("References/In-Reply-To が井桁で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_dollar_lead {
+        render_risks.push("References/In-Reply-To が通貨符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_at_lead {
+        render_risks.push("References/In-Reply-To が渦巻符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
+    if env.refs_qmark_lead {
+        render_risks.push("References/In-Reply-To が疑問符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
