@@ -1486,6 +1486,14 @@ pub struct Envelope {
     pub received_from_gt: bool,
     /// `Received:` の `by` 節の `>` (D1890 — 経路解析ずれ)。
     pub received_by_gt: bool,
+    /// `;file)name=x` 型の param 名内 `)` (D1891 — param ずれ)。
+    pub param_rparen_name: bool,
+    /// `Content-Transfer-Encoding:` 値内の `'` (D1892 — 復号ずれ)。
+    pub cte_apos: bool,
+    /// `Received:` の `via` 節の `>` (D1893 — 経路解析ずれ)。
+    pub received_via_gt: bool,
+    /// `Received:` の `for` 節の `>` (D1894 — 配送先ずれ)。
+    pub received_for_gt: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4334,6 +4342,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let cte_dollar = has_cte_dollar(bytes);
     let received_from_gt = has_received_from_gt(bytes);
     let received_by_gt = has_received_by_gt(bytes);
+    let param_rparen_name = has_param_rparen_name(bytes);
+    let cte_apos = has_cte_apos(bytes);
+    let received_via_gt = has_received_via_gt(bytes);
+    let received_for_gt = has_received_for_gt(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4982,6 +4994,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cte_dollar,
         received_from_gt,
         received_by_gt,
+        param_rparen_name,
+        cte_apos,
+        received_via_gt,
+        received_for_gt,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -34670,6 +34686,191 @@ pub fn has_received_by_gt(raw: &[u8]) -> bool {
     false
 }
 
+/// param 名に `)` が含まれるか判定する (D1891)。
+///
+/// `;file)name=x` — `)` は param 名の字集合外 (コメント終端と紛
+/// れる)。名を継続する実装と欄ごと捨てる実装で param がずれる
+/// (`(` は D1887)。
+#[must_use]
+pub fn has_param_rparen_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(name, "content-type" | "content-disposition") {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(';').skip(1) {
+            let Some(eq) = seg.find('=') else { continue };
+            let pname = seg[..eq].trim();
+            if pname.contains(')') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値に `'` が含まれるか判定する (D1892)。
+///
+/// `Content-Transfer-Encoding: base'64` — `'` は符号化値の字集合
+/// には書けない。値を継続する実装と欄ごと捨てる実装で復号がずれる
+/// (`$`/`#`/`*`/`{`/`}`/`[`/`]`/`|`/`^`/`~` は D1860–D1888)。
+#[must_use]
+pub fn has_cte_apos(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-transfer-encoding:") else { continue };
+        let val = v.split(';').next().unwrap_or("");
+        let mut scrub = String::with_capacity(val.len());
+        let mut depth = 0i32;
+        for c in val.chars() {
+            if depth > 0 {
+                if c == '(' { depth += 1 } else if c == ')' { depth -= 1 }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.contains('\'') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `via` 節の値に `>` が含まれるか判定する (D1893)。
+///
+/// `Received: … via >a` — `via` 節は経路方式を置く場所で `>` は
+/// 書けない。角括弧読みする実装と欄ごと捨てる実装で経路がずれる
+/// (`via` の `<` は D1869)。
+#[must_use]
+pub fn has_received_via_gt(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("via") && i + 1 < toks.len()
+                && toks[i + 1].contains('>')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received:` の `for` 節の値に `>` が含まれるか判定する (D1894)。
+///
+/// `Received: … for >a@b` — `for` 節は配送先を置く場所で `>` は
+/// addr-spec の枠組み外。角括弧読みする実装と欄ごと捨てる実装で
+/// 配送先がずれる (`for` の `<` は D1885)。
+#[must_use]
+pub fn has_received_for_gt(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("for") && i + 1 < toks.len()
+                && toks[i + 1].contains('>')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -57449,6 +57650,82 @@ mod tests {
             b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
         ));
         assert!(!has_received_by_gt(b""));
+    }
+
+    #[test]
+    fn param_rparen_name_param名の閉じ括弧を検出する() {
+        // D1891 — `;file)name=x`
+        assert!(has_param_rparen_name(
+            b"Content-Type: text/plain; file)name=x\r\n\r\nb"
+        ));
+        assert!(has_param_rparen_name(
+            b"Content-Disposition: attachment; f)ile=\"a.txt\"\r\n\r\nb"
+        ));
+        // 値側の `)` は対象外 — 不発火
+        assert!(!has_param_rparen_name(
+            b"Content-Type: text/plain; name=a)b\r\n\r\nb"
+        ));
+        assert!(!has_param_rparen_name(
+            b"Content-Type: text/plain; filename=x\r\n\r\nb"
+        ));
+        assert!(!has_param_rparen_name(b""));
+    }
+
+    #[test]
+    fn cte_apos_符丁のアポストロフィを検出する() {
+        // D1892 — `Content-Transfer-Encoding: base'64`
+        assert!(has_cte_apos(
+            b"Content-Transfer-Encoding: base'64\r\n\r\nb"
+        ));
+        assert!(has_cte_apos(
+            b"Content-Transfer-Encoding: 7'bit\r\n\r\nb"
+        ));
+        // コメント内の `'` は対象外 — 不発火
+        assert!(!has_cte_apos(
+            b"Content-Transfer-Encoding: base64 (a'b)\r\n\r\nb"
+        ));
+        assert!(!has_cte_apos(
+            b"Content-Transfer-Encoding: base64\r\n\r\nb"
+        ));
+        assert!(!has_cte_apos(b""));
+    }
+
+    #[test]
+    fn received_via_gt_via節の閉じ角括弧を検出する() {
+        // D1893 — `Received: … via >a`
+        assert!(has_received_via_gt(
+            b"Received: from m.example by s.example via >uucp\r\n\r\nx"
+        ));
+        assert!(has_received_via_gt(
+            b"Received: from m.example by s.example via u>ucp\r\n\r\nx"
+        ));
+        // 節なし・通常の via は不発火
+        assert!(!has_received_via_gt(
+            b"Received: from m.example by s.example via uucp\r\n\r\nx"
+        ));
+        assert!(!has_received_via_gt(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_via_gt(b""));
+    }
+
+    #[test]
+    fn received_for_gt_for節の閉じ角括弧を検出する() {
+        // D1894 — `Received: … for >a@b`
+        assert!(has_received_for_gt(
+            b"Received: from m.example by s.example for >a@b\r\n\r\nx"
+        ));
+        assert!(has_received_for_gt(
+            b"Received: from m.example by s.example for a>@b\r\n\r\nx"
+        ));
+        // 節なし・通常の for は不発火
+        assert!(!has_received_for_gt(
+            b"Received: from m.example by s.example for a@b\r\n\r\nx"
+        ));
+        assert!(!has_received_for_gt(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_for_gt(b""));
     }
 
     #[test]
