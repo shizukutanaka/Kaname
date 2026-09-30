@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1818: `Message-ID: &<a>` 等の `&` 先立ちを検出 — `Envelope` に `msgid_amp_lead` を追加 (lead-sep 系は D1755–D1814)。
+### Security — D1817: `Received:` の `via` 節の `!` を検出 — `Envelope` に `received_via_bang` を追加 (`by` の `!` は D1813、`via` の `@`/`%` は D1789/D1809)。
+### Security — D1816: `Content-Type: text,plain` の型本体内 `,` を検出 — `Envelope` に `ct_comma_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`?` は D1758–D1812)。
+### Security — D1815: `To: a#b@c` のローカル部 `#` を検出 — `Envelope` に `addr_hash_local` を追加 (`%` D1811、`$` D1806、`|` D1802、`&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
 ### Security — D1814: `Message-ID: #<a>` 等の `#` 先立ちを検出 — `Envelope` に `msgid_hash_lead` を追加 (lead-sep 系は D1755–D1807)。
 ### Security — D1813: `Received:` の `by` 節の `!` を検出 — `Envelope` に `received_by_bang` を追加 (`from`/`id` の `!` は D1781/D1785、`by` の `@`/`%` は D1773/D1793)。
 ### Security — D1812: `Content-Type: text?plain` の型本体内 `?` を検出 — `Envelope` に `ct_qmark_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@` は D1758–D1808)。
