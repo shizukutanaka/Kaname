@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1902: `Received:` の `id` 節の `"` を検出 — `Envelope` に `received_id_quote` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/複数は D1785–D1897)。
+### Security — D1901: `Received:` の `by` 節の `#` を検出 — `Envelope` に `received_by_hash` を追加 (`by` の `<`/`>`/`=`/`%`/`@` は D1773–D1890)。
+### Security — D1900: `Received:` の `from` 節の `?` を検出 — `Envelope` に `received_from_qmark` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@` は D1781–D1889)。
+### Security — D1899: `;file<name=x` の param 名 `<` を検出 — `Envelope` に `param_lt_name` を追加 (`>` は D1895)。
 ### Security — D1898: `Received:` の `with` 節の `>` を検出 — `Envelope` に `received_with_gt` を追加 (`with` の `<` は D1881)。
 ### Security — D1897: `Received:` の `id` 節の `>` を検出 — `Envelope` に `received_id_gt` を追加 (`id` の `<` は D1873)。
 ### Security — D1896: `Content-Transfer-Encoding: base"64` の値内 `"` を検出 — `Envelope` に `cte_quote` を追加 (`'`/`$`/`#`/`*`/`{`/`}`/`[`/`]`/`|`/`^`/`~` は D1860–D1892)。
