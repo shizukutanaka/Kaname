@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1810: `;file?name=x` の param 名 `?` を検出 — `Envelope` に `param_qmark_name` を追加 (`@` は D1713、`/` は D1716、反転符は D1782)。
+### Security — D1809: `Received:` の `via` 節の `%` を検出 — `Envelope` に `received_via_pct` を追加 (`via` の `@` は D1789、`from`/`by`/`id`/`for` の `%` は D1797/D1793/D1800/D1804)。
+### Security — D1808: `Content-Type: text@plain` の型本体内 `@` を検出 — `Envelope` に `ct_at_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<` は D1758–D1796)。
+### Security — D1807: `Message-ID: /<a>` 等の `/` 先立ちを検出 — `Envelope` に `msgid_slash_lead` を追加 (lead-sep 系は D1755–D1803)。
 ### Security — D1806: `To: a$b@c` のローカル部 `$` を検出 — `Envelope` に `addr_dollar_local` を追加 (`|` D1802、`&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
 ### Security — D1805: `Content-Transfer-Encoding: base<64` の値内 `<` を検出 — `Envelope` に `cte_lt` を追加 (`>` は D1798、`=` は D1780、`\` は D1788)。
 ### Security — D1804: `Received:` の `for` 節の `%` を検出 — `Envelope` に `received_for_pct` を追加 (`for` の `@` 二つは D1777、`id`/`by`/`from` の `%` は D1800/D1793/D1797)。
