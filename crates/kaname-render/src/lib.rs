@@ -1614,6 +1614,14 @@ pub struct Envelope {
     pub received_with_caret: bool,
     /// `Received:` の `for` 節の `|` (D1954 — 配送先ずれ)。
     pub received_for_pipe: bool,
+    /// `Received:` の `id` 節の `&` (D1955 — 識別子ずれ)。
+    pub received_id_amp: bool,
+    /// `Received:` の `via` 節の `|` (D1956 — 経路解析ずれ)。
+    pub received_via_pipe: bool,
+    /// `Received:` の `with` 節の `#` (D1957 — 経路解析ずれ)。
+    pub received_with_hash: bool,
+    /// `Received:` の `by` 節の `~` (D1958 — 経路ずれ)。
+    pub received_by_tilde: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4526,6 +4534,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let received_via_caret = has_received_via_caret(bytes);
     let received_with_caret = has_received_with_caret(bytes);
     let received_for_pipe = has_received_for_pipe(bytes);
+    let received_id_amp = has_received_id_amp(bytes);
+    let received_via_pipe = has_received_via_pipe(bytes);
+    let received_with_hash = has_received_with_hash(bytes);
+    let received_by_tilde = has_received_by_tilde(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5238,6 +5250,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_via_caret,
         received_with_caret,
         received_for_pipe,
+        received_id_amp,
+        received_via_pipe,
+        received_with_hash,
+        received_by_tilde,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -14580,7 +14596,7 @@ pub fn has_dash_filename(raw: &[u8]) -> bool {
                 // RFC 2231 形 `charset''…` は `''` の後の符号化部を見る
                 let body = v.find("''").map_or(v, |i| &v[i + 2..]);
                 if body.starts_with('-')
-                    || body.get(..3).is_some_and(|p| p.eq_ignore_ascii_case("%2d"))
+                    || (body.len() >= 3 && body[..3].eq_ignore_ascii_case("%2d"))
                 {
                     return true;
                 }
@@ -18825,7 +18841,6 @@ pub fn has_bad_month_name(raw: &[u8]) -> bool {
         for (i, t) in toks.iter().enumerate() {
             let tt = t.trim_matches(|c: char| c == ',' || c == ';');
             if tt.len() >= 3
-                && tt.is_char_boundary(3)
                 && tt[..3].bytes().all(|b| b.is_ascii_alphabetic())
                 && i > 0
                 && toks[..i].iter().any(|p| {
@@ -37866,6 +37881,182 @@ pub fn has_received_for_pipe(raw: &[u8]) -> bool {
         for (i, t) in toks.iter().enumerate() {
             if t.eq_ignore_ascii_case("for") && i + 1 < toks.len()
                 && toks[i + 1].contains('|')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received: … id a&b` — `&` は識別子の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で識別子がずれる
+/// (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|`/`^`/`~`/`$`/`'`/`?`/`,`/`:` は D1785–D1951)。
+#[must_use]
+pub fn has_received_id_amp(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("id") && i + 1 < toks.len()
+                && toks[i + 1].contains('&')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received: … via a|b` — `|` は便り名の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で経路がずれる
+/// (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^` は D1766–D1952)。
+#[must_use]
+pub fn has_received_via_pipe(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("via") && i + 1 < toks.len()
+                && toks[i + 1].contains('|')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received: … with a#b` — `#` は渡し方名の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で経路がずれる
+/// (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^` は D1825–D1953)。
+#[must_use]
+pub fn has_received_with_hash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("with") && i + 1 < toks.len()
+                && toks[i + 1].contains('#')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received: … by a~b` — `~` は受け口名の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で経路がずれる
+/// (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:` は D1845–D1950)。
+#[must_use]
+pub fn has_received_by_tilde(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("by") && i + 1 < toks.len()
+                && toks[i + 1].contains('~')
             {
                 return true;
             }
@@ -56986,6 +57177,82 @@ mod tests {
     }
 
     #[test]
+    fn received_id_amp_id節の連結符を検出する() {
+        // D1955 — `Received: … id a&b`
+        assert!(has_received_id_amp(
+            b"Received: from m.example by s.example id a&b id 1\r\n\r\nx"
+        ));
+        assert!(has_received_id_amp(
+            b"Received: from m.example by s.example id &a id 1\r\n\r\nx"
+        ));
+        // 節なし・通常の id は不発火
+        assert!(!has_received_id_amp(
+            b"Received: from m.example by s.example id a-b id 1\r\n\r\nx"
+        ));
+        assert!(!has_received_id_amp(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_id_amp(b""));
+    }
+
+    #[test]
+    fn received_via_pipe_via節の縦線を検出する() {
+        // D1956 — `Received: … via a|b`
+        assert!(has_received_via_pipe(
+            b"Received: from m.example by s.example via a|b id 1\r\n\r\nx"
+        ));
+        assert!(has_received_via_pipe(
+            b"Received: from m.example by s.example via |a id 1\r\n\r\nx"
+        ));
+        // 節なし・通常の via は不発火
+        assert!(!has_received_via_pipe(
+            b"Received: from m.example by s.example via a-b id 1\r\n\r\nx"
+        ));
+        assert!(!has_received_via_pipe(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_via_pipe(b""));
+    }
+
+    #[test]
+    fn received_with_hash_with節の井桁を検出する() {
+        // D1957 — `Received: … with a#b`
+        assert!(has_received_with_hash(
+            b"Received: from m.example by s.example with a#b id 1\r\n\r\nx"
+        ));
+        assert!(has_received_with_hash(
+            b"Received: from m.example by s.example with #a id 1\r\n\r\nx"
+        ));
+        // 節なし・通常の with は不発火
+        assert!(!has_received_with_hash(
+            b"Received: from m.example by s.example with a-b id 1\r\n\r\nx"
+        ));
+        assert!(!has_received_with_hash(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_with_hash(b""));
+    }
+
+    #[test]
+    fn received_by_tilde_by節の波線を検出する() {
+        // D1958 — `Received: … by a~b`
+        assert!(has_received_by_tilde(
+            b"Received: from m.example by s.example by a~b id 1\r\n\r\nx"
+        ));
+        assert!(has_received_by_tilde(
+            b"Received: from m.example by s.example by ~a id 1\r\n\r\nx"
+        ));
+        // 節なし・通常の by は不発火
+        assert!(!has_received_by_tilde(
+            b"Received: from m.example by s.example by a-b id 1\r\n\r\nx"
+        ));
+        assert!(!has_received_by_tilde(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_by_tilde(b""));
+    }
+
+    #[test]
     fn long_month_長い月名を検出する() {
         // D1648 — 4字以上の月名
         assert!(has_long_month(b"Date: Thu, 25 September 2025 12:00:00 +0000\r\n\r\nx"));
@@ -69114,4 +69381,888 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+    #[test]
+    fn ampm_time_ampm記号を検出する() {
+        // D1665 — `12:00 PM`
+        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
+        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
+        // 24時間・ゾーン名・他欄は不発火
+        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
+        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
+    }
+    #[test]
+    fn conflicting_mime_headers_は重複と不正cteを検出する() {
+        // D1285 — 重複 CTE (noxxi Dubious MIME)
+        let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
+        assert!(has_conflicting_mime_headers(dup_cte));
+        // 不正 CTE 値
+        let bad_cte = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: x-uuencode\r\n\r\nx";
+        assert!(has_conflicting_mime_headers(bad_cte));
+        // 重複 Content-Type
+        let dup_ct = b"Content-Type: text/plain\r\nContent-Type: text/html\r\n\r\nx";
+        assert!(has_conflicting_mime_headers(dup_ct));
+        // 正規ヘッダは不発火 (本文中の 'token:' 行も誤認しない)
+        let ok = b"Content-Type: multipart/mixed; boundary=x\r\nContent-Transfer-Encoding: 7bit\r\n\r\n--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nbody\r\n--x--";
+        assert!(!has_conflicting_mime_headers(ok));
+        assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
+    }
+    #[test]
+    fn cte_param_cte値paramを検出する() {
+        // D1655 — `base64; x`
+        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
+        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
+        // 通常値・CT 欄の param・他欄は不発火
+        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
+        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn dup_mime_headers_は外側mime欄重複を検出する() {
+        // D1401 — 外側の CT/CD/CTE 二重
+        assert!(has_dup_mime_headers(
+            b"Content-Type: text/plain\r\nContent-Type: text/html\r\nSubject: x\r\n\r\nbody"
+        ));
+        assert!(has_dup_mime_headers(
+            b"Content-Transfer-Encoding: 7bit\r\nContent-Transfer-Encoding: base64\r\n\r\nbody"
+        ));
+        assert!(!has_dup_mime_headers(
+            b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
+        ));
+    }
+    #[test]
+    fn empty_mime_field_mime欄空値を検出する() {
+        // D1645 — CT/CD/CTE の空値
+        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
+        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
+        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
+        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
+        // 値あり・他欄空値は不発火
+        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
+        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
+        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn encoded_multipart_container_はmultipart上のcteを検出する() {
+        // D1293 — multipart/* に base64/quoted-printable CTE
+        assert!(has_encoded_multipart_container(
+            b"Content-Type: multipart/mixed; boundary=x\r\nContent-Transfer-Encoding: base64\r\n\r\nb"
+        ));
+        // CTE が CT より先の run でも発火
+        assert!(has_encoded_multipart_container(
+            b"Content-Transfer-Encoding: base64\r\nContent-Type: multipart/alternative; boundary=y\r\n\r\nb"
+        ));
+        // 入れ子パートのヘッダ run でも発火
+        assert!(has_encoded_multipart_container(
+            b"Content-Type: multipart/mixed; boundary=o\r\n\r\n--o\r\nContent-Type: multipart/related; boundary=i\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nx"
+        ));
+        // multipart + 7bit/8bit/binary は正規 → 不発火
+        assert!(!has_encoded_multipart_container(
+            b"Content-Type: multipart/mixed; boundary=x\r\nContent-Transfer-Encoding: 7bit\r\n\r\n--x--"
+        ));
+        // 非 multipart への base64 は正規 → 不発火
+        assert!(!has_encoded_multipart_container(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\naGk="
+        ));
+        // multipart 宣言なし → 不発火
+        assert!(!has_encoded_multipart_container(
+            b"Content-Type: text/html\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nx"
+        ));
+    }
+    #[test]
+    fn http_framing_headers_はhttp系ヘッダを検出する() {
+        assert!(has_http_framing_headers(b"Content-Length: 500\r\nSubject: x\r\n\r\nx"));
+        assert!(has_http_framing_headers(b"Transfer-Encoding: chunked\r\n\r\nx"));
+        assert!(has_http_framing_headers(b"Host: evil.example\r\n\r\nx"));
+        assert!(has_http_framing_headers(b"Connection: keep-alive\r\n\r\nx"));
+        // Content-Transfer-Encoding は別名 — 対象外
+        assert!(!has_http_framing_headers(
+            b"Content-Transfer-Encoding: base64\r\n\r\nx"
+        ));
+        // 本文中の Content-Length は対象外
+        assert!(!has_http_framing_headers(b"Subject: x\r\n\r\nContent-Length: 5"));
+        assert!(!has_http_framing_headers(b"Subject: x\r\n\r\nx"));
+    }
+    #[test]
+    fn leading_bom_は先頭bomを検出する() {
+        assert!(has_leading_bom(b"\xEF\xBB\xBFFrom: a@x\r\n\r\nx"));
+        assert!(has_leading_bom(b"\xFF\xFEF\x00r\x00o\x00m\x00"));
+        assert!(has_leading_bom(b"\xFE\xFF\x00F\x00r\x00o\x00m\x00"));
+        assert!(!has_leading_bom(b"From: a@x\r\n\r\nx"));
+        // 本文中の BOM は対象外
+        assert!(!has_leading_bom(b"Subject: x\r\n\r\n\xEF\xBB\xBF"));
+    }
+    #[test]
+    fn malformed_media_type_は折りたたみctを誤爆しない() {
+        // Content-Type: \n text/plain の FWS 折りたたみは正規
+        assert!(!has_malformed_media_type(
+            b"Content-Type:\n text/plain\r\n\r\nx"
+        ));
+        // 値が本当に無いものは依然発火
+        assert!(has_malformed_media_type(
+            b"Content-Type: \r\nSubject: x\r\n\r\nx"
+        ));
+    }
+    #[test]
+    fn missing_mime_version_はmime宣言なし構造を検出する() {
+        // D1289 — MIME 構造を使うのに MIME-Version ヘッダがない
+        assert!(has_missing_mime_version(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\n\r\nb\r\n--x--"
+        ));
+        assert!(has_missing_mime_version(
+            b"Content-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\nx"
+        ));
+        // 正規: MIME-Version ありは不発火
+        assert!(!has_missing_mime_version(
+            b"MIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\nx"
+        ));
+        // MIME 構造を名乗らない単純テキストは不発火
+        assert!(!has_missing_mime_version(b"Subject: a\r\n\r\nplain"));
+    }
+    #[test]
+    fn nntp_routing_はusenet欄を検出する() {
+        // D1412 — Newsgroups/Path/Xref/NNTP-* 等
+        assert!(has_nntp_routing(
+            b"From: a@b\r\nNewsgroups: misc.test\r\n\r\nbody"
+        ));
+        assert!(has_nntp_routing(
+            b"From: a@b\r\nPath: news.example!a\r\n\r\nbody"
+        ));
+        assert!(!has_nntp_routing(
+            b"From: a@b\r\nSubject: x\r\n\r\nbody"
+        ));
+    }
+    #[test]
+    fn non_ascii_addr_domain_はunicode宛先を検出する() {
+        assert!(has_non_ascii_addr_domain(
+            "From: u@例え.jp\r\nSubject: x\r\n\r\nx".as_bytes()
+        ));
+        assert!(has_non_ascii_addr_domain(
+            "To: Taro <t@日本.example>\r\nSubject: x\r\n\r\nx".as_bytes()
+        ));
+        // コメント内の Unicode は対象外 / ASCII 宛先は不発火
+        assert!(!has_non_ascii_addr_domain(
+            "From: u@x.com (例え.jp)\r\nSubject: x\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_non_ascii_addr_domain(
+            "From: u@x.example\r\nSubject: x\r\n\r\nx".as_bytes()
+        ));
+        // 件名の Unicode は対象外
+        assert!(!has_non_ascii_addr_domain(
+            "From: u@x.com\r\nSubject: 例え\r\n\r\nx".as_bytes()
+        ));
+    }
+    #[test]
+    fn odd_mime_version_はfws折りたたみでも値を読む() {
+        // Review BUG_0003 — 値が折りたたまれても論理行で比較
+        assert!(has_odd_mime_version(
+            b"MIME-Version:\r\n 2.0\r\nContent-Type: text/plain\r\n\r\nx"
+        ));
+        assert!(has_odd_mime_version(b"MIME-Version: 2.0\r\n\r\nx"));
+        assert!(!has_odd_mime_version(b"MIME-Version: 1.0\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_はai印を検出する() {
+        let o1 = b"X-OpenAI-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(o1));
+        let a1 = b"X-Anthropic-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(a1));
+        let c1 = b"X-Cohere-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(c1));
+        let h1 = b"X-HuggingFace-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(h1));
+        let m1 = b"X-Mistral-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(m1));
+        let e1 = b"X-ElevenLabs-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(e1));
+        let p1 = b"X-Pinecone-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(p1));
+        let l1 = b"X-LangChain-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(l1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ai_marks(clean));
+    }
+    #[test]
+    fn scan_はarc_bimi印を検出する() {
+        let a1 = b"ARC-Seal: i=1; s=arc\r\n\r\nx";
+        assert!(has_arc_bimi_marks(a1));
+        let a2 = b"ARC-Message-Signature: i=1; a=rsa\r\n\r\nx";
+        assert!(has_arc_bimi_marks(a2));
+        let a3 = b"ARC-Authentication-Results: i=1; mx\r\n\r\nx";
+        assert!(has_arc_bimi_marks(a3));
+        let x1 = b"X-ARC-Result: pass\r\n\r\nx";
+        assert!(has_arc_bimi_marks(x1));
+        let l1 = b"BIMI-Location: https://e/l.svg\r\n\r\nx";
+        assert!(has_arc_bimi_marks(l1));
+        let i1 = b"BIMI-Indicator: AAAB\r\n\r\nx";
+        assert!(has_arc_bimi_marks(i1));
+        let p1 = b"BIMI-Logo-Preference: f\r\n\r\nx";
+        assert!(has_arc_bimi_marks(p1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_arc_bimi_marks(clean));
+    }
+    #[test]
+    fn scan_はav印第三群を検出する() {
+        let k1 = b"X-KSMG-AntiVirus: 2.1\r\n\r\nx";
+        assert!(has_av3_marks(k1));
+        let k2 = b"X-KLMS-Rule-ID: 4\r\n\r\nx";
+        assert!(has_av3_marks(k2));
+        let d1 = b"X-DrWeb-SpamReason: encoded\r\n\r\nx";
+        assert!(has_av3_marks(d1));
+        let n1 = b"X-NAI-Spam-Score: 1.5\r\n\r\nx";
+        assert!(has_av3_marks(n1));
+        let m1 = b"X-McAfee-Spam-Report: x\r\n\r\nx";
+        assert!(has_av3_marks(m1));
+        let f1 = b"X-F-Secure-Antivirus: x\r\n\r\nx";
+        assert!(has_av3_marks(f1));
+        let s1 = b"X-Symantec-Antivirus: x\r\n\r\nx";
+        assert!(has_av3_marks(s1));
+        let i1 = b"X-Ikarus-Antispam: x\r\n\r\nx";
+        assert!(has_av3_marks(i1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_av3_marks(clean));
+    }
+    #[test]
+    fn scan_はcdnエッジホスティング印を検出する() {
+        let c1 = b"X-Cloudflare-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(c1));
+        let f1 = b"X-Fastly-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(f1));
+        let v1 = b"X-Varnish: 123\r\n\r\nx";
+        assert!(has_cdn_marks(v1));
+        let s1 = b"X-Sucuri-ID: 123\r\n\r\nx";
+        assert!(has_cdn_marks(s1));
+        let w1 = b"X-WPEngine-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(w1));
+        let k1 = b"X-Kinsta-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(k1));
+        let p1 = b"X-Pantheon-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(p1));
+        let b1 = b"X-BunnyCDN-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(b1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cdn_marks(clean));
+    }
+    #[test]
+    fn scan_はcicdビルドバンドラ印を検出する() {
+        let d1 = b"X-Drone-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(d1));
+        let c1 = b"X-Concourse-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(c1));
+        let b1 = b"X-Bazel-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(b1));
+        let g1 = b"X-Gradle-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(g1));
+        let a1 = b"X-AppVeyor-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(a1));
+        let w1 = b"X-Webpack-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(w1));
+        let v1 = b"X-Vite-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(v1));
+        let e1 = b"X-ESLint-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(e1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ci_marks(clean));
+    }
+    #[test]
+    fn scan_はcis韓国印を検出する() {
+        let m1 = b"X-Mras: Ok\r\n\r\nx";
+        assert!(has_cis_provider_marks(m1));
+        let m2 = b"X-Mru-Authenticated-Sender: a@b\r\n\r\nx";
+        assert!(has_cis_provider_marks(m2));
+        let y1 = b"X-Yandex-Spam: 1\r\n\r\nx";
+        assert!(has_cis_provider_marks(y1));
+        let r1 = b"X-Rambler-Spam: no\r\n\r\nx";
+        assert!(has_cis_provider_marks(r1));
+        let n1 = b"X-Naver-Spam: no\r\n\r\nx";
+        assert!(has_cis_provider_marks(n1));
+        let d1 = b"X-Daum-Spam-Info: x\r\n\r\nx";
+        assert!(has_cis_provider_marks(d1));
+        let h1 = b"X-Hanmail-Antispam: x\r\n\r\nx";
+        assert!(has_cis_provider_marks(h1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cis_provider_marks(clean));
+    }
+    #[test]
+    fn scan_はdcc印を検出する() {
+        let dc = b"X-DCC-Main-Metrics: bulk 123\r\n\r\nx";
+        assert!(has_dcc_marks(dc));
+        let dv = b"X-DCC: ok\r\n\r\nx";
+        assert!(has_dcc_marks(dv));
+        let dc2 = b"X-DCC-WEIKOA-Metrics: 1\r\n\r\nx";
+        assert!(has_dcc_marks(dc2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_dcc_marks(clean));
+    }
+    #[test]
+    fn scan_はdnsドメインddns印を検出する() {
+        let g1 = b"X-GoDaddy-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(g1));
+        let n1 = b"X-Namecheap-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(n1));
+        let d1 = b"X-DNSimple-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(d1));
+        let p1 = b"X-Porkbun-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(p1));
+        let h1 = b"X-Hover-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(h1));
+        let r1 = b"X-Route53-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(r1));
+        let e1 = b"X-easyDNS-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(e1));
+        let a1 = b"X-AzureDNS-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_domain_marks(clean));
+    }
+    #[test]
+    fn scan_はecマーケットプレイス印を検出する() {
+        let s1 = b"X-Shopify-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(s1));
+        let e1 = b"X-Etsy-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(e1));
+        let s2 = b"X-Squarespace-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(s2));
+        let w1 = b"X-Wix-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(w1));
+        let m1 = b"X-Magento-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(m1));
+        let a1 = b"X-AliExpress-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(a1));
+        let z1 = b"X-Zalando-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(z1));
+        let p1 = b"X-Poshmark-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(p1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ecommerce_marks(clean));
+    }
+    #[test]
+    fn scan_はec販売印を検出する() {
+        let w1 = b"X-Walmart-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(w1));
+        let n1 = b"X-Newegg-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(n1));
+        let l1 = b"X-Logitech-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(l1));
+        let r1 = b"X-Razer-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(r1));
+        let a1 = b"X-Anker-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(a1));
+        let s1 = b"X-Shopware-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(s1));
+        let m1 = b"X-Medusa-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(m1));
+        let k1 = b"X-Keychron-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(k1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_retail_marks(clean));
+    }
+    #[test]
+    fn scan_はesp印2を検出する() {
+        let sp = b"X-SparkPost-Subaccount: 1\r\n\r\nx";
+        assert!(has_esp2_stamps(sp));
+        let ms = b"X-MSYS-API: {options}\r\n\r\nx";
+        assert!(has_esp2_stamps(ms));
+        let mc = b"X-MailChannels-Auth: u\r\n\r\nx";
+        assert!(has_esp2_stamps(mc));
+        let s2 = b"X-SMTP2GO-Message-ID: m\r\n\r\nx";
+        assert!(has_esp2_stamps(s2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_esp2_stamps(clean));
+    }
+    #[test]
+    fn scan_はesp第四群印を検出する() {
+        let p1 = b"X-PHPlist-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(p1));
+        let s1 = b"X-Sendy-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(s1));
+        let m1 = b"X-MailWizz-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(m1));
+        let o1 = b"X-OpenEMM-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(o1));
+        let m2 = b"X-Mautic-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(m2));
+        let n1 = b"X-Netcore-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(n1));
+        let m3 = b"X-MoEngage-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(m3));
+        let o2 = b"X-OneSignal-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(o2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_esp4_marks(clean));
+    }
+    #[test]
+    fn scan_はfeedbackidを検出する() {
+        let fb = b"Feedback-ID: 12345:camp:x\r\n\r\ny";
+        assert!(has_feedback_id(fb));
+        let xf = b"X-Feedback-ID: camp:x\r\n\r\ny";
+        assert!(has_feedback_id(xf));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_feedback_id(clean));
+    }
+    #[test]
+    fn scan_はhr採用第二群印を検出する() {
+        let g1 = b"X-Greenhouse-Candidate: x\r\n\r\nx";
+        assert!(has_hr_marks(g1));
+        let l1 = b"X-Lever-Candidate: x\r\n\r\nx";
+        assert!(has_hr_marks(l1));
+        let b1 = b"X-BambooHR-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(b1));
+        let a1 = b"X-ADP-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(a1));
+        let g2 = b"X-Gusto-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(g2));
+        let r1 = b"X-Rippling-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(r1));
+        let w1 = b"X-Workable-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(w1));
+        let d1 = b"X-Deel-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_hr_marks(clean));
+    }
+    #[test]
+    fn scan_はideエディタapi稼働印を検出する() {
+        let p1 = b"X-Postman-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(p1));
+        let v1 = b"X-VisualStudio-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(v1));
+        let s1 = b"X-Statuspage-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(s1));
+        let x1 = b"X-Xcode-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(x1));
+        let i1 = b"X-IntelliJ-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(i1));
+        let n1 = b"X-Neovim-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(n1));
+        let o1 = b"X-OhDear-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(o1));
+        let e1 = b"X-Eclipse-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(e1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_devtools_marks(clean));
+    }
+    #[test]
+    fn scan_はiot3dプリント部品印を検出する() {
+        let a1 = b"X-Arduino-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(a1));
+        let p1 = b"X-Prusa-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(p1));
+        let j1 = b"X-JLCPCB-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(j1));
+        let b1 = b"X-Bambu-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(b1));
+        let r1 = b"X-RaspberryPi-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(r1));
+        let s1 = b"X-SparkFun-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(s1));
+        let d1 = b"X-DigiKey-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(d1));
+        let m1 = b"X-Mouser-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_maker_marks(clean));
+    }
+    #[test]
+    fn scan_はml配信印を検出する() {
+        let m1 = b"X-ML-Id: 1\r\n\r\nx";
+        assert!(has_mailinglist_marks(m1));
+        let m2 = b"X-MLName: list\r\n\r\nx";
+        assert!(has_mailinglist_marks(m2));
+        let m3 = b"X-Mail-Count: 10\r\n\r\nx";
+        assert!(has_mailinglist_marks(m3));
+        let m4 = b"X-MLServer: fml\r\n\r\nx";
+        assert!(has_mailinglist_marks(m4));
+        let m5 = b"X-Mailman-Version: 2\r\n\r\nx";
+        assert!(has_mailinglist_marks(m5));
+        let l1 = b"X-List-Administrivia: yes\r\n\r\nx";
+        assert!(has_mailinglist_marks(l1));
+        let s1 = b"X-Sympa-Loop: x\r\n\r\nx";
+        assert!(has_mailinglist_marks(s1));
+        let e1 = b"X-eGroups-Approved-By: x\r\n\r\nx";
+        assert!(has_mailinglist_marks(e1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mailinglist_marks(clean));
+    }
+    #[test]
+    fn scan_はmseop印を検出する() {
+        let m1 = b"X-Microsoft-Antispam: BCL:0\r\n\r\nx";
+        assert!(has_ms_eop_marks(m1));
+        let e1 = b"X-EOPAttributedMessage: 1\r\n\r\nx";
+        assert!(has_ms_eop_marks(e1));
+        let e2 = b"X-EOPTenantAttributedMessage: g:0\r\n\r\nx";
+        assert!(has_ms_eop_marks(e2));
+        let f1 = b"X-Forefront-PRVS: abc\r\n\r\nx";
+        assert!(has_ms_eop_marks(f1));
+        let h1 = b"X-HM-SenderCID: x\r\n\r\nx";
+        assert!(has_ms_eop_marks(h1));
+        let l1 = b"X-MS-Exchange-ForwardingLoop: x\r\n\r\nx";
+        assert!(has_ms_eop_marks(l1));
+        let l2 = b"X-LD-Processed: x\r\n\r\nx";
+        assert!(has_ms_eop_marks(l2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ms_eop_marks(clean));
+    }
+    #[test]
+    fn scan_はmta製品印を検出する() {
+        let p1 = b"X-Postfix-Queue-ID: 123\r\n\r\nx";
+        assert!(has_mta_product_marks(p1));
+        let o1 = b"X-Original-To: u@h\r\n\r\nx";
+        assert!(has_mta_product_marks(o1));
+        let e1 = b"X-Exim-Version: 4\r\n\r\nx";
+        assert!(has_mta_product_marks(e1));
+        let q1 = b"X-Qmail-Scanner: 1\r\n\r\nx";
+        assert!(has_mta_product_marks(q1));
+        let k1 = b"X-Kerio-Anti-Spam: no\r\n\r\nx";
+        assert!(has_mta_product_marks(k1));
+        let m1 = b"X-MDAV-Result: clean\r\n\r\nx";
+        assert!(has_mta_product_marks(m1));
+        let s1 = b"X-Spam-Processed: mx\r\n\r\nx";
+        assert!(has_mta_product_marks(s1));
+        let i1 = b"X-imss-scan-details: x\r\n\r\nx";
+        assert!(has_mta_product_marks(i1));
+        let t1 = b"X-TM-AS-Result: No\r\n\r\nx";
+        assert!(has_mta_product_marks(t1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mta_product_marks(clean));
+    }
+    #[test]
+    fn scan_はossスキャナ印を検出する() {
+        let r1 = b"X-Rspamd-Action: no action\r\n\r\nx";
+        assert!(has_oss_scan_marks(r1));
+        let r2 = b"X-Rspamd-Server: mx\r\n\r\nx";
+        assert!(has_oss_scan_marks(r2));
+        let s1 = b"X-Spamd-Result: default\r\n\r\nx";
+        assert!(has_oss_scan_marks(s1));
+        let s2 = b"X-Stat-Signature: abc\r\n\r\nx";
+        assert!(has_oss_scan_marks(s2));
+        let o1 = b"X-OS-Fingerprint: linux\r\n\r\nx";
+        assert!(has_oss_scan_marks(o1));
+        let a1 = b"X-Amavis-Alert: bad\r\n\r\nx";
+        assert!(has_oss_scan_marks(a1));
+        let m1 = b"X-MailScanner-SpamCheck: spam\r\n\r\nx";
+        assert!(has_oss_scan_marks(m1));
+        let m2 = b"X-MIMEDefang-Notify: x\r\n\r\nx";
+        assert!(has_oss_scan_marks(m2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_oss_scan_marks(clean));
+    }
+    #[test]
+    fn scan_はsa詳細印を検出する() {
+        let sr = b"X-Spam-Report: tests=AWL,BAYES_00\r\n\r\nx";
+        assert!(has_spam_detail_marks(sr));
+        let sd = b"X-Spam-Details: hits 3.2\r\n\r\nx";
+        assert!(has_spam_detail_marks(sd));
+        let sh = b"X-Spam-Hits: 2\r\n\r\nx";
+        assert!(has_spam_detail_marks(sh));
+        let sp = b"X-Spam-Probability: U=0.9\r\n\r\nx";
+        assert!(has_spam_detail_marks(sp));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_spam_detail_marks(clean));
+    }
+    #[test]
+    fn scan_はsnsプラットフォーム印を検出する() {
+        let f1 = b"X-Facebook-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(f1));
+        let t1 = b"X-Twitter-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(t1));
+        let l1 = b"X-LinkedIn-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(l1));
+        let i1 = b"X-Instagram-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(i1));
+        let d1 = b"X-Discord-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(d1));
+        let s1 = b"X-Spotify-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(s1));
+        let m1 = b"X-Meetup-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(m1));
+        let e1 = b"X-Eventbrite-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(e1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_sns_platform_marks(clean));
+    }
+    #[test]
+    fn scan_はsaas通知印を検出する() {
+        let g1 = b"X-GitHub-Reason: mention\r\n\r\nx";
+        assert!(has_saas_notify_marks(g1));
+        let g2 = b"X-GitHub-Recipient: u\r\n\r\nx";
+        assert!(has_saas_notify_marks(g2));
+        let g3 = b"X-GitLab-Project: x\r\n\r\nx";
+        assert!(has_saas_notify_marks(g3));
+        let g4 = b"X-Gitea-Issue-ID: 1\r\n\r\nx";
+        assert!(has_saas_notify_marks(g4));
+        let j1 = b"X-Jenkins-Job: x\r\n\r\nx";
+        assert!(has_saas_notify_marks(j1));
+        let p1 = b"X-PayPal-Transaction: x\r\n\r\nx";
+        assert!(has_saas_notify_marks(p1));
+        let d1 = b"X-DocuSign-Envelope: x\r\n\r\nx";
+        assert!(has_saas_notify_marks(d1));
+        let s1 = b"X-Slack-Request-Id: x\r\n\r\nx";
+        assert!(has_saas_notify_marks(s1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_saas_notify_marks(clean));
+    }
+    #[test]
+    fn scan_はナレッジタスク管理crm印を検出する() {
+        let q1 = b"X-Qiita-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(q1));
+        let z1 = b"X-Zenn-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(z1));
+        let b1 = b"X-Backlog-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(b1));
+        let k1 = b"X-Kibela-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(k1));
+        let t1 = b"X-Taiga-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(t1));
+        let p1 = b"X-Pipedrive-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(p1));
+        let o1 = b"X-Obsidian-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(o1));
+        let m1 = b"X-Microsoft-Todo-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_project_marks(clean));
+    }
+    #[test]
+    fn scan_はノート執筆pkm印を検出する() {
+        let j1 = b"X-Joplin-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(j1));
+        let l1 = b"X-Logseq-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(l1));
+        let h1 = b"X-HackMD-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(h1));
+        let t1 = b"X-Typora-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(t1));
+        let a1 = b"X-Anytype-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(a1));
+        let n1 = b"X-Notability-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(n1));
+        let d1 = b"X-DokuWiki-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(d1));
+        let r1 = b"X-RemNote-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(r1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_notes_marks(clean));
+    }
+    #[test]
+    fn scan_はヘルスケア薬局dna印を検出する() {
+        let z1 = b"X-Zocdoc-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(z1));
+        let g1 = b"X-GoodRx-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(g1));
+        let d1 = b"X-Doximity-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(d1));
+        let l1 = b"X-LabCorp-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(l1));
+        let a1 = b"X-Ancestry-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(a1));
+        let m1 = b"X-MyChart-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(m1));
+        let c1 = b"X-CVS-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(c1));
+        let k1 = b"X-Kaiser-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(k1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_health_marks(clean));
+    }
+    #[test]
+    fn scan_はマーケesp印を検出する() {
+        let e1 = b"X-ELQ-Customer: x\r\n\r\nx";
+        assert!(has_marketing_marks(e1));
+        let m1 = b"X-MC-User: abc\r\n\r\nx";
+        assert!(has_marketing_marks(m1));
+        let m2 = b"X-Mailjet-Campaign: 1\r\n\r\nx";
+        assert!(has_marketing_marks(m2));
+        let m3 = b"X-MJ-CustomID: x\r\n\r\nx";
+        assert!(has_marketing_marks(m3));
+        let m4 = b"X-Mandrill-User: x\r\n\r\nx";
+        assert!(has_marketing_marks(m4));
+        let h1 = b"X-HubSpot-Customer: x\r\n\r\nx";
+        assert!(has_marketing_marks(h1));
+        let a1 = b"X-Accounttype: pd\r\n\r\nx";
+        assert!(has_marketing_marks(a1));
+        let r1 = b"X-Report-Abuse: x\r\n\r\nx";
+        assert!(has_marketing_marks(r1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_marketing_marks(clean));
+    }
+    #[test]
+    fn scan_はローコードcms印を検出する() {
+        let r1 = b"X-Retool-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(r1));
+        let s1 = b"X-Supabase-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(s1));
+        let t1 = b"X-Strapi-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(t1));
+        let b1 = b"X-Budibase-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(b1));
+        let n1 = b"X-NocoDB-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(n1));
+        let a1 = b"X-Appwrite-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(a1));
+        let c1 = b"X-Contentful-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(c1));
+        let d1 = b"X-Directus-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_lowcode_marks(clean));
+    }
+    #[test]
+    fn scan_は教育lms印を検出する() {
+        let c1 = b"X-Coursera-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(c1));
+        let d1 = b"X-Duolingo-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(d1));
+        let h1 = b"X-HackerRank-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(h1));
+        let u1 = b"X-Udemy-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(u1));
+        let c2 = b"X-Canvas-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(c2));
+        let b1 = b"X-Blackboard-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(b1));
+        let k1 = b"X-KhanAcademy-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(k1));
+        let l1 = b"X-LeetCode-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(l1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_edu_marks(clean));
+    }
+    #[test]
+    fn scan_は欧州isp印を検出する() {
+        let g1 = b"X-GMX-Antispam: 0\r\n\r\nx";
+        assert!(has_eu_provider_marks(g1));
+        let g2 = b"X-GMX-Antivirus: 0\r\n\r\nx";
+        assert!(has_eu_provider_marks(g2));
+        let u1 = b"X-UI-Filterresults: notjunk\r\n\r\nx";
+        assert!(has_eu_provider_marks(u1));
+        let u2 = b"UI-InboundReport: junk:10\r\n\r\nx";
+        assert!(has_eu_provider_marks(u2));
+        let m1 = b"X-me-spamlevel: not-spam\r\n\r\nx";
+        assert!(has_eu_provider_marks(m1));
+        let m2 = b"X-ME-Helo: server.localdomain\r\n\r\nx";
+        assert!(has_eu_provider_marks(m2));
+        let p1 = b"X-ProXad-Spam: no\r\n\r\nx";
+        assert!(has_eu_provider_marks(p1));
+        let w1 = b"X-WEBDE-Spam: no\r\n\r\nx";
+        assert!(has_eu_provider_marks(w1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_eu_provider_marks(clean));
+    }
+    #[test]
+    fn scan_は欧州isp第二群印を検出する() {
+        let a1 = b"X-Arcor-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(a1));
+        let s1 = b"X-Strato-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(s1));
+        let i1 = b"X-IONOS-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(i1));
+        let z1 = b"X-Ziggo-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(z1));
+        let b1 = b"X-Bluewin-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(b1));
+        let t1 = b"X-Telia-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(t1));
+        let e1 = b"X-Elisa-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(e1));
+        let f1 = b"X-Fastweb-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(f1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_eu_isp2_marks(clean));
+    }
+    #[test]
+    fn scan_は送信元ip認定印を検出する() {
+        let o1 = b"X-Originating-IP: [1.1.1.1]\r\n\r\nx";
+        assert!(has_source_ip_marks(o1));
+        let s1 = b"X-Source-IP: 1.1.1.1\r\n\r\nx";
+        assert!(has_source_ip_marks(s1));
+        let c1 = b"X-Client-IP: 1.1.1.1\r\n\r\nx";
+        assert!(has_source_ip_marks(c1));
+        let r1 = b"X-Reverse-DNS: x\r\n\r\nx";
+        assert!(has_source_ip_marks(r1));
+        let h1 = b"X-HELO-Domain: x\r\n\r\nx";
+        assert!(has_source_ip_marks(h1));
+        let e1 = b"X-EIP: 1.1.1.1\r\n\r\nx";
+        assert!(has_source_ip_marks(e1));
+        let i1 = b"X-IADB-IP: 1.1.1.1\r\n\r\nx";
+        assert!(has_source_ip_marks(i1));
+        let c2 = b"X-CSA-Complaints: x\r\n\r\nx";
+        assert!(has_source_ip_marks(c2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_source_ip_marks(clean));
+    }
+    #[test]
+    fn scan_は通信apiサポート印を検出する() {
+        let t1 = b"X-Twilio-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(t1));
+        let s1 = b"X-Sinch-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(s1));
+        let r1 = b"X-RingCentral-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(r1));
+        let v1 = b"X-Vonage-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(v1));
+        let p1 = b"X-Plivo-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(p1));
+        let i1 = b"X-Infobip-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(i1));
+        let w1 = b"X-Webex-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(w1));
+        let d1 = b"X-Drift-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_comms_marks(clean));
+    }
+    #[test]
+    fn scan_は開発idセキュリティsaas印を検出する() {
+        let o1 = b"X-Okta-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(o1));
+        let c1 = b"X-CrowdStrike-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(c1));
+        let s1 = b"X-Snyk-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(s1));
+        let a1 = b"X-Auth0-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(a1));
+        let h1 = b"X-HashiCorp-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(h1));
+        let d1 = b"X-Docker-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(d1));
+        let s2 = b"X-SentinelOne-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(s2));
+        let b1 = b"X-Bitbucket-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(b1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_enterprise_saas_marks(clean));
+    }
+    #[test]
+    fn tnef_attachment_はtnef形式を検出する() {
+        assert!(has_tnef_attachment(
+            b"Content-Type: application/ms-tnef; name=\"winmail.dat\"\r\n\r\nX"
+        ));
+        assert!(has_tnef_attachment(
+            b"Content-Type: application/vnd.ms-tnef\r\n\r\nX"
+        ));
+        assert!(has_tnef_attachment(
+            b"Content-Disposition: attachment; filename=\"winmail.dat\"\r\n\r\nX"
+        ));
+        // 通常添付・通常本文は不発火
+        assert!(!has_tnef_attachment(
+            b"Content-Type: application/octet-stream; name=\"a.bin\"\r\n\r\nX"
+        ));
+        assert!(!has_tnef_attachment(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+    #[test]
+    fn url_display_name_はurl名を検出する() {
+        // D1403 — 表示名中の URL
+        assert!(has_url_display_name(
+            b"From: \"http://click.evil\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(has_url_display_name(
+            b"From: \"visit www.evil.com\" <a@b>\r\n\r\nbody"
+        ));
+        // 普通の表示名は不発火
+        assert!(!has_url_display_name(
+            b"From: \"Taro Tanaka\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(!has_url_display_name(b"From: a@b\r\n\r\nbody"));
     }

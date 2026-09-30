@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1958: `Received:` の `by` 節の `~` を検出 — `Envelope` に `received_by_tilde` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:` は D1845–D1950)。
+### Security — D1957: `Received:` の `with` 節の `#` を検出 — `Envelope` に `received_with_hash` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^` は D1825–D1953)。
+### Security — D1956: `Received:` の `via` 節の `|` を検出 — `Envelope` に `received_via_pipe` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^` は D1766–D1952)。
+### Security — D1955: `Received:` の `id` 節の `&` を検出 — `Envelope` に `received_id_amp` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|`/`^`/`~`/`$`/`'`/`?`/`,`/`:` は D1785–D1951)。
 ### Security — D1954: `Received:` の `for` 節の `|` を検出 — `Envelope` に `received_for_pipe` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&`/`#`/`"`/`'`/`:`/`,` は D1804–D1950)。
 ### Security — D1953: `Received:` の `with` 節の `^` を検出 — `Envelope` に `received_with_caret` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$` は D1825–D1949)。
 ### Security — D1952: `Received:` の `via` 節の `^` を検出 — `Envelope` に `received_via_caret` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"` は D1766–D1948)。
@@ -2577,7 +2581,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **修正**: `magic_bytes::is_exotic_message_subtype` を追加し `scan_attachment_bytes` で注意喚起 (パラメータ付き宣言も判定)。Caution 級。
 - **教訓**: 「中身を持たない/持てない」サブタイプはスキャン不能を前提に兆候として数えよ。
 
-||||||| cd3333d### Security — D1263: 意図的に壊された ICS 構造 (malformed calendar invite) が未検査
+### Security — D1263: 意図的に壊された ICS 構造 (malformed calendar invite) が未検査
 
 - **問題**: Mimecast (2026-06) が観測した 4 千件超の quishing キャンペーンは、.ics 招待を RFC 5545 に違反する形で意図的に壊し、QR 抽出ツールをパース段階で失敗させていた: (a) `BEGIN:VCALENDAR` の前に大量の X- ジャンク行、(b) `X-GENERATION; FUTURE:` 型 — `;` 後のパラメータが `name=value` 形を取らない — の無意味な X- プロパティ行。正当な ICS 生成器はどちらも出力しないが、kaname-render の CalendarGuard は構造異常を一切見ていなかった。
 - **修正**: `CalendarRisk::MalformedStructure { leading_lines, malformed_x_props }` を追加し `analyze` で検査 (継続行・正規 X- プロパティは対象外)。Caution 扱いで兆候として報告。
