@@ -674,9 +674,13 @@ fn unwrap_protected_url(url: &str) -> Option<String> {
     }
 
     // --- Google リダイレクタ ---
-    // google.com/url?q= / /imgres?imgurl= (国別ドメイン含む)
-    if is_google_host(&domain) && (url.contains("/url?") || url.contains("/imgres?")) {
-        for name in ["q", "url", "imgurl"] {
+    // google.com/url?q= / /imgres?imgurl= / translate?u= (国別ドメイン含む)
+    // translate.google.com/translate?u= は Google 翻訳プロキシ経由で
+    // 宛先を隠す形式 (フィッシング対策協議会 2026 報告) (D1274)
+    if is_google_host(&domain)
+        && (url.contains("/url?") || url.contains("/imgres?") || url.contains("/translate?"))
+    {
+        for name in ["q", "url", "imgurl", "u"] {
             if let Some(v) = query_param(url, name) {
                 let inner = html_unescape(&percent_decode(&v));
                 if inner.starts_with("http://") || inner.starts_with("https://") {
@@ -734,6 +738,21 @@ fn unwrap_protected_url(url: &str) -> Option<String> {
         }
         return None;
     }
+    // --- Google 翻訳プロキシ (translate.goog) (D1274) ---
+    // <encoded-host>.translate.goog — 宛先ドメインがサブドメインに
+    // 埋込まれる (`-`→`.`、`--`→`-`)。評判判定は translate.goog
+    // (Google) を見て実宛先を見逃すため、ホスト名を復元して返す。
+    if let Some(enc) = domain.strip_suffix(".translate.goog") {
+        let dest = enc
+            .replace("--", "\u{0}")
+            .replace('-', ".")
+            .replace('\u{0}', "-");
+        if dest.contains('.') && !dest.is_empty() {
+            return Some(format!("https://{dest}"));
+        }
+        return None;
+    }
+
     if domain == "l.facebook.com"
         || domain == "lm.facebook.com"
         || domain == "l.instagram.com"
@@ -1588,6 +1607,37 @@ mod tests {
         assert_eq!(
             d.evaluate_url("https://www.google.com/search?q=rust"),
             UrlReputation::Trusted
+        );
+    }
+
+    #[test]
+    fn google_translate_unwraps_u_param() {
+        let d = QuishingDefense::new();
+        // D1274 — translate.google.com/translate?u= 経由の宛先隠し
+        let wrapped = "https://translate.google.com/translate?sl=auto&tl=en&u=https%3A%2F%2Fevil.tk%2Flogin";
+        assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn translate_goog_unwraps_embedded_host() {
+        let d = QuishingDefense::new();
+        // D1274 — <host>.translate.goog は宛先ドメインがホスト名に埋込
+        // `evil-tk.translate.goog` → evil.tk へ復元して評価
+        let wrapped = "https://evil-tk.translate.goog/login?_x_tr_sl=ja";
+        assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
+        // `--` は元ドメインの `-` を表す (my-bank.tk → my--bank-tk)
+        let hyphenated = "https://my--bank-tk.translate.goog/x";
+        assert_eq!(d.evaluate_url(hyphenated), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn bare_translate_goog_is_not_unwrapped() {
+        let d = QuishingDefense::new();
+        // 裸の translate.goog (翻訳トップ) は宛先埋込なし → 不発火
+        // (信頼リスト未登録のため評価は Neutral)
+        assert_eq!(
+            d.evaluate_url("https://translate.goog/"),
+            UrlReputation::Neutral
         );
     }
 

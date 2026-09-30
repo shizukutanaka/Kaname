@@ -119,6 +119,18 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `Return-Path:` ヘッダが存在し値が空 (`<>` または空白のみ) (D1271)。
+    ///
+    /// 空の SMTP エンベロープ差出人 — バウンスメールでは正規だが、
+    /// 通常差出人のメールで現れると Direct Send 系の認証回避
+    /// (ReliaQuest 2026-09 観測) の兆候。
+    pub empty_return_path: bool,
+    /// 同一 MIME パートで `Content-Type:` の `name=` と
+    /// `Content-Disposition:` の `filename=` が食い違うか (D1272)。
+    ///
+    /// スキャナが片方、保存処理がもう片方を見る実装差を突く
+    /// パーサ差異工作。
+    pub filename_name_mismatch: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2013,6 +2025,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D281: Return-Path の不正値
     let malformed_return_path = has_malformed_return_path(bytes);
 
+    // D1271: Return-Path 空エンベロープ
+    let empty_return_path = has_empty_return_path(bytes);
+
+    // D1272: name= vs filename= 不一致
+    let filename_name_mismatch = has_filename_name_mismatch(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -2035,6 +2053,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        empty_return_path,
+        filename_name_mismatch,
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2280,6 +2300,68 @@ pub fn has_malformed_return_path(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("return-path:") && !l.contains('<'))
+}
+
+/// `Return-Path:` ヘッダが存在し値が空 (`<>` または空白のみ) か判定する (D1271)。
+///
+/// ReliaQuest (2026-09): 空の SMTP エンベロープ差出人は M365 の
+/// RejectDirectSend (Direct Send 制御) を素通りし、内部ユーザー
+/// 偽装に使われた。バウンス (From: MAILER-DAEMON 系) では正規のため、
+/// 呼び出し側で差出人と突き合わせて判定する。
+pub fn has_empty_return_path(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        if let Some(v) = l.strip_prefix("return-path:") {
+            let v = v.trim();
+            v.is_empty() || v == "<>"
+        } else {
+            false
+        }
+    })
+}
+
+/// 同一 MIME パートで `Content-Type:` の `name=` と `Content-Disposition:` の
+/// `filename=` が食い違うか判定する (D1272)。
+///
+/// パーサ差異: スキャナは `name=` を、保存処理は `filename=` を見る
+/// 実装があるため、両者をずらすと検査と実行で別ファイル名になる。
+/// ヘッダブロック (空行区切り) ごとに両方を抽出して比較する。
+pub fn has_filename_name_mismatch(raw: &[u8]) -> bool {
+    fn param_value<'a>(block: &'a str, key: &str) -> Option<&'a str> {
+        for l in block.lines() {
+            let ll = l.trim_start();
+            let val = ll.split(';').find_map(|p| {
+                let p = p.trim();
+                p.strip_prefix(key)
+                    .map(|v| v.trim().trim_matches('"'))
+            });
+            if let Some(v) = val.filter(|v| !v.is_empty()) {
+                return Some(v);
+            }
+        }
+        None
+    }
+    let text = String::from_utf8_lossy(raw);
+    // CRLF/LF 統一してからパートヘッダブロックを空行で区切る
+    let lower = text.replace("\r\n", "\n").to_ascii_lowercase();
+    for block in lower.split("\n\n") {
+        if !block.contains("content-type:") || !block.contains("content-disposition:") {
+            continue;
+        }
+        let name = param_value(block, "name=");
+        let filename = param_value(block, "filename=");
+        if let (Some(n), Some(f)) = (name, filename) {
+            if n != f {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -13403,6 +13485,13 @@ pub struct ExtractedBodyText {
     /// ではないが、参照の存在自体が開封確認トラッキング (生存確認の
     /// 偵察) の兆候として報告する価値がある。
     pub remote_resource: bool,
+    /// 太字/斜体/囲み/二重線等の装飾英数字 (Mathematical Alphanumeric
+    /// Symbols U+1D400–U+1D7FF、囲みラテン U+24B6–U+24E9、二乗/反転
+    /// ラテン U+1F130–U+1F189) が本文中にあるか — 見た目は「Amazon」
+    /// 等のブランド語だがキーワード照合が効かない文字種変換回避
+    /// (フィッシング対策協議会 2026 報告: 囲み文字・Unicode 装飾文字の
+    /// 混入) の兆候 (D1273)。正規メールでこの文字種は使われない。
+    pub styled_alphanum: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -13619,7 +13708,24 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         unicode_tag_chars: text.chars().any(|c| ('\u{E0000}'..='\u{E007F}').contains(&c)),
         confusable_script_mix: has_confusable_script_mix(&text),
         remote_resource: has_remote_resource(html),
+        styled_alphanum: has_styled_alphanum(&text),
     }
+}
+
+/// 装飾英数字 (太字/斜体/フラクチャ/二重線/囲みラテン等) が本文にあるか (D1273)。
+///
+/// `𝐀𝐦𝐚𝐳𝐨𝐧` のように表示上は通常文字列に見えるが、キーワード/
+/// 正規表現照合では別文字列になる。Mathematical Alphanumeric Symbols
+/// と囲み・二乗ラテン各ブロックを対象とする (全角英数 U+FF21– は
+/// 日本語ビジネスメールで正規使用のため対象外)。
+fn has_styled_alphanum(text: &str) -> bool {
+    text.chars().any(|c| {
+        ('\u{1D400}'..='\u{1D7FF}').contains(&c) // Mathematical Alphanumeric Symbols
+            || ('\u{24B6}'..='\u{24E9}').contains(&c) // 囲みラテン Ⓐ–ⓩ
+            || ('\u{1F130}'..='\u{1F14F}').contains(&c) // 二乗ラテン 🄰–🅏
+            || ('\u{1F150}'..='\u{1F169}').contains(&c) // 反転囲みラテン
+            || ('\u{1F170}'..='\u{1F189}').contains(&c) // 反転二乗ラテン
+    })
 }
 
 /// HTML 本文に外部 (http/https) リソース参照があるか (D1270)。
@@ -15439,6 +15545,32 @@ mod tests {
     // ── D160: html_to_text (HTML のみメールの解析対象化 + hidden text salting) ──
 
     #[test]
+    fn empty_return_path_は空エンベロープを検出する() {
+        // D1271 — ReliaQuest 2026-09 の Direct Send バイパス
+        assert!(has_empty_return_path(b"Return-Path: <>\r\nFrom: ceo@corp.jp\r\n\r\nx"));
+        assert!(has_empty_return_path(b"Return-Path: <>\nFrom: ceo@corp.jp\n\nx"));
+        assert!(has_empty_return_path(b"Return-Path:\r\nFrom: a@b\r\n\r\nx"));
+        // 正規アドレス/ヘッダ不在は不発火
+        assert!(!has_empty_return_path(b"Return-Path: <bounce@mx.com>\r\n\r\nx"));
+        assert!(!has_empty_return_path(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn filename_name_mismatch_は不一致を検出する() {
+        // D1272 — パーサ差異
+        let bad = b"Content-Type: application/octet-stream; name=\"safe.pdf\"\r\nContent-Disposition: attachment; filename=\"evil.exe\"\r\n\r\nx";
+        assert!(has_filename_name_mismatch(bad));
+        // 一致は不発火
+        let ok = b"Content-Type: application/pdf; name=\"doc.pdf\"\r\nContent-Disposition: attachment; filename=\"doc.pdf\"\r\n\r\nx";
+        assert!(!has_filename_name_mismatch(ok));
+        // name= のみ / filename= のみは不発火
+        let only_name = b"Content-Type: application/pdf; name=\"doc.pdf\"\r\nContent-Disposition: attachment\r\n\r\nx";
+        assert!(!has_filename_name_mismatch(only_name));
+        // 添付セクション自体がない場合
+        assert!(!has_filename_name_mismatch(b"Content-Type: text/plain\r\n\r\nhello"));
+    }
+
+    #[test]
     fn html_to_text_flags_remote_resources() {
         // D1270 — リモート画像 (開封確認トラッキング)
         assert!(html_to_text(r#"<p>x</p><img src="https://tracker.evil.com/px.gif">"#).remote_resource);
@@ -15452,6 +15584,21 @@ mod tests {
         assert!(!html_to_text(r#"<img src="data:image/png;base64,iVBOR">"#).remote_resource);
         assert!(!html_to_text(r#"<a href="https://example.com">link</a>"#).remote_resource);
         assert!(!html_to_text("<p>plain text</p>").remote_resource);
+    }
+
+    #[test]
+    fn html_to_text_flags_styled_alphanum() {
+        // D1273 — Mathematical Alphanumeric Symbols で書いた "Amazon"
+        let styled = "<p>Your \u{1D400}mazon account</p>";
+        assert!(html_to_text(styled).styled_alphanum);
+        // 囲みラテン Ⓐ
+        assert!(html_to_text("<p>\u{24B6}mazon</p>").styled_alphanum);
+        // 二乗ラテン 🄰
+        assert!(html_to_text("<p>\u{1F130}mazon</p>").styled_alphanum);
+        // 正規テキスト・全角英数・絵文字一般は対象外
+        assert!(!html_to_text("<p>Amazon アカウント</p>").styled_alphanum);
+        assert!(!html_to_text("<p>ＡＢＣ社の件</p>").styled_alphanum); // 全角
+        assert!(!html_to_text("<p>①②③の手順</p>").styled_alphanum); // 囲み数字は対象外
     }
 
     #[test]
