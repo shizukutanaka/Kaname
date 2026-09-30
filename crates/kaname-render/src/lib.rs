@@ -1406,6 +1406,14 @@ pub struct Envelope {
     pub received_id_eq: bool,
     /// msgid 系の `'` 先立ち (D1850 — 識別子照合ずれ)。
     pub msgid_squote_lead: bool,
+    /// `;file]name=x` 型の param 名内 `]` (D1851 — param ずれ)。
+    pub param_rbrack_name: bool,
+    /// `Content-Transfer-Encoding:` 値内の `[` (D1852 — 復号ずれ)。
+    pub cte_lbrack: bool,
+    /// `Received:` の `for` 節の `=` (D1853 — 配送先ずれ)。
+    pub received_for_eq: bool,
+    /// msgid 系の `+` 先立ち (D1854 — 識別子照合ずれ)。
+    pub msgid_plus_lead: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4214,6 +4222,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let cte_slash = has_cte_slash(bytes);
     let received_id_eq = has_received_id_eq(bytes);
     let msgid_squote_lead = has_msgid_squote_lead(bytes);
+    let param_rbrack_name = has_param_rbrack_name(bytes);
+    let cte_lbrack = has_cte_lbrack(bytes);
+    let received_for_eq = has_received_for_eq(bytes);
+    let msgid_plus_lead = has_msgid_plus_lead(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4822,6 +4834,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cte_slash,
         received_id_eq,
         msgid_squote_lead,
+        param_rbrack_name,
+        cte_lbrack,
+        received_for_eq,
+        msgid_plus_lead,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -32677,6 +32693,190 @@ pub fn has_msgid_squote_lead(raw: &[u8]) -> bool {
     false
 }
 
+/// param 名に `]` が含まれるか判定する (D1851)。
+///
+/// `;file]name=x` — `]` は attr-char の字集合外。名を継続する
+/// 実装と欄ごと捨てる実装で param がずれる (`@`/`/`/`` ` ``/`?`/`!`/
+/// `&`/`:`/`%`/`,`/`[` は D1713–D1847)。
+#[must_use]
+pub fn has_param_rbrack_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(name, "content-type" | "content-disposition") {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(';').skip(1) {
+            let Some(eq) = seg.find('=') else { continue };
+            let pname = seg[..eq].trim();
+            if pname.contains(']') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値に `[` が含まれるか判定する (D1852)。
+///
+/// `Content-Transfer-Encoding: base[64` — `[` は符号化値の字集合
+/// には書けない。値を継続する実装と欄ごと捨てる実装で復号がずれる
+/// (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`%`/`!`/`?`/`/` は D1756–D1848)。
+#[must_use]
+pub fn has_cte_lbrack(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-transfer-encoding:") else { continue };
+        let val = v.split(';').next().unwrap_or("");
+        let mut scrub = String::with_capacity(val.len());
+        let mut depth = 0i32;
+        for c in val.chars() {
+            if depth > 0 {
+                if c == '(' { depth += 1 } else if c == ')' { depth -= 1 }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.contains('[') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `for` 節の値に `=` が含まれるか判定する (D1853)。
+///
+/// `Received: … for a=b` — `for` 節は配送先宛名を置く場所で `=`
+/// は書けない。代入式と読む実装と欄ごと捨てる実装で配送先が
+/// ずれる (`for` の `!`/`%`/`@@` は D1821/D1804/D1777、`via`/`by`/
+/// `id` の `=` は D1841/D1845/D1849)。
+#[must_use]
+pub fn has_received_for_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("for") && i + 1 < toks.len()
+                && toks[i + 1].contains('=')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// msgid 系欄の値が `+` 先立ちか判定する (D1854)。
+///
+/// `Message-ID: +<a@b>` — `+` は識別子の先立ち字として書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で照合がずれる
+/// (lead-sep 系は D1755–D1850)。
+#[must_use]
+pub fn has_msgid_plus_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.starts_with('+') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -54696,6 +54896,82 @@ mod tests {
             b"Subject: a'b\r\n\r\nb"
         ));
         assert!(!has_msgid_squote_lead(b""));
+    }
+
+    #[test]
+    fn param_rbrack_name_param名の閉じ角括弧を検出する() {
+        // D1851 — `;file]name=x`
+        assert!(has_param_rbrack_name(
+            b"Content-Type: text/plain; file]name=x\r\n\r\nb"
+        ));
+        assert!(has_param_rbrack_name(
+            b"Content-Disposition: attachment; f]ile=\"a.txt\"\r\n\r\nb"
+        ));
+        // 値側の `]` は対象外 — 不発火
+        assert!(!has_param_rbrack_name(
+            b"Content-Type: text/plain; name=[x]\r\n\r\nb"
+        ));
+        assert!(!has_param_rbrack_name(
+            b"Content-Type: text/plain; filename=x\r\n\r\nb"
+        ));
+        assert!(!has_param_rbrack_name(b""));
+    }
+
+    #[test]
+    fn cte_lbrack_符丁の角括弧を検出する() {
+        // D1852 — `Content-Transfer-Encoding: base[64`
+        assert!(has_cte_lbrack(
+            b"Content-Transfer-Encoding: base[64\r\n\r\nb"
+        ));
+        assert!(has_cte_lbrack(
+            b"Content-Transfer-Encoding: 7[bit\r\n\r\nb"
+        ));
+        // コメント内の `[` は対象外 — 不発火
+        assert!(!has_cte_lbrack(
+            b"Content-Transfer-Encoding: base64 (a[b)\r\n\r\nb"
+        ));
+        assert!(!has_cte_lbrack(
+            b"Content-Transfer-Encoding: base64\r\n\r\nb"
+        ));
+        assert!(!has_cte_lbrack(b""));
+    }
+
+    #[test]
+    fn received_for_eq_for節の等号を検出する() {
+        // D1853 — `Received: … for a=b`
+        assert!(has_received_for_eq(
+            b"Received: from m by s for =a; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(has_received_for_eq(
+            b"Received: from m by s for x=y with ESMTP\r\n\r\nx"
+        ));
+        // 節なし・他節の `=` は対象外 — 不発火
+        assert!(!has_received_for_eq(
+            b"Received: from m by s via x=y; Tue\r\n\r\nx"
+        ));
+        assert!(!has_received_for_eq(
+            b"Received: from m by s for u@h; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_for_eq(b""));
+    }
+
+    #[test]
+    fn msgid_plus_lead_識別子の加符先立ちを検出する() {
+        // D1854 — `Message-ID: +<a@b>`
+        assert!(has_msgid_plus_lead(
+            b"Message-ID: +<a@b.com>\r\n\r\nb"
+        ));
+        assert!(has_msgid_plus_lead(
+            b"List-Id: +<l.b.com>\r\n\r\nb"
+        ));
+        // 通常形・他欄は不発火
+        assert!(!has_msgid_plus_lead(
+            b"Message-ID: <a@b.com>\r\n\r\nb"
+        ));
+        assert!(!has_msgid_plus_lead(
+            b"Subject: a+b\r\n\r\nb"
+        ));
+        assert!(!has_msgid_plus_lead(b""));
     }
 
     #[test]
