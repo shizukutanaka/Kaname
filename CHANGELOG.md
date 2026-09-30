@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1942: `Received:` の `for` 節の `'` を検出 — `Envelope` に `received_for_apos` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&`/`#`/`"` は D1804–D1936)。
+### Security — D1941: `Received:` の `with` 節の `~` を検出 — `Envelope` に `received_with_tilde` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"` は D1825–D1938)。
+### Security — D1940: `Received:` の `via` 節の `:` を検出 — `Envelope` に `received_via_colon` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?` は D1766–D1937)。
+### Security — D1939: `Received:` の `id` 節の `'` を検出 — `Envelope` に `received_id_apos` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|`/`^`/`~`/`$` は D1785–D1933)。
 ### Security — D1938: `Received:` の `with` 節の `"` を検出 — `Envelope` に `received_with_quote` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,` は D1825–D1932)。
 ### Security — D1937: `Received:` の `via` 節の `?` を検出 — `Envelope` に `received_via_qmark` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&` は D1766–D1925)。
 ### Security — D1936: `Received:` の `for` 節の `"` を検出 — `Envelope` に `received_for_quote` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&`/`#` は D1804–D1931)。
