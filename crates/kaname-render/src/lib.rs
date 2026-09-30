@@ -1358,6 +1358,14 @@ pub struct Envelope {
     pub received_with_pct: bool,
     /// msgid 系の `|` 先立ち (D1826 — 識別子照合ずれ)。
     pub msgid_pipe_lead: bool,
+    /// `Received:` の `id` 節の `@` (D1827 — 識別子ずれ)。
+    pub received_id_at: bool,
+    /// `;file!name=x` 型の param 名内 `!` (D1828 — param ずれ)。
+    pub param_bang_name: bool,
+    /// `Content-Disposition:` 型本体内の `@` (D1829 — 添付判定ずれ)。
+    pub cd_at_type: bool,
+    /// msgid 系の `` ` `` 先立ち (D1830 — 識別子照合ずれ)。
+    pub msgid_backtick_lead: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4142,6 +4150,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ct_rbracket_type = has_ct_rbracket_type(bytes);
     let received_with_pct = has_received_with_pct(bytes);
     let msgid_pipe_lead = has_msgid_pipe_lead(bytes);
+    let received_id_at = has_received_id_at(bytes);
+    let param_bang_name = has_param_bang_name(bytes);
+    let cd_at_type = has_cd_at_type(bytes);
+    let msgid_backtick_lead = has_msgid_backtick_lead(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4726,6 +4738,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ct_rbracket_type,
         received_with_pct,
         msgid_pipe_lead,
+        received_id_at,
+        param_bang_name,
+        cd_at_type,
+        msgid_backtick_lead,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -31468,6 +31484,193 @@ pub fn has_msgid_pipe_lead(raw: &[u8]) -> bool {
     false
 }
 
+/// `Received:` の `id` 節の値に `@` が含まれるか判定する (D1827)。
+///
+/// `Received: … id a@b` — `id` 節は通常ホスト名や msgid を置く
+/// 場所だが `@` を含む値は宛名としても読みうる。宛名として読む
+/// 実装と欄ごと捨てる実装で識別子がずれる (`id` の `!`/`%` は
+/// D1785/D1800、`by`/`via`/`for` の `@` は D1773/D1789/D1777)。
+#[must_use]
+pub fn has_received_id_at(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("id") && i + 1 < toks.len()
+                && toks[i + 1].contains('@')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// param 名に `!` が含まれるか判定する (D1828)。
+///
+/// `;file!name=x` — `!` は token 内では合法 (atext 相当) だが、
+/// 多くの param パーサは厳格な attr-char 集合 (`()`等を除く) を
+/// 適用して捨てる。名を継続する実装と欄を捨てる実装で param が
+/// ずれる (`@`/`/`/`` ` ``/`?` は D1713/D1716/D1782/D1810)。
+#[must_use]
+pub fn has_param_bang_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(name, "content-type" | "content-disposition") {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // param 部だけ見る — 最初の `;` 以降の各 `name=` 名
+        for seg in v.split(';').skip(1) {
+            let Some(eq) = seg.find('=') else { continue };
+            let pname = seg[..eq].trim();
+            if pname.contains('!') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Disposition:` の型本体に `@` が含まれるか判定する (D1829)。
+///
+/// `Content-Disposition: attach@ment` — `@` は tspecial で型トークン
+/// には書けない。型として読む実装と欄ごと捨てる実装で添付判定が
+/// ずれる (`=`/`:`/括弧/`\`/`>`/`<` は D1759/D1765/D1766/D1786/
+/// D1794/D1801、CT 側の `@` は D1808)。
+#[must_use]
+pub fn has_cd_at_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-disposition:") else { continue };
+        let ty = v.split(';').next().unwrap_or("");
+        let mut scrub = String::with_capacity(ty.len());
+        let mut depth = 0i32;
+        for c in ty.chars() {
+            if depth > 0 {
+                if c == '(' { depth += 1 } else if c == ')' { depth -= 1 }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.contains('@') {
+            return true;
+        }
+    }
+    false
+}
+
+/// msgid 系欄の値が `` ` `` 先立ちか判定する (D1830)。
+///
+/// `Message-ID: `<a@b>` — 反転符先立ちを読み飛ばす実装と欄ごと
+/// 捨てる実装で識別子照合がずれる (`;`/`,`/`=`/`%`/`:`/`>`/`?`/`@`/`<<`/`!`/`/`/`#`/`&`/`~`/`|`
+/// は D1755–D1826)。
+#[must_use]
+pub fn has_msgid_backtick_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.starts_with('`') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -53021,6 +53224,86 @@ mod tests {
             b"Subject: a|b\r\n\r\nb"
         ));
         assert!(!has_msgid_pipe_lead(b""));
+    }
+
+    #[test]
+    fn received_id_at_id節のアットを検出する() {
+        // D1827 — `Received: … id a@b`
+        assert!(has_received_id_at(
+            b"Received: from m by s id a@b; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(has_received_id_at(
+            b"Received: from m by s id user@host.example\r\n\r\nx"
+        ));
+        // 節なし・他節の `@` は対象外 — 不発火
+        assert!(!has_received_id_at(
+            b"Received: from m by s for a@b; Tue\r\n\r\nx"
+        ));
+        assert!(!has_received_id_at(
+            b"Received: from m by s id ABC123; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_id_at(b""));
+    }
+
+    #[test]
+    fn param_bang_name_param名の嘆き符を検出する() {
+        // D1828 — `;file!name=x`
+        assert!(has_param_bang_name(
+            b"Content-Type: text/plain; file!name=x\r\n\r\nb"
+        ));
+        assert!(has_param_bang_name(
+            b"Content-Disposition: attachment; f!n=\"a.txt\"\r\n\r\nb"
+        ));
+        // 型本体・値側の `!` は対象外 — 不発火
+        assert!(!has_param_bang_name(
+            b"Content-Type: text/plain; name=a!b\r\n\r\nb"
+        ));
+        assert!(!has_param_bang_name(
+            b"Content-Type: text/plain; filename=x\r\n\r\nb"
+        ));
+        assert!(!has_param_bang_name(b""));
+    }
+
+    #[test]
+    fn cd_at_type_荷印型のアットを検出する() {
+        // D1829 — `Content-Disposition: attach@ment`
+        assert!(has_cd_at_type(
+            b"Content-Disposition: attach@ment\r\n\r\nb"
+        ));
+        assert!(has_cd_at_type(
+            b"Content-Disposition: attach@ment; filename=x\r\n\r\nb"
+        ));
+        // param 値側・コメント内の `@` は対象外 — 不発火
+        assert!(!has_cd_at_type(
+            b"Content-Disposition: attachment; filename=a@b.txt\r\n\r\nb"
+        ));
+        assert!(!has_cd_at_type(
+            b"Content-Disposition: attachment (a@b)\r\n\r\nb"
+        ));
+        assert!(!has_cd_at_type(
+            b"Content-Disposition: attachment\r\n\r\nb"
+        ));
+        assert!(!has_cd_at_type(b""));
+    }
+
+    #[test]
+    fn msgid_backtick_lead_識別子の反転符先立ちを検出する() {
+        // D1830 — `Message-ID: `<a@b>`
+        assert!(has_msgid_backtick_lead(
+            b"Message-ID: `<a@b.com>\r\n\r\nb"
+        ));
+        assert!(has_msgid_backtick_lead(
+            b"Content-ID: `<c.b.com>\r\n\r\nb"
+        ));
+        // 値なし・通常形は不発火
+        assert!(!has_msgid_backtick_lead(b"Message-ID: `\r\n\r\nb"));
+        assert!(!has_msgid_backtick_lead(
+            b"Message-ID: <a@b.com>\r\n\r\nb"
+        ));
+        assert!(!has_msgid_backtick_lead(
+            b"Subject: `code`\r\n\r\nb"
+        ));
+        assert!(!has_msgid_backtick_lead(b""));
     }
 
     #[test]

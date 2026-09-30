@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1830: `Message-ID: `<a>` 等の反転符先立ちを検出 — `Envelope` に `msgid_backtick_lead` を追加 (lead-sep 系は D1755–D1826)。
+### Security — D1829: `Content-Disposition: attach@ment` の型本体内 `@` を検出 — `Envelope` に `cd_at_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<` は D1759–D1801、CT 側は D1808)。
+### Security — D1828: `;file!name=x` の param 名 `!` を検出 — `Envelope` に `param_bang_name` を追加 (`@`/`/`/`` ` ``/`?` は D1713/D1716/D1782/D1810)。
+### Security — D1827: `Received:` の `id` 節の `@` を検出 — `Envelope` に `received_id_at` を追加 (`id` の `!`/`%` は D1785/D1800)。
 ### Security — D1826: `Message-ID: |<a>` 等の `|` 先立ちを検出 — `Envelope` に `msgid_pipe_lead` を追加 (lead-sep 系は D1755–D1822)。
 ### Security — D1825: `Received:` の `with` 節の `%` を検出 — `Envelope` に `received_with_pct` を追加 (`by`/`via`/`for` の `%`/`!` は D1793/D1809/D1804/D1817/D1821)。
 ### Security — D1824: `Content-Type: text]plain` の型本体内 `]` を検出 — `Envelope` に `ct_rbracket_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`?`/`,`/`[` は D1758–D1820)。
