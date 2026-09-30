@@ -14900,7 +14900,7 @@ pub fn has_dash_filename(raw: &[u8]) -> bool {
                 // RFC 2231 形 `charset''…` は `''` の後の符号化部を見る
                 let body = v.find("''").map_or(v, |i| &v[i + 2..]);
                 if body.starts_with('-')
-                    || (body.len() >= 3 && body[..3].eq_ignore_ascii_case("%2d"))
+                    || body.get(..3).is_some_and(|p| p.eq_ignore_ascii_case("%2d"))
                 {
                     return true;
                 }
@@ -19145,6 +19145,7 @@ pub fn has_bad_month_name(raw: &[u8]) -> bool {
         for (i, t) in toks.iter().enumerate() {
             let tt = t.trim_matches(|c: char| c == ',' || c == ';');
             if tt.len() >= 3
+                && tt.is_char_boundary(3)
                 && tt[..3].bytes().all(|b| b.is_ascii_alphabetic())
                 && i > 0
                 && toks[..i].iter().any(|p| {
