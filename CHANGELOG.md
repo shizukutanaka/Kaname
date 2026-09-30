@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1886: `;file+name=x` の param 名 `+` を検出 — `Envelope` に `param_plus_name` を追加 (`'`/`#` は D1883/D1879)。
+### Security — D1885: `Received:` の `for` 節の `<` を検出 — `Envelope` に `received_for_lt` を追加 (`for` の `!`/`%`/`@`/`=`/複数は D1777–D1853)。
+### Security — D1884: `Content-Transfer-Encoding: base#64` の値内 `#` を検出 — `Envelope` に `cte_hash` を追加 (`*`/`{`/`}`/`[`/`]`/`|`/`^`/`~` は D1860–D1880)。
+### Security — D1883: `;file'name=x` の param 名 `'` を検出 — `Envelope` に `param_apos_name` を追加 (`#` は D1879)。
 ### Security — D1882: `Message-ID: _<a>` 等の `_` 先立ちを検出 — `Envelope` に `msgid_uscore_lead` を追加 (lead-sep 系は D1755–D1878)。
 ### Security — D1881: `Received:` の `with` 節の `<` を検出 — `Envelope` に `received_with_lt` を追加 (`with` の `%`/`!`/`@`/`=` は D1825–D1857)。
 ### Security — D1880: `Content-Transfer-Encoding: base*64` の値内 `*` を検出 — `Envelope` に `cte_star` を追加 (`{`/`}`/`[`/`]`/`|`/`^`/`~` は D1860–D1876)。

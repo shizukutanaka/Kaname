@@ -1470,6 +1470,14 @@ pub struct Envelope {
     pub received_with_lt: bool,
     /// msgid 系の `_` 先立ち (D1882 — 識別子照合ずれ)。
     pub msgid_uscore_lead: bool,
+    /// `;file'name=x` 型の param 名内 `'` (D1883 — param ずれ)。
+    pub param_apos_name: bool,
+    /// `Content-Transfer-Encoding:` 値内の `#` (D1884 — 復号ずれ)。
+    pub cte_hash: bool,
+    /// `Received:` の `for` 節の `<` (D1885 — 配送先ずれ)。
+    pub received_for_lt: bool,
+    /// `;file+name=x` 型の param 名内 `+` (D1886 — param ずれ)。
+    pub param_plus_name: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4310,6 +4318,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let cte_star = has_cte_star(bytes);
     let received_with_lt = has_received_with_lt(bytes);
     let msgid_uscore_lead = has_msgid_uscore_lead(bytes);
+    let param_apos_name = has_param_apos_name(bytes);
+    let cte_hash = has_cte_hash(bytes);
+    let received_for_lt = has_received_for_lt(bytes);
+    let param_plus_name = has_param_plus_name(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4950,6 +4962,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cte_star,
         received_with_lt,
         msgid_uscore_lead,
+        param_apos_name,
+        cte_hash,
+        received_for_lt,
+        param_plus_name,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -34270,6 +34286,189 @@ pub fn has_msgid_uscore_lead(raw: &[u8]) -> bool {
     false
 }
 
+/// param 名に `'` が含まれるか判定する (D1883)。
+///
+/// `;file'name=x` — `'` は attr-char の字集合外。名を継続する
+/// 実装と欄ごと捨てる実装で param がずれる (`#` は D1879)。
+#[must_use]
+pub fn has_param_apos_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(name, "content-type" | "content-disposition") {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(';').skip(1) {
+            let Some(eq) = seg.find('=') else { continue };
+            let pname = seg[..eq].trim();
+            if pname.contains('\'') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値に `#` が含まれるか判定する (D1884)。
+///
+/// `Content-Transfer-Encoding: base#64` — `#` は符号化値の字集合
+/// には書けない。値を継続する実装と欄ごと捨てる実装で復号がずれる
+/// (`*`/`{`/`}`/`[`/`]`/`|`/`^`/`~` は D1860–D1880)。
+#[must_use]
+pub fn has_cte_hash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-transfer-encoding:") else { continue };
+        let val = v.split(';').next().unwrap_or("");
+        let mut scrub = String::with_capacity(val.len());
+        let mut depth = 0i32;
+        for c in val.chars() {
+            if depth > 0 {
+                if c == '(' { depth += 1 } else if c == ')' { depth -= 1 }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.contains('#') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `for` 節の値に `<` が含まれるか判定する (D1885)。
+///
+/// `Received: … for <a@b` — `for` 節は配送先を置く場所で `<` は
+/// addr-spec の枠組み外。角括弧読みする実装と欄ごと捨てる実装で
+/// 配送先がずれる (`for` の `!`/`%`/`@`/`=`/複数は D1777–D1853)。
+#[must_use]
+pub fn has_received_for_lt(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("for") && i + 1 < toks.len()
+                && toks[i + 1].contains('<')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// param 名に `+` が含まれるか判定する (D1886)。
+///
+/// `;file+name=x` — `+` は attr-char の字集合内だが一般の取得系が
+/// param 名を字集合で検査しないため、名を継続する実装と欄ごと
+/// 捨てる実装で param がずれる (`'`/`#` は D1883/D1879)。
+#[must_use]
+pub fn has_param_plus_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(name, "content-type" | "content-disposition") {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(';').skip(1) {
+            let Some(eq) = seg.find('=') else { continue };
+            let pname = seg[..eq].trim();
+            if pname.contains('+') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -56897,6 +57096,82 @@ mod tests {
             b"Subject: a_b\r\n\r\nb"
         ));
         assert!(!has_msgid_uscore_lead(b""));
+    }
+
+    #[test]
+    fn param_apos_name_param名のアポストロフィを検出する() {
+        // D1883 — `;file'name=x`
+        assert!(has_param_apos_name(
+            b"Content-Type: text/plain; file'name=x\r\n\r\nb"
+        ));
+        assert!(has_param_apos_name(
+            b"Content-Disposition: attachment; f'ile=\"a.txt\"\r\n\r\nb"
+        ));
+        // 値側の `'` は対象外 — 不発火
+        assert!(!has_param_apos_name(
+            b"Content-Type: text/plain; name=a'b\r\n\r\nb"
+        ));
+        assert!(!has_param_apos_name(
+            b"Content-Type: text/plain; filename=x\r\n\r\nb"
+        ));
+        assert!(!has_param_apos_name(b""));
+    }
+
+    #[test]
+    fn cte_hash_符丁の井桁を検出する() {
+        // D1884 — `Content-Transfer-Encoding: base#64`
+        assert!(has_cte_hash(
+            b"Content-Transfer-Encoding: base#64\r\n\r\nb"
+        ));
+        assert!(has_cte_hash(
+            b"Content-Transfer-Encoding: 7#bit\r\n\r\nb"
+        ));
+        // コメント内の `#` は対象外 — 不発火
+        assert!(!has_cte_hash(
+            b"Content-Transfer-Encoding: base64 (a#b)\r\n\r\nb"
+        ));
+        assert!(!has_cte_hash(
+            b"Content-Transfer-Encoding: base64\r\n\r\nb"
+        ));
+        assert!(!has_cte_hash(b""));
+    }
+
+    #[test]
+    fn received_for_lt_for節の開き角括弧を検出する() {
+        // D1885 — `Received: … for <a@b`
+        assert!(has_received_for_lt(
+            b"Received: from m.example by s.example for <a@b\r\n\r\nx"
+        ));
+        assert!(has_received_for_lt(
+            b"Received: from m.example by s.example for a<b@c\r\n\r\nx"
+        ));
+        // 節なし・通常の for は不発火
+        assert!(!has_received_for_lt(
+            b"Received: from m.example by s.example for a@b\r\n\r\nx"
+        ));
+        assert!(!has_received_for_lt(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_for_lt(b""));
+    }
+
+    #[test]
+    fn param_plus_name_param名の加符を検出する() {
+        // D1886 — `;file+name=x`
+        assert!(has_param_plus_name(
+            b"Content-Type: text/plain; file+name=x\r\n\r\nb"
+        ));
+        assert!(has_param_plus_name(
+            b"Content-Disposition: attachment; f+ile=\"a.txt\"\r\n\r\nb"
+        ));
+        // 値側の `+` は対象外 — 不発火
+        assert!(!has_param_plus_name(
+            b"Content-Type: text/plain; name=a+b\r\n\r\nb"
+        ));
+        assert!(!has_param_plus_name(
+            b"Content-Type: text/plain; filename=x\r\n\r\nb"
+        ));
+        assert!(!has_param_plus_name(b""));
     }
 
     #[test]
