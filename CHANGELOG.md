@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1970: `Received:` の `via` 節の `[` を検出 — `Envelope` に `received_via_lbracket` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/`/`\` は D1766–D1964)。
+### Security — D1969: `Received:` の `by` 節の `*` を検出 — `Envelope` に `received_by_star` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'`/`"` は D1845–D1966)。
+### Security — D1968: `Received:` の `with` 節の `*` を検出 — `Envelope` に `received_with_star` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#`/`'` は D1825–D1961)。
+### Security — D1967: `Received:` の `from` 節の `^` を検出 — `Envelope` に `received_from_caret` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|`/`'`/`#`/`"`/`&` は D1837–D1965)。
 ### Security — D1966: `Received:` の `by` 節の `"` を検出 — `Envelope` に `received_by_quote` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'` は D1845–D1962)。
 ### Security — D1965: `Received:` の `from` 節の `&` を検出 — `Envelope` に `received_from_amp` を追加 (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~`/`|`/`'`/`#`/`"` は D1837–D1963)。
 ### Security — D1964: `Received:` の `via` 節の `\` を検出 — `Envelope` に `received_via_bslash` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/` は D1766–D1960)。
