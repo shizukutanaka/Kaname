@@ -1734,6 +1734,14 @@ pub struct Envelope {
     pub refs_rbrace_lead: bool,
     /// `References:`/`In-Reply-To:` の値頭の `.` (D2014 — スレッドずれ)。
     pub refs_dot_lead: bool,
+    /// `References:`/`In-Reply-To:` の値頭の `\` (D2015 — スレッドずれ)。
+    pub refs_bslash_lead: bool,
+    /// `References:`/`In-Reply-To:` の最初の `<` より前の英数字語 (D2016 — スレッドずれ)。
+    pub refs_junk_before_angle: bool,
+    /// `References:`/`In-Reply-To:` の識別子より前に閉じたコメント (D2017 — スレッドずれ)。
+    pub refs_comment_before_msgid: bool,
+    /// `References:` の識別子直後に続く `<…>` (D2018 — スレッドずれ)。
+    pub refs_adjacent_angles: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4706,6 +4714,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let refs_pipe_lead = has_refs_pipe_lead(bytes);
     let refs_rbrace_lead = has_refs_rbrace_lead(bytes);
     let refs_dot_lead = has_refs_dot_lead(bytes);
+    let refs_bslash_lead = has_refs_bslash_lead(bytes);
+    let refs_junk_before_angle = has_refs_junk_before_angle(bytes);
+    let refs_comment_before_msgid = has_refs_comment_before_msgid(bytes);
+    let refs_adjacent_angles = has_refs_adjacent_angles(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5478,6 +5490,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         refs_pipe_lead,
         refs_rbrace_lead,
         refs_dot_lead,
+        refs_bslash_lead,
+        refs_junk_before_angle,
+        refs_comment_before_msgid,
+        refs_adjacent_angles,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -40628,6 +40644,178 @@ pub fn has_refs_dot_lead(raw: &[u8]) -> bool {
     false
 }
 
+/// `References: \\<a@b>` / `In-Reply-To: \\<a@b>` — 値頭の `\\`。
+/// 欄名の継続として読む実装と識別子を拾う実装でスレッド関連がずれる
+/// (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`、
+/// 残る表示可能な特殊字はすべて D1991–D2014 で網羅済み)。
+#[must_use]
+pub fn has_refs_bslash_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {{
+        if l.starts_with(' ') || l.starts_with('\t') {{
+            if !first {{
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }}
+        }} else {{
+            if !first {{
+                logical.push('\n');
+            }}
+            first = false;
+            logical.push_str(l);
+        }}
+    }}
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "references" && name != "in-reply-to" {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if v.starts_with('\\') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `References: x<a@b>` / `In-Reply-To: x <a@b>` — 最初の `<` の前の英数字語。
+/// 語を識別子の一部と読む実装と語を捨てて角括弧だけ拾う実装で
+/// スレッド関連がずれる (前置特殊字は `refs_*_lead` 系、コメントは
+/// `refs_comment_*`、語が一切無い値は `bare_msgid_ref`)。
+#[must_use]
+pub fn has_refs_junk_before_angle(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {{
+        if l.starts_with(' ') || l.starts_with('\t') {{
+            if !first {{
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }}
+        }} else {{
+            if !first {{
+                logical.push('\n');
+            }}
+            first = false;
+            logical.push_str(l);
+        }}
+    }}
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "references" && name != "in-reply-to" {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        let Some(lt) = v.find('<') else { continue };
+        if lt == 0 {
+            continue;
+        }
+        let junk = v[..lt].trim();
+        if junk.is_empty() {
+            continue;
+        }
+        // 英数字または空白のみの前置語 (特殊字頭は `refs_*_lead` が担当)
+        if junk
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c.is_whitespace())
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// `References: (c) <a@b>` / `In-Reply-To: (c) <a@b>` — 識別子前の閉じたコメント。
+/// コメントを剥がして識別子を拾う実装と欄全体を捨てる実装で
+/// スレッド関連がずれる (`)` と `<` の直結は `msgid_paren`、
+/// コメント内の識別子は `refs_comment_lead`)。
+#[must_use]
+pub fn has_refs_comment_before_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {{
+        if l.starts_with(' ') || l.starts_with('\t') {{
+            if !first {{
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }}
+        }} else {{
+            if !first {{
+                logical.push('\n');
+            }}
+            first = false;
+            logical.push_str(l);
+        }}
+    }}
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "references" && name != "in-reply-to" {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        let (Some(lt), Some(op)) = (v.find('<'), v.find('(')) else {
+            continue;
+        };
+        // `<` 直前が `)` の隣接形は `msgid_paren` が担当するため除く
+        if op < lt
+            && v[op..lt].contains(')')
+            && v.as_bytes()[lt - 1] != b')'
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// `References: <a@b><c@d>` — 区切り無しに連結した識別子列。
+/// `><` を二つの識別子の境と読む実装と一語として読む実装で
+/// スレッド関連がずれる (`<<`/`>>` の入れ子は `nested_msgid`、
+/// `In-Reply-To` の複数識別子は `multi_inreply` が担当)。
+#[must_use]
+pub fn has_refs_adjacent_angles(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {{
+        if l.starts_with(' ') || l.starts_with('\t') {{
+            if !first {{
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }}
+        }} else {{
+            if !first {{
+                logical.push('\n');
+            }}
+            first = false;
+            logical.push_str(l);
+        }}
+    }}
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().eq_ignore_ascii_case("references")
+            && l[colon + 1..].contains("><")
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -60829,6 +61017,80 @@ mod tests {
             b"References: <a@b.example> <c@d.example>\r\n\r\nx"
         ));
         assert!(!has_refs_dot_lead(b""));
+    }
+
+    #[test]
+    fn refs_bslash_lead_値頭の逆斜線を検出する() {
+        // D2015 — `References: \<a@b>` / `In-Reply-To: \<a@b>`
+        assert!(has_refs_bslash_lead(
+            b"References: \\<a@b.example>\r\n\r\nx"
+        ));
+        assert!(has_refs_bslash_lead(
+            b"In-Reply-To: \\<a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_refs_bslash_lead(b"References: \\\r\n\r\nx"));
+        assert!(!has_refs_bslash_lead(
+            b"References: <a@b.example> <c@d.example>\r\n\r\nx"
+        ));
+        assert!(!has_refs_bslash_lead(b""));
+    }
+
+    #[test]
+    fn refs_junk_before_angle_識別子前の英数字語を検出する() {
+        // D2016 — `References: x<a@b>` / `In-Reply-To: x <a@b>`
+        assert!(has_refs_junk_before_angle(
+            b"References: x<a@b.example>\r\n\r\nx"
+        ));
+        assert!(has_refs_junk_before_angle(
+            b"In-Reply-To: word <a@b.example>\r\n\r\nx"
+        ));
+        // 前置特殊字・語なし・通常列は不発火
+        assert!(!has_refs_junk_before_angle(
+            b"References: !<a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_refs_junk_before_angle(
+            b"References: <a@b.example> <c@d.example>\r\n\r\nx"
+        ));
+        assert!(!has_refs_junk_before_angle(b""));
+    }
+
+    #[test]
+    fn refs_comment_before_msgid_識別子前の閉じたコメントを検出する() {
+        // D2017 — `References: (c) <a@b>` / `In-Reply-To: (c) <a@b>`
+        assert!(has_refs_comment_before_msgid(
+            b"References: (thread) <a@b.example>\r\n\r\nx"
+        ));
+        assert!(has_refs_comment_before_msgid(
+            b"In-Reply-To: x (c) <a@b.example>\r\n\r\nx"
+        ));
+        // `)<` の直結は `msgid_paren`、コメント内識別子は `refs_comment_lead`
+        assert!(!has_refs_comment_before_msgid(
+            b"References: (c)<a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_refs_comment_before_msgid(
+            b"References: (c<a@b.example>)\r\n\r\nx"
+        ));
+        assert!(!has_refs_comment_before_msgid(
+            b"References: <a@b.example>\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn refs_adjacent_angles_連結識別子を検出する() {
+        // D2018 — `References: <a@b><c@d>`
+        assert!(has_refs_adjacent_angles(
+            b"References: <a@b.example><c@d.example>\r\n\r\nx"
+        ));
+        assert!(has_refs_adjacent_angles(
+            b"References: <a@b> <c@d><e@f>\r\n\r\nx"
+        ));
+        assert!(!has_refs_adjacent_angles(
+            b"References: <a@b.example> <c@d.example>\r\n\r\nx"
+        ));
+        assert!(!has_refs_adjacent_angles(
+            b"In-Reply-To: <a@b><c@d>\r\n\r\nx"
+        ));
+        assert!(!has_refs_adjacent_angles(b""));
     }
 
     #[test]

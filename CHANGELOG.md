@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D2018: `References:` の識別子直後に続く `<…>` を検出 — `Envelope` に `refs_adjacent_angles` を追加 (`<<`/`>>` 入れ子は `nested_msgid`、`In-Reply-To` の複数識別子は `multi_inreply`)。
+### Security — D2017: `References:`/`In-Reply-To:` の識別子より前に閉じたコメントを検出 — `Envelope` に `refs_comment_before_msgid` を追加 (`)<` 直結は `msgid_paren`、コメント内識別子は `refs_comment_lead`)。
+### Security — D2016: `References:`/`In-Reply-To:` の最初の `<` より前の英数字語を検出 — `Envelope` に `refs_junk_before_angle` を追加 (前置特殊字は `refs_*_lead` 系)。
+### Security — D2015: `References:`/`In-Reply-To:` の値頭の `\` を検出 — `Envelope` に `refs_bslash_lead` を追加 (これで値頭の表示可能な特殊字は D1991–D2015 で全網羅)。
 ### Security — D2014: `References:`/`In-Reply-To:` の値頭の `.` を検出 — `Envelope` に `refs_dot_lead` を追加 (値頭の `;`/`,`/`>`/`(`/`"`/`!`/`=`/`:`/`*`/`#`/`$`/`@`/`?`/`&`/`'`/`+`/`/`/`%`/`-`/`[`/`]`/`^`/`_`/`` ` ``/`~` は `ref_lead_sep`/`ref_gt_lead`/`refs_comment_lead` 及び D1991–D2010)。
 ### Security — D2013: `References:`/`In-Reply-To:` の値頭の `}` を検出 — `Envelope` に `refs_rbrace_lead` を追加 (同上)。
 ### Security — D2012: `References:`/`In-Reply-To:` の値頭の `|` を検出 — `Envelope` に `refs_pipe_lead` を追加 (同上)。
