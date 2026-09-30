@@ -1550,6 +1550,14 @@ pub struct Envelope {
     pub received_with_amp: bool,
     /// `Received:` の `id` 節の `^` (D1922 — 識別子ずれ)。
     pub received_id_caret: bool,
+    /// `Received:` の `from` 節の `|` (D1923 — 経路解析ずれ)。
+    pub received_from_pipe: bool,
+    /// `Received:` の `by` 節の `?` (D1924 — 経路解析ずれ)。
+    pub received_by_qmark: bool,
+    /// `Received:` の `via` 節の `&` (D1925 — 経路解析ずれ)。
+    pub received_via_amp: bool,
+    /// `Received:` の `for` 節の `$` (D1926 — 配送先ずれ)。
+    pub received_for_dollar: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4430,6 +4438,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let received_by_dollar = has_received_by_dollar(bytes);
     let received_with_amp = has_received_with_amp(bytes);
     let received_id_caret = has_received_id_caret(bytes);
+    let received_from_pipe = has_received_from_pipe(bytes);
+    let received_by_qmark = has_received_by_qmark(bytes);
+    let received_via_amp = has_received_via_amp(bytes);
+    let received_for_dollar = has_received_for_dollar(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5110,6 +5122,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_by_dollar,
         received_with_amp,
         received_id_caret,
+        received_from_pipe,
+        received_by_qmark,
+        received_via_amp,
+        received_for_dollar,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -36269,6 +36285,190 @@ pub fn has_received_id_caret(raw: &[u8]) -> bool {
     false
 }
 
+/// `Received:` の `from` 節の値に `|` が含まれるか判定する (D1923)。
+///
+/// `Received: from a|b` — `|` はホスト名の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で経路がずれる
+/// (`from` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`,`/`$`/`~` は D1781–D1919)。
+#[must_use]
+pub fn has_received_from_pipe(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("from") && i + 1 < toks.len()
+                && toks[i + 1].contains('|')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received:` の `by` 節の値に `?` が含まれるか判定する (D1924)。
+///
+/// `Received: … by a?b` — `?` はホスト名の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で経路がずれる
+/// (`by` の `<`/`>`/`=`/`%`/`@`/`#`/`\\`/`|`/`&`/`$` は D1773–D1920)。
+#[must_use]
+pub fn has_received_by_qmark(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("by") && i + 1 < toks.len()
+                && toks[i + 1].contains('?')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received:` の `via` 節の値に `&` が含まれるか判定する (D1925)。
+///
+/// `Received: … via a&b` — `&` はプロトコル名の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で経路がずれる
+/// (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$` は D1766–D1917)。
+#[must_use]
+pub fn has_received_via_amp(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("via") && i + 1 < toks.len()
+                && toks[i + 1].contains('&')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received:` の `for` 節の値に `$` が含まれるか判定する (D1926)。
+///
+/// `Received: … for a$b` — `$` は宛名の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で配送先がずれる
+/// (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^` は D1804–D1918)。
+#[must_use]
+pub fn has_received_for_dollar(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("for") && i + 1 < toks.len()
+                && toks[i + 1].contains('$')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -59656,6 +59856,82 @@ mod tests {
             b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
         ));
         assert!(!has_received_id_caret(b""));
+    }
+
+    #[test]
+    fn received_from_pipe_from節の縦線を検出する() {
+        // D1923 — `Received: from a|b`
+        assert!(has_received_from_pipe(
+            b"Received: from a|b by s.example\r\n\r\nx"
+        ));
+        assert!(has_received_from_pipe(
+            b"Received: from |a by s.example\r\n\r\nx"
+        ));
+        // 節なし・通常の from は不発火
+        assert!(!has_received_from_pipe(
+            b"Received: from m.example by s.example\r\n\r\nx"
+        ));
+        assert!(!has_received_from_pipe(
+            b"Received: ; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_from_pipe(b""));
+    }
+
+    #[test]
+    fn received_by_qmark_by節の疑問符を検出する() {
+        // D1924 — `Received: … by a?b`
+        assert!(has_received_by_qmark(
+            b"Received: from m.example by a?b\r\n\r\nx"
+        ));
+        assert!(has_received_by_qmark(
+            b"Received: from m.example by ?a\r\n\r\nx"
+        ));
+        // 節なし・通常の by は不発火
+        assert!(!has_received_by_qmark(
+            b"Received: from m.example by s.example\r\n\r\nx"
+        ));
+        assert!(!has_received_by_qmark(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_by_qmark(b""));
+    }
+
+    #[test]
+    fn received_via_amp_via節の連結符を検出する() {
+        // D1925 — `Received: … via a&b`
+        assert!(has_received_via_amp(
+            b"Received: from m.example via a&b by s.example\r\n\r\nx"
+        ));
+        assert!(has_received_via_amp(
+            b"Received: from m.example via &a by s.example\r\n\r\nx"
+        ));
+        // 節なし・通常の via は不発火
+        assert!(!has_received_via_amp(
+            b"Received: from m.example via VESP by s.example\r\n\r\nx"
+        ));
+        assert!(!has_received_via_amp(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_via_amp(b""));
+    }
+
+    #[test]
+    fn received_for_dollar_for節の通貨符を検出する() {
+        // D1926 — `Received: … for a$b`
+        assert!(has_received_for_dollar(
+            b"Received: from m.example by s.example id 1 for a$b\r\n\r\nx"
+        ));
+        assert!(has_received_for_dollar(
+            b"Received: from m.example by s.example id 1 for $a\r\n\r\nx"
+        ));
+        // 節なし・通常の for は不発火
+        assert!(!has_received_for_dollar(
+            b"Received: from m.example by s.example id 1 for a@b\r\n\r\nx"
+        ));
+        assert!(!has_received_for_dollar(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_for_dollar(b""));
     }
 
     #[test]
