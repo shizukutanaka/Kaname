@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1834: `Message-ID: ^<a>` 等の `^` 先立ちを検出 — `Envelope` に `msgid_caret_lead` を追加 (lead-sep 系は D1755–D1830)。
+### Security — D1833: `Received:` の `with` 節の `!` を検出 — `Envelope` に `received_with_bang` を追加 (`with` の `%` は D1825)。
+### Security — D1832: `Content-Transfer-Encoding: base@64` の値内 `@` を検出 — `Envelope` に `cte_at` を追加 (`=`/`:`/括弧/`\`/`>`/`<` は D1756–D1805)。
+### Security — D1831: `;file&name=x` の param 名 `&` を検出 — `Envelope` に `param_amp_name` を追加 (`@`/`/`/`` ` ``/`?`/`!` は D1713–D1828)。
 ### Security — D1830: `Message-ID: `<a>` 等の反転符先立ちを検出 — `Envelope` に `msgid_backtick_lead` を追加 (lead-sep 系は D1755–D1826)。
 ### Security — D1829: `Content-Disposition: attach@ment` の型本体内 `@` を検出 — `Envelope` に `cd_at_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<` は D1759–D1801、CT 側は D1808)。
 ### Security — D1828: `;file!name=x` の param 名 `!` を検出 — `Envelope` に `param_bang_name` を追加 (`@`/`/`/`` ` ``/`?` は D1713/D1716/D1782/D1810)。
