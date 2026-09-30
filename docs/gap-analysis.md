@@ -1300,3 +1300,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1884 | `Content-Transfer-Encoding:` 値内の `#` | 値継続 vs 欄破棄で復号ずれ |
 | D1885 | `Received:` の `for` 節の `<` | 角括弧読み vs 欄破棄で配送先ずれ |
 | D1886 | param 名の `+` | 名継続 vs 欄破棄で param ずれ |
+| D1887 | param 名の `(` | 名継続 vs 欄破棄で param ずれ |
+| D1888 | `Content-Transfer-Encoding:` 値内の `$` | 値継続 vs 欄破棄で復号ずれ |
+| D1889 | `Received:` の `from` 節の `>` | 角括弧読み vs 欄破棄で経路ずれ |
+| D1890 | `Received:` の `by` 節の `>` | 角括弧読み vs 欄破棄で経路ずれ |
