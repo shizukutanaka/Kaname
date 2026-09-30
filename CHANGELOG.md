@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D2034: `Message-ID:` 系欄の `<…>` 内側の非隣接 `<` を検出 — `Envelope` に `msgid_inner_lt` を追加 (`<<` 直結は `nested_msgid`)。
+### Security — D2033: `Message-ID:` 系欄の `<…>` 内側の `;` を検出 — `Envelope` に `msgid_inner_semi` を追加 (内側の `|`/`\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`)。
+### Security — D2032: `Message-ID:` 系欄の `<…>` 内側の `}` を検出 — `Envelope` に `msgid_inner_rbrace` を追加 (同上)。
+### Security — D2031: `Message-ID:` 系欄の `<…>` 内側の `{` を検出 — `Envelope` に `msgid_inner_lbrace` を追加 (同上)。
 ### Security — D2030: `Message-ID:` 系欄の `<…>` 内側の `~` を検出 — `Envelope` に `msgid_inner_tilde` を追加 (内側の `|`/`\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`、`!`/`#`/`$`/`*` は D2023–D2026)。
 ### Security — D2029: `Message-ID:` 系欄の `<…>` 内側の `` ` `` を検出 — `Envelope` に `msgid_inner_backtick` を追加 (同上)。
 ### Security — D2028: `Message-ID:` 系欄の `<…>` 内側の `^` を検出 — `Envelope` に `msgid_inner_caret` を追加 (同上)。
