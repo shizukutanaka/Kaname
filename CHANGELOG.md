@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D2022: `Message-ID:` 系欄 (`message-id`/`resent-message-id`/`list-id`/`content-id`) の `<` を欠く値を検出 — `Envelope` に `msgid_no_angle` を追加 (`In-Reply-To`/`References` の裸値は `bare_msgid_ref`)。
+### Security — D2021: `Message-ID:` 系欄の最初の `<` より前の英数字語を検出 — `Envelope` に `msgid_junk_before_angle` を追加 (`References`/`In-Reply-To` 側は `refs_junk_before_angle`)。
+### Security — D2020: `Message-ID:` 系欄の値頭の `\` を検出 — `Envelope` に `msgid_bslash_lead` を追加 (これで値頭の表示可能な特殊字は `msgid_*_lead` 系で全網羅)。
+### Security — D2019: `Message-ID:` 系欄の値頭の `*` を検出 — `Envelope` に `msgid_star_lead` を追加。
 ### Security — D2018: `References:` の識別子直後に続く `<…>` を検出 — `Envelope` に `refs_adjacent_angles` を追加 (`<<`/`>>` 入れ子は `nested_msgid`、`In-Reply-To` の複数識別子は `multi_inreply`)。
 ### Security — D2017: `References:`/`In-Reply-To:` の識別子より前に閉じたコメントを検出 — `Envelope` に `refs_comment_before_msgid` を追加 (`)<` 直結は `msgid_paren`、コメント内識別子は `refs_comment_lead`)。
 ### Security — D2016: `References:`/`In-Reply-To:` の最初の `<` より前の英数字語を検出 — `Envelope` に `refs_junk_before_angle` を追加 (前置特殊字は `refs_*_lead` 系)。

@@ -1742,6 +1742,14 @@ pub struct Envelope {
     pub refs_comment_before_msgid: bool,
     /// `References:` の識別子直後に続く `<…>` (D2018 — スレッドずれ)。
     pub refs_adjacent_angles: bool,
+    /// `Message-ID:` 系欄の値頭の `*` (D2019 — 識別子ずれ)。
+    pub msgid_star_lead: bool,
+    /// `Message-ID:` 系欄の値頭の `\` (D2020 — 識別子ずれ)。
+    pub msgid_bslash_lead: bool,
+    /// `Message-ID:` 系欄の最初の `<` より前の英数字語 (D2021 — 識別子ずれ)。
+    pub msgid_junk_before_angle: bool,
+    /// `Message-ID:` 系欄の `<` を欠く値 (D2022 — 識別子ずれ)。
+    pub msgid_no_angle: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4718,6 +4726,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let refs_junk_before_angle = has_refs_junk_before_angle(bytes);
     let refs_comment_before_msgid = has_refs_comment_before_msgid(bytes);
     let refs_adjacent_angles = has_refs_adjacent_angles(bytes);
+    let msgid_star_lead = has_msgid_star_lead(bytes);
+    let msgid_bslash_lead = has_msgid_bslash_lead(bytes);
+    let msgid_junk_before_angle = has_msgid_junk_before_angle(bytes);
+    let msgid_no_angle = has_msgid_no_angle(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5494,6 +5506,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         refs_junk_before_angle,
         refs_comment_before_msgid,
         refs_adjacent_angles,
+        msgid_star_lead,
+        msgid_bslash_lead,
+        msgid_junk_before_angle,
+        msgid_no_angle,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -40816,6 +40832,189 @@ pub fn has_refs_adjacent_angles(raw: &[u8]) -> bool {
     false
 }
 
+/// `Message-ID: *<a@b>` 系 — 値頭の `*`。
+/// 欄名の継続として読む実装と識別子を拾う実装で識別子がずれる
+/// (値頭の `;`/`,`/`=`/`%`/`:`/`<`/`>`/`?`/`@`/`!`/`/`/`#`/`&`/`~`/`|`
+/// ほか表示可能字は `msgid_*_lead` 系で網羅済み、`References:`/
+/// `In-Reply-To:` 側は `refs_*_lead` 系)。
+#[must_use]
+pub fn has_msgid_star_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {{
+        if l.starts_with(' ') || l.starts_with('\t') {{
+            if !first {{
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }}
+        }} else {{
+            if !first {{
+                logical.push('\n');
+            }}
+            first = false;
+            logical.push_str(l);
+        }}
+    }}
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.starts_with('*') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Message-ID: \\<a@b>` 系 — 値頭の `\\`。
+/// 欄名の継続として読む実装と識別子を拾う実装で識別子がずれる
+/// (これで値頭の表示可能な特殊字は `msgid_*_lead` 系で全網羅)。
+#[must_use]
+pub fn has_msgid_bslash_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {{
+        if l.starts_with(' ') || l.starts_with('\t') {{
+            if !first {{
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }}
+        }} else {{
+            if !first {{
+                logical.push('\n');
+            }}
+            first = false;
+            logical.push_str(l);
+        }}
+    }}
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.starts_with('\\') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Message-ID: x<a@b>` / `Message-ID: x <a@b>` 系 — 最初の `<` の前の英数字語。
+/// 語を識別子の一部と読む実装と語を捨てて角括弧だけ拾う実装で
+/// 識別子がずれる (`References:`/`In-Reply-To:` 側は `refs_junk_before_angle`、
+/// 前置特殊字は `msgid_*_lead` 系)。
+#[must_use]
+pub fn has_msgid_junk_before_angle(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {{
+        if l.starts_with(' ') || l.starts_with('\t') {{
+            if !first {{
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }}
+        }} else {{
+            if !first {{
+                logical.push('\n');
+            }}
+            first = false;
+            logical.push_str(l);
+        }}
+    }}
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        let Some(lt) = v.find('<') else { continue };
+        if lt == 0 {
+            continue;
+        }
+        let junk = v[..lt].trim();
+        if junk.is_empty() {
+            continue;
+        }
+        if junk
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c.is_whitespace())
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Message-ID: a@b` 系 — `<` を欠く値。
+/// 原子として読む実装と欄ごと捨てる実装で識別子がずれる
+/// (`In-Reply-To:`/`References:` の裸値は `bare_msgid_ref`、
+/// 空欄は `empty_identity_value`、`>` のみは `msgid_gt_only`)。
+#[must_use]
+pub fn has_msgid_no_angle(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {{
+        if l.starts_with(' ') || l.starts_with('\t') {{
+            if !first {{
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }}
+        }} else {{
+            if !first {{
+                logical.push('\n');
+            }}
+            first = false;
+            logical.push_str(l);
+        }}
+    }}
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if !v.is_empty() && !v.contains('<') {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -61091,6 +61290,74 @@ mod tests {
             b"In-Reply-To: <a@b><c@d>\r\n\r\nx"
         ));
         assert!(!has_refs_adjacent_angles(b""));
+    }
+
+    #[test]
+    fn msgid_star_lead_値頭の星を検出する() {
+        // D2019 — `Message-ID: *<a@b>`
+        assert!(has_msgid_star_lead(
+            b"Message-ID: *<a@b.example>\r\n\r\nx"
+        ));
+        assert!(has_msgid_star_lead(
+            b"Content-ID: *<a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_star_lead(b"Message-ID: *\r\n\r\nx"));
+        assert!(!has_msgid_star_lead(
+            b"Message-ID: <a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_star_lead(b""));
+    }
+
+    #[test]
+    fn msgid_bslash_lead_値頭の逆斜線を検出する() {
+        // D2020 — `Message-ID: \<a@b>`
+        assert!(has_msgid_bslash_lead(
+            b"Message-ID: \\<a@b.example>\r\n\r\nx"
+        ));
+        assert!(has_msgid_bslash_lead(
+            b"List-ID: \\<a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_bslash_lead(b"Message-ID: \\\r\n\r\nx"));
+        assert!(!has_msgid_bslash_lead(
+            b"Message-ID: <a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_bslash_lead(b""));
+    }
+
+    #[test]
+    fn msgid_junk_before_angle_識別子前の英数字語を検出する() {
+        // D2021 — `Message-ID: x<a@b>` / `List-ID: x <a@b>`
+        assert!(has_msgid_junk_before_angle(
+            b"Message-ID: x<a@b.example>\r\n\r\nx"
+        ));
+        assert!(has_msgid_junk_before_angle(
+            b"List-ID: word <a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_junk_before_angle(
+            b"Message-ID: !<a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_junk_before_angle(
+            b"Message-ID: <a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_junk_before_angle(b""));
+    }
+
+    #[test]
+    fn msgid_no_angle_角括弧なき値を検出する() {
+        // D2022 — `Message-ID: a@b`
+        assert!(has_msgid_no_angle(
+            b"Message-ID: a@b.example\r\n\r\nx"
+        ));
+        assert!(has_msgid_no_angle(
+            b"Content-ID: bare-id\r\n\r\nx"
+        ));
+        assert!(!has_msgid_no_angle(
+            b"Message-ID: <a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_no_angle(b"Message-ID: \r\n\r\nx"));
+        assert!(!has_msgid_no_angle(
+            b"In-Reply-To: a@b.example\r\n\r\nx"
+        ));
     }
 
     #[test]
