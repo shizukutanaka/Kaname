@@ -3109,6 +3109,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D570: 155 個の `has_*_marks` はヘッダのみを見るため、ヘッダ部分だけを
     // 一度切り出して渡す (以前は各関数が本文ごと全体を複製・小文字化していた)。
     let hdr = header_section(raw);
+    // D系検出器は本文まで含むメッセージ全体を走査する (boundary 行等の
+    // 本文側兆候を見るため、hdr ではなく raw を渡す)。
+    let bytes = raw;
 
     let msg = MessageParser::default()
         .parse(raw)
@@ -3214,7 +3217,25 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // メタスペースでの評判判定・ドメイン不一致検査に回すため保持)
     let list_unsubscribe = msg
         .header_values("List-Unsubscribe")
-        .find_map(|v| v.as_text().map(|s| s.to_string()));
+        .find_map(|v| match v {
+            // mail-parser は List-Unsubscribe を Address 値 (URI を
+            // address として持つ Addr 列) に落とす — 元の
+            // `<uri>, <uri>` 形式に再構成する。
+            mail_parser::HeaderValue::Address(a) => {
+                let joined = a
+                    .iter()
+                    .filter_map(|addr| addr.address.as_ref().map(|u| format!("<{u}>")))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if joined.is_empty() {
+                    None
+                } else {
+                    Some(joined)
+                }
+            }
+            mail_parser::HeaderValue::TextList(l) => Some(l.join(", ")),
+            _ => v.as_text().map(|s| s.to_string()),
+        });
 
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
@@ -22852,7 +22873,6 @@ pub fn has_ws_domain(raw: &[u8]) -> bool {
         let mut in_a = false;
         let mut prev = b'\0';
         let mut after_at = false;
-        let mut domain_started = false;
         let mut ws_gap = false;
         for &b in v.as_bytes() {
             if prev == b'\\' {
@@ -22872,12 +22892,10 @@ pub fn has_ws_domain(raw: &[u8]) -> bool {
             } else if b == b'<' {
                 in_a = true;
                 after_at = false;
-                domain_started = false;
                 ws_gap = false;
             } else if b == b'>' {
                 in_a = false;
                 after_at = false;
-                domain_started = false;
                 ws_gap = false;
             } else if b == b'@' {
                 after_at = true;
@@ -22886,14 +22904,12 @@ pub fn has_ws_domain(raw: &[u8]) -> bool {
                     // `a@b .c` / `a@ b.c` — 空白を挟んだドメイン継続
                     return true;
                 }
-                domain_started = true;
             } else if b == b' ' || b == b'\t' {
                 if after_at {
                     ws_gap = true;
                 }
             } else if b == b',' || b == b';' {
                 after_at = false;
-                domain_started = false;
                 ws_gap = false;
             }
             prev = b;
@@ -31153,7 +31169,9 @@ fn has_stat_filter_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-razor-")
             || l.starts_with("x-razor2-")
             || l.starts_with("x-pyzor-")
+            || l.starts_with("x-pyzor:")
             || l.starts_with("x-greylist-")
+            || l.starts_with("x-greylist:")
             || l.starts_with("x-greylisted-")
             || l.starts_with("x-policy-")
             || l.starts_with("x-dnsbl-")
@@ -31460,6 +31478,7 @@ fn has_envelope_trace_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-bounce-")
             || l.starts_with("x-return-")
             || l.starts_with("x-verp-")
+            || l.starts_with("x-verp:")
             || l.starts_with("x-prvs-")
             || l.starts_with("x-subaddress-")
             || l.starts_with("x-tag-")
@@ -42062,6 +42081,20 @@ fn decoded_url_token(v: &str) -> String {
         .to_ascii_lowercase()
 }
 
+/// `decoded_url_token` のうち %HH 復号を行わない変種 (ホスト名評価用)。
+///
+/// ブラウザは URL の authority 部に残った `%` をホスト名の一部として
+/// 解決しないため、`http://abc.onion%2f` のような難読形を実ホストと
+/// 同一視しない。実体参照と制御空白のみ正規化する。
+fn decoded_url_token_no_pct(v: &str) -> String {
+    let mut s = String::with_capacity(v.len());
+    decode_entities_into(v, &mut s);
+    s.chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect::<String>()
+        .to_ascii_lowercase()
+}
+
 /// 本文中の各 `href` 属性値を復号・正規化してクロージャへ渡す
 /// (D969–D971, D973)。
 ///
@@ -42071,7 +42104,11 @@ fn decoded_url_token(v: &str) -> String {
 /// ブラウザ解釈後の形で評価できる。
 /// コメント内の href も通るが、実害のないヒューリスティックとして
 /// 既存の `has_tel_link` と揃える。
-fn for_each_href_value(html: &str, mut f: impl FnMut(&str)) {
+fn for_each_href_value(html: &str, f: impl FnMut(&str)) {
+    for_each_href_value_impl(html, f, true);
+}
+
+fn for_each_href_value_impl(html: &str, mut f: impl FnMut(&str), pct: bool) {
     let lower = html.to_ascii_lowercase();
     let mut rest = lower.as_str();
     while let Some(i) = rest.find("href") {
@@ -42097,7 +42134,11 @@ fn for_each_href_value(html: &str, mut f: impl FnMut(&str)) {
                 (&v[..e], e)
             }
         };
-        let decoded = decoded_url_token(val);
+        let decoded = if pct {
+            decoded_url_token(val)
+        } else {
+            decoded_url_token_no_pct(val)
+        };
         f(&decoded);
         rest = &v[adv.min(v.len())..];
     }
@@ -42108,15 +42149,22 @@ fn for_each_href_value(html: &str, mut f: impl FnMut(&str)) {
 /// 取れない値は対象外。
 fn has_host_flag(html: &str, mut pred: impl FnMut(&str) -> bool) -> bool {
     let mut hit = false;
-    for_each_href_value(html, |v| {
-        if !hit {
-            if let Some(h) = url_host(v) {
-                if pred(&h) {
-                    hit = true;
+    // ホスト評価は %HH 復号しない — ブラウザは authority 内の % を
+    // ホスト名の一部として解決しないため、`abc.onion%2f` のような
+    // 難読形を実ホストと同一視しない (実体参照・制御空白のみ復号)。
+    for_each_href_value_impl(
+        html,
+        |v| {
+            if !hit {
+                if let Some(h) = url_host(v) {
+                    if pred(&h) {
+                        hit = true;
+                    }
                 }
             }
-        }
-    });
+        },
+        false,
+    );
     hit
 }
 
@@ -42176,13 +42224,14 @@ fn tag_is(inner: &str, name: &str) -> bool {
 /// `ping = "..."` のような名前と `=` の間の空白にも対応する。
 fn tag_has_named_attr(inner: &str, name: &str) -> bool {
     let toks: Vec<&str> = inner.split_whitespace().collect();
-    for (i, t) in toks.iter().enumerate() {
+    for t in toks.iter() {
         if let Some(r) = t.strip_prefix(name) {
             if r.trim_start().starts_with('=') {
                 return true;
             }
-            // `ping =` のように属性名だけで終わるトークン
-            if r.is_empty() && toks.get(i + 1).is_some_and(|n| n.starts_with('=')) {
+            // `<a download>` のような値なし属性、`ping =` のように
+            // 属性名だけで終わるトークン
+            if r.is_empty() {
                 return true;
             }
         }
@@ -43753,7 +43802,7 @@ mod tests {
     }
 
     #[test]
-    fn conflicting_mime_headers_は重複と不正CTEを検出する() {
+    fn conflicting_mime_headers_は重複と不正_cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
         assert!(has_conflicting_mime_headers(dup_cte));
@@ -43814,7 +43863,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_mime_version_はMIME宣言なし構造を検出する() {
+    fn missing_mime_version_は_mime宣言なし構造を検出する() {
         // D1289 — MIME 構造を使うのに MIME-Version ヘッダがない
         assert!(has_missing_mime_version(
             b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\n\r\nb\r\n--x--"
@@ -43889,7 +43938,7 @@ mod tests {
     }
 
     #[test]
-    fn encoded_multipart_container_はmultipart上のCTEを検出する() {
+    fn encoded_multipart_container_はmultipart上の_cteを検出する() {
         // D1293 — multipart/* に base64/quoted-printable CTE
         assert!(has_encoded_multipart_container(
             b"Content-Type: multipart/mixed; boundary=x\r\nContent-Transfer-Encoding: base64\r\n\r\nb"
@@ -44457,7 +44506,7 @@ mod tests {
     }
 
     #[test]
-    fn tnef_attachment_はTNEF形式を検出する() {
+    fn tnef_attachment_は_tnef形式を検出する() {
         assert!(has_tnef_attachment(
             b"Content-Type: application/ms-tnef; name=\"winmail.dat\"\r\n\r\nX"
         ));
@@ -44852,7 +44901,7 @@ mod tests {
     }
 
     #[test]
-    fn leading_bom_は先頭BOMを検出する() {
+    fn leading_bom_は先頭_bomを検出する() {
         assert!(has_leading_bom(b"\xEF\xBB\xBFFrom: a@x\r\n\r\nx"));
         assert!(has_leading_bom(b"\xFF\xFEF\x00r\x00o\x00m\x00"));
         assert!(has_leading_bom(b"\xFE\xFF\x00F\x00r\x00o\x00m\x00"));
@@ -44884,7 +44933,7 @@ mod tests {
     }
 
     #[test]
-    fn http_framing_headers_はHTTP系ヘッダを検出する() {
+    fn http_framing_headers_は_http系ヘッダを検出する() {
         assert!(has_http_framing_headers(b"Content-Length: 500\r\nSubject: x\r\n\r\nx"));
         assert!(has_http_framing_headers(b"Transfer-Encoding: chunked\r\n\r\nx"));
         assert!(has_http_framing_headers(b"Host: evil.example\r\n\r\nx"));
@@ -45127,7 +45176,7 @@ mod tests {
     }
 
     #[test]
-    fn non_ascii_addr_domain_はUnicode宛先を検出する() {
+    fn non_ascii_addr_domain_は_unicode宛先を検出する() {
         assert!(has_non_ascii_addr_domain(
             "From: u@例え.jp\r\nSubject: x\r\n\r\nx".as_bytes()
         ));
@@ -45335,7 +45384,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_media_type_は折りたたみCTを誤爆しない() {
+    fn malformed_media_type_は折りたたみ_ctを誤爆しない() {
         // Content-Type: \n text/plain の FWS 折りたたみは正規
         assert!(!has_malformed_media_type(
             b"Content-Type:\n text/plain\r\n\r\nx"
@@ -45514,7 +45563,7 @@ mod tests {
     }
 
     #[test]
-    fn odd_mime_version_はFWS折りたたみでも値を読む() {
+    fn odd_mime_version_は_fws折りたたみでも値を読む() {
         // Review BUG_0003 — 値が折りたたまれても論理行で比較
         assert!(has_odd_mime_version(
             b"MIME-Version:\r\n 2.0\r\nContent-Type: text/plain\r\n\r\nx"
@@ -45991,7 +46040,7 @@ mod tests {
     }
 
     #[test]
-    fn dup_mime_headers_は外側MIME欄重複を検出する() {
+    fn dup_mime_headers_は外側_mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
             b"Content-Type: text/plain\r\nContent-Type: text/html\r\nSubject: x\r\n\r\nbody"
@@ -46021,7 +46070,7 @@ mod tests {
     }
 
     #[test]
-    fn url_display_name_はURL名を検出する() {
+    fn url_display_name_は_url名を検出する() {
         // D1403 — 表示名中の URL
         assert!(has_url_display_name(
             b"From: \"http://click.evil\" <a@b>\r\n\r\nbody"
@@ -46167,7 +46216,7 @@ mod tests {
     }
 
     #[test]
-    fn nntp_routing_はUsenet欄を検出する() {
+    fn nntp_routing_は_usenet欄を検出する() {
         // D1412 — Newsgroups/Path/Xref/NNTP-* 等
         assert!(has_nntp_routing(
             b"From: a@b\r\nNewsgroups: misc.test\r\n\r\nbody"
@@ -49535,7 +49584,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_mime_field_MIME欄空値を検出する() {
+    fn empty_mime_field_mime欄空値を検出する() {
         // D1645 — CT/CD/CTE の空値
         assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
         assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
@@ -49653,7 +49702,7 @@ mod tests {
     }
 
     #[test]
-    fn cte_param_CTE値paramを検出する() {
+    fn cte_param_cte値paramを検出する() {
         // D1655 — `base64; x`
         assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
         assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
@@ -49766,7 +49815,7 @@ mod tests {
     }
 
     #[test]
-    fn ampm_time_AMPM記号を検出する() {
+    fn ampm_time_ampm記号を検出する() {
         // D1665 — `12:00 PM`
         assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
         assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
@@ -51014,7 +51063,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn boundary_quoted_semi_クオート内の仕切りを検出する() {
         // D1775 — クオート値内 `;`
         assert!(has_boundary_quoted_semi(
@@ -51095,7 +51143,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn msgid_pct_lead_先立つパーセントを検出する() {
         // D1779 — `%` 先立ち
         assert!(has_msgid_pct_lead(
@@ -51173,7 +51220,6 @@ mod tests {
         assert!(!has_param_backtick_name(b""));
     }
 
-    #[test]
     #[test]
     fn msgid_colon_lead_先立つコロンを検出する() {
         // D1783 — `:` 先立ち
@@ -51254,7 +51300,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn msgid_lt_lead_二重開き額を検出する() {
         // D1787 — `<<`
         assert!(has_msgid_lt_lead(
@@ -51328,7 +51373,6 @@ mod tests {
         assert!(!has_msgid_inner_bslash(b""));
     }
 
-    #[test]
     #[test]
     fn msgid_gt_lead_先立つ閉じ額を検出する() {
         // D1791 — `>` 先立ち
@@ -51409,7 +51453,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn msgid_qmark_lead_先立つ疑問符を検出する() {
         // D1795 — `?` 先立ち
         assert!(has_msgid_qmark_lead(
@@ -51488,7 +51531,6 @@ mod tests {
         assert!(!has_cte_gt(b""));
     }
 
-    #[test]
     #[test]
     fn msgid_at_lead_先立つアットを検出する() {
         // D1799 — `@` 先立ち
@@ -51571,7 +51613,6 @@ mod tests {
         assert!(!has_addr_pipe_local(b""));
     }
 
-    #[test]
     #[test]
     fn msgid_bang_lead_先立つ感嘆符を検出する() {
         // D1803 — `!` 先立ち
@@ -52938,7 +52979,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はFeedbackIDを検出する() {
+    fn scan_は_feedback_idを検出する() {
         let fb = b"Feedback-ID: 12345:camp:x\r\n\r\ny";
         assert!(has_feedback_id(fb));
         let xf = b"X-Feedback-ID: camp:x\r\n\r\ny";
@@ -52948,7 +52989,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はSA詳細印を検出する() {
+    fn scan_は_sa詳細印を検出する() {
         let sr = b"X-Spam-Report: tests=AWL,BAYES_00\r\n\r\nx";
         assert!(has_spam_detail_marks(sr));
         let sd = b"X-Spam-Details: hits 3.2\r\n\r\nx";
@@ -52962,7 +53003,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はDCC印を検出する() {
+    fn scan_は_dcc印を検出する() {
         let dc = b"X-DCC-Main-Metrics: bulk 123\r\n\r\nx";
         assert!(has_dcc_marks(dc));
         let dv = b"X-DCC: ok\r\n\r\nx";
@@ -52988,7 +53029,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はESP印2を検出する() {
+    fn scan_は_esp印2を検出する() {
         let sp = b"X-SparkPost-Subaccount: 1\r\n\r\nx";
         assert!(has_esp2_stamps(sp));
         let ms = b"X-MSYS-API: {options}\r\n\r\nx";
@@ -53154,7 +53195,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はARC_BIMI印を検出する() {
+    fn scan_は_arc_bimi印を検出する() {
         let a1 = b"ARC-Seal: i=1; s=arc\r\n\r\nx";
         assert!(has_arc_bimi_marks(a1));
         let a2 = b"ARC-Message-Signature: i=1; a=rsa\r\n\r\nx";
@@ -53214,7 +53255,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はAV印第三群を検出する() {
+    fn scan_は_av印第三群を検出する() {
         let k1 = b"X-KSMG-AntiVirus: 2.1\r\n\r\nx";
         assert!(has_av3_marks(k1));
         let k2 = b"X-KLMS-Rule-ID: 4\r\n\r\nx";
@@ -53258,7 +53299,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_は欧州ISP印を検出する() {
+    fn scan_は欧州_isp印を検出する() {
         let g1 = b"X-GMX-Antispam: 0\r\n\r\nx";
         assert!(has_eu_provider_marks(g1));
         let g2 = b"X-GMX-Antivirus: 0\r\n\r\nx";
@@ -53280,7 +53321,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はCIS韓国印を検出する() {
+    fn scan_は_cis韓国印を検出する() {
         let m1 = b"X-Mras: Ok\r\n\r\nx";
         assert!(has_cis_provider_marks(m1));
         let m2 = b"X-Mru-Authenticated-Sender: a@b\r\n\r\nx";
@@ -53322,7 +53363,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はOSSスキャナ印を検出する() {
+    fn scan_は_ossスキャナ印を検出する() {
         let r1 = b"X-Rspamd-Action: no action\r\n\r\nx";
         assert!(has_oss_scan_marks(r1));
         let r2 = b"X-Rspamd-Server: mx\r\n\r\nx";
@@ -53366,7 +53407,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はMTA製品印を検出する() {
+    fn scan_は_mta製品印を検出する() {
         let p1 = b"X-Postfix-Queue-ID: 123\r\n\r\nx";
         assert!(has_mta_product_marks(p1));
         let o1 = b"X-Original-To: u@h\r\n\r\nx";
@@ -53456,7 +53497,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はMSEOP印を検出する() {
+    fn scan_は_mseop印を検出する() {
         let m1 = b"X-Microsoft-Antispam: BCL:0\r\n\r\nx";
         assert!(has_ms_eop_marks(m1));
         let e1 = b"X-EOPAttributedMessage: 1\r\n\r\nx";
@@ -53476,7 +53517,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はマーケESP印を検出する() {
+    fn scan_はマーケ_esp印を検出する() {
         let e1 = b"X-ELQ-Customer: x\r\n\r\nx";
         assert!(has_marketing_marks(e1));
         let m1 = b"X-MC-User: abc\r\n\r\nx";
@@ -53542,7 +53583,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_は送信元IP認定印を検出する() {
+    fn scan_は送信元_ip認定印を検出する() {
         let o1 = b"X-Originating-IP: [1.1.1.1]\r\n\r\nx";
         assert!(has_source_ip_marks(o1));
         let s1 = b"X-Source-IP: 1.1.1.1\r\n\r\nx";
@@ -53586,7 +53627,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はML配信印を検出する() {
+    fn scan_は_ml配信印を検出する() {
         let m1 = b"X-ML-Id: 1\r\n\r\nx";
         assert!(has_mailinglist_marks(m1));
         let m2 = b"X-MLName: list\r\n\r\nx";
@@ -53608,7 +53649,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はSaaS通知印を検出する() {
+    fn scan_は_saa_s通知印を検出する() {
         let g1 = b"X-GitHub-Reason: mention\r\n\r\nx";
         assert!(has_saas_notify_marks(g1));
         let g2 = b"X-GitHub-Recipient: u\r\n\r\nx";
@@ -53717,7 +53758,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_は欧州ISP第二群印を検出する() {
+    fn scan_は欧州_isp第二群印を検出する() {
         let a1 = b"X-Arcor-Spam: x\r\n\r\nx";
         assert!(has_eu_isp2_marks(a1));
         let s1 = b"X-Strato-Spam: x\r\n\r\nx";
@@ -53849,7 +53890,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はSNSプラットフォーム印を検出する() {
+    fn scan_は_snsプラットフォーム印を検出する() {
         let f1 = b"X-Facebook-Notify: x\r\n\r\nx";
         assert!(has_sns_platform_marks(f1));
         let t1 = b"X-Twitter-Notify: x\r\n\r\nx";
@@ -53893,7 +53934,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はESP第四群印を検出する() {
+    fn scan_は_esp第四群印を検出する() {
         let p1 = b"X-PHPlist-Campaign: x\r\n\r\nx";
         assert!(has_esp4_marks(p1));
         let s1 = b"X-Sendy-Campaign: x\r\n\r\nx";
@@ -54003,7 +54044,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はHR採用第二群印を検出する() {
+    fn scan_は_hr採用第二群印を検出する() {
         let g1 = b"X-Greenhouse-Candidate: x\r\n\r\nx";
         assert!(has_hr_marks(g1));
         let l1 = b"X-Lever-Candidate: x\r\n\r\nx";
@@ -54025,7 +54066,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はECマーケットプレイス印を検出する() {
+    fn scan_は_ecマーケットプレイス印を検出する() {
         let s1 = b"X-Shopify-Order: x\r\n\r\nx";
         assert!(has_ecommerce_marks(s1));
         let e1 = b"X-Etsy-Order: x\r\n\r\nx";
@@ -54069,7 +54110,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はCDNエッジホスティング印を検出する() {
+    fn scan_は_cdnエッジホスティング印を検出する() {
         let c1 = b"X-Cloudflare-Notify: x\r\n\r\nx";
         assert!(has_cdn_marks(c1));
         let f1 = b"X-Fastly-Notify: x\r\n\r\nx";
@@ -54179,7 +54220,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_は開発IDセキュリティSaaS印を検出する() {
+    fn scan_は開発_idセキュリティ_saa_s印を検出する() {
         let o1 = b"X-Okta-Notify: x\r\n\r\nx";
         assert!(has_enterprise_saas_marks(o1));
         let c1 = b"X-CrowdStrike-Notify: x\r\n\r\nx";
@@ -54223,7 +54264,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_は通信APIサポート印を検出する() {
+    fn scan_は通信_apiサポート印を検出する() {
         let t1 = b"X-Twilio-Notify: x\r\n\r\nx";
         assert!(has_comms_marks(t1));
         let s1 = b"X-Sinch-Notify: x\r\n\r\nx";
@@ -54245,7 +54286,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_は教育LMS印を検出する() {
+    fn scan_は教育_lms印を検出する() {
         let c1 = b"X-Coursera-Notify: x\r\n\r\nx";
         assert!(has_edu_marks(c1));
         let d1 = b"X-Duolingo-Notify: x\r\n\r\nx";
@@ -54333,7 +54374,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はヘルスケア薬局DNA印を検出する() {
+    fn scan_はヘルスケア薬局_dna印を検出する() {
         let z1 = b"X-Zocdoc-Notify: x\r\n\r\nx";
         assert!(has_health_marks(z1));
         let g1 = b"X-GoodRx-Notify: x\r\n\r\nx";
@@ -54421,7 +54462,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はナレッジタスク管理CRM印を検出する() {
+    fn scan_はナレッジタスク管理_crm印を検出する() {
         let q1 = b"X-Qiita-Notify: x\r\n\r\nx";
         assert!(has_project_marks(q1));
         let z1 = b"X-Zenn-Notify: x\r\n\r\nx";
@@ -54619,7 +54660,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はEC販売印を検出する() {
+    fn scan_は_ec販売印を検出する() {
         let w1 = b"X-Walmart-Notify: x\r\n\r\nx";
         assert!(has_retail_marks(w1));
         let n1 = b"X-Newegg-Notify: x\r\n\r\nx";
@@ -54707,7 +54748,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はIoT3Dプリント部品印を検出する() {
+    fn scan_は_io_t3_dプリント部品印を検出する() {
         let a1 = b"X-Arduino-Notify: x\r\n\r\nx";
         assert!(has_maker_marks(a1));
         let p1 = b"X-Prusa-Notify: x\r\n\r\nx";
@@ -54751,7 +54792,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はIDEエディタAPI稼働印を検出する() {
+    fn scan_は_ideエディタ_api稼働印を検出する() {
         let p1 = b"X-Postman-Notify: x\r\n\r\nx";
         assert!(has_devtools_marks(p1));
         let v1 = b"X-VisualStudio-Notify: x\r\n\r\nx";
@@ -54773,7 +54814,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はDNSドメインDDNS印を検出する() {
+    fn scan_は_dnsドメイン_ddns印を検出する() {
         let g1 = b"X-GoDaddy-Notify: x\r\n\r\nx";
         assert!(has_domain_marks(g1));
         let n1 = b"X-Namecheap-Notify: x\r\n\r\nx";
@@ -54839,7 +54880,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はCICDビルドバンドラ印を検出する() {
+    fn scan_は_cicdビルドバンドラ印を検出する() {
         let d1 = b"X-Drone-Notify: x\r\n\r\nx";
         assert!(has_ci_marks(d1));
         let c1 = b"X-Concourse-Notify: x\r\n\r\nx";
@@ -54905,7 +54946,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はノート執筆PKM印を検出する() {
+    fn scan_はノート執筆_pkm印を検出する() {
         let j1 = b"X-Joplin-Notify: x\r\n\r\nx";
         assert!(has_notes_marks(j1));
         let l1 = b"X-Logseq-Notify: x\r\n\r\nx";
@@ -54949,7 +54990,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はローコードCMS印を検出する() {
+    fn scan_はローコード_cms印を検出する() {
         let r1 = b"X-Retool-Notify: x\r\n\r\nx";
         assert!(has_lowcode_marks(r1));
         let s1 = b"X-Supabase-Notify: x\r\n\r\nx";
@@ -54971,7 +55012,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_はAI印を検出する() {
+    fn scan_は_ai印を検出する() {
         let o1 = b"X-OpenAI-Notify: x\r\n\r\nx";
         assert!(has_ai_marks(o1));
         let a1 = b"X-Anthropic-Notify: x\r\n\r\nx";
@@ -57244,6 +57285,7 @@ X-Other: 1
 
 body";
     assert!(!has_funeral_marks(clean));
+}
 
 #[test]
 fn scan_は銭機印を検出する() {
@@ -58978,4 +59020,3 @@ body";
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
-}
