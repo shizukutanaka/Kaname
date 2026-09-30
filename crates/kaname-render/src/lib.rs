@@ -11959,7 +11959,7 @@ pub fn has_epilogue_content(raw: &[u8]) -> bool {
             // 外側の閉じ boundary `--b--` を厳密一致で探す
             // (bounds は外側ヘッダに宣言された値のみ — 内側パートの
             // 境界はここに入らないので入れ子で誤判定しない)
-            if t.starts_with("--") && t.ends_with("--") {
+            if t.len() >= 4 && t.starts_with("--") && t.ends_with("--") {
                 let name = t[2..t.len() - 2].trim_end().to_ascii_lowercase();
                 if bounds.iter().any(|b| *b == name) {
                     seen_close = true;
@@ -14580,7 +14580,7 @@ pub fn has_dash_filename(raw: &[u8]) -> bool {
                 // RFC 2231 形 `charset''…` は `''` の後の符号化部を見る
                 let body = v.find("''").map_or(v, |i| &v[i + 2..]);
                 if body.starts_with('-')
-                    || (body.len() >= 3 && body[..3].eq_ignore_ascii_case("%2d"))
+                    || body.get(..3).is_some_and(|p| p.eq_ignore_ascii_case("%2d"))
                 {
                     return true;
                 }
@@ -18825,6 +18825,7 @@ pub fn has_bad_month_name(raw: &[u8]) -> bool {
         for (i, t) in toks.iter().enumerate() {
             let tt = t.trim_matches(|c: char| c == ',' || c == ';');
             if tt.len() >= 3
+                && tt.is_char_boundary(3)
                 && tt[..3].bytes().all(|b| b.is_ascii_alphabetic())
                 && i > 0
                 && toks[..i].iter().any(|p| {
@@ -19042,6 +19043,7 @@ pub fn has_bad_clock(raw: &[u8]) -> bool {
                 let m: u32 = digs[1].parse().unwrap_or(0);
                 let s_ok = digs.len() < 3
                     || (digs[2].len() >= 2
+                        && digs[2].is_char_boundary(2)
                         && digs[2][..2].bytes().all(|b| b.is_ascii_digit())
                         && digs[2][..2].parse::<u32>().unwrap_or(0) <= 60);
                 if h > 23 || m > 59 || !s_ok {
