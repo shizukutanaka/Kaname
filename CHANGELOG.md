@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1954: `Received:` の `for` 節の `|` を検出 — `Envelope` に `received_for_pipe` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&`/`#`/`"`/`'`/`:`/`,` は D1804–D1950)。
+### Security — D1953: `Received:` の `with` 節の `^` を検出 — `Envelope` に `received_with_caret` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$` は D1825–D1949)。
+### Security — D1952: `Received:` の `via` 節の `^` を検出 — `Envelope` に `received_via_caret` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"` は D1766–D1948)。
+### Security — D1951: `Received:` の `id` 節の `:` を検出 — `Envelope` に `received_id_colon` を追加 (`id` の `<`/`>`/`=`/`!`/`%`/`@`/`"`/`#`/`|`/`^`/`~`/`$`/`'`/`?`/`,` は D1785–D1947)。
 ### Security — D1950: `Received:` の `for` 節の `,` を検出 — `Envelope` に `received_for_comma` を追加 (`for` の `<`/`>`/`=`/`!`/`%`/`@`/`?`/`/`/`~`/`^`/`$`/`&`/`#`/`"`/`'`/`:` は D1804–D1946)。
 ### Security — D1949: `Received:` の `with` 節の `$` を検出 — `Envelope` に `received_with_dollar` を追加 (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|` は D1825–D1945)。
 ### Security — D1948: `Received:` の `via` 節の `"` を検出 — `Envelope` に `received_via_quote` を追加 (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,` は D1766–D1944)。
