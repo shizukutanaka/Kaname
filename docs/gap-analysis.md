@@ -1420,3 +1420,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2004 | `References:`/`In-Reply-To:` の値頭の `-` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
 | D2005 | `References:`/`In-Reply-To:` の値頭の `[` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
 | D2006 | `References:`/`In-Reply-To:` の値頭の `]` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2007 | `References:`/`In-Reply-To:` の値頭の `^` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2008 | `References:`/`In-Reply-To:` の値頭の `_` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2009 | `References:`/`In-Reply-To:` の値頭の `` ` `` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D2010 | `References:`/`In-Reply-To:` の値頭の `~` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
