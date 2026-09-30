@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D2026: `Message-ID:` 系欄の `<…>` 内側の `*` を検出 — `Envelope` に `msgid_inner_star` を追加 (内側の `|`/`\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`)。
+### Security — D2025: `Message-ID:` 系欄の `<…>` 内側の `$` を検出 — `Envelope` に `msgid_inner_dollar` を追加 (同上)。
+### Security — D2024: `Message-ID:` 系欄の `<…>` 内側の `#` を検出 — `Envelope` に `msgid_inner_hash` を追加 (同上)。
+### Security — D2023: `Message-ID:` 系欄の `<…>` 内側の `!` を検出 — `Envelope` に `msgid_inner_bang` を追加 (同上)。
 ### Security — D2022: `Message-ID:` 系欄 (`message-id`/`resent-message-id`/`list-id`/`content-id`) の `<` を欠く値を検出 — `Envelope` に `msgid_no_angle` を追加 (`In-Reply-To`/`References` の裸値は `bare_msgid_ref`)。
 ### Security — D2021: `Message-ID:` 系欄の最初の `<` より前の英数字語を検出 — `Envelope` に `msgid_junk_before_angle` を追加 (`References`/`In-Reply-To` 側は `refs_junk_before_angle`)。
 ### Security — D2020: `Message-ID:` 系欄の値頭の `\` を検出 — `Envelope` に `msgid_bslash_lead` を追加 (これで値頭の表示可能な特殊字は `msgid_*_lead` 系で全網羅)。

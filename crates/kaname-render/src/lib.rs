@@ -1750,6 +1750,14 @@ pub struct Envelope {
     pub msgid_junk_before_angle: bool,
     /// `Message-ID:` 系欄の `<` を欠く値 (D2022 — 識別子ずれ)。
     pub msgid_no_angle: bool,
+    /// `Message-ID:` 系欄の `<…>` 内側の `!` (D2023 — 識別子ずれ)。
+    pub msgid_inner_bang: bool,
+    /// `Message-ID:` 系欄の `<…>` 内側の `#` (D2024 — 識別子ずれ)。
+    pub msgid_inner_hash: bool,
+    /// `Message-ID:` 系欄の `<…>` 内側の `$` (D2025 — 識別子ずれ)。
+    pub msgid_inner_dollar: bool,
+    /// `Message-ID:` 系欄の `<…>` 内側の `*` (D2026 — 識別子ずれ)。
+    pub msgid_inner_star: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4730,6 +4738,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_bslash_lead = has_msgid_bslash_lead(bytes);
     let msgid_junk_before_angle = has_msgid_junk_before_angle(bytes);
     let msgid_no_angle = has_msgid_no_angle(bytes);
+    let msgid_inner_bang = has_msgid_inner_bang(bytes);
+    let msgid_inner_hash = has_msgid_inner_hash(bytes);
+    let msgid_inner_dollar = has_msgid_inner_dollar(bytes);
+    let msgid_inner_star = has_msgid_inner_star(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5510,6 +5522,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         msgid_bslash_lead,
         msgid_junk_before_angle,
         msgid_no_angle,
+        msgid_inner_bang,
+        msgid_inner_hash,
+        msgid_inner_dollar,
+        msgid_inner_star,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -41015,6 +41031,218 @@ pub fn has_msgid_no_angle(raw: &[u8]) -> bool {
     false
 }
 
+/// `Message-ID: <a!b@c>` 系 — `<…>` 内側の `!`。
+/// `!` は atext 許容でも厳密に弾く実装と緩く通す実装で識別子がずれる
+/// (内側の `|`/`\\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`、
+/// `\\` は `msgid_inner_bslash`、空白は `msgid_ws_inner`)。
+#[must_use]
+pub fn has_msgid_inner_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let is_id = matches!(
+            lower[..colon].trim_end(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if rest[a + 1..a + z].bytes().any(|b| b == b'!') {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// `Message-ID: <a#b@c>` 系 — `<…>` 内側の `#`。
+/// `#` は atext 許容でも厳密に弾く実装と緩く通す実装で識別子がずれる
+/// (内側の `|`/`\\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`、
+/// `\\` は `msgid_inner_bslash`、空白は `msgid_ws_inner`)。
+#[must_use]
+pub fn has_msgid_inner_hash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let is_id = matches!(
+            lower[..colon].trim_end(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if rest[a + 1..a + z].bytes().any(|b| b == b'#') {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// `Message-ID: <a$b@c>` 系 — `<…>` 内側の `$`。
+/// `$` は atext 許容でも厳密に弾く実装と緩く通す実装で識別子がずれる
+/// (内側の `|`/`\\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`、
+/// `\\` は `msgid_inner_bslash`、空白は `msgid_ws_inner`)。
+#[must_use]
+pub fn has_msgid_inner_dollar(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let is_id = matches!(
+            lower[..colon].trim_end(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if rest[a + 1..a + z].bytes().any(|b| b == b'$') {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// `Message-ID: <a*b@c>` 系 — `<…>` 内側の `*`。
+/// `*` は atext 許容でも厳密に弾く実装と緩く通す実装で識別子がずれる
+/// (内側の `|`/`\\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`、
+/// `\\` は `msgid_inner_bslash`、空白は `msgid_ws_inner`)。
+#[must_use]
+pub fn has_msgid_inner_star(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let is_id = matches!(
+            lower[..colon].trim_end(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if rest[a + 1..a + z].bytes().any(|b| b == b'*') {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -61358,6 +61586,70 @@ mod tests {
         assert!(!has_msgid_no_angle(
             b"In-Reply-To: a@b.example\r\n\r\nx"
         ));
+    }
+
+    #[test]
+    fn msgid_inner_bang_識別子内の感嘆符を検出する() {
+        // D2023 — `Message-ID: <a!b@c>`
+        assert!(has_msgid_inner_bang(
+            b"Message-ID: <a!b@c.example>\r\n\r\nx"
+        ));
+        assert!(has_msgid_inner_bang(
+            b"References: <a@b> <c!d@e>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_inner_bang(
+            b"Message-ID: <a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_inner_bang(b"Message-ID: a!b@c\r\n\r\nx"));
+        assert!(!has_msgid_inner_bang(b""));
+    }
+
+    #[test]
+    fn msgid_inner_hash_識別子内の井桁を検出する() {
+        // D2024 — `Message-ID: <a#b@c>`
+        assert!(has_msgid_inner_hash(
+            b"Message-ID: <a#b@c.example>\r\n\r\nx"
+        ));
+        assert!(has_msgid_inner_hash(
+            b"References: <a@b> <c#d@e>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_inner_hash(
+            b"Message-ID: <a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_inner_hash(b"Message-ID: a#b@c\r\n\r\nx"));
+        assert!(!has_msgid_inner_hash(b""));
+    }
+
+    #[test]
+    fn msgid_inner_dollar_識別子内の通貨符を検出する() {
+        // D2025 — `Message-ID: <a$b@c>`
+        assert!(has_msgid_inner_dollar(
+            b"Message-ID: <a$b@c.example>\r\n\r\nx"
+        ));
+        assert!(has_msgid_inner_dollar(
+            b"References: <a@b> <c$d@e>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_inner_dollar(
+            b"Message-ID: <a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_inner_dollar(b"Message-ID: a$b@c\r\n\r\nx"));
+        assert!(!has_msgid_inner_dollar(b""));
+    }
+
+    #[test]
+    fn msgid_inner_star_識別子内の星を検出する() {
+        // D2026 — `Message-ID: <a*b@c>`
+        assert!(has_msgid_inner_star(
+            b"Message-ID: <a*b@c.example>\r\n\r\nx"
+        ));
+        assert!(has_msgid_inner_star(
+            b"References: <a@b> <c*d@e>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_inner_star(
+            b"Message-ID: <a@b.example>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_inner_star(b"Message-ID: a*b@c\r\n\r\nx"));
+        assert!(!has_msgid_inner_star(b""));
     }
 
     #[test]
