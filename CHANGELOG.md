@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1842: `Message-ID: )<a>` 等の `)` 先立ちを検出 — `Envelope` に `msgid_rparen_lead` を追加 (lead-sep 系は D1755–D1838)。
+### Security — D1841: `Received:` の `via` 節の `=` を検出 — `Envelope` に `received_via_eq` を追加 (`via` の `!`/`@` は D1817/D1789)。
+### Security — D1840: `Content-Transfer-Encoding: base!64` の値内 `!` を検出 — `Envelope` に `cte_bang` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`%` は D1756–D1836)。
+### Security — D1839: `;file%name=x` の param 名 `%` を検出 — `Envelope` に `param_pct_name` を追加 (`@`/`/`/`` ` ``/`?`/`!`/`&`/`:` は D1713–D1835)。
 ### Security — D1838: `Message-ID: $<a>` 等の `$` 先立ちを検出 — `Envelope` に `msgid_dollar_lead` を追加 (lead-sep 系は D1755–D1834)。
 ### Security — D1837: `Received:` の `with` 節の `@` を検出 — `Envelope` に `received_with_at` を追加 (`with` の `%`/`!` は D1825/D1833)。
 ### Security — D1836: `Content-Transfer-Encoding: base%64` の値内 `%` を検出 — `Envelope` に `cte_pct` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@` は D1756–D1832)。
