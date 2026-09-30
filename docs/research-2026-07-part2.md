@@ -44,6 +44,29 @@
 - **deepfake 増強 BEC** — deepfake が BEC の **40%** に関与 (2023 年は 5% 未満)。
   メール + 「CEO を騙る音声メモ」で確認を偽装する複合攻撃。
 
+### 1.4 標準規格の刷新 — DKIM2 / DMARCbis (2026)、および関連ソフトウェア
+
+Kaname の認証系実装に**直接影響する標準の更新**が 2026 年に起きた。
+
+- **DMARCbis** — 2026-05 に **RFC 9989 / 9990 / 9991** として公開。静的な
+  Public Suffix List を**ライブ DNS tree walk** に置き換え、機能しなかったタグを廃止。
+- **DKIM2** — 10 年以上ぶりの認証プロトコル再設計。**メッセージを宛先にバインドし
+  送信時刻を記録**することで**リプレイ攻撃をプロトコルレベルで解決**。さらに転送時に
+  署名が壊れない chain of custody を導入し、署名対象ヘッダを標準化する。
+- **`mail-auth`** ([Stalwart Labs](https://github.com/stalwartlabs/mail-auth)) —
+  DKIM (RSA/Ed25519) / ARC 連鎖検証 / SPF / DMARC を実装する Rust ライブラリ。
+  **Kaname が既に採用している `mail-parser` と同一ベンダ** (ADR-009) であり、
+  2026-07 時点で **DKIM2 と DMARCbis を実装済み**。
+
+**Kaname への含意 (重要)**:
+1. **§3.15 で実装した DKIM リプレイ検出 (`d=` と From の整合) は DKIM1 時代の
+   暫定ヒューリスティックであり、DKIM2 対応が入れば本来不要になる。**
+   DKIM2 は同じ問題をプロトコルで解決するため、転送起因の「SPF fail + DKIM pass +
+   DMARC pass」という曖昧な状態自体が消える。
+2. Kaname は現在**送信ドメイン認証を独立検証しておらず**、受信サーバが付けた
+   `Authentication-Results` ヘッダの文字列パースに全面依存している (D18 / §3.15b)。
+   `mail-auth` はこのギャップを埋める最有力候補であり、同時に DKIM2/DMARCbis 対応も得られる。
+
 ---
 
 ## 2. このセッションの実装マップ (研究 → PR)
@@ -100,10 +123,64 @@ README は「コンパイル時型安全」を掲げるが、**`impl Quarantined
 | **P1** | D17(c): `llm_bridge` を `dual_llm` の trait を実装する形に変更し `&str` 入口を塞ぐ | 配線時の最短経路を型安全側へ倒す。**最も重要** | P0 |
 | **P1** | D17(a,b,d): `Content` の serde derive 除去 / `as_text` を `pub(crate)` / `TopicTag` の Deserialize 迂回封じ | 中核型のため要ワークスペース再コンパイル | P0 |
 | **P2** | D10 + D16 の配線 (jmap 受信 → store 永続化 → 表示 → 送信、添付テキストの preflight 強制) | 検出器に初めて実メールが流れる | P1 |
+| **P2** | D18: [`mail-auth`](https://github.com/stalwartlabs/mail-auth) (Stalwart Labs) 採用による**送信ドメイン認証の独立検証**。当面は authserv-id 検証と `extract_auth_result` のスコープ限定パース | 認証系シグナル全体が受信サーバのヘッダへの盲目的信頼の上に乗っている。**mail-parser と同一ベンダ** (ADR-009) で **DKIM2/DMARCbis 実装済み** | 新規依存 → ネットワーク解放 |
 | **P3** | I4 の矛盾解消 (所有者判断: コードを I4 に合わせるか I4 改訂か)、`resources/seccomp/` 実体作成 | CLAUDE.md I4 は「変更禁止」 | 所有者判断 |
 | P4 | 画素 typographic 注入 (OCR)、自前ドメインの動的 QR 追跡 (要ネットワーク) | 今回の実装で原理的に届かない残余リスク | 設計判断 |
 
 ---
+
+## 4.5 静的検証の実施状況 (2026-07、コンパイラ不在下)
+
+`cargo check` が実行できないため、**コンパイルエラーになりやすい箇所を静的に
+自己検証**した。以下は「実際にファイルを読んで確認した」項目であり、
+**`cargo check` の代替にはならない** (特定の高リスク点のみの確認)。
+
+| 検証項目 | 結果 |
+|---|---|
+| `src-tauri/src/main.rs` の `use kaname_ui::commands;` | ✅ 存在 |
+| main.rs が参照する型 (`ScreenResponse` / `OobvRecommendRequest` / `OobvRecommendResponse` / `V02CommandError` / `DeepfakeEvaluateRequest` / `AdvisoryReport`) が `pub` で到達可能 | ✅ 全て `pub` (`AdvisoryReport` は `pub use` 済み) |
+| `kaname_memory_guard::normalize_for_matching` のシグネチャ (`&str -> String`) と `kaname-bec` 側の利用 (`b.contains()`, `&b`) の整合 | ✅ 一致 |
+| `SignalFamily::Content` バリアントの実在 | ✅ 実在 |
+| BEC テストヘルパー (`MockLlm` / `baseline_auth_all_pass` / `plain_req`) の実在 | ✅ 全て実在 |
+| 新規 DKIM テストの `AssessmentRequest` フィールド網羅 (13 フィールド) | ✅ 過不足なし |
+| `AuditFinding` への新バリアント追加による網羅 `match` の破壊 | ✅ 網羅 match は存在せず (全て `matches!`) |
+| `QuishingDefense` の構造体リテラル漏れ (新フィールド `url_shorteners`) | ✅ 構築箇所は `new()` のみ、`Default` は `Self::new()` 委譲 |
+| `pub mod svg_guard;` の登録 | ✅ 登録済み |
+
+**未検証のまま残るもの**: 借用チェッカ、ライフタイム、正規表現の実コンパイル、
+テスト assert の実際の成否、`extract_ai_visible_text` の UTF-8 境界安全性、
+`fold_homoglyphs` のマッピング網羅性。**これらは `cargo check` / `cargo nextest`
+でしか確認できない**。
+
+### 独立エージェントによる敵対的レビュー (2026-07 実施)
+
+[適応的評価 2606.26479](https://arxiv.org/html/2606.26479v1) が指摘する通り
+**自己評価は安全性を過大評価しがち**であるため、主エージェントとは独立した
+エージェントに「コンパイラの代わりにビルドエラーを探す」タスクを与えた。
+**結論: コンパイルエラー・テスト失敗と確信できるものは検出されなかった。**
+
+独立検証で個別に確認された項目 (いずれも「問題なし」):
+
+| 懸念点 | 検証結果 |
+|---|---|
+| `svg_guard::extract_ai_visible_text` の `lower` バイト位置を `content` に適用する安全性 | `to_ascii_lowercase` は非 ASCII バイトを変更せずバイト長も保存。加えて `is_char_boundary` で二重チェックしており panic 不可 |
+| 同関数のループが無限ループにならないか | close 発見時も未発見時も `search_from` が厳密増加し必ず前進 |
+| `extract_script_type` の `?` と `Option` 整合 | 全て `Option` 上で戻り値と整合。`q @ ('"' \| '\'')` バインディングも合法 |
+| `kaname_screen` の API 実在と `Debug` derive | `PromptScreener::new`/`screen`/`ScreenVerdict::Blocked`/`ScreenRisk::HighEntropy(f32)` 全て実在、`Debug` あり |
+| `ordinary_japanese_text_not_flagged_as_injection` の成立 | 日本語文は最悪でも `HighEntropy` のみ → verdict は `Suspicious` で `Blocked` にならず注入判定されない |
+| `fold_homoglyphs` の `.flat_map(char::to_lowercase)` | インヘレント `fn(char) -> ToLowercase` を関数パスで渡すのは型推論が通る |
+| `fold_homoglyphs` テスト期待値のコードポイント一致 | U+0421→c / U+0415→e / U+041E→o、全角は `-0xFEE0` で FF23/FF25/FF2F→CEO→"ceo" いずれも一致 |
+| `reply_to_spoof` の `&&str` → `&str` と借用寿命 | 関数引数は coercion site のため deref coercion が適用。`folded` はクロージャより長生き |
+| `magic_bytes` の `Cow<str>::to_ascii_lowercase` | `Cow` は `Deref<Target=str>` のため呼べる。先行マジックバイトは `<svg`/`<?xml`/`<!--` 始まりに一致しない |
+| `quishing` のネスト `fn is_braille_block` と絵文字 char | `self` 非参照の自由関数として合法。`'🟥'`/`'🟦'`/`'　'` は全て単一スカラ値 |
+| `QuishingDefense` の初期化漏れ | 構築箇所は `new()` のみ、`Default` は委譲 → 漏れなし |
+
+**それでもなお `cargo check` の代替にはならない**。静的読解は借用チェッカや
+トレイト解決の完全な代替ではなく、正規表現の実コンパイルやテストの実行結果も
+確認できていない。ネットワーク解放後の検証は依然として P0 のままである。
+
+指摘された唯一の改善余地は性能のみ (`extract_ai_visible_text` が 4 タグそれぞれで
+`to_ascii_lowercase()` を再計算)。動作・ビルドには影響しない。
 
 ## 5. 正直な総括
 

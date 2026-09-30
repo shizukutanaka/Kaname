@@ -1,0 +1,20 @@
+From: IT Support <support@arnazon-billing.com>
+To: you@example.com
+Subject: Verify your account
+Date: Mon, 26 Apr 2026 11:00:00 +0900
+Message-ID: <qr-003@arnazon-billing.com>
+Authentication-Results: mx.example.com; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=none; dmarc=fail header.from=arnazon-billing.com
+Content-Type: text/plain; charset=utf-8
+
+Scan the code below to verify your account immediately.
+
+████████████████████
+██  ██  ████  ██  ██
+████  ██  ██  ████ █
+██  ████  ████  ████
+████  ██  ██  ██  ██
+██  ██  ████  ████ █
+████████  ██  ██  ██
+██  ████████  ██████
+████  ██  ██  ██  ██
+██████████████████ █

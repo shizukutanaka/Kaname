@@ -27,12 +27,8 @@
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::cast_possible_truncation)]
 
-pub mod oauth_state;
-pub mod jwt_inspect;
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use thiserror::Error;
 
 // ============================================================================
 // SaaS プラットフォーム
@@ -68,16 +64,16 @@ impl SaasPlatform {
     #[must_use]
     pub fn domains(&self) -> Vec<&'static str> {
         match self {
-            Self::GoogleDrive  => vec!["drive.google.com", "docs.google.com", "sheets.google.com"],
-            Self::OneDrive     => vec!["1drv.ms", "onedrive.live.com"],
-            Self::SharePoint   => vec!["sharepoint.com"],
-            Self::DocuSign     => vec!["docusign.net", "docusign.com"],
-            Self::AdobeSign    => vec!["adobesign.com", "echosign.com"],
-            Self::Dropbox      => vec!["dropbox.com", "db.tt"],
-            Self::Box          => vec!["box.com", "boxcloud.com"],
-            Self::Notion       => vec!["notion.so", "notion.site"],
-            Self::Smartsheet   => vec!["smartsheet.com"],
-            Self::Other(_)     => vec![],
+            Self::GoogleDrive => vec!["drive.google.com", "docs.google.com", "sheets.google.com"],
+            Self::OneDrive => vec!["1drv.ms", "onedrive.live.com"],
+            Self::SharePoint => vec!["sharepoint.com"],
+            Self::DocuSign => vec!["docusign.net", "docusign.com"],
+            Self::AdobeSign => vec!["adobesign.com", "echosign.com"],
+            Self::Dropbox => vec!["dropbox.com", "db.tt"],
+            Self::Box => vec!["box.com", "boxcloud.com"],
+            Self::Notion => vec!["notion.so", "notion.site"],
+            Self::Smartsheet => vec!["smartsheet.com"],
+            Self::Other(_) => vec![],
         }
     }
 
@@ -86,15 +82,15 @@ impl SaasPlatform {
     pub fn display_name(&self) -> String {
         match self {
             Self::GoogleDrive => "Google Drive".into(),
-            Self::OneDrive    => "Microsoft OneDrive".into(),
-            Self::SharePoint  => "Microsoft SharePoint".into(),
-            Self::DocuSign    => "DocuSign".into(),
-            Self::AdobeSign   => "Adobe Sign".into(),
-            Self::Dropbox     => "Dropbox".into(),
-            Self::Box         => "Box".into(),
-            Self::Notion      => "Notion".into(),
-            Self::Smartsheet  => "Smartsheet".into(),
-            Self::Other(d)    => d.clone(),
+            Self::OneDrive => "Microsoft OneDrive".into(),
+            Self::SharePoint => "Microsoft SharePoint".into(),
+            Self::DocuSign => "DocuSign".into(),
+            Self::AdobeSign => "Adobe Sign".into(),
+            Self::Dropbox => "Dropbox".into(),
+            Self::Box => "Box".into(),
+            Self::Notion => "Notion".into(),
+            Self::Smartsheet => "Smartsheet".into(),
+            Self::Other(d) => d.clone(),
         }
     }
 }
@@ -168,7 +164,10 @@ impl SaasHistory {
     /// 新規履歴を作成。
     #[must_use]
     pub fn new() -> Self {
-        Self { interactions: std::collections::HashMap::new(), max_senders: 100_000 }
+        Self {
+            interactions: std::collections::HashMap::new(),
+            max_senders: 100_000,
+        }
     }
 
     /// やり取りを記録。
@@ -283,7 +282,8 @@ impl SaasLinkInspector {
             platform: SaasPlatform::Other("shortened-url".to_string()),
             risk: SaasLinkRisk::Warn,
             reasons: vec![
-                "短縮 URL を検出 — 展開前の評価不可能。サンドボックスで展開後に再評価が必要".to_string(),
+                "短縮 URL を検出 — 展開前の評価不可能。サンドボックスで展開後に再評価が必要"
+                    .to_string(),
             ],
             sender: String::new(),
         })
@@ -305,7 +305,10 @@ impl SaasLinkInspector {
                 url: url.chars().take(64).collect::<String>() + "…",
                 platform: SaasPlatform::Other("unknown".to_string()),
                 risk: SaasLinkRisk::Suspicious,
-                reasons: vec![format!("URL が異常に長い: {} 文字 (上限 {MAX_URL_LEN})", url.len())],
+                reasons: vec![format!(
+                    "URL が異常に長い: {} 文字 (上限 {MAX_URL_LEN})",
+                    url.len()
+                )],
                 sender: sender.to_string(),
             });
         }
@@ -313,7 +316,14 @@ impl SaasLinkInspector {
         if let Some(short_finding) = self.check_shortened(url) {
             return Some(short_finding);
         }
-        let platform = self.identify_platform(url)?;
+        // 正規ドメイン名を含むが正当なホストではない偽装ドメイン
+        // (notdocusign.com、mail.google.com.evil.com 等) は
+        // identify_platform が None を返すが、警告なしに素通りさせると
+        // 偽 SaaS リンク攻撃を見逃すため、偽装先プラットフォームとして検査を継続する。
+        let platform = match self.identify_platform(url) {
+            Some(p) => p,
+            None => self.find_impersonated_platform(url)?,
+        };
         let mut reasons = Vec::new();
         let mut risk = SaasLinkRisk::Safe;
 
@@ -337,7 +347,9 @@ impl SaasLinkInspector {
                 for mal in &self.malicious_domains {
                     if domain_matches_or_is_subdomain_of(&query_domain, mal) {
                         risk = SaasLinkRisk::Block;
-                        reasons.push(format!("リダイレクトパラメータに既知の悪意あるドメイン: {mal}"));
+                        reasons.push(format!(
+                            "リダイレクトパラメータに既知の悪意あるドメイン: {mal}"
+                        ));
                     }
                 }
             }
@@ -347,23 +359,35 @@ impl SaasLinkInspector {
         //    既知 SaaS ドメインが「サブドメイン」として悪用されている
         if risk != SaasLinkRisk::Block && self.is_fake_saas_subdomain(url, &platform) {
             risk = SaasLinkRisk::Suspicious;
-            reasons.push(format!("{} を装った偽ドメインの可能性", platform.display_name()));
+            reasons.push(format!(
+                "{} を装った偽ドメインの可能性",
+                platform.display_name()
+            ));
         }
 
         // 3. 送信者履歴ベース評価
         if risk == SaasLinkRisk::Safe {
             risk = if history.is_familiar(sender, platform.clone()) {
-                reasons.push(format!("{} さんとの{}での通常やり取り", sender, platform.display_name()));
+                reasons.push(format!(
+                    "{} さんとの{}での通常やり取り",
+                    sender,
+                    platform.display_name()
+                ));
                 SaasLinkRisk::Safe
             } else {
-                reasons.push(format!("{} さんからの {} 経由のリンクは初回または低頻度", sender, platform.display_name()));
+                reasons.push(format!(
+                    "{} さんからの {} 経由のリンクは初回または低頻度",
+                    sender,
+                    platform.display_name()
+                ));
                 SaasLinkRisk::Caution
             };
         }
 
         // 4. URL パターン分析: 認証や署名キーワード
         let url_lower = url.to_lowercase();
-        if url_lower.contains("login") || url_lower.contains("signin") || url_lower.contains("auth") {
+        if url_lower.contains("login") || url_lower.contains("signin") || url_lower.contains("auth")
+        {
             if risk == SaasLinkRisk::Safe || risk == SaasLinkRisk::Caution {
                 risk = SaasLinkRisk::Warn;
             }
@@ -384,7 +408,9 @@ impl SaasLinkInspector {
                     if matches!(r, kaname_screen::ScreenRisk::HighEntropy(_)) {
                         continue;
                     }
-                    reasons.push(format!("SaaSリンクにプロンプト注入の疑いあるパラメータ: {r:?}"));
+                    reasons.push(format!(
+                        "SaaSリンクにプロンプト注入の疑いあるパラメータ: {r:?}"
+                    ));
                 }
             }
         }
@@ -412,8 +438,8 @@ impl SaasLinkInspector {
             if url.contains(legit_domain) {
                 if let Some(domain) = extract_actual_domain(url) {
                     // 正規ドメインそのもの、またはドット区切りのサブドメインのみ許可
-                    let is_legitimate = domain == legit_domain
-                        || domain.ends_with(&format!(".{legit_domain}"));
+                    let is_legitimate =
+                        domain == legit_domain || domain.ends_with(&format!(".{legit_domain}"));
                     if !is_legitimate {
                         return true; // 偽装の可能性
                     }
@@ -421,6 +447,26 @@ impl SaasLinkInspector {
             }
         }
         false
+    }
+
+    /// ホスト名に正規ドメイン文字列を埋め込んだ偽装ドメイン
+    /// (`notdocusign.com`、`mail.google.com.evil.com` 等) から
+    /// 偽装されているプラットフォームを特定する。
+    /// ホスト部分のみを対象とするため、クエリ内の正規ドメイン
+    /// (`evil.com/?to=drive.google.com`) では発火しない。
+    fn find_impersonated_platform(&self, url: &str) -> Option<SaasPlatform> {
+        let actual = extract_actual_domain(url)?;
+        for platform in &self.platforms {
+            for legit in platform.domains() {
+                if actual.contains(legit)
+                    && actual != legit
+                    && !actual.ends_with(&format!(".{legit}"))
+                {
+                    return Some(platform.clone());
+                }
+            }
+        }
+        None
     }
 }
 
@@ -436,10 +482,24 @@ impl Default for SaasLinkInspector {
 
 /// 既知の短縮 URL サービスのドメイン一覧。
 const URL_SHORTENER_DOMAINS: &[&str] = &[
-    "bit.ly", "t.co", "tinyurl.com", "goo.gl", "ow.ly",
-    "buff.ly", "dlvr.it", "ift.tt", "short.link", "rebrand.ly",
-    "cutt.ly", "tiny.cc", "is.gd", "rb.gy", "clck.ru",
-    "qr.ae", "po.st", "shorturl.at",
+    "bit.ly",
+    "t.co",
+    "tinyurl.com",
+    "goo.gl",
+    "ow.ly",
+    "buff.ly",
+    "dlvr.it",
+    "ift.tt",
+    "short.link",
+    "rebrand.ly",
+    "cutt.ly",
+    "tiny.cc",
+    "is.gd",
+    "rb.gy",
+    "clck.ru",
+    "qr.ae",
+    "po.st",
+    "shorturl.at",
 ];
 
 /// 短縮 URL かどうかを判定する。
@@ -463,7 +523,9 @@ fn extract_actual_domain(url: &str) -> Option<String> {
     let without_scheme = url
         .trim_start_matches("https://")
         .trim_start_matches("http://");
-    let domain_end = without_scheme.find(['/', '?']).unwrap_or(without_scheme.len());
+    let domain_end = without_scheme
+        .find(['/', '?'])
+        .unwrap_or(without_scheme.len());
     let authority = &without_scheme[..domain_end];
     // userinfo を除去: "drive.google.com@evil.com" → "evil.com"
     // 修正前は userinfo を考慮しておらず、`https://drive.google.com@evil.com/`
@@ -487,8 +549,16 @@ fn domain_matches_or_is_subdomain_of(domain: &str, suffix: &str) -> bool {
 ///
 /// SaaS ドメイン (google.com 等) を偽装しつつ、クエリパラメータで
 /// 実際の悪意あるサイトへ誘導する攻撃パターンを検出するために使う。
-const REDIRECT_PARAM_KEYS: &[&str] =
-    &["redirect=", "url=", "to=", "dest=", "link=", "next=", "continue=", "r="];
+const REDIRECT_PARAM_KEYS: &[&str] = &[
+    "redirect=",
+    "url=",
+    "to=",
+    "dest=",
+    "link=",
+    "next=",
+    "continue=",
+    "r=",
+];
 
 fn extract_redirect_param_domain(url: &str) -> Option<String> {
     let q_pos = url.find('?')?;
@@ -496,8 +566,13 @@ fn extract_redirect_param_domain(url: &str) -> Option<String> {
     for pair in query.split('&') {
         for key in REDIRECT_PARAM_KEYS {
             if let Some(value) = pair.strip_prefix(*key) {
-                if value.starts_with("http://") || value.starts_with("https://") {
-                    return extract_actual_domain(value);
+                // パーセントエンコードされたリダイレクト先を復号する。
+                // `?next=https%3A%2F%2Fevil.com` はブラウザが復号して遷移する
+                // が、エンコードのままでは `starts_with("http")` に合わず
+                // 検査を素通りしていた (D154)。
+                let decoded = percent_decode(value);
+                if decoded.starts_with("http://") || decoded.starts_with("https://") {
+                    return extract_actual_domain(&decoded);
                 }
             }
         }
@@ -505,18 +580,36 @@ fn extract_redirect_param_domain(url: &str) -> Option<String> {
     None
 }
 
-// ============================================================================
-// エラー型
-// ============================================================================
-
-/// SaaS Link Safety エラー。
-#[derive(Debug, Error)]
-pub enum SaasGuardError {
-    /// URL パースエラー
-    #[error("URL パースに失敗: {0}")]
-    InvalidUrl(String),
+/// `%XX` 形式のパーセントエンコードをバイト単位で復号する。
+/// URL クエリ値の検査用 — ドメイン部分は ASCII のため lossy 変換で十分。
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                out.push(h * 16 + l);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+// ============================================================================
 // ============================================================================
 // テスト
 // ============================================================================
@@ -555,8 +648,10 @@ mod tests {
         // 旧実装: ?to=drive.google.com が含まれると Some(GoogleDrive) を返していた
         let i = SaasLinkInspector::new();
         let result = i.identify_platform("https://evil.com/redirect?to=drive.google.com");
-        assert_eq!(result, None,
-            "クエリパラメーター内の SaaS ドメインで偽陽性を起こしてはならない");
+        assert_eq!(
+            result, None,
+            "クエリパラメーター内の SaaS ドメインで偽陽性を起こしてはならない"
+        );
     }
 
     #[test]
@@ -564,8 +659,7 @@ mod tests {
         // drive.google.com.evil.com は Google として認識してはならない
         let i = SaasLinkInspector::new();
         let result = i.identify_platform("https://drive.google.com.evil.com/file");
-        assert_eq!(result, None,
-            "サブドメイン偽装ドメインは None を返すべき");
+        assert_eq!(result, None, "サブドメイン偽装ドメインは None を返すべき");
     }
 
     #[test]
@@ -575,11 +669,13 @@ mod tests {
         for _ in 0..6 {
             hist.record("alice@example.com", SaasPlatform::GoogleDrive);
         }
-        let detected = i.evaluate(
-            "https://drive.google.com/file/d/abc",
-            "alice@example.com",
-            &hist,
-        ).unwrap_or_default();
+        let detected = i
+            .evaluate(
+                "https://drive.google.com/file/d/abc",
+                "alice@example.com",
+                &hist,
+            )
+            .unwrap_or_default();
         assert_eq!(detected.risk, SaasLinkRisk::Safe);
     }
 
@@ -587,11 +683,13 @@ mod tests {
     fn unknown_sender_gets_caution() {
         let i = SaasLinkInspector::new();
         let hist = SaasHistory::new();
-        let detected = i.evaluate(
-            "https://drive.google.com/file/d/abc",
-            "stranger@unknown.com",
-            &hist,
-        ).unwrap_or_default();
+        let detected = i
+            .evaluate(
+                "https://drive.google.com/file/d/abc",
+                "stranger@unknown.com",
+                &hist,
+            )
+            .unwrap_or_default();
         assert_eq!(detected.risk, SaasLinkRisk::Caution);
     }
 
@@ -599,11 +697,13 @@ mod tests {
     fn auth_keyword_escalates_to_warn() {
         let i = SaasLinkInspector::new();
         let hist = SaasHistory::new();
-        let detected = i.evaluate(
-            "https://drive.google.com/auth/login",
-            "stranger@unknown.com",
-            &hist,
-        ).unwrap_or_default();
+        let detected = i
+            .evaluate(
+                "https://drive.google.com/auth/login",
+                "stranger@unknown.com",
+                &hist,
+            )
+            .unwrap_or_default();
         assert_eq!(detected.risk, SaasLinkRisk::Warn);
     }
 
@@ -664,11 +764,9 @@ mod tests {
     fn reasons_populated() {
         let i = SaasLinkInspector::new();
         let hist = SaasHistory::new();
-        let detected = i.evaluate(
-            "https://docusign.net/sign",
-            "newbie@startup.com",
-            &hist,
-        ).unwrap_or_default();
+        let detected = i
+            .evaluate("https://docusign.net/sign", "newbie@startup.com", &hist)
+            .unwrap_or_default();
         assert!(!detected.reasons.is_empty());
     }
 
@@ -712,8 +810,11 @@ mod tests {
         // → 偽ドメインと誤判定 (Suspicious) しないこと
         let result = inspector.evaluate("https://docusign.com:8443/sign", "sender@corp.com", &hist);
         if let Some(found) = result {
-            assert_ne!(found.risk, SaasLinkRisk::Suspicious,
-                "正規ドメインのポート付き URL を偽ドメインと誤判定してはならない");
+            assert_ne!(
+                found.risk,
+                SaasLinkRisk::Suspicious,
+                "正規ドメインのポート付き URL を偽ドメインと誤判定してはならない"
+            );
         }
     }
 
@@ -726,10 +827,16 @@ mod tests {
         let long_url = format!("https://evil.com/{}", "a".repeat(10_000));
         let result = inspector.evaluate(&long_url, "attacker@evil.com", &hist);
         let found = result.expect("長すぎる URL は Suspicious を返すべき");
-        assert_eq!(found.risk, SaasLinkRisk::Suspicious,
-            "8192 文字超の URL は Suspicious でなければならない");
-        assert!(found.reasons[0].contains("異常に長い"),
-            "理由に長さの説明が含まれるべき: {:?}", found.reasons);
+        assert_eq!(
+            found.risk,
+            SaasLinkRisk::Suspicious,
+            "8192 文字超の URL は Suspicious でなければならない"
+        );
+        assert!(
+            found.reasons[0].contains("異常に長い"),
+            "理由に長さの説明が含まれるべき: {:?}",
+            found.reasons
+        );
     }
 
     // ── SaasHistory 容量制限テスト ────────────────────────────────────────
@@ -743,8 +850,11 @@ mod tests {
         hist.record("c@c.com", SaasPlatform::GoogleDrive);
         // 容量上限到達 → 新規送信者は無視
         hist.record("d@d.com", SaasPlatform::GoogleDrive);
-        assert_eq!(hist.count("d@d.com", SaasPlatform::GoogleDrive), 0,
-            "上限到達後の新規送信者はカウントされてはならない");
+        assert_eq!(
+            hist.count("d@d.com", SaasPlatform::GoogleDrive),
+            0,
+            "上限到達後の新規送信者はカウントされてはならない"
+        );
     }
 
     // ── ドット境界バイパステスト ──────────────────────────────────────────
@@ -760,8 +870,12 @@ mod tests {
             &hist,
         );
         if let Some(found) = result {
-            assert_eq!(found.risk, SaasLinkRisk::Suspicious,
-                "notdocusign.com は Suspicious でなければならない: {:?}", found.risk);
+            assert_eq!(
+                found.risk,
+                SaasLinkRisk::Suspicious,
+                "notdocusign.com は Suspicious でなければならない: {:?}",
+                found.risk
+            );
         }
     }
 
@@ -775,8 +889,12 @@ mod tests {
             &hist,
         );
         if let Some(found) = result {
-            assert_eq!(found.risk, SaasLinkRisk::Suspicious,
-                "notdropbox.com は Suspicious でなければならない: {:?}", found.risk);
+            assert_eq!(
+                found.risk,
+                SaasLinkRisk::Suspicious,
+                "notdropbox.com は Suspicious でなければならない: {:?}",
+                found.risk
+            );
         }
     }
 
@@ -785,14 +903,13 @@ mod tests {
         // www.docusign.com は正規サブドメイン → Suspicious にしてはならない
         let inspector = SaasLinkInspector::new();
         let hist = SaasHistory::new();
-        let result = inspector.evaluate(
-            "https://www.docusign.com/sign",
-            "sender@corp.com",
-            &hist,
-        );
+        let result = inspector.evaluate("https://www.docusign.com/sign", "sender@corp.com", &hist);
         if let Some(found) = result {
-            assert_ne!(found.risk, SaasLinkRisk::Suspicious,
-                "www.docusign.com は正規サブドメインなので Suspicious にしてはならない");
+            assert_ne!(
+                found.risk,
+                SaasLinkRisk::Suspicious,
+                "www.docusign.com は正規サブドメインなので Suspicious にしてはならない"
+            );
         }
     }
 
@@ -800,14 +917,13 @@ mod tests {
     fn exact_legit_domain_not_flagged() {
         let inspector = SaasLinkInspector::new();
         let hist = SaasHistory::new();
-        let result = inspector.evaluate(
-            "https://dropbox.com/sh/abc123",
-            "sender@corp.com",
-            &hist,
-        );
+        let result = inspector.evaluate("https://dropbox.com/sh/abc123", "sender@corp.com", &hist);
         if let Some(found) = result {
-            assert_ne!(found.risk, SaasLinkRisk::Suspicious,
-                "dropbox.com そのものを偽ドメイン扱いしてはならない");
+            assert_ne!(
+                found.risk,
+                SaasLinkRisk::Suspicious,
+                "dropbox.com そのものを偽ドメイン扱いしてはならない"
+            );
         }
     }
 
@@ -819,8 +935,11 @@ mod tests {
         // 容量上限 (1) 到達後でも alice のカウント更新は許可
         hist.record("alice@corp.com", SaasPlatform::DocuSign);
         hist.record("alice@corp.com", SaasPlatform::DocuSign);
-        assert_eq!(hist.count("alice@corp.com", SaasPlatform::DocuSign), 3,
-            "既存送信者のカウントは上限後も更新されるべき");
+        assert_eq!(
+            hist.count("alice@corp.com", SaasPlatform::DocuSign),
+            3,
+            "既存送信者のカウントは上限後も更新されるべき"
+        );
     }
 }
 
@@ -873,7 +992,7 @@ mod property_tests {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod security_tests {
     use super::*;
 
@@ -884,9 +1003,16 @@ mod security_tests {
         let huge_sender = "a".repeat(50_000);
         hist.record(huge_sender.clone(), SaasPlatform::GoogleDrive);
         // 登録されていないこと
-        assert_eq!(hist.count(&huge_sender, SaasPlatform::GoogleDrive), 0,
-            "過大な送信者アドレスは無視されるべき");
-        assert_eq!(hist.interactions.len(), 0, "HashMap のエントリ数は 0 のまま");
+        assert_eq!(
+            hist.count(&huge_sender, SaasPlatform::GoogleDrive),
+            0,
+            "過大な送信者アドレスは無視されるべき"
+        );
+        assert_eq!(
+            hist.interactions.len(),
+            0,
+            "HashMap のエントリ数は 0 のまま"
+        );
     }
 
     #[test]
@@ -912,7 +1038,8 @@ mod security_tests {
         if let Some(link) = result {
             assert!(
                 link.risk == SaasLinkRisk::Suspicious || link.risk == SaasLinkRisk::Block,
-                "パスにドメインを埋めた偽 URL は Suspicious 以上でなければならない: {:?}", link.risk
+                "パスにドメインを埋めた偽 URL は Suspicious 以上でなければならない: {:?}",
+                link.risk
             );
         }
         // None の場合も安全 (リンクなしと判定)
@@ -932,8 +1059,11 @@ mod security_tests {
             &hist,
         );
         if let Some(link) = result {
-            assert_ne!(link.risk, SaasLinkRisk::Block,
-                "notevil.com は evil.com とドメイン境界で一致しないため Block になってはならない");
+            assert_ne!(
+                link.risk,
+                SaasLinkRisk::Block,
+                "notevil.com は evil.com とドメイン境界で一致しないため Block になってはならない"
+            );
         }
     }
 
@@ -947,8 +1077,11 @@ mod security_tests {
             "sender@company.com",
             &hist,
         );
-        assert_eq!(result.map(|l| l.risk), Some(SaasLinkRisk::Block),
-            "完全一致ドメインは引き続き Block されるべき");
+        assert_eq!(
+            result.map(|l| l.risk),
+            Some(SaasLinkRisk::Block),
+            "完全一致ドメインは引き続き Block されるべき"
+        );
     }
 
     #[test]
@@ -961,8 +1094,50 @@ mod security_tests {
             "sender@company.com",
             &hist,
         );
-        assert_eq!(result.map(|l| l.risk), Some(SaasLinkRisk::Block),
-            "evil.com のサブドメインは引き続き Block されるべき");
+        assert_eq!(
+            result.map(|l| l.risk),
+            Some(SaasLinkRisk::Block),
+            "evil.com のサブドメインは引き続き Block されるべき"
+        );
+    }
+
+    /// D154: `?next=https%3A%2F%2Fevil.com` のようにパーセントエンコード
+    /// されたリダイレクト先は、ブラウザが復号して遷移するにも関わらず
+    /// 検査を素通りしていた。復号後に実ドメインを照合することを固定する。
+    #[test]
+    fn percent_encoded_redirect_param_is_decoded_and_blocked() {
+        let mut inspector = SaasLinkInspector::new();
+        inspector.add_malicious("evil.com");
+        let hist = SaasHistory::new();
+        for url in [
+            "https://drive.google.com/?next=https%3A%2F%2Fevil.com%2Fsteal",
+            "https://www.docusign.net/?redirect=http%3A%2F%2Fsub.evil.com",
+        ] {
+            let result = inspector.evaluate(url, "sender@company.com", &hist);
+            assert_eq!(
+                result.map(|l| l.risk),
+                Some(SaasLinkRisk::Block),
+                "エンコード済み悪意リダイレクトも Block されるべき: {url}"
+            );
+        }
+    }
+
+    /// D154: エンコードされていない正当な値 (非 URL) は誤検知しない。
+    #[test]
+    fn percent_encoded_non_url_param_is_ignored() {
+        let inspector = SaasLinkInspector::new();
+        let hist = SaasHistory::new();
+        let result = inspector.evaluate(
+            "https://drive.google.com/?next=%2Fdashboard%2Fhome%3Ftab%3Dfiles",
+            "sender@company.com",
+            &hist,
+        );
+        let risk = result.map(|l| l.risk);
+        assert_ne!(
+            risk,
+            Some(SaasLinkRisk::Block),
+            "非 URL のパラメータ値は Block にならないべき"
+        );
     }
 
     #[test]
@@ -987,8 +1162,12 @@ mod security_tests {
             &hist,
         );
         let found = result.expect("Google Drive リンクは検出されるべき");
-        assert_ne!(found.risk, SaasLinkRisk::Block,
-            "正規のSaaSリンクがプロンプト注入と誤検出された: {:?}", found.reasons);
+        assert_ne!(
+            found.risk,
+            SaasLinkRisk::Block,
+            "正規のSaaSリンクがプロンプト注入と誤検出された: {:?}",
+            found.reasons
+        );
     }
 
     #[test]
@@ -1001,11 +1180,16 @@ mod security_tests {
             &hist,
         );
         let found = result.expect("SaaSリンクとして検出されるべき");
-        assert_eq!(found.risk, SaasLinkRisk::Block,
-            "クエリパラメータの命令上書きフレーズが検出されるべき: {:?}", found.reasons);
+        assert_eq!(
+            found.risk,
+            SaasLinkRisk::Block,
+            "クエリパラメータの命令上書きフレーズが検出されるべき: {:?}",
+            found.reasons
+        );
         assert!(
             found.reasons.iter().any(|r| r.contains("プロンプト注入")),
-            "理由にプロンプト注入の言及があるべき: {:?}", found.reasons
+            "理由にプロンプト注入の言及があるべき: {:?}",
+            found.reasons
         );
     }
 
@@ -1019,8 +1203,12 @@ mod security_tests {
             &hist,
         );
         let found = result.expect("DocuSign リンクとして検出されるべき");
-        assert_eq!(found.risk, SaasLinkRisk::Block,
-            "特殊トークンを含むクエリが検出されるべき: {:?}", found.reasons);
+        assert_eq!(
+            found.risk,
+            SaasLinkRisk::Block,
+            "特殊トークンを含むクエリが検出されるべき: {:?}",
+            found.reasons
+        );
     }
 
     #[test]
@@ -1035,9 +1223,16 @@ mod security_tests {
             &hist,
         );
         let found = result.expect("偽DocuSignリンクとして検出されるべき");
-        assert_eq!(found.risk, SaasLinkRisk::Block,
-            "プロンプト注入検出が偽ドメインのSuspiciousをBlockに格上げすべき: {:?}", found.reasons);
-        assert!(found.reasons.len() >= 2,
-            "偽ドメイン検出とプロンプト注入検出の両方の理由があるべき: {:?}", found.reasons);
+        assert_eq!(
+            found.risk,
+            SaasLinkRisk::Block,
+            "プロンプト注入検出が偽ドメインのSuspiciousをBlockに格上げすべき: {:?}",
+            found.reasons
+        );
+        assert!(
+            found.reasons.len() >= 2,
+            "偽ドメイン検出とプロンプト注入検出の両方の理由があるべき: {:?}",
+            found.reasons
+        );
     }
 }

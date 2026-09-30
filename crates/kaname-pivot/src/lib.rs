@@ -15,7 +15,6 @@
 #![allow(missing_docs)]
 
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 // ============================================================================
 // 検出された pivot
@@ -115,16 +114,16 @@ impl DetectedPivot {
     #[must_use]
     pub fn channel_name(&self) -> &'static str {
         match self {
-            Self::PhoneNumber { .. }   => "電話",
-            Self::TeamsLink { .. }     => "Microsoft Teams",
-            Self::SlackInvite { .. }   => "Slack",
-            Self::ZoomMeeting { .. }   => "Zoom",
-            Self::GoogleMeet { .. }    => "Google Meet",
-            Self::SaasDocument { .. }  => "SaaS ドキュメント",
-            Self::CryptoWallet { .. }  => "暗号通貨ウォレット",
-            Self::WhatsAppLink { .. }  => "WhatsApp",
-            Self::TelegramLink { .. }  => "Telegram",
-            Self::SignalLink { .. }    => "Signal",
+            Self::PhoneNumber { .. } => "電話",
+            Self::TeamsLink { .. } => "Microsoft Teams",
+            Self::SlackInvite { .. } => "Slack",
+            Self::ZoomMeeting { .. } => "Zoom",
+            Self::GoogleMeet { .. } => "Google Meet",
+            Self::SaasDocument { .. } => "SaaS ドキュメント",
+            Self::CryptoWallet { .. } => "暗号通貨ウォレット",
+            Self::WhatsAppLink { .. } => "WhatsApp",
+            Self::TelegramLink { .. } => "Telegram",
+            Self::SignalLink { .. } => "Signal",
         }
     }
 }
@@ -149,7 +148,11 @@ impl PivotDetector {
     pub fn analyze(&self, body: &str) -> Vec<DetectedPivot> {
         const MAX_BODY_LEN: usize = 1_000_000; // 1 MB
         let body = if body.len() > MAX_BODY_LEN {
-            tracing::warn!("PivotDetector: body が {}B を超えたため先頭 {}B のみ解析", MAX_BODY_LEN, MAX_BODY_LEN);
+            tracing::warn!(
+                "PivotDetector: body が {}B を超えたため先頭 {}B のみ解析",
+                MAX_BODY_LEN,
+                MAX_BODY_LEN
+            );
             &body[..MAX_BODY_LEN]
         } else {
             body
@@ -169,124 +172,6 @@ impl PivotDetector {
         pivots.extend(extract_crypto_addresses(body));
 
         pivots
-    }
-
-    /// 信頼スコアを計算する (0.0..=1.0)。
-    ///
-    /// 高いほど安全 (信頼できる pivot)。
-    /// 過去 30 日のやりとりに同じチャネルがあれば加点。
-    #[must_use]
-    pub fn trust_score(&self, pivots: &[DetectedPivot], known_history: &PivotHistory) -> f32 {
-        if pivots.is_empty() {
-            return 1.0;
-        }
-
-        let mut score: f32 = 0.5;
-
-        for pivot in pivots {
-            if known_history.has_seen(pivot) {
-                score += 0.2; // 過去に見たチャネル
-            } else if pivot.is_high_risk() {
-                score -= 0.3; // 高リスク
-            } else {
-                score -= 0.1; // 未知だが高リスクではない
-            }
-        }
-
-        score.clamp(0.0, 1.0)
-    }
-
-    /// `trust_score` に BEC 検出結果のリスクスコアを組み合わせた複合信頼スコア。
-    ///
-    /// # 背景
-    ///
-    /// `kaname-bec` はテキストベースのチャネル移行フレーズ
-    /// (「LINEグループを作って」等) を検出し、`kaname-pivot` は
-    /// URL ベースの実際のチャネルリンク (`wa.me`, `t.me` 等) を検出するが、
-    /// 依存グラフ上 `kaname-pivot` が下流にあるにも関わらず両者は
-    /// 連携しておらず、それぞれ独立に判定されていた。
-    ///
-    /// 「BEC スコアが高いメールに実際のチャットアプリ誘導リンクが
-    /// 含まれる」という複合は、片方だけの判定より遥かに強い
-    /// シグナルであるため、BEC リスクスコアが高いほど pivot の
-    /// 信頼スコアをより強く減点する。
-    ///
-    /// `kaname-pivot` は `kaname-bec` の具体的な型に依存させない設計とし
-    /// (クレート結合を避ける)、呼び出し側が `Assessment.score` (0.0-1.0)
-    /// を渡す。
-    ///
-    /// # 引数
-    ///
-    /// - `bec_risk_score`: `kaname-bec::Assessment.score` 相当の値 (0.0=安全, 1.0=確実に BEC)。
-    #[must_use]
-    pub fn trust_score_with_bec_context(
-        &self,
-        pivots: &[DetectedPivot],
-        known_history: &PivotHistory,
-        bec_risk_score: f32,
-    ) -> f32 {
-        let base = self.trust_score(pivots, known_history);
-        if pivots.is_empty() {
-            return base;
-        }
-        let bec_risk_score = bec_risk_score.clamp(0.0, 1.0);
-        // BEC リスクが高いメールにチャネル誘導が含まれる場合、追加でペナルティを課す。
-        // BEC が Safe (低スコア) なら影響を与えない。
-        let penalty = bec_risk_score * 0.4;
-        (base - penalty).clamp(0.0, 1.0)
-    }
-}
-
-// ============================================================================
-// 過去履歴 (信頼スコア計算用)
-// ============================================================================
-
-/// 過去 30 日に観測された pivot の履歴。
-#[derive(Debug, Default, Clone)]
-pub struct PivotHistory {
-    seen_phones: Vec<String>,
-    seen_urls: Vec<String>,
-}
-
-impl PivotHistory {
-    /// 新規履歴を構築する。
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// 電話番号を履歴に追加する。
-    ///
-    /// 検出側の `DetectedPivot::PhoneNumber.number` は `normalize_phone` で
-    /// 正規化済み (数字と `+` のみ) のため、履歴も同じ正規形で保存する。
-    /// そうしないと "+1 (800) 555-1234" のような書式付き番号が検出値
-    /// "+18005551234" と一致せず、既知の正規チャネルを未知の高リスク pivot と
-    /// 誤判定し、誤検知・アラート疲れを招く。
-    pub fn add_phone(&mut self, number: impl Into<String>) {
-        self.seen_phones.push(normalize_phone(&number.into()));
-    }
-
-    /// URL を履歴に追加する。
-    pub fn add_url(&mut self, url: impl Into<String>) {
-        self.seen_urls.push(url.into());
-    }
-
-    /// 既知の pivot か判定する。
-    #[must_use]
-    pub fn has_seen(&self, pivot: &DetectedPivot) -> bool {
-        match pivot {
-            DetectedPivot::PhoneNumber { number, .. } => self.seen_phones.iter().any(|n| n == number),
-            DetectedPivot::TeamsLink { url, .. }
-            | DetectedPivot::SlackInvite { url, .. }
-            | DetectedPivot::GoogleMeet { url }
-            | DetectedPivot::SaasDocument { url, .. }
-            | DetectedPivot::WhatsAppLink { url }
-            | DetectedPivot::TelegramLink { url, .. }
-            | DetectedPivot::SignalLink { url } => {
-                self.seen_urls.iter().any(|u| u == url)
-            }
-            _ => false,
-        }
     }
 }
 
@@ -329,7 +214,11 @@ fn extract_phone_numbers(body: &str) -> Vec<DetectedPivot> {
         }
         // 行末
         if (10..=15).contains(&digit_count) {
-            let context = lines.get(i.saturating_sub(1)).copied().unwrap_or("").to_string()
+            let context = lines
+                .get(i.saturating_sub(1))
+                .copied()
+                .unwrap_or("")
+                .to_string()
                 + " "
                 + line;
             results.push(DetectedPivot::PhoneNumber {
@@ -433,7 +322,10 @@ fn extract_crypto_addresses(body: &str) -> Vec<DetectedPivot> {
 
         // Ethereum: 0x/0X で始まる 40 桁の hex (大文字プレフィックスもバイパス防止)
         let w_lower = w.to_lowercase();
-        if w_lower.starts_with("0x") && w.len() == 42 && w[2..].chars().all(|c| c.is_ascii_hexdigit()) {
+        if w_lower.starts_with("0x")
+            && w.len() == 42
+            && w[2..].chars().all(|c| c.is_ascii_hexdigit())
+        {
             results.push(DetectedPivot::CryptoWallet {
                 currency: "ETH".to_string(),
                 address: w.to_string(),
@@ -468,10 +360,7 @@ fn trim_url(s: &str) -> &str {
 /// `"https://foo.example.com/path?q=1"` → `"foo.example.com"`
 /// スキームなし (`"foo.example.com/path"`) にも対応。
 fn extract_hostname(url: &str) -> &str {
-    let after_scheme = url
-        .find("://")
-        .map(|i| &url[i + 3..])
-        .unwrap_or(url);
+    let after_scheme = url.find("://").map(|i| &url[i + 3..]).unwrap_or(url);
     // ホスト部分: 最初の '/', '?', '#', ':' まで
     let end = after_scheme
         .find(['/', '?', '#', ':'])
@@ -520,8 +409,13 @@ fn extract_zoom_meeting_id(url: &str) -> Option<String> {
 
 /// 否定フレーズ。直後に付くと緊急扱いしない。
 const NEGATION_SUFFIXES: &[&str] = &[
-    "ではありません", "ではない", "じゃない", "ではなく", "でない",
-    "ではないので", "ではなかった",
+    "ではありません",
+    "ではない",
+    "じゃない",
+    "ではなく",
+    "でない",
+    "ではないので",
+    "ではなかった",
 ];
 
 /// 英語の否定: "not urgent", "no urgency" などを検出するために
@@ -530,8 +424,17 @@ const EN_NEGATION_PREFIXES: &[&str] = &["not ", "no ", "non-", "isn't", "aren't"
 
 fn has_urgency(text: &str) -> bool {
     let urgency_markers = [
-        "至急", "緊急", "今すぐ", "本日中", "急いで", "すぐに",
-        "urgent", "asap", "immediately", "right now", "as soon as",
+        "至急",
+        "緊急",
+        "今すぐ",
+        "本日中",
+        "急いで",
+        "すぐに",
+        "urgent",
+        "asap",
+        "immediately",
+        "right now",
+        "as soon as",
     ];
     let text_lower = text.to_lowercase();
     // 文字単位でトークン化して境界問題を回避
@@ -547,7 +450,8 @@ fn has_urgency(text: &str) -> bool {
             let ja_negated = NEGATION_SUFFIXES.iter().any(|neg| after.starts_with(neg));
 
             // 英語否定: マーカーの直前 8 文字以内
-            let before_start = rest[..pos].char_indices()
+            let before_start = rest[..pos]
+                .char_indices()
                 .rev()
                 .nth(7)
                 .map(|(i, _)| i)
@@ -566,17 +470,6 @@ fn has_urgency(text: &str) -> bool {
 }
 
 // ============================================================================
-// エラー型
-// ============================================================================
-
-/// PivotDetector のエラー。
-#[derive(Debug, Error)]
-pub enum PivotError {
-    /// 不正な入力
-    #[error("不正な入力: {0}")]
-    InvalidInput(String),
-}
-
 // ============================================================================
 // テスト
 // ============================================================================
@@ -651,7 +544,11 @@ mod tests {
             .iter()
             .find(|p| matches!(p, DetectedPivot::ZoomMeeting { .. }));
         assert!(zoom.is_some());
-        if let Some(DetectedPivot::ZoomMeeting { meeting_id, has_password }) = zoom {
+        if let Some(DetectedPivot::ZoomMeeting {
+            meeting_id,
+            has_password,
+        }) = zoom
+        {
             assert_eq!(meeting_id, "123456789");
             assert!(*has_password);
         }
@@ -725,118 +622,6 @@ mod tests {
     }
 
     #[test]
-    fn trust_score_decreases_with_high_risk_pivots() {
-        let detector = PivotDetector::new();
-        let history = PivotHistory::new();
-
-        let pivots = vec![DetectedPivot::CryptoWallet {
-            currency: "ETH".to_string(),
-            address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1".to_string(),
-        }];
-
-        let score = detector.trust_score(&pivots, &history);
-        assert!(score < 0.5, "暗号通貨アドレスがあればスコアは低いはず: {}", score);
-    }
-
-    #[test]
-    fn trust_score_increases_with_known_pivots() {
-        let detector = PivotDetector::new();
-        let mut history = PivotHistory::new();
-        history.add_url("https://teams.microsoft.com/l/meetup-join/abc");
-
-        let pivots = vec![DetectedPivot::TeamsLink {
-            url: "https://teams.microsoft.com/l/meetup-join/abc".to_string(),
-            tenant: None,
-        }];
-
-        let score = detector.trust_score(&pivots, &history);
-        assert!(score > 0.5, "既知の Teams リンクはスコアが高いはず: {}", score);
-    }
-
-    #[test]
-    fn bec_context_penalizes_pivot_when_bec_risk_high() {
-        // BEC リスクが高いメールにチャネル誘導があれば、通常より強く減点される
-        let detector = PivotDetector::new();
-        let history = PivotHistory::new();
-        let pivots = vec![DetectedPivot::WhatsAppLink {
-            url: "https://wa.me/819012345678".to_string(),
-        }];
-
-        let base = detector.trust_score(&pivots, &history);
-        let with_bec = detector.trust_score_with_bec_context(&pivots, &history, 0.9);
-        assert!(with_bec < base,
-            "BEC リスクが高い場合はベーススコアより低くなるべき: base={base} with_bec={with_bec}");
-    }
-
-    #[test]
-    fn bec_context_no_effect_when_bec_safe() {
-        // BEC が Safe (低スコア) ならベーススコアと同じ
-        let detector = PivotDetector::new();
-        let history = PivotHistory::new();
-        let pivots = vec![DetectedPivot::TeamsLink {
-            url: "https://teams.microsoft.com/l/meetup-join/xyz".to_string(),
-            tenant: None,
-        }];
-
-        let base = detector.trust_score(&pivots, &history);
-        let with_bec = detector.trust_score_with_bec_context(&pivots, &history, 0.0);
-        assert!((base - with_bec).abs() < f32::EPSILON,
-            "BEC が Safe ならベーススコアと変わらないべき: base={base} with_bec={with_bec}");
-    }
-
-    #[test]
-    fn bec_context_no_pivots_returns_base() {
-        // pivot がなければ BEC スコアに関わらず 1.0 (安全)
-        let detector = PivotDetector::new();
-        let history = PivotHistory::new();
-        let score = detector.trust_score_with_bec_context(&[], &history, 0.9);
-        assert!((score - 1.0).abs() < f32::EPSILON, "pivot がなければ 1.0: {score}");
-    }
-
-    #[test]
-    fn bec_context_clamps_out_of_range_bec_score() {
-        // 範囲外の bec_risk_score でもパニックせず 0.0..=1.0 に収まる
-        let detector = PivotDetector::new();
-        let history = PivotHistory::new();
-        let pivots = vec![DetectedPivot::SignalLink {
-            url: "https://signal.me/#p/+819012345678".to_string(),
-        }];
-        let score = detector.trust_score_with_bec_context(&pivots, &history, 99.0);
-        assert!((0.0..=1.0).contains(&score), "スコアは範囲内に収まるべき: {score}");
-    }
-
-    #[test]
-    fn known_formatted_phone_matches_normalized_detection() {
-        // 履歴に書式付きで登録された番号が、検出側の正規化済み番号と一致すること
-        let mut history = PivotHistory::new();
-        history.add_phone("+1 (800) 555-1234");
-
-        // 検出側が生成する正規形 (digits + '+')
-        let detected = DetectedPivot::PhoneNumber {
-            number: normalize_phone("+1 (800) 555-1234"),
-            context: String::new(),
-        };
-        assert!(history.has_seen(&detected),
-            "書式付きで登録された既知番号が正規化検出値と一致しない");
-    }
-
-    #[test]
-    fn known_phone_raises_trust_despite_formatting() {
-        let detector = PivotDetector::new();
-        let mut history = PivotHistory::new();
-        history.add_phone("080-1234-5678"); // ハイフン付きで登録
-
-        // 検出側は正規化済み ("08012345678")
-        let pivots = vec![DetectedPivot::PhoneNumber {
-            number: normalize_phone("080-1234-5678"),
-            context: String::new(),
-        }];
-        let score = detector.trust_score(&pivots, &history);
-        assert!(score > 0.5,
-            "書式違いでも既知番号は信頼スコアを上げるべき (誤検知防止): {score}");
-    }
-
-    #[test]
     fn empty_body_returns_no_pivots() {
         let detector = PivotDetector::new();
         assert!(detector.analyze("").is_empty());
@@ -855,10 +640,13 @@ mod tests {
         let body = "本件は緊急ではありませんので、お時間のある時にご確認ください。080-1234-5678";
         let detector = PivotDetector::new();
         let pivots = detector.analyze(body);
-        let phone_high_risk = pivots.iter().any(|p| {
-            matches!(p, DetectedPivot::PhoneNumber { .. }) && p.is_high_risk()
-        });
-        assert!(!phone_high_risk, "否定された緊急表現は高リスク扱いにしてはならない");
+        let phone_high_risk = pivots
+            .iter()
+            .any(|p| matches!(p, DetectedPivot::PhoneNumber { .. }) && p.is_high_risk());
+        assert!(
+            !phone_high_risk,
+            "否定された緊急表現は高リスク扱いにしてはならない"
+        );
     }
 
     #[test]
@@ -867,10 +655,13 @@ mod tests {
         let body = "至急ご確認ください。080-1234-5678";
         let detector = PivotDetector::new();
         let pivots = detector.analyze(body);
-        let phone_high_risk = pivots.iter().any(|p| {
-            matches!(p, DetectedPivot::PhoneNumber { .. }) && p.is_high_risk()
-        });
-        assert!(phone_high_risk, "否定なし 至急 + 電話番号は高リスクでなければならない");
+        let phone_high_risk = pivots
+            .iter()
+            .any(|p| matches!(p, DetectedPivot::PhoneNumber { .. }) && p.is_high_risk());
+        assert!(
+            phone_high_risk,
+            "否定なし 至急 + 電話番号は高リスクでなければならない"
+        );
     }
 
     // ── ドメイン混同バイパス回帰テスト ──────────────────────────────────────
@@ -882,7 +673,9 @@ mod tests {
         let detector = PivotDetector::new();
         let pivots = detector.analyze(body);
         assert!(
-            !pivots.iter().any(|p| matches!(p, DetectedPivot::TeamsLink { .. })),
+            !pivots
+                .iter()
+                .any(|p| matches!(p, DetectedPivot::TeamsLink { .. })),
             "偽ドメインを Teams リンクと誤検知してはならない"
         );
     }
@@ -894,7 +687,9 @@ mod tests {
         let detector = PivotDetector::new();
         let pivots = detector.analyze(body);
         assert!(
-            !pivots.iter().any(|p| matches!(p, DetectedPivot::TeamsLink { .. })),
+            !pivots
+                .iter()
+                .any(|p| matches!(p, DetectedPivot::TeamsLink { .. })),
             "パス部分に Teams ドメインを含む URL を Teams リンクと誤検知してはならない"
         );
     }
@@ -906,7 +701,9 @@ mod tests {
         let detector = PivotDetector::new();
         let pivots = detector.analyze(body);
         assert!(
-            pivots.iter().any(|p| matches!(p, DetectedPivot::TeamsLink { .. })),
+            pivots
+                .iter()
+                .any(|p| matches!(p, DetectedPivot::TeamsLink { .. })),
             "正規サブドメインは Teams リンクとして検出されるべき"
         );
     }
@@ -918,7 +715,9 @@ mod tests {
         let detector = PivotDetector::new();
         let pivots = detector.analyze(body);
         assert!(
-            !pivots.iter().any(|p| matches!(p, DetectedPivot::SlackInvite { .. })),
+            !pivots
+                .iter()
+                .any(|p| matches!(p, DetectedPivot::SlackInvite { .. })),
             "偽ドメインを Slack 招待と誤検知してはならない"
         );
     }
@@ -963,8 +762,13 @@ mod tests {
         // 0X (大文字) バイパス対策テスト
         let body = "ETH 送金先: 0X742d35Cc6634C0532925a3b844Bc9e7595f0bEb1";
         let pivots = extract_crypto_addresses(body);
-        assert!(!pivots.is_empty(), "0X プレフィックスの Ethereum アドレスも検出すべき");
-        assert!(pivots.iter().any(|p| matches!(p, DetectedPivot::CryptoWallet { currency, .. } if currency == "ETH")));
+        assert!(
+            !pivots.is_empty(),
+            "0X プレフィックスの Ethereum アドレスも検出すべき"
+        );
+        assert!(pivots.iter().any(
+            |p| matches!(p, DetectedPivot::CryptoWallet { currency, .. } if currency == "ETH")
+        ));
     }
 
     #[test]
@@ -972,7 +776,10 @@ mod tests {
         // 元々の 0x も引き続き検出できること
         let body = "送金: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1";
         let pivots = extract_crypto_addresses(body);
-        assert!(!pivots.is_empty(), "0x プレフィックスの Ethereum アドレスは検出されるべき");
+        assert!(
+            !pivots.is_empty(),
+            "0x プレフィックスの Ethereum アドレスは検出されるべき"
+        );
     }
 
     // ── WhatsApp / Telegram / Signal 検出 ─────────────────────────────────
@@ -983,14 +790,18 @@ mod tests {
         let d = PivotDetector::new();
         let pivots = d.analyze(body);
         assert!(
-            pivots.iter().any(|p| matches!(p, DetectedPivot::WhatsAppLink { .. })),
+            pivots
+                .iter()
+                .any(|p| matches!(p, DetectedPivot::WhatsAppLink { .. })),
             "wa.me リンクが検出されなかった: {pivots:?}"
         );
     }
 
     #[test]
     fn whatsapp_link_is_high_risk() {
-        let pivot = DetectedPivot::WhatsAppLink { url: "https://wa.me/819012345678".to_string() };
+        let pivot = DetectedPivot::WhatsAppLink {
+            url: "https://wa.me/819012345678".to_string(),
+        };
         assert!(pivot.is_high_risk(), "WhatsApp は高リスクチャネル");
         assert_eq!(pivot.channel_name(), "WhatsApp");
     }
@@ -1001,7 +812,9 @@ mod tests {
         let d = PivotDetector::new();
         let pivots = d.analyze(body);
         assert!(
-            pivots.iter().any(|p| matches!(p, DetectedPivot::TelegramLink { .. })),
+            pivots
+                .iter()
+                .any(|p| matches!(p, DetectedPivot::TelegramLink { .. })),
             "t.me リンクが検出されなかった: {pivots:?}"
         );
     }
@@ -1012,7 +825,9 @@ mod tests {
         let d = PivotDetector::new();
         let pivots = d.analyze(body);
         assert!(
-            pivots.iter().any(|p| matches!(p, DetectedPivot::TelegramLink { is_bot: true, .. })),
+            pivots
+                .iter()
+                .any(|p| matches!(p, DetectedPivot::TelegramLink { is_bot: true, .. })),
             "Telegram ボットリンクが検出されなかった"
         );
     }
@@ -1023,14 +838,18 @@ mod tests {
         let d = PivotDetector::new();
         let pivots = d.analyze(body);
         assert!(
-            pivots.iter().any(|p| matches!(p, DetectedPivot::SignalLink { .. })),
+            pivots
+                .iter()
+                .any(|p| matches!(p, DetectedPivot::SignalLink { .. })),
             "signal.me リンクが検出されなかった: {pivots:?}"
         );
     }
 
     #[test]
     fn signal_link_is_high_risk() {
-        let pivot = DetectedPivot::SignalLink { url: "https://signal.me/#p/+819012345678".to_string() };
+        let pivot = DetectedPivot::SignalLink {
+            url: "https://signal.me/#p/+819012345678".to_string(),
+        };
         assert!(pivot.is_high_risk());
         assert_eq!(pivot.channel_name(), "Signal");
     }

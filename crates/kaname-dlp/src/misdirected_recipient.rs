@@ -43,9 +43,18 @@ pub enum MisdirectReason {
 
 /// フリーメールドメイン一覧 (社内スレッドへの混入検出用)。
 const FREE_MAIL_DOMAINS: &[&str] = &[
-    "gmail.com", "yahoo.com", "yahoo.co.jp", "hotmail.com", "outlook.com",
-    "live.com", "icloud.com", "protonmail.com", "yandex.com", "aol.com",
-    "qq.com", "163.com",
+    "gmail.com",
+    "yahoo.com",
+    "yahoo.co.jp",
+    "hotmail.com",
+    "outlook.com",
+    "live.com",
+    "icloud.com",
+    "protonmail.com",
+    "yandex.com",
+    "aol.com",
+    "qq.com",
+    "163.com",
 ];
 
 /// 宛先リストを評価し、宛先ミスの疑いがある宛先を検出する。
@@ -78,15 +87,21 @@ pub fn detect_misdirected_recipients(
         .iter()
         .filter_map(|r| extract_domain(r))
         .collect();
-    let all_internal_except_last = recipient_domains.len() > 1
-        && recipient_domains[..recipient_domains.len().saturating_sub(1)]
+    // 「社内のみのスレッドにフリーメール混入」を位置に依存せず検出する (D54):
+    // スレッドに社内宛先が1件以上存在し、社内・フリーメール以外の外部ドメインが
+    // 含まれない場合、そのスレッド内の全フリーメール宛先を疑い対象とする。
+    let internal_freemail_thread = recipient_domains.len() > 1
+        && recipient_domains.iter().any(|d| d == &our_domain_lower)
+        && recipient_domains
             .iter()
-            .all(|d| d == &our_domain_lower);
+            .all(|d| d == &our_domain_lower || FREE_MAIL_DOMAINS.contains(&d.as_str()));
 
     let mut suspicious = Vec::new();
 
     for recipient in recipients {
-        let Some(domain) = extract_domain(recipient) else { continue };
+        let Some(domain) = extract_domain(recipient) else {
+            continue;
+        };
         if domain == our_domain_lower {
             continue; // 自己送信は対象外
         }
@@ -95,16 +110,21 @@ pub fn detect_misdirected_recipients(
         }
 
         // 1. 既知ドメインとのタイポスクワット類似度チェック (距離 1-2)
-        if let Some(similar) = known_lower.iter().find(|k| levenshtein_le_2(&domain, k) && &domain != *k) {
+        if let Some(similar) = known_lower
+            .iter()
+            .find(|k| levenshtein_le_2(&domain, k) && &domain != *k)
+        {
             suspicious.push(SuspiciousRecipient {
                 address: recipient.clone(),
-                reason: MisdirectReason::LookalikeDomain { similar_to: similar.clone() },
+                reason: MisdirectReason::LookalikeDomain {
+                    similar_to: similar.clone(),
+                },
             });
             continue;
         }
 
         // 2. 社内のみのスレッドにフリーメールが混入
-        if all_internal_except_last && FREE_MAIL_DOMAINS.contains(&domain.as_str()) {
+        if internal_freemail_thread && FREE_MAIL_DOMAINS.contains(&domain.as_str()) {
             suspicious.push(SuspiciousRecipient {
                 address: recipient.clone(),
                 reason: MisdirectReason::FreeMailInInternalThread,
@@ -172,7 +192,10 @@ mod tests {
         let known = vec!["corp.com".to_string()];
         let result = detect_misdirected_recipients(&recipients, "us.com", &known);
         assert_eq!(result.len(), 1, "タイポドメインが検出されるべき");
-        assert!(matches!(result[0].reason, MisdirectReason::LookalikeDomain { .. }));
+        assert!(matches!(
+            result[0].reason,
+            MisdirectReason::LookalikeDomain { .. }
+        ));
     }
 
     #[test]
@@ -180,7 +203,10 @@ mod tests {
         let recipients = vec!["alice@corp.com".to_string()];
         let known = vec!["corp.com".to_string()];
         let result = detect_misdirected_recipients(&recipients, "us.com", &known);
-        assert!(result.is_empty(), "既知の実績あるドメインは検出されるべきではない");
+        assert!(
+            result.is_empty(),
+            "既知の実績あるドメインは検出されるべきではない"
+        );
     }
 
     #[test]
@@ -197,7 +223,10 @@ mod tests {
         let recipients = vec!["contact@newvendor.io".to_string()];
         let known = vec!["corp.com".to_string()];
         let result = detect_misdirected_recipients(&recipients, "us.com", &known);
-        assert!(result.is_empty(), "無関係な新規ドメインは誤検知されるべきではない");
+        assert!(
+            result.is_empty(),
+            "無関係な新規ドメインは誤検知されるべきではない"
+        );
     }
 
     #[test]
@@ -214,6 +243,55 @@ mod tests {
             result.iter().any(|r| r.address == "leak@gmail.com"
                 && matches!(r.reason, MisdirectReason::FreeMailInInternalThread)),
             "社内スレッドへのフリーメール混入が検出されるべき: {result:?}"
+        );
+    }
+
+    #[test]
+    fn free_mail_in_internal_thread_position_independent() {
+        // D54: フリーメール宛先が先頭・中間にあっても検出される
+        for recipients in [
+            vec!["leak@gmail.com", "alice@us.com", "bob@us.com"],
+            vec!["alice@us.com", "leak@gmail.com", "bob@us.com"],
+        ] {
+            let owned: Vec<String> = recipients.iter().map(|s| (*s).to_string()).collect();
+            let result = detect_misdirected_recipients(&owned, "us.com", &[]);
+            assert!(
+                result.iter().any(|r| r.address == "leak@gmail.com"),
+                "先頭/中間のフリーメールも検出されるべき: {owned:?} -> {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn multiple_free_mail_recipients_all_flagged() {
+        // D54: フリーメールが複数混入していても個々に検出される
+        let recipients = vec![
+            "alice@us.com".to_string(),
+            "x@gmail.com".to_string(),
+            "y@yahoo.com".to_string(),
+        ];
+        let result = detect_misdirected_recipients(&recipients, "us.com", &[]);
+        assert_eq!(
+            result.len(),
+            2,
+            "両フリーメール宛先が検出されるべき: {result:?}"
+        );
+    }
+
+    #[test]
+    fn freemail_with_other_external_domain_not_flagged() {
+        // 社内+フリーメール以外の外部ドメインが混在するスレッドでは誤検出しない
+        let recipients = vec![
+            "alice@us.com".to_string(),
+            "partner@acme-vendor.example".to_string(),
+            "x@gmail.com".to_string(),
+        ];
+        let result = detect_misdirected_recipients(&recipients, "us.com", &[]);
+        assert!(
+            result
+                .iter()
+                .all(|r| !matches!(r.reason, MisdirectReason::FreeMailInInternalThread)),
+            "他の外部ドメインが混在するスレッドでは FreeMailInInternalThread は付かないべき: {result:?}"
         );
     }
 
@@ -247,7 +325,10 @@ mod tests {
     #[test]
     fn levenshtein_le_2_rejects_oversized_input() {
         let huge = "a".repeat(1000);
-        assert!(!levenshtein_le_2(&huge, "corp.com"), "巨大入力はDoS対策で早期拒否されるべき");
+        assert!(
+            !levenshtein_le_2(&huge, "corp.com"),
+            "巨大入力はDoS対策で早期拒否されるべき"
+        );
     }
 
     #[test]

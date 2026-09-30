@@ -12,19 +12,16 @@
 //   4. 戻れる、スキップできる、後で変更できる
 //   5. 終わった瞬間にユーザーは **すでに価値を得ている**
 
-import { Component, createSignal, Show, onMount } from "solid-js";
+import { Component, createSignal, Show, For, onMount } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
 // ── 型定義 ───────────────────────────────────────────────────────────────
 
-type Step = "welcome" | "principles" | "permissions" | "first_email" | "ready";
+type Step = "welcome" | "principles" | "first_email" | "ready";
 
 interface OnboardingState {
   step: Step;
   emailConsent:        boolean;
-  telemetryOptIn:      boolean;
-  continuityEnabled:   boolean;
-  notificationsAllowed: boolean;
 }
 
 // ── オンボーディングコンポーネント ───────────────────────────────────────────
@@ -33,9 +30,6 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
   const [state, setState] = createSignal<OnboardingState>({
     step: "welcome",
     emailConsent: false,
-    telemetryOptIn: false,
-    continuityEnabled: false,
-    notificationsAllowed: false,
   });
 
   const next = (step: Step) =>
@@ -111,61 +105,19 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
       <div class="k-principle">
         <div class="k-principle-icon">🌐</div>
         <div class="k-principle-content">
-          <h3>サーバーは中身を読めない</h3>
+          <h3>解析はデバイス上で完結</h3>
           <p>
-            あなたのメールは MLS RFC 9420 で暗号化されます。
-            <strong>件名も含めて</strong>。
-            Kaname サーバーは暗号化された箱だけを保存します。
+            メールの解析・履歴・監査証跡はすべてこのデバイスの
+            ローカル DB (SQLCipher 暗号化) に保存され、
+            Kaname が運営するサーバーは存在しません。
+            Kaname ユーザー同士の会話では、メール本文は
+            MLS (RFC 9420) でエンドツーエンド暗号化されます。
           </p>
         </div>
       </div>
 
       <div class="k-step-controls">
         <button class="k-btn-text" onClick={() => next("welcome")}>戻る</button>
-        <button class="k-btn-primary" onClick={() => next("permissions")}>
-          続ける
-        </button>
-      </div>
-    </div>
-  );
-
-  // ── Step 3: PERMISSIONS ─────────────────────────────────────────
-  // すべて明示的、すべてオプトイン
-
-  const Permissions = () => (
-    <div class="k-onboard-step">
-      <h2>権限を設定する</h2>
-      <p class="k-subtitle">
-        いずれも後で変更できます。すべてオプトインです。
-      </p>
-
-      <PermissionToggle
-        title="通知を表示する"
-        description="新着メールと BEC 警告のシステム通知"
-        checked={state().notificationsAllowed}
-        onChange={v => setState(s => ({ ...s, notificationsAllowed: v }))}
-        recommended={true}
-      />
-
-      <PermissionToggle
-        title="Continuity を有効化"
-        description="iPhone と Mac で同じメールを引き継ぐ (Handoff)"
-        checked={state().continuityEnabled}
-        onChange={v => setState(s => ({ ...s, continuityEnabled: v }))}
-        recommended={false}
-      />
-
-      <PermissionToggle
-        title="匿名利用統計を送信"
-        description="クラッシュレポートと匿名のクリック数のみ。メール本文は絶対に送りません"
-        checked={state().telemetryOptIn}
-        onChange={v => setState(s => ({ ...s, telemetryOptIn: v }))}
-        recommended={false}
-        privacyNote="送信されるデータは https://kaname.app/privacy/telemetry で確認できます"
-      />
-
-      <div class="k-step-controls">
-        <button class="k-btn-text" onClick={() => next("principles")}>戻る</button>
         <button class="k-btn-primary" onClick={() => next("first_email")}>
           続ける
         </button>
@@ -173,56 +125,104 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
     </div>
   );
 
-  // ── Step 4: FIRST EMAIL ─────────────────────────────────────────
+  // ── Step 3: FIRST EMAIL ─────────────────────────────────────────
   // **重要**: 終わった瞬間にユーザーは価値を得ている
-  // BEC 攻撃メールのデモを見せる
+  // BEC 攻撃メールのデモを**実際の解析エンジンで**解析して見せる
 
-  const FirstEmail = () => (
-    <div class="k-onboard-step">
-      <h2>実際の脅威を見てみましょう</h2>
-      <p class="k-subtitle">
-        これは実際の BEC 攻撃メールの例です
-      </p>
+  // デモ用の .eml (実際に解析パイプラインに投入する実バイト列)。
+  // 以前は「信頼度 92%」などの固定表示で、実エンジンの出力を装った
+  // デモだった (判定結果が演出だった) — 実解析に差し替え。
+  const DEMO_EML = [
+    "From: \"CFO\" <cfo@arnazon-billing.com>",
+    "To: user@company.example",
+    "Subject: 【至急】振込先変更のご連絡",
+    "Authentication-Results: mx.company.example; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=fail header.d=arnazon-billing.com; dmarc=fail header.from=arnazon-billing.com",
+    "Content-Type: text/plain; charset=\"utf-8\"",
+    "",
+    "新しい銀行口座に 200 万円をご送金ください。本日中の処理をお願いします。",
+  ].join("\r\n");
 
-      {/* 模擬メールカード */}
-      <div class="k-demo-mail-card k-bec-danger">
-        <div class="k-demo-banner">
-          ⚠ 危険・BEC攻撃の可能性 (信頼度: 92%)
+  interface DemoAnalysis {
+    bec_verdict: string;
+    bec_score:   number;
+    bec_signals: string[];
+    auth:        string;
+  }
+
+  const FirstEmail = () => {
+    const [analysis, setAnalysis] = createSignal<DemoAnalysis | null>(null);
+    const [failed, setFailed] = createSignal(false);
+
+    onMount(async () => {
+      try {
+        const bytes = Array.from(new TextEncoder().encode(DEMO_EML));
+        setAnalysis(await invoke<DemoAnalysis>("mail_analyze_bytes", { bytes }));
+      } catch {
+        // 解析に失敗したら偽の結果を見せず「解析できなかった」とだけ伝える
+        setFailed(true);
+      }
+    });
+
+    const verdictLabel = (v: string) => ({
+      DANGEROUS: "⚠ 危険・BEC攻撃の可能性",
+      SUSPICIOUS: "⚠ 疑わしい・要注意",
+      ADVISORY: "△ 助言レベル",
+      SAFE: "✓ 安全",
+    } as Record<string, string>)[v] ?? v;
+
+    return (
+      <div class="k-onboard-step">
+        <h2>実際の脅威を見てみましょう</h2>
+        <p class="k-subtitle">
+          このデモメールを Kaname の実解析エンジンで解析しています
+        </p>
+
+        <div class="k-demo-mail-card k-bec-danger">
+          <div class="k-demo-banner">
+            {analysis()
+              ? `${verdictLabel(analysis()!.bec_verdict)} (スコア: ${(analysis()!.bec_score * 100).toFixed(0)}%)`
+              : failed() ? "解析を実行できませんでした" : "解析中…"}
+          </div>
+          <div class="k-demo-from">
+            From: <strong>CFO</strong> &lt;cfo@<span class="k-typo">arnazon</span>-billing.com&gt;
+          </div>
+          <div class="k-demo-subject">
+            【至急】振込先変更のご連絡
+          </div>
+          <div class="k-demo-body">
+            新しい銀行口座に 200 万円をご送金ください。本日中の処理をお願いします。
+          </div>
         </div>
-        <div class="k-demo-from">
-          From: <strong>CFO</strong> &lt;cfo@<span class="k-typo">arnazon</span>-billing.com&gt;
-        </div>
-        <div class="k-demo-subject">
-          【至急】振込先変更のご連絡
-        </div>
-        <div class="k-demo-body">
-          新しい銀行口座に 200 万円をご送金ください。本日中の処理をお願いします。
+
+        <Show when={analysis()}>
+          <div class="k-detection-explanation">
+            <h3>検出された信号 (実解析の出力)</h3>
+            <ul>
+              <For each={analysis()!.bec_signals}>
+                {(sig) => <li>✓ {sig}</li>}
+              </For>
+            </ul>
+            <Show when={analysis()!.bec_signals.length === 0}>
+              <p style={{ "font-size": "12px", color: "#8B96A5" }}>
+                シグナルは検出されませんでした
+              </p>
+            </Show>
+          </div>
+        </Show>
+
+        <p class="k-callout">
+          💡 実際の受信トレイでもこの解析が毎日動作します。
+        </p>
+
+        <div class="k-step-controls">
+          <button class="k-btn-text" onClick={() => next("principles")}>戻る</button>
+          <button class="k-btn-primary" onClick={() => next("ready")}>
+            理解しました
+          </button>
         </div>
       </div>
-
-      <div class="k-detection-explanation">
-        <h3>Kaname が検出した信号</h3>
-        <ul>
-          <li>✓ ドメイン偽装 (amazon → arnazon の Levenshtein 距離 1)</li>
-          <li>✓ 緊急性マーカー (「至急」「本日中」)</li>
-          <li>✓ 振込パターン (「振込先変更」「200 万円」)</li>
-          <li>✓ 送信者名と実ドメインの不一致</li>
-        </ul>
-      </div>
-
-      <p class="k-callout">
-        💡 Kaname はこのようなメールを毎日防いでいます。
-        実際の受信トレイで動作を確認できます。
-      </p>
-
-      <div class="k-step-controls">
-        <button class="k-btn-text" onClick={() => next("permissions")}>戻る</button>
-        <button class="k-btn-primary" onClick={() => next("ready")}>
-          理解しました
-        </button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   // ── Step 5: READY ──────────────────────────────────────────────
   // **完了の瞬間**: ユーザーはすでに価値を得ている
@@ -234,11 +234,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
     // 同期コンポーネント契約に違反する — 従来は @ts-ignore で
     // この型エラーを隠していたが、根本原因はこの async 構造だった)。
     onMount(() => {
-      invoke("settings_save_onboarding", {
-        notifications: state().notificationsAllowed,
-        continuity:    state().continuityEnabled,
-        telemetry:     state().telemetryOptIn,
-      }).catch(() => {
+      invoke("settings_save_onboarding").catch(() => {
         // オンボーディング設定保存の失敗は致命的ではないため無視して続行するが、
         // 完全に沈黙させず開発時に気付けるようログだけ残す。
         console.warn("[Onboarding] settings_save_onboarding failed");
@@ -255,17 +251,12 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
 
         <div class="k-ready-features">
           <div>🛡 BEC 検出は<strong>すでに動いています</strong></div>
-          <div>🤖 Phi-4-mini AI モデルは<strong>すでに準備されています</strong></div>
           <div>🔒 ローカル DB は<strong>すでに暗号化されています</strong></div>
         </div>
 
         <button class="k-btn-primary" onClick={props.onComplete} autofocus>
           受信トレイを開く
         </button>
-
-        <p class="k-tip">
-          💡 ⌘K でいつでもコマンドパレットを開けます
-        </p>
       </div>
     );
   };
@@ -274,17 +265,140 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
 
   return (
     <div class="k-onboarding-overlay">
+      {/* 2026-09: k-* クラスはアーカイブ移行時にスタイル定義が欠落しており
+          オンボーディング全体が無スタイルで描画されていた。他コンポーネントと
+          同じダークパレット (#0A0E14/#00C4CC 系) で本ファイル内に定義する。 */}
+      <style>{`
+        .k-onboarding-overlay {
+          position: fixed; inset: 0; background: #080C11;
+          display: flex; flex-direction: column; align-items: center;
+          justify-content: center; z-index: 100; overflow-y: auto;
+          font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+        }
+        .k-onboarding-progress {
+          position: absolute; top: 32px; left: 50%; transform: translateX(-50%);
+          display: flex; gap: 8px;
+        }
+        .k-progress-dot {
+          width: 8px; height: 8px; border-radius: 50%;
+          background: #2A3441; transition: background .2s;
+        }
+        .k-progress-dot.active { background: #00C4CC; }
+        .k-onboard-step {
+          max-width: 560px; width: 100%; padding: 48px 32px;
+          display: flex; flex-direction: column; align-items: center;
+          text-align: center;
+        }
+        .k-onboard-step h1 { font-size: 28px; font-weight: 600; color: #F5F7FA; margin: 16px 0 8px; }
+        .k-onboard-step h2 { font-size: 20px; font-weight: 600; color: #F5F7FA; margin-bottom: 8px; }
+        .k-onboard-step h3 { font-size: 14px; font-weight: 600; color: #F5F7FA; margin-bottom: 8px; }
+        .k-icon-large { font-size: 64px; line-height: 1; margin-bottom: 8px; color: #00C4CC; }
+        .k-tagline { font-size: 15px; color: #8B96A5; margin-bottom: 32px; }
+        .k-subtitle { font-size: 13px; color: #8B96A5; margin-bottom: 24px; }
+        .k-pillars { display: flex; gap: 24px; margin: 24px 0 40px; }
+        .k-pillar { max-width: 160px; }
+        .k-pillar-emoji { font-size: 28px; margin-bottom: 8px; }
+        .k-pillar-title { font-size: 14px; font-weight: 600; color: #F5F7FA; margin-bottom: 4px; }
+        .k-pillar-desc { font-size: 12px; color: #8B96A5; line-height: 1.5; }
+        .k-principle {
+          display: flex; gap: 12px; text-align: left;
+          background: #1A2129; border: 0.5px solid #2A3441; border-radius: 10px;
+          padding: 14px 16px; margin-bottom: 10px; width: 100%;
+        }
+        .k-principle-icon { font-size: 20px; flex-shrink: 0; }
+        .k-principle-content { font-size: 13px; color: #C9D2DC; line-height: 1.6; }
+        .k-permission-row {
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 16px; width: 100%; text-align: left;
+          background: #1A2129; border: 0.5px solid #2A3441; border-radius: 10px;
+          padding: 14px 16px; margin-bottom: 10px;
+        }
+        .k-permission-content { flex: 1; }
+        .k-permission-title { font-size: 13px; font-weight: 600; color: #F5F7FA; display: flex; align-items: center; gap: 8px; }
+        .k-permission-desc { font-size: 12px; color: #8B96A5; margin-top: 4px; line-height: 1.5; }
+        .k-privacy-note { font-size: 11px; color: #00C4CC; margin-top: 6px; }
+        .k-recommended-badge {
+          font-size: 10px; font-weight: 600; color: #080C11; background: #00C4CC;
+          border-radius: 4px; padding: 1px 6px;
+        }
+        .k-toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+        .k-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+        .k-toggle-slider {
+          position: absolute; inset: 0; border-radius: 22px;
+          background: #2A3441; cursor: pointer; transition: background .15s;
+        }
+        .k-toggle-slider::before {
+          content: ""; position: absolute; width: 16px; height: 16px;
+          left: 3px; top: 3px; border-radius: 50%; background: #8B96A5;
+          transition: transform .15s, background .15s;
+        }
+        .k-toggle input:checked + .k-toggle-slider { background: #00C4CC; }
+        .k-toggle input:checked + .k-toggle-slider::before { transform: translateX(18px); background: #080C11; }
+        .k-toggle input:focus-visible + .k-toggle-slider { outline: 2px solid #00C4CC; outline-offset: 2px; }
+        .k-demo-mail-card {
+          width: 100%; text-align: left; background: #1A2129;
+          border: 1px solid #2A3441; border-radius: 10px; overflow: hidden;
+          margin-bottom: 20px;
+        }
+        .k-bec-danger { border-color: #FF6B70; }
+        .k-demo-banner {
+          background: #FF6B7018; color: #FF6B70; font-size: 12px; font-weight: 600;
+          padding: 8px 14px; border-bottom: 0.5px solid #FF6B7040;
+        }
+        .k-demo-from { padding: 12px 14px 4px; font-size: 13px; color: #C9D2DC; }
+        .k-demo-subject { padding: 0 14px 4px; font-size: 14px; font-weight: 600; color: #F5F7FA; }
+        .k-demo-body { padding: 8px 14px 14px; font-size: 13px; color: #8B96A5; line-height: 1.6; }
+        .k-typo { color: #FF6B70; text-decoration: underline wavy #FF6B70; }
+        .k-detection-explanation {
+          width: 100%; text-align: left; background: #1A2129;
+          border: 0.5px solid #2A3441; border-radius: 10px; padding: 14px 16px;
+          margin-bottom: 20px;
+        }
+        .k-detection-explanation ul { list-style: none; }
+        .k-detection-explanation li { font-size: 12px; color: #C9D2DC; padding: 3px 0; }
+        .k-callout {
+          font-size: 12px; color: #F5A623; background: #F5A62312;
+          border: 0.5px solid #F5A62330; border-radius: 8px;
+          padding: 10px 14px; width: 100%; text-align: left; margin-bottom: 20px;
+        }
+        .k-ready-features {
+          display: flex; flex-direction: column; gap: 10px;
+          font-size: 14px; color: #C9D2DC; margin: 16px 0 32px;
+        }
+        .k-ready-features strong { color: #00C4CC; }
+        .k-success-icon {
+          width: 64px; height: 64px; border-radius: 50%;
+          background: #00C4CC18; border: 2px solid #00C4CC;
+          color: #00C4CC; font-size: 32px; display: flex;
+          align-items: center; justify-content: center; margin-bottom: 8px;
+        }
+
+        .k-step-controls {
+          display: flex; justify-content: space-between; align-items: center;
+          width: 100%; margin-top: 8px;
+        }
+        .k-btn-primary {
+          background: #00C4CC; color: #080C11; border: none; border-radius: 8px;
+          font-size: 14px; font-weight: 600; padding: 10px 24px; cursor: pointer;
+          margin-left: auto;
+        }
+        .k-btn-primary:hover { background: #00D6DE; }
+        .k-btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+        .k-btn-text {
+          background: transparent; border: none; color: #8B96A5;
+          font-size: 13px; cursor: pointer; padding: 10px 12px;
+        }
+        .k-btn-text:hover { color: #F5F7FA; }
+      `}</style>
       <div class="k-onboarding-progress">
         <ProgressDot active={state().step === "welcome"} />
         <ProgressDot active={state().step === "principles"} />
-        <ProgressDot active={state().step === "permissions"} />
         <ProgressDot active={state().step === "first_email"} />
         <ProgressDot active={state().step === "ready"} />
       </div>
 
       <Show when={state().step === "welcome"}>     <Welcome /> </Show>
       <Show when={state().step === "principles"}>  <Principles /> </Show>
-      <Show when={state().step === "permissions"}> <Permissions /> </Show>
       <Show when={state().step === "first_email"}> <FirstEmail /> </Show>
       <Show when={state().step === "ready"}>
         <Ready />
@@ -300,38 +414,6 @@ const Pillar: Component<{ emoji: string; title: string; desc: string }> = (p) =>
     <div class="k-pillar-emoji">{p.emoji}</div>
     <div class="k-pillar-title">{p.title}</div>
     <div class="k-pillar-desc">{p.desc}</div>
-  </div>
-);
-
-const PermissionToggle: Component<{
-  title: string;
-  description: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  recommended: boolean;
-  privacyNote?: string;
-}> = (p) => (
-  <div class="k-permission-row">
-    <div class="k-permission-content">
-      <div class="k-permission-title">
-        {p.title}
-        <Show when={p.recommended}>
-          <span class="k-recommended-badge">推奨</span>
-        </Show>
-      </div>
-      <div class="k-permission-desc">{p.description}</div>
-      <Show when={p.privacyNote}>
-        <div class="k-privacy-note">🔒 {p.privacyNote}</div>
-      </Show>
-    </div>
-    <label class="k-toggle">
-      <input
-        type="checkbox"
-        checked={p.checked}
-        onChange={(e) => p.onChange(e.currentTarget.checked)}
-      />
-      <span class="k-toggle-slider"></span>
-    </label>
   </div>
 );
 

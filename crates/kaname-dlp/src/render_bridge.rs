@@ -11,7 +11,7 @@
 //! // kaname_render::render_with_dlp(raw, Some(&scanner))
 //! ```
 
-use crate::{Action, Direction, DlpEngine, EvalCtx, edm::EdmFingerprints};
+use crate::{edm::EdmFingerprints, Action, Direction, DlpEngine, EvalCtx};
 use kaname_render::{DlpScanner, DlpVerdict, Envelope};
 use std::collections::HashMap;
 
@@ -20,7 +20,7 @@ use std::collections::HashMap;
 /// `edm_sets` を保持することで `Predicate::ExactDataMatch` が機能する。
 /// 空のまま渡すと EDM ルールは常にミスになる (無効化と同じ)。
 pub struct EnvelopeScanner {
-    engine:   DlpEngine,
+    engine: DlpEngine,
     /// 登録済み EDM フィンガープリントセット (set_id → fingerprints)
     edm_sets: HashMap<String, EdmFingerprints>,
 }
@@ -29,7 +29,10 @@ impl EnvelopeScanner {
     /// エンジンをラップする。EDM フィンガープリントなし。
     #[must_use]
     pub fn new(engine: DlpEngine) -> Self {
-        Self { engine, edm_sets: HashMap::new() }
+        Self {
+            engine,
+            edm_sets: HashMap::new(),
+        }
     }
 
     /// EDM フィンガープリントを追加する。
@@ -51,17 +54,23 @@ impl DlpScanner for EnvelopeScanner {
         // Envelope → EvalCtx 変換
         let body = envelope.text_body.as_deref().unwrap_or("");
         let subject = envelope.subject.as_deref().unwrap_or("");
-        let to: Vec<String> = envelope.to.iter()
-            .map(|a| a.addr.as_string())
-            .collect();
-        let from = envelope.from.first()
+        let to: Vec<String> = envelope.to.iter().map(|a| a.addr.as_string()).collect();
+        let from = envelope
+            .from
+            .first()
             .map(|a| a.addr.as_string())
             .unwrap_or_default();
-        let attachment_mimes: Vec<String> = envelope.attachments.iter()
+        let attachment_mimes: Vec<String> = envelope
+            .attachments
+            .iter()
             .map(|a| a.declared_mime.clone())
             .collect();
         let size_bytes = body.len() as u64
-            + envelope.attachments.iter().map(|a| a.size_bytes).sum::<u64>();
+            + envelope
+                .attachments
+                .iter()
+                .map(|a| a.size_bytes)
+                .sum::<u64>();
         let ctx = EvalCtx {
             body,
             subject,
@@ -82,13 +91,15 @@ impl DlpScanner for EnvelopeScanner {
             Action::Warn => {
                 let f = result.findings.first();
                 DlpVerdict::Warn {
-                    policy:  f.map(|f| f.rule_name.clone()).unwrap_or_default(),
+                    policy: f.map(|f| f.rule_name.clone()).unwrap_or_default(),
                     excerpt: f.map(|f| f.excerpt.clone()).unwrap_or_default(),
                 }
             }
             Action::Block => {
                 // Block findings の中で最初のものをポリシー名として返す
-                let policy = result.findings.iter()
+                let policy = result
+                    .findings
+                    .iter()
                     .find(|f| f.action == Action::Block)
                     .map(|f| f.rule_name.clone())
                     .unwrap_or_default();
@@ -199,15 +210,19 @@ mod tests {
         let scanner = EnvelopeScanner::new(engine);
         let env = parse_mail("FW", "Contact: secret@corp.example.com");
         // フィンガープリント未登録なので Allow
-        assert_eq!(scanner.scan(&env), DlpVerdict::Allow,
-            "edm_sets 未登録なのに Block になった");
+        assert_eq!(
+            scanner.scan(&env),
+            DlpVerdict::Allow,
+            "edm_sets 未登録なのに Block になった"
+        );
     }
 
     #[test]
     fn render_with_dlp_passes_clean_mail() {
         let engine = DlpEngine::new(vec![confidential_block_rule()], PatternLibrary::default());
         let scanner = EnvelopeScanner::new(engine);
-        let raw = b"From: alice@example.com\r\nTo: bob@example.com\r\nSubject: hi\r\n\r\nhello there";
+        let raw =
+            b"From: alice@example.com\r\nTo: bob@example.com\r\nSubject: hi\r\n\r\nhello there";
         let result = kaname_render::render_with_dlp(raw, Some(&scanner));
         assert!(result.is_ok());
         let (_, _, verdict) = result.unwrap();

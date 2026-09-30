@@ -119,18 +119,28 @@ impl SenderStyleProfile {
         let alpha = 1.0 / (n + 1.0); // 新規サンプルの重み
 
         self.avg_paragraphs = lerp(self.avg_paragraphs, features.paragraphs as f32, alpha);
-        self.avg_sentences_per_paragraph =
-            lerp(self.avg_sentences_per_paragraph, features.sentences_per_paragraph, alpha);
-        self.avg_chars_per_sentence =
-            lerp(self.avg_chars_per_sentence, features.chars_per_sentence, alpha);
-        self.punctuation_density =
-            lerp(self.punctuation_density, features.punctuation_density, alpha);
-        self.formality_score =
-            lerp(self.formality_score, features.formality_score, alpha);
-        self.avg_email_length =
-            lerp(self.avg_email_length, features.email_length as f32, alpha);
-        self.avg_signature_lines =
-            lerp(self.avg_signature_lines, features.signature_lines as f32, alpha);
+        self.avg_sentences_per_paragraph = lerp(
+            self.avg_sentences_per_paragraph,
+            features.sentences_per_paragraph,
+            alpha,
+        );
+        self.avg_chars_per_sentence = lerp(
+            self.avg_chars_per_sentence,
+            features.chars_per_sentence,
+            alpha,
+        );
+        self.punctuation_density = lerp(
+            self.punctuation_density,
+            features.punctuation_density,
+            alpha,
+        );
+        self.formality_score = lerp(self.formality_score, features.formality_score, alpha);
+        self.avg_email_length = lerp(self.avg_email_length, features.email_length as f32, alpha);
+        self.avg_signature_lines = lerp(
+            self.avg_signature_lines,
+            features.signature_lines as f32,
+            alpha,
+        );
 
         // 送信時刻分布を更新 (% 24 で範囲外の send_hour を正規化)
         let hour = (features.send_hour as usize) % 24;
@@ -199,7 +209,9 @@ impl SenderStyleProfile {
         weight_sum += 0.15;
 
         // 句読点密度 (重み: 0.15)
-        let punct_dist = (self.punctuation_density - features.punctuation_density).abs().min(1.0);
+        let punct_dist = (self.punctuation_density - features.punctuation_density)
+            .abs()
+            .min(1.0);
         weighted_dist += 0.15 * punct_dist;
         weight_sum += 0.15;
 
@@ -220,165 +232,8 @@ impl SenderStyleProfile {
             d if d >= 0.75 => StyleWarning::High,
             d if d >= 0.60 => StyleWarning::Medium,
             d if d >= 0.40 => StyleWarning::Low,
-            _              => StyleWarning::None,
+            _ => StyleWarning::None,
         }
-    }
-}
-
-// ============================================================================
-// 組織ベースライン (Cold-Start 対策)
-// ============================================================================
-
-/// 組織全体の文体ベースライン。
-///
-/// **Cold-Start 問題**: 初回接触の送信者 (`sample_count < 10`) は
-/// `SenderStyleProfile::is_reliable()` が false を返し、SSA が完全に
-/// 無効化される。BEC 攻撃者は初回接触メールに集中する傾向があるため、
-/// これは検出の主要な穴になる。
-///
-/// 組織内の全既知送信者プロファイルを集約した「組織の平均的な文体」を
-/// フォールバックとして使うことで、初回接触メールでも粗い異常検知が可能になる。
-/// 個々の送信者ほど精度は高くないが、"全く何もしない" よりはるかに良い。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct OrgStyleBaseline {
-    /// 集約に使った送信者プロファイル数
-    pub profile_count: u32,
-    /// 組織全体の平均フォーマリティ
-    pub avg_formality_score: f32,
-    /// 組織全体の平均文長
-    pub avg_chars_per_sentence: f32,
-    /// 組織全体の平均メール長
-    pub avg_email_length: f32,
-    /// 組織全体の平均読点密度
-    pub avg_punctuation_density: f32,
-    /// 組織全体の送信時刻分布 (業務時間帯に集中するはず)
-    pub send_hour_distribution: [f32; 24],
-}
-
-impl OrgStyleBaseline {
-    /// 信頼できる送信者プロファイル群から組織ベースラインを構築する。
-    ///
-    /// `is_reliable()` (sample_count >= 10) なプロファイルのみを対象とする。
-    /// 空リストの場合は全フィールド 0 のベースラインを返す (呼び出し側で
-    /// `profile_count == 0` をチェックして未使用にすること)。
-    #[must_use]
-    pub fn from_profiles(profiles: &[SenderStyleProfile]) -> Self {
-        let reliable: Vec<&SenderStyleProfile> = profiles.iter().filter(|p| p.is_reliable()).collect();
-        let n = reliable.len() as f32;
-        if reliable.is_empty() {
-            return Self {
-                profile_count: 0,
-                avg_formality_score: 0.5,
-                avg_chars_per_sentence: 0.0,
-                avg_email_length: 0.0,
-                avg_punctuation_density: 0.0,
-                send_hour_distribution: [0.0; 24],
-            };
-        }
-
-        let mut send_hour_distribution = [0.0f32; 24];
-        for p in &reliable {
-            for (i, v) in p.send_hour_distribution.iter().enumerate() {
-                send_hour_distribution[i] += v / n;
-            }
-        }
-
-        Self {
-            profile_count: reliable.len() as u32,
-            avg_formality_score: reliable.iter().map(|p| p.formality_score).sum::<f32>() / n,
-            avg_chars_per_sentence: reliable.iter().map(|p| p.avg_chars_per_sentence).sum::<f32>() / n,
-            avg_email_length: reliable.iter().map(|p| p.avg_email_length).sum::<f32>() / n,
-            avg_punctuation_density: reliable.iter().map(|p| p.punctuation_density).sum::<f32>() / n,
-            send_hour_distribution,
-        }
-    }
-
-    /// ベースラインが実用に足るデータを持つか (最低 3 送信者)。
-    #[must_use]
-    pub fn is_usable(&self) -> bool {
-        self.profile_count >= 3
-    }
-
-    /// 新着メールの特徴量と組織ベースラインとのスタイル距離を計算する。
-    ///
-    /// 個別送信者プロファイルより粒度は粗いが、初回接触メールでも
-    /// "組織の通常パターンから外れているか" を検出できる。
-    /// 重みは `SenderStyleProfile::style_distance` より緩め (誤検知抑制のため)。
-    #[must_use]
-    pub fn style_distance(&self, features: &EmailStyleFeatures) -> f32 {
-        if !self.is_usable() || !features.is_finite() {
-            return 0.0;
-        }
-
-        let mut weighted_dist = 0.0_f32;
-        let mut weight_sum = 0.0_f32;
-
-        // 送信時刻 (重み: 0.30) — 深夜/早朝送信は組織ベースラインでも強いシグナル
-        let hour = (features.send_hour as usize) % 24;
-        let hour_prob = self.send_hour_distribution[hour];
-        let hour_dist = 1.0 - hour_prob.clamp(0.0, 1.0);
-        weighted_dist += 0.30 * hour_dist;
-        weight_sum += 0.30;
-
-        // フォーマリティ (重み: 0.25)
-        let form_dist = (self.avg_formality_score - features.formality_score).abs().min(1.0);
-        weighted_dist += 0.25 * form_dist;
-        weight_sum += 0.25;
-
-        // 文長 (重み: 0.20)
-        let sent_dist = if self.avg_chars_per_sentence > 0.0 {
-            ((features.chars_per_sentence / self.avg_chars_per_sentence - 1.0).abs()).min(1.0)
-        } else {
-            0.0
-        };
-        weighted_dist += 0.20 * sent_dist;
-        weight_sum += 0.20;
-
-        // 読点密度 (重み: 0.25)
-        let punct_dist = (self.avg_punctuation_density - features.punctuation_density).abs().min(1.0);
-        weighted_dist += 0.25 * punct_dist;
-        weight_sum += 0.25;
-
-        if weight_sum > 0.0 { weighted_dist / weight_sum } else { 0.0 }
-    }
-
-    /// 組織ベースラインからの警告レベルを判定する。
-    ///
-    /// 個別プロファイルより粗いため、閾値は個別版よりやや高めに設定。
-    /// Cold-Start メールの誤検知率を抑えつつ、明らかな逸脱は捕捉する。
-    #[must_use]
-    pub fn warning_level(&self, distance: f32) -> StyleWarning {
-        if !self.is_usable() {
-            return StyleWarning::InsufficientData;
-        }
-        match distance {
-            d if d >= 0.80 => StyleWarning::High,
-            d if d >= 0.65 => StyleWarning::Medium,
-            d if d >= 0.45 => StyleWarning::Low,
-            _              => StyleWarning::None,
-        }
-    }
-}
-
-/// 送信者プロファイルと組織ベースラインを組み合わせて評価する。
-///
-/// - 送信者プロファイルが信頼できる (`sample_count >= 10`) 場合はそちらを優先。
-/// - 信頼できない場合 (Cold-Start) は組織ベースラインにフォールバック。
-/// - どちらも使えない場合は `StyleWarning::InsufficientData`。
-#[must_use]
-pub fn assess_with_fallback(
-    sender_profile: &SenderStyleProfile,
-    org_baseline: &OrgStyleBaseline,
-    features: &EmailStyleFeatures,
-) -> StyleWarning {
-    if sender_profile.is_reliable() {
-        let dist = sender_profile.style_distance(features);
-        sender_profile.warning_level(dist)
-    } else if org_baseline.is_usable() {
-        let dist = org_baseline.style_distance(features);
-        org_baseline.warning_level(dist)
-    } else {
-        StyleWarning::InsufficientData
     }
 }
 
@@ -482,7 +337,8 @@ impl EmailStyleFeatures {
         const MAX_BODY_BYTES: usize = 500_000; // 500 KB
         let body = if body.len() > MAX_BODY_BYTES {
             // UTF-8 マルチバイト境界を壊さないよう char 境界で切り捨てる
-            let end = body.char_indices()
+            let end = body
+                .char_indices()
                 .map(|(i, _)| i)
                 .take_while(|&i| i < MAX_BODY_BYTES)
                 .last()
@@ -559,15 +415,12 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 fn now_unix() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }
 
 fn count_paragraphs(text: &str) -> u32 {
     // 空行で区切られた段落
-    text.split("\n\n")
-        .filter(|p| !p.trim().is_empty())
-        .count() as u32
+    text.split("\n\n").filter(|p| !p.trim().is_empty()).count() as u32
 }
 
 fn count_sentences(text: &str) -> u32 {
@@ -602,13 +455,23 @@ fn estimate_formality(text: &str) -> f32 {
     let lower = text.to_lowercase();
 
     // 出現回数を数える (binary ではなく frequency)
-    let polite_count: u32 = polite_japanese.iter()
+    let polite_count: u32 = polite_japanese
+        .iter()
         .map(|kw| count_occurrences(text, kw))
-        .chain(polite_english.iter().map(|kw| count_occurrences(&lower, kw)))
+        .chain(
+            polite_english
+                .iter()
+                .map(|kw| count_occurrences(&lower, kw)),
+        )
         .sum();
-    let casual_count: u32 = casual_japanese.iter()
+    let casual_count: u32 = casual_japanese
+        .iter()
         .map(|kw| count_occurrences(text, kw))
-        .chain(casual_english.iter().map(|kw| count_occurrences(&lower, kw)))
+        .chain(
+            casual_english
+                .iter()
+                .map(|kw| count_occurrences(&lower, kw)),
+        )
         .sum();
 
     let total = (polite_count + casual_count) as f32;
@@ -639,7 +502,7 @@ fn count_occurrences(text: &str, pattern: &str) -> u32 {
 mod tests {
     use super::*;
 
-    fn make_profile(sample_count: u32) -> SenderStyleProfile {
+    pub(crate) fn make_profile(sample_count: u32) -> SenderStyleProfile {
         let mut p = SenderStyleProfile::new("cfo@company.co.jp");
         // 典型的な CFO のメールパターン
         for i in 0..sample_count {
@@ -687,7 +550,10 @@ mod tests {
         };
         // パニックせず有限のスコアを返すこと
         let dist = profile.style_distance(&crafted);
-        assert!(dist.is_finite() && (0.0..=1.0).contains(&dist), "dist={dist}");
+        assert!(
+            dist.is_finite() && (0.0..=1.0).contains(&dist),
+            "dist={dist}"
+        );
 
         // update も範囲外 send_hour でパニックしないこと
         let mut p2 = SenderStyleProfile::new("x@y.com");
@@ -698,7 +564,11 @@ mod tests {
     fn extract_normalizes_out_of_range_hour() {
         // 範囲外の send_hour は extract で 0-23 に正規化される (99 % 24 = 3)
         let f = EmailStyleFeatures::extract("こんにちは。", 99);
-        assert!(f.send_hour < 24, "send_hour が正規化されていない: {}", f.send_hour);
+        assert!(
+            f.send_hour < 24,
+            "send_hour が正規化されていない: {}",
+            f.send_hour
+        );
         assert_eq!(f.send_hour, 99 % 24);
     }
 
@@ -731,7 +601,7 @@ mod tests {
             formality_score: 0.98,    // 過丁寧
             email_length: 800,        // 4x 長い
             signature_lines: 1,
-            send_hour: 23,            // 深夜送信
+            send_hour: 23, // 深夜送信
         };
         let dist = profile.style_distance(&ai_style);
         assert!(dist > 0.50, "dist={dist:.3}");
@@ -741,11 +611,19 @@ mod tests {
     fn midnight_send_increases_distance() {
         let profile = make_profile(20);
         let normal = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
-            signature_lines: 3, send_hour: 10,
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.8,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
         };
-        let midnight = EmailStyleFeatures { send_hour: 23, ..normal };
+        let midnight = EmailStyleFeatures {
+            send_hour: 23,
+            ..normal
+        };
         assert!(
             profile.style_distance(&midnight) > profile.style_distance(&normal),
             "深夜送信はスタイル距離を高める"
@@ -756,9 +634,14 @@ mod tests {
     fn insufficient_samples_return_zero_distance() {
         let profile = make_profile(5); // 10 未満
         let features = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
-            signature_lines: 3, send_hour: 10,
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.8,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
         };
         // 信頼性不足 → 距離 0.0 (無視)
         assert_eq!(profile.style_distance(&features), 0.0);
@@ -793,7 +676,10 @@ mod tests {
         let body = "お世話になっております。\nご確認をお願いいたします。\n\n田中部長";
         let features = EmailStyleFeatures::extract(body, 10);
         assert!(features.email_length > 0);
-        assert!(features.formality_score > 0.5, "敬語が多い文章のフォーマリティは高い");
+        assert!(
+            features.formality_score > 0.5,
+            "敬語が多い文章のフォーマリティは高い"
+        );
     }
 
     #[test]
@@ -812,8 +698,11 @@ mod tests {
         let with_one_please = format!("please {heavy_casual}");
         let features = EmailStyleFeatures::extract(&with_one_please, 10);
         // "please" 1 回 vs casual 5 回 → formality は 0.5 以下のはず
-        assert!(features.formality_score < 0.5,
-            "1 回 please に対して casual が多いとき formality は低いはず: {}", features.formality_score);
+        assert!(
+            features.formality_score < 0.5,
+            "1 回 please に対して casual が多いとき formality は低いはず: {}",
+            features.formality_score
+        );
     }
 
     #[test]
@@ -833,13 +722,21 @@ mod tests {
         p.sample_count = u32::MAX;
         // saturating_add: u32::MAX + 1 = u32::MAX (not 0)
         p.update(&EmailStyleFeatures {
-            paragraphs: 1, sentences_per_paragraph: 1.0, chars_per_sentence: 30.0,
-            punctuation_density: 1.0, formality_score: 0.5,
-            email_length: 100, signature_lines: 0, send_hour: 10,
+            paragraphs: 1,
+            sentences_per_paragraph: 1.0,
+            chars_per_sentence: 30.0,
+            punctuation_density: 1.0,
+            formality_score: 0.5,
+            email_length: 100,
+            signature_lines: 0,
+            send_hour: 10,
         });
         assert_eq!(p.sample_count, u32::MAX, "saturating_add が機能していない");
         // オーバーフロー後も is_reliable() は true のまま
-        assert!(p.is_reliable(), "オーバーフロー後に is_reliable() が false になった");
+        assert!(
+            p.is_reliable(),
+            "オーバーフロー後に is_reliable() が false になった"
+        );
     }
 
     #[test]
@@ -850,13 +747,20 @@ mod tests {
         p.avg_paragraphs = 3.0;
         p.update(&EmailStyleFeatures {
             paragraphs: 100, // 極端な値を入れても avg は変わらないはず
-            sentences_per_paragraph: 1.0, chars_per_sentence: 30.0,
-            punctuation_density: 1.0, formality_score: 0.5,
-            email_length: 100, signature_lines: 0, send_hour: 10,
+            sentences_per_paragraph: 1.0,
+            chars_per_sentence: 30.0,
+            punctuation_density: 1.0,
+            formality_score: 0.5,
+            email_length: 100,
+            signature_lines: 0,
+            send_hour: 10,
         });
         // avg_paragraphs は 3.0 からほとんど動かないはず (alpha ≈ 2.3e-10)
-        assert!((p.avg_paragraphs - 3.0).abs() < 0.01,
-            "alpha が大きすぎる: avg_paragraphs = {}", p.avg_paragraphs);
+        assert!(
+            (p.avg_paragraphs - 3.0).abs() < 0.01,
+            "alpha が大きすぎる: avg_paragraphs = {}",
+            p.avg_paragraphs
+        );
     }
 
     // ── NaN / Infinity 攻撃回帰テスト ───────────────────────────────────────
@@ -879,7 +783,10 @@ mod tests {
         let mut profile = make_profile(30);
         let original_formality = profile.formality_score;
         profile.update(&nan_features());
-        assert!(profile.formality_score.is_finite(), "NaN update 後も有限値でなければならない");
+        assert!(
+            profile.formality_score.is_finite(),
+            "NaN update 後も有限値でなければならない"
+        );
         assert!(
             (profile.formality_score - original_formality).abs() < 1e-3,
             "NaN update はプロファイルを変更してはならない"
@@ -890,7 +797,10 @@ mod tests {
     fn nan_features_style_distance_returns_max() {
         let profile = make_profile(30);
         let dist = profile.style_distance(&nan_features());
-        assert!((dist - 1.0).abs() < 1e-6, "NaN 特徴量の距離は 1.0 でなければならない: {dist}");
+        assert!(
+            (dist - 1.0).abs() < 1e-6,
+            "NaN 特徴量の距離は 1.0 でなければならない: {dist}"
+        );
     }
 
     #[test]
@@ -898,7 +808,11 @@ mod tests {
         let profile = make_profile(30);
         let dist = profile.style_distance(&nan_features());
         let warn = profile.warning_level(dist);
-        assert_eq!(warn, StyleWarning::High, "NaN 特徴量は High 警告でなければならない");
+        assert_eq!(
+            warn,
+            StyleWarning::High,
+            "NaN 特徴量は High 警告でなければならない"
+        );
     }
 
     #[test]
@@ -911,115 +825,24 @@ mod tests {
     // ── 組織ベースライン Cold-Start 対策テスト ──────────────────────────────
 
     #[test]
-    fn empty_org_baseline_is_not_usable() {
-        let baseline = OrgStyleBaseline::from_profiles(&[]);
-        assert!(!baseline.is_usable());
-        assert_eq!(baseline.profile_count, 0);
-    }
-
-    #[test]
-    fn org_baseline_needs_at_least_3_reliable_profiles() {
-        let profiles = vec![make_profile(15)]; // 1件のみ
-        let baseline = OrgStyleBaseline::from_profiles(&profiles);
-        assert!(!baseline.is_usable(), "3件未満は usable ではない");
-    }
-
-    #[test]
-    fn org_baseline_usable_with_3_reliable_profiles() {
-        let profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
-        let baseline = OrgStyleBaseline::from_profiles(&profiles);
-        assert!(baseline.is_usable());
-        assert_eq!(baseline.profile_count, 3);
-    }
-
-    #[test]
-    fn org_baseline_ignores_unreliable_profiles() {
-        // 10 通未満のプロファイルは集約対象外
-        let profiles = vec![make_profile(5), make_profile(3), make_profile(15)];
-        let baseline = OrgStyleBaseline::from_profiles(&profiles);
-        assert_eq!(baseline.profile_count, 1, "信頼できるプロファイルのみ集約すべき");
-    }
-
-    #[test]
-    fn cold_start_email_uses_org_baseline_fallback() {
-        // 初回接触送信者 (sample_count=0) — SSA が従来は完全無効化されていたケース
-        let new_sender = SenderStyleProfile::new("newcomer@company.co.jp");
-        let org_profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
-        let baseline = OrgStyleBaseline::from_profiles(&org_profiles);
-
-        // 組織の通常パターンと同じ特徴量 → 低距離
-        let normal = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
-            signature_lines: 3, send_hour: 10,
-        };
-        let warning = assess_with_fallback(&new_sender, &baseline, &normal);
-        assert_ne!(warning, StyleWarning::InsufficientData,
-            "組織ベースラインが使える場合は InsufficientData にならない");
-    }
-
-    #[test]
-    fn cold_start_email_with_anomalous_style_flagged_via_baseline() {
-        // 初回接触 + 組織の通常パターンから大きく逸脱 (深夜送信・過丁寧・長文)
-        let new_sender = SenderStyleProfile::new("attacker@evil.co.jp");
-        let org_profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
-        let baseline = OrgStyleBaseline::from_profiles(&org_profiles);
-
-        let anomalous = EmailStyleFeatures {
-            paragraphs: 5, sentences_per_paragraph: 4.0, chars_per_sentence: 80.0,
-            punctuation_density: 8.0, formality_score: 0.99, email_length: 900,
-            signature_lines: 1, send_hour: 3, // 深夜3時
-        };
-        let warning = assess_with_fallback(&new_sender, &baseline, &anomalous);
-        assert!(
-            matches!(warning, StyleWarning::Medium | StyleWarning::High),
-            "組織パターンから大きく逸脱した Cold-Start メールは警告されるべき: {warning:?}"
-        );
-    }
-
-    #[test]
-    fn reliable_sender_profile_takes_precedence_over_org_baseline() {
-        // 送信者プロファイルが信頼できる場合は個別プロファイルを優先
-        let sender = make_profile(30);
-        let org_profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
-        let baseline = OrgStyleBaseline::from_profiles(&org_profiles);
-
-        let same_style = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
-            signature_lines: 3, send_hour: 10,
-        };
-        let warning = assess_with_fallback(&sender, &baseline, &same_style);
-        assert_eq!(warning, StyleWarning::None, "既知の送信者は個別プロファイルで低リスク判定されるべき");
-    }
-
-    #[test]
-    fn no_baseline_and_cold_start_returns_insufficient_data() {
-        // 組織ベースラインも未確立 (新規組織) → InsufficientData
-        let new_sender = SenderStyleProfile::new("first@newco.com");
-        let empty_baseline = OrgStyleBaseline::from_profiles(&[]);
-        let features = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
-            signature_lines: 3, send_hour: 10,
-        };
-        let warning = assess_with_fallback(&new_sender, &empty_baseline, &features);
-        assert_eq!(warning, StyleWarning::InsufficientData);
-    }
-
-    // ── 自己送信メールのなりすまし検出 (アカウント乗っ取り) テスト ───────────
-
-    #[test]
     fn self_send_matching_own_style_is_none() {
         let own = make_profile(30);
         let normal = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
-            signature_lines: 3, send_hour: 10,
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.8,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
         };
         let warning = assess_self_send_anomaly(&own, &normal, false);
-        assert_eq!(warning, StyleWarning::None,
-            "普段の文体と一致する自己送信は警告なしであるべき");
+        assert_eq!(
+            warning,
+            StyleWarning::None,
+            "普段の文体と一致する自己送信は警告なしであるべき"
+        );
     }
 
     #[test]
@@ -1027,13 +850,20 @@ mod tests {
         // 文体逸脱のみ (金融要求なし) — 通常の warning_level のまま
         let own = make_profile(30);
         let deviated = EmailStyleFeatures {
-            paragraphs: 5, sentences_per_paragraph: 4.0, chars_per_sentence: 80.0,
-            punctuation_density: 5.0, formality_score: 0.98, email_length: 800,
-            signature_lines: 1, send_hour: 23,
+            paragraphs: 5,
+            sentences_per_paragraph: 4.0,
+            chars_per_sentence: 80.0,
+            punctuation_density: 5.0,
+            formality_score: 0.98,
+            email_length: 800,
+            signature_lines: 1,
+            send_hour: 23,
         };
         let warning = assess_self_send_anomaly(&own, &deviated, false);
-        assert!(matches!(warning, StyleWarning::Medium | StyleWarning::High),
-            "文体逸脱のみでも通常の警告は出るべき: {warning:?}");
+        assert!(
+            matches!(warning, StyleWarning::Medium | StyleWarning::High),
+            "文体逸脱のみでも通常の警告は出るべき: {warning:?}"
+        );
     }
 
     #[test]
@@ -1043,15 +873,22 @@ mod tests {
         let own = make_profile(30);
         // わずかな逸脱 (通常なら Low 程度) だが金融要求と組み合わさる
         let slight_deviation = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.55, email_length: 200,
-            signature_lines: 3, send_hour: 10,
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.55,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
         };
         let without_financial = assess_self_send_anomaly(&own, &slight_deviation, false);
         let with_financial = assess_self_send_anomaly(&own, &slight_deviation, true);
-        assert_ne!(with_financial, without_financial,
+        assert_ne!(
+            with_financial, without_financial,
             "金融要求が絡む場合は文体逸脱のみのケースよりエスカレートすべき: \
-             without={without_financial:?} with={with_financial:?}");
+             without={without_financial:?} with={with_financial:?}"
+        );
     }
 
     #[test]
@@ -1059,9 +896,14 @@ mod tests {
         // 自己プロファイルが未確立 (新規アカウント) の場合は判断材料不足
         let own = SenderStyleProfile::new("me@company.com");
         let features = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
-            signature_lines: 3, send_hour: 10,
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.8,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
         };
         let warning = assess_self_send_anomaly(&own, &features, true);
         assert_eq!(warning, StyleWarning::InsufficientData);
@@ -1073,28 +915,184 @@ mod tests {
         assert_eq!(escalate_warning(StyleWarning::Low), StyleWarning::Medium);
         assert_eq!(escalate_warning(StyleWarning::Medium), StyleWarning::High);
         assert_eq!(escalate_warning(StyleWarning::High), StyleWarning::High);
-        assert_eq!(escalate_warning(StyleWarning::InsufficientData), StyleWarning::InsufficientData);
+        assert_eq!(
+            escalate_warning(StyleWarning::InsufficientData),
+            StyleWarning::InsufficientData
+        );
+    }
+}
+
+// ============================================================================
+// 校正ハーネス (D9): 閾値の検出面を敵対的列挙で実測
+// ============================================================================
+//
+// `docs/design-d9-ssa-calibration.md` Phase 2 (測定) のうちモデル不要の
+// 決定論的部分をテストとして固定する。「被害者プロファイルを完全に知る
+// 攻撃者が、任意の軸を最大限に外したメールを送ったとき、どの軸の組合せで
+// 警告が出るか」を全 31 通りの軸サブセットについて列挙する。
+//
+// style_distance の有効次元は 5 軸のみ (send_hour 0.25 / formality 0.25 /
+// chars_per_sentence 0.20 / email_length 0.15 / punctuation_density 0.15)。
+// paragraphs / sentences_per_paragraph / signature_lines は抽出されるが
+// 距離計算に一切寄与しない (抽出のみのデッド次元)。
+//
+// 実測された検出面 (下のテストが回帰ガードとして固定):
+//   - 1 軸のみを完全に外す攻撃: 最大 0.25 — **警告すら出ない** (Low 0.40
+//     にも届かない)。「文体を完全に真似たが深夜送信」は検出対象外
+//   - 2 軸を完全に外す攻撃: 最大 ~0.45 — Low まで。**Medium には到達不能**
+//   - 3 軸を完全に外す攻撃: 0.50-0.65 — 一部のみ Medium に到達
+//   - 全 5 軸を外す攻撃: 1.0 — High
+// これが閾値 0.40/0.60/0.75 の実際の検出面であり、D9 校正の基線である。
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
+mod calibration_tests {
+    use super::tests::make_profile;
+    use super::*;
+
+    /// 距離に寄与する 5 軸の識別子。
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    enum Axis {
+        Hour,
+        Formality,
+        SentLen,
+        Length,
+        Punct,
     }
 
-    #[test]
-    fn org_baseline_distance_always_in_range() {
-        let profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
-        let baseline = OrgStyleBaseline::from_profiles(&profiles);
-        let features = EmailStyleFeatures {
-            paragraphs: 1, sentences_per_paragraph: 1.0, chars_per_sentence: 500.0,
-            punctuation_density: 50.0, formality_score: 0.0, email_length: 10,
-            signature_lines: 0, send_hour: 4,
+    const AXES: [Axis; 5] = [
+        Axis::Hour,
+        Axis::Formality,
+        Axis::SentLen,
+        Axis::Length,
+        Axis::Punct,
+    ];
+
+    /// プロファイルの想定文体を完全に真似た特徴量を返し、指定された軸
+    /// だけを「その軸で到達可能な最大乖離」に書き換える。
+    /// (プロファイル値: cps=40, len=200, punct=2.5, formality=0.8, hour=10)
+    fn mimicry(overrides: &[Axis]) -> EmailStyleFeatures {
+        let mut f = EmailStyleFeatures {
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.8,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
         };
-        let dist = baseline.style_distance(&features);
-        assert!((0.0..=1.0).contains(&dist), "dist={dist}");
+        for axis in overrides {
+            match axis {
+                // 深夜 3 時 — プロファイル上ほぼ 0% の時間帯
+                Axis::Hour => f.send_hour = 3,
+                // 超丁寧な CFO が完全な口語に (dist = 0.8 が最大)
+                Axis::Formality => f.formality_score = 0.0,
+                // 1 文 200 文字の極端に長い文 (ratio 4.0 → cap 1.0)
+                Axis::SentLen => f.chars_per_sentence = 200.0,
+                // 20 倍の長文 (ratio cap 1.0)
+                Axis::Length => f.email_length = 4000,
+                // 読点 20/100文字 (|2.5-20| → cap 1.0)
+                Axis::Punct => f.punctuation_density = 20.0,
+            }
+        }
+        f
     }
 
+    /// 全軸サブセット (31 通り) の距離を実測して返す。
+    fn enumerate_surface() -> Vec<(Vec<Axis>, f32, StyleWarning)> {
+        let profile = make_profile(30);
+        assert!(profile.is_reliable());
+        let mut out = Vec::new();
+        // 部分集合を bitmask で列挙
+        for mask in 1u32..(1 << 5) {
+            let axes: Vec<Axis> = AXES
+                .iter()
+                .copied()
+                .enumerate()
+                .filter(|(i, _)| mask & (1 << i) != 0)
+                .map(|(_, a)| a)
+                .collect();
+            let f = mimicry(&axes);
+            let d = profile.style_distance(&f);
+            out.push((axes, d, profile.warning_level(d)));
+        }
+        out
+    }
+
+    /// 検出面の基線: 1 軸のみを最大乖離しても警告は **一切出ない**。
+    /// 「文体を完璧に真似たが送信時刻だけ異常」な BEC は素通しになる。
     #[test]
-    fn org_baseline_nan_features_return_zero_distance() {
-        let profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
-        let baseline = OrgStyleBaseline::from_profiles(&profiles);
-        let dist = baseline.style_distance(&nan_features());
-        assert_eq!(dist, 0.0, "NaN 特徴量は組織ベースラインでは無視 (0.0) されるべき");
+    fn 単一軸の最大乖離は警告に届かない() {
+        for (axes, d, w) in enumerate_surface() {
+            if axes.len() == 1 {
+                assert!(
+                    matches!(w, StyleWarning::None),
+                    "{axes:?} が {d} で警告 {w:?} — 単一軸攻撃が可視化されてしまった (これは良い変化だが検出面の記録を更新すること)"
+                );
+            }
+        }
+    }
+
+    /// 検出面の基線: 2 軸まで同時に完全に外されても Medium 以上には
+    /// 到達しない (最大でも Low)。
+    #[test]
+    fn 二軸の最大乖離はlowまででmediumに届かない() {
+        for (axes, _d, w) in enumerate_surface() {
+            if axes.len() == 2 {
+                assert!(
+                    matches!(w, StyleWarning::None | StyleWarning::Low),
+                    "{axes:?} が {w:?} — 二軸攻撃が Medium に到達"
+                );
+            }
+        }
+    }
+
+    /// 検出面の基線: 最強の 3 軸組合せ (送信時刻+フォーマリティ+文長)
+    /// で初めて Medium に到達する。
+    #[test]
+    fn 最強三軸で初めてmediumに到達する() {
+        for (axes, _d, w) in enumerate_surface() {
+            if axes == [Axis::Hour, Axis::Formality, Axis::SentLen] {
+                assert_eq!(w, StyleWarning::Medium, "最強3軸は Medium のはず");
+            }
+        }
+    }
+
+    /// 検出面の基線: 全軸を外すと必ず High。
+    #[test]
+    fn 全軸乖離はhighに到達する() {
+        for (axes, _d, w) in enumerate_surface() {
+            if axes.len() == 5 {
+                assert_eq!(w, StyleWarning::High);
+            }
+        }
+    }
+
+    /// 誤検知面の基線: 正当なばらつき (数値 ±20%・formality -0.05・
+    /// 1 時間ずれ) の同時発生では警告が出ないこと。
+    #[test]
+    fn 正当なばらつきでは警告が出ない() {
+        let profile = make_profile(30);
+        let legit = EmailStyleFeatures {
+            paragraphs: 3,
+            sentences_per_paragraph: 2.4,
+            chars_per_sentence: 48.0, // +20%
+            punctuation_density: 3.0, // +20%
+            formality_score: 0.75,
+            email_length: 240, // +20%
+            signature_lines: 3,
+            send_hour: 11, // プロファイルに稀に存在する時間帯
+        };
+        let d = profile.style_distance(&legit);
+        assert!(
+            matches!(
+                profile.warning_level(d),
+                StyleWarning::None | StyleWarning::Low
+            ),
+            "正当なばらつきが {w:?} (d={d}) — 誤検知",
+            w = profile.warning_level(d),
+        );
     }
 }
 
@@ -1205,5 +1203,4 @@ mod property_tests {
             }
         }
     }
-
 }

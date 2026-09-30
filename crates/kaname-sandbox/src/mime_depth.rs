@@ -121,7 +121,10 @@ mod tests {
         let mut data = String::new();
         for i in 0..51u8 {
             use std::fmt::Write as _;
-            let _ = write!(data, "Content-Type: multipart/mixed; boundary=\"b{i}\"\r\n\r\n--b{i}\r\n");
+            let _ = write!(
+                data,
+                "Content-Type: multipart/mixed; boundary=\"b{i}\"\r\n\r\n--b{i}\r\n"
+            );
         }
         let result = check_mime_depth(data.as_bytes(), MAX_MIME_DEPTH);
         assert!(result.is_err(), "過剰なネストは拒否されるべき");

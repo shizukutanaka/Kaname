@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 /// AiTM リスク評価。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AitmRisk {
-    /// 集約スコア (0-100、80+ = 危険)
+    /// 集約スコア (0-100、50 以上 = 危険)
     pub score: u32,
     /// 検出シグナル一覧
     pub signals: Vec<String>,
@@ -114,11 +114,20 @@ impl AitmDetector {
         let low_risk_params = ["code", "state", "nonce"];
 
         let domain = extract_domain_from_url(&lower);
-        let is_legitimate_domain = self.legitimate_auth_domains.iter()
+        let is_legitimate_domain = self
+            .legitimate_auth_domains
+            .iter()
             .any(|legit| self.is_legitimate_subdomain(&domain, legit));
 
         for param in &high_risk_params {
-            let patterns = [format!("?{param}="), format!("&{param}=")];
+            // OAuth Implicit Flow はトークンを URL フラグメント (#access_token=...) で
+            // 返すため、クエリ区切り (? / &) に加えてフラグメント先頭 (#) も検査する。
+            // Tycoon2FA/Storm-1747 系 AiTM キットのトークン窃取手口 (D56)。
+            let patterns = [
+                format!("?{param}="),
+                format!("&{param}="),
+                format!("#{param}="),
+            ];
             for pat in &patterns {
                 if lower.contains(pat) {
                     score += 25;
@@ -130,7 +139,11 @@ impl AitmDetector {
         // code/state/nonce は非正規ドメインの場合のみ加点
         if !is_legitimate_domain {
             for param in &low_risk_params {
-                let patterns = [format!("?{param}="), format!("&{param}=")];
+                let patterns = [
+                    format!("?{param}="),
+                    format!("&{param}="),
+                    format!("#{param}="),
+                ];
                 for pat in &patterns {
                     if lower.contains(pat) {
                         score += 15;
@@ -175,6 +188,10 @@ impl AitmDetector {
             signals.push("URL 内にリダイレクト先 URL が埋め込まれている".to_string());
         }
 
+        // スコアは契約上 0-100 に収める (D102: 高リスクパラメータ多重 +
+        // PhaaS パターン + 偽ドメインの重複加点で 100 を超え得た)。
+        let score = score.min(100);
+
         // スコアからバーディクト
         let verdict = if score >= 50 {
             AitmVerdict::Dangerous
@@ -184,7 +201,11 @@ impl AitmDetector {
             AitmVerdict::Safe
         };
 
-        AitmRisk { score, signals, verdict }
+        AitmRisk {
+            score,
+            signals,
+            verdict,
+        }
     }
 
     /// ドメインが正規のサブドメインかを確認。
@@ -198,7 +219,9 @@ impl AitmDetector {
 
 /// URL から NULL バイト・制御文字を除去し、ドメイン混同攻撃を防ぐ。
 fn sanitize_url_for_domain_check(url: &str) -> String {
-    url.chars().filter(|c| *c != '\0' && !c.is_control()).collect()
+    url.chars()
+        .filter(|c| *c != '\0' && !c.is_control())
+        .collect()
 }
 
 impl Default for AitmDetector {
@@ -241,11 +264,26 @@ mod tests {
     }
 
     #[test]
+    fn detects_auth_token_in_fragment() {
+        // D56: OAuth Implicit Flow はトークンをフラグメントで返すため、
+        // AiTM キットは #access_token=... でトークンを窃取する。
+        let d = AitmDetector::new();
+        let r = d.analyze("https://evil-relay.tk/#access_token=stolen&id_token=abc");
+        assert!(r.score >= 25, "score={}", r.score);
+        assert!(r.signals.iter().any(|s| s.contains("access_token")));
+    }
+
+    #[test]
     fn detects_brand_impersonation() {
         let d = AitmDetector::new();
         // microsoft.com を含むが別ドメイン
         let r = d.analyze("https://microsoft.com.evil.tk/login");
-        assert_eq!(r.verdict, AitmVerdict::Dangerous, "シグナル: {:?}", r.signals);
+        assert_eq!(
+            r.verdict,
+            AitmVerdict::Dangerous,
+            "シグナル: {:?}",
+            r.signals
+        );
     }
 
     #[test]
@@ -282,8 +320,13 @@ mod tests {
         let d = AitmDetector::new();
         // 複数シグナルでスコア累積
         let single = d.analyze("https://evil.com/?id_token=abc");
-        let multi  = d.analyze("https://microsoft.com.evil.tk/mfa-relay?id_token=abc");
-        assert!(multi.score > single.score, "multi={} single={}", multi.score, single.score);
+        let multi = d.analyze("https://microsoft.com.evil.tk/mfa-relay?id_token=abc");
+        assert!(
+            multi.score > single.score,
+            "multi={} single={}",
+            multi.score,
+            single.score
+        );
     }
 
     #[test]
@@ -300,7 +343,9 @@ mod tests {
         let r = d.analyze("https://example.com/relay?redirect=http://evil.com");
         assert!(
             r.verdict == AitmVerdict::Caution || r.verdict == AitmVerdict::Dangerous,
-            "score={} verdict={:?}", r.score, r.verdict
+            "score={} verdict={:?}",
+            r.score,
+            r.verdict
         );
     }
 
@@ -320,9 +365,13 @@ mod tests {
         // 正規 GitHub OAuth コールバック: ?code= は正規ドメインなら Safe
         let d = AitmDetector::new();
         let r = d.analyze("https://github.com/login/oauth/authorize?code=abc123&state=xyz");
-        assert_eq!(r.verdict, AitmVerdict::Safe,
+        assert_eq!(
+            r.verdict,
+            AitmVerdict::Safe,
             "正規 GitHub OAuth コールバックは Safe であるべき: score={} signals={:?}",
-            r.score, r.signals);
+            r.score,
+            r.signals
+        );
     }
 
     #[test]
@@ -332,7 +381,8 @@ mod tests {
         let r = d.analyze("https://suspicious-relay.net/callback?code=abc123&state=xyz");
         assert!(
             r.verdict == AitmVerdict::Caution || r.verdict == AitmVerdict::Dangerous,
-            "非正規ドメインの code/state は Caution 以上であるべき: score={}", r.score
+            "非正規ドメインの code/state は Caution 以上であるべき: score={}",
+            r.score
         );
     }
 
@@ -343,9 +393,13 @@ mod tests {
         let r = d.analyze(
             "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&state=abc&nonce=def"
         );
-        assert_eq!(r.verdict, AitmVerdict::Safe,
+        assert_eq!(
+            r.verdict,
+            AitmVerdict::Safe,
             "正規 Microsoft OAuth フローは Safe であるべき: score={} signals={:?}",
-            r.score, r.signals);
+            r.score,
+            r.signals
+        );
     }
 
     #[test]
@@ -353,8 +407,11 @@ mod tests {
         // evil.com%00.microsoft.com — NULL バイトで偽ドメインを正規ドメインに見せかける
         let d = AitmDetector::new();
         let r = d.analyze("https://evil.com\x00.microsoft.com/login?id_token=stolen");
-        assert!(r.verdict != AitmVerdict::Safe,
-            "NULL バイト混入ドメインは Safe であってはならない: {:?}", r.signals);
+        assert!(
+            r.verdict != AitmVerdict::Safe,
+            "NULL バイト混入ドメインは Safe であってはならない: {:?}",
+            r.signals
+        );
     }
 
     #[test]
@@ -362,7 +419,9 @@ mod tests {
         // 制御文字を含む URL は Caution 以上でなければならない
         let d = AitmDetector::new();
         let r = d.analyze("https://evil.com\r\n.microsoft.com/login?id_token=test");
-        assert!(r.verdict != AitmVerdict::Safe,
-            "制御文字を含むドメインは Safe であってはならない");
+        assert!(
+            r.verdict != AitmVerdict::Safe,
+            "制御文字を含むドメインは Safe であってはならない"
+        );
     }
 }

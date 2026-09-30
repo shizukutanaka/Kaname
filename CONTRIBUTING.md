@@ -11,12 +11,12 @@
 | ドキュメント改善 | PR 直接 |
 | コード貢献 | Issue で議論 → PR |
 | セキュリティ脆弱性 | [SECURITY.md](SECURITY.md) 参照、公開しない |
-| 翻訳 | `src/i18n/` |
+| 翻訳 | `src/locales/` |
 
 ## 開発環境
 
 ```bash
-git clone https://github.com/kaname-app/kaname.git
+git clone https://github.com/shizukutanaka/kaname.git
 cd kaname
 npm ci
 npm run tauri:dev
@@ -108,14 +108,17 @@ RFC 9420 準拠を維持。プロトコル変更は ADR + 相互運用性テス�
 
 ## i18n
 
-`src/i18n/` に言語ごと JSON:
+`src/locales/` に言語ごと JSON (2026-09 訂正: 旧記述の `src/i18n/` は誤り):
 ```
-src/i18n/ja.json   # 日本語 (基準)
-src/i18n/en.json
-src/i18n/zh-CN.json
-src/i18n/ko.json
+src/locales/ja.json   # 日本語 (基準)
+src/locales/en.json
 ```
-全キーが `ja.json` と一致することを CI が検証。
+`src/i18n.ts` の `Language` 型は `"zh-CN"`/`"ko"` も宣言しているが、
+対応する JSON ファイルは未作成。ブラウザ言語が中国語/韓国語の場合、
+自動選択された言語に翻訳が無いため `t()` は日本語へフォールバックする
+(クラッシュや空表示にはならない。`src/i18n.ts` の `resolveKey`/`t` 参照)。
+**CI による自動検証は存在しない** (`.github/workflows/` が空、
+`docs/gap-analysis.md` D7)。キーの一致は目視レビューで確認すること。
 
 ## CLA
 

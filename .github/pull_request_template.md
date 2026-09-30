@@ -24,7 +24,6 @@
 - [ ] kaname-store
 - [ ] kaname-render
 - [ ] kaname-sandbox
-- [ ] kaname-billing
 - [ ] フロントエンド (TSX)
 - [ ] CI / ビルド
 

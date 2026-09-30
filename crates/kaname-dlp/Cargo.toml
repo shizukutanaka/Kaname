@@ -3,17 +3,19 @@ name             = "kaname-dlp"
 version.workspace     = true
 edition.workspace     = true
 rust-version.workspace = true
+license.workspace     = true
+publish             = false
 
 [dependencies]
 serde      = { workspace = true }
 serde_json = { workspace = true }
-thiserror  = { workspace = true }
-tokio      = { workspace = true }
 tracing    = { workspace = true }
-kaname-error  = { path = "../kaname-error" }
 kaname-render = { path = "../kaname-render" }
 regex         = { workspace = true }
 sha2          = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[lints]
+workspace = true

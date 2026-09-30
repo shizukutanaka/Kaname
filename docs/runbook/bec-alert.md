@@ -46,25 +46,21 @@
 
 ### 自動判定支援
 
-```bash
-# 監査ログから該当メールの BEC スコアと信号を取得
-kaname-cli audit query --email-id={id} --include-bec-signals
-```
+Kaname はローカルファーストのデスクトップアプリであり、サポートが直接
+クエリする CLI は存在しない。ユーザーに以下の情報を画面から転記してもらう:
 
-出力例:
-```
-email_id: e_abc123
-verdict: DANGEROUS
-signals:
-  domain_similarity:    0.45 (CFO@arnazon.com vs CFO@amazon.com)
-  spoofing_indicator:   YES (DKIM fail)
-  urgency_markers:      3 (至急, 今すぐ, 本日中)
-  qr_phishing:          NO
-  vec_indicator:        YES (vendor change request)
-  multi_persona:        NO
-  email_bombing:        NO
-total_score:            0.78 (threshold: 0.65)
-```
+- メール詳細画面の **BEC バッジとシグナル一覧** (domain similarity /
+  spoofing / urgency / QR phishing / VEC 等の発火シグナルが
+  ラベルとして表示される)
+- セキュリティダッシュボードの判定履歴
+
+また、セキュリティ上重要なイベント (アプリ起動・メールサーバ接続/切断・
+送信者の「確認済み」化・添付のダウンロード/拒否) は、ユーザーのローカル
+SQLCipher DB 内の `audit_log` テーブルにハッシュチェーン付きで不変記録
+される。DB キーはユーザーの OS キーチェーン管理のためサポート側で直接
+開くことはできない — フォレンジック目的で必要な場合は、ユーザー立会いの
+もとで DB 複製を取り、キーチェーンからのキー取得をユーザーに依頼する
+手順 (法務承認が前提) とする。
 
 ### 判別フロー
 
@@ -79,17 +75,16 @@ total_score:            0.78 (threshold: 0.65)
 
 ### 確認すべきこと
 - ユーザーが本当に送信者を知っているか
-- 過去のメール履歴で類似メールがあったか (`kaname-cli mail history`)
+- 過去のメール履歴で類似メールがあったか (ユーザーに検索画面で同送信者
+  のメールを検索してもらう — `mail_search`)
 - 送信者ドメインが正規のものか
 
 ### アクション
-1. **即座にホワイトリスト追加** (再発防止):
-   ```bash
-   kaname-cli screener decide \
-     --user={user_email} \
-     --sender={sender_email} \
-     --decision=allow_inbox
-   ```
+1. **送信者を「確認済み」にする** (再発防止):
+   ユーザーにメール詳細画面の本人確認ボタンを押してもらう
+   (`history_mark_verified`)。以後この送信者には `user_verified`
+   シグナルが適用され、同一内容の誤警告を抑制する。
+   この操作は `audit_log` に `SENDER_VERIFIED` イベントとして記録される。
 
 2. **ユーザーへの説明**:
    - なぜ誤検知が起きたか (どの信号が反応したか)
@@ -133,25 +128,22 @@ Kaname サポート
 
 ### 同組織内の他ユーザーへの影響確認
 
-```bash
-# 同じ送信者からのメールを受け取った他ユーザーを検索
-kaname-cli admin search \
-  --sender={attacker_email} \
-  --org={organization_id} \
-  --since=7d
-```
+Kaname はローカルファーストであり、組織横断のメール検索機能は存在しない
+(設計上の意図的な制約 — サーバに一括アクセスする権限を持たない)。
+以下の手段で代替する:
 
-該当ユーザーには即座に警告メールを送信。
+- **メールサーバ (JMAP) 管理者に依頼**: 組織のメールサーバ管理者は
+  サーバ側で同送信者・同件名の配送先を検索できる
+- **関係部署への注意喚起**: 財務・経理など同種攻撃の標的になりやすい
+  部署へ警告メールを送信
 
 ### 攻撃インテリジェンスの収集
 
 1. **メールサンプルの保存** (改ざん防止形式):
-   ```bash
-   kaname-cli forensics export \
-     --email-id={id} \
-     --format=eml-with-headers \
-     --output=/forensics/{date}/{ticket}.eml
-   ```
+   原本 `.eml` をユーザーに保全してもらう — メールサーバ上の原本、
+   または `.eml` インポート元のローカルファイルをそのまま取得する。
+   Kaname 内の本文は暗号化 BLOB で保存されており、平文エクスポート
+   機能は意図的に存在しない。
 
 2. **共有インテリジェンス DB に登録**:
    - 送信者ドメイン

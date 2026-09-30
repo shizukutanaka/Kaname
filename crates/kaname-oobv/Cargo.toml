@@ -3,14 +3,13 @@ name             = "kaname-oobv"
 version.workspace     = true
 edition.workspace     = true
 rust-version.workspace = true
+license.workspace     = true
+publish             = false
 
 [dependencies]
 serde      = { workspace = true }
 serde_json = { workspace = true }
 thiserror  = { workspace = true }
-tokio      = { workspace = true }
-tracing    = { workspace = true }
-kaname-error  = { path = "../kaname-error" }
 kaname-crypto = { path = "../kaname-crypto" }
 kaname-memory-guard = { path = "../kaname-memory-guard" }
 rand       = { workspace = true }
@@ -18,3 +17,6 @@ zeroize    = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[lints]
+workspace = true

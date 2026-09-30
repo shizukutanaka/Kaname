@@ -1,5 +1,59 @@
 # 機能マチュリティ・マトリクス
 
+> **v0.6.0 (2026-09-02) の到達点**: エントリポイントから到達可能な UI 9/9 が
+> 呼ぶコマンドはすべて実装 (`not_wired` 0 件)。永続化は実際に書き込める。
+> **v0.7.0 (2026-09-14) の到達点**: 逆方向 (実装済みだが UI から未到達の
+> コマンド) を仕分け、配線すべき5件を全件解消。静的検証ツール自体の
+> 見落としも2件修正 (D25/D26)。詳細は「2026-09 の続報」節を参照。
+> **v0.7.1 (2026-09-14) の到達点**: CLAUDE.md 不変条件 I5/I6 を初めて検証。
+> I5 (PII 禁止) を守るはずの `PrivacyLayer` が無効だったのを配線し (D28)、
+> I6 (unwrap 禁止) は違反ゼロを確認・自動検証化 (D27)。D24 の分類を
+> 検証し直し2箇所の誤りを訂正 (D29/D30)。README の誤ったリポジトリ
+> 参照も訂正 (D31)。
+> 「完成」の定義と根拠は `docs/socratic-review.md`。未実装 (MLS/LLM/サンドボックス)
+> と未検証 (cargo/vitest, D20) は本文書の該当節に明記し、UI は一切それを偽らない。
+> **2026-09 続報 (D43〜D50)**: `Store::save_message` がフォルダ移動を永久に反映しない
+> 欠陥 (D46)、`JmapClient::sync` が RFC 8620 の `hasMoreChanges` ページングを実装しておらず
+> 500件超の差分をサイレント欠落させる欠陥 (D48)、`send_email` が送信済みフォルダ未検出時に
+> 架空の ID にフォールバックしていた欠陥 (D49)、`HtmlSmugglingDetector` の4MBサイズ上限が
+> UTF-8 文字境界を無視しパニックしうる欠陥 (D50) を発見・修正。DLP/BEC の `our_domain` が
+> 全箇所 `"example.com"` 固定で自組織ドメインが一切永続化されていない欠陥 (D44) と、
+> `kaname-memory-guard` のゼロ幅文字除去が複数単語キーワードの語境界を壊す新たな回避経路 (D45)、
+> `kaname-crypto` (ハイブリッド PQC クレート) に実暗号バックエンドが皆無で `kaname-mls` とは
+> 独立に未実装のままであること (D47) は、セキュリティレビュー必須クレートに触れるため未修正の
+> まま記録のみ (→ その後 trait 面の利用者ゼロが判明し D143 でクレートを ct_eq のみに縮小)。詳細は `docs/gap-analysis.md` D43〜D50。
+> **2026-09 続報 (D60〜D61 および D45/D18 部分対応)**: `SecurityDashboard.tsx` の
+> 未使用 setter が `npm run build` を main で壊していた出荷ブロッカー (D60) を修正。
+> `kaname-memory-guard` の複数単語キーワード回避経路 (D45) は、ゼロ幅文字を
+> スペース化する `normalize_for_matching_spaced` を新設し memory-guard/oobv/ui の
+> 3箇所で二重照合とした (kaname-bec の2箇所はセキュリティレビュー必須クレートのため残件)。
+> `extract_auth_result` を機構スコープ限定パースに修正し `authserv_id` を露出 (D18 部分対応、
+> `mail-auth` 導入は未実施)。npm devDeps の脆弱性は全件解消 (D61 — `vite` 5→8
+> rolldown 系・`vitest` 1→5・`jsdom` 最新・`@types/node` ^24。rolldown で廃止された
+> `manualChunks` オブジェクト形式は関数形式に書き換え、`npm audit` 0件を実測)。
+> **2026-09 続報 (D51 完全解消・D24 残件)**: 「機能デモ」タブ (KanameAppleFeatures.tsx、
+> 偽データで未実装機能を見せる遊技場、1,244 行) をファイルごと削除しナビから除去 —
+> 部分解消ラベルでもデモ画面を出荷する理由が無かった (到達可能 UI 9/9 → 8/8、
+> vitest 15→8件は対象消滅分)。作成画面の送信前アドバイザリに `oobv_recommend` を配線し、
+> `oobv_start`/`oobv_verify`/`pivot_analyze` も `invoke_handler` 登録で到達可能化 (D15 残件。
+> #139 はコンフリクトで未マージのままクローズされていたため #143 として再適用)。
+> **2026-09 続報 (D44 解消)**: DLP/BEC の `our_domain` が全箇所 `"example.com"` 固定だった
+> 欠陥を解消。`Session.username` (RFC 8620) から `JmapClient::account_domain()` が
+> 組織ドメインを自動導出し、`commands.rs` の `our_domain()` ヘルパーが
+> 設定 `org_domain` → `from` ヒント → 接続アカウント導出 → 空文字 (安全スキップ) の順で
+> 解決する。設定 UI は追加せず導出結果を接続画面に表示する方針 (操作回数最小の原則)。
+> (#138 はベースブランチ側へマージされ main に入っていなかったため再適用)。
+> **2026-09 続報 (D8 解消)**: Playwright E2E が実際に実行可能になった
+> (#147 はコンフリクトで未マージクローズのため再適用)。
+> `@tauri-apps/api` の mockIPC と同構造の `__TAURI_INTERNALS__` 注入モック
+> (`e2e/tauri-mock.ts`) で Tauri なしの vite 起動上で UI 層 E2E を実現し、
+> 実 UI に合わせて spec を全面書き換えた結果、実行が**実 a11y 欠陥を検出**:
+> `#5A6473` (2.7–3.2:1) / `#E5484D` (tint 上 4.15:1) / nav 白30% (2.61:1) の
+> WCAG AA 未達、`h1` 不在、ランドマーク不足、×ボタンの aria-label 欠落、
+> `prefers-reduced-motion` 未尊重 — すべて修正済み。全行列で 62 pass / 1 skip。
+> spec が呼ばない mockserver の webServer と架空スワイプ spec/project、
+> 空のスナップショット基準インフラは削除した。
+
 > このドキュメントは `crates/kaname-ai/src/lib.rs` の doc コメントが参照する
 > マチュリティ表を実体化したもの。市販/本番出荷の可否判断材料として、
 > 「実際に動作する本番実装」と「開発中のモック実装」を明確に区別する。
@@ -8,25 +62,159 @@
 
 ---
 
-## ⚠️ 最重要: メールクライアントとしての配線が存在しない (2026-07 検証)
+## 製品スコープ (2026-07 確定)
 
-**下表の「本番出荷可」は個々のクレートが純粋関数/ライブラリとして動作することを
-意味するに過ぎない。出荷バイナリはメールを送受信できない。** First Principles
-監査 (2026-07) で以下を実コード確認した:
+Kaname は現在 **「ローカル・メールセキュリティ解析ツール」** として完結している。
+サーバ接続もアカウント設定も不要で、以下が**実際に動作する**:
+
+| 機能 | 状態 | 入口 |
+|---|---|---|
+| MIME 解析 (RFC 5322) | ✅ 動作 | 「ファイル解析」タブ |
+| 送信ドメイン認証の評価 (SPF/DKIM/DMARC) | ✅ 動作 (ヘッダ由来) | 同上 |
+| BEC 多信号検出 (決定論的 9 シグナル) | ✅ 動作 | 同上 |
+| HTML サニタイズ (mXSS/CSS exfil/トラッキング) | ✅ 動作 | 同上 |
+| 本文リスク検出 (HTMLスマグリング/テキストQR/CSS外部参照/リンク評判判定/**SaaSリンク安全性**) | ✅ 動作 | 同上 |
+| 機微情報検出 (DLP, Inbound) | ✅ 動作 | 同上 |
+| **添付ファイル検査** (MIME偽装/polyglot/危険拡張子/SVGスクリプト/メタデータ/**カレンダー招待**) | ✅ 動作 | 同上 |
+| キャンペーン検出 (複数メール横断) | ✅ 動作 | 「フォルダを一括解析」 |
+| **JMAP サーバ接続・受信** (各通に BEC 判定) | ✅ 実装済 (要サーバ) | 「サーバ接続」タブ |
+| **メール送信** (送信前 DLP `Outbound` でブロック) | ✅ 実装済 (要サーバ) | 同上 |
+| **送信者履歴の永続化** (BEC の履歴シグナルに供給) | ✅ 実装済 (SQLCipher) | `history_open` コマンド |
+| **メール本体の永続化** (オフライン閲覧) | ✅ 実装済 (SQLCipher) | 受信時に自動保存 |
+| **検索** (件名/送信者/本文プレビュー) | ✅ 実装済 | 受信箱の検索欄 |
+| **送信者文体認証 (SSA)** — アカウント乗っ取り検出 | ✅ 動作 (同一セッション内で学習) | 「ファイル解析」タブ |
+| **トラッキングピクセル検出** | ✅ 動作 | 同上 |
+
+動作確認用のサンプルを [`examples/emails/`](../examples/) に同梱している。
+
+**このスコープの外にあるもの** (次段階):
+MLS 暗号化 (モック)、ローカル LLM 推論 (スタブ)。
+
+**認証情報を永続化しない設計**: Bearer トークンはプロセスのメモリ内にのみ
+保持し、ディスクへは書かない。`kaname-store` の鍵管理が keyfile への
+フォールバックを含む現状では平文同然で置くことになるため、
+**安全に保管できないものは保管しない**方針を採っている。
+OS キーチェーン統合が入るまで、起動のたびに接続し直す。
+
+---
+
+## 出荷バイナリに含まれないクレートとその理由 (2026-07 仕分け)
+
+依存グラフ実測で「到達可能 10/27」だった状態から組み立てを進め、
+現在 **17/22** が出荷バイナリに含まれる (2026-09-20 に cargo metadata
+で再実測: billing/continuity/i18n/tray + kaname-error/kaname-core を削除し
+ワークスペースは 27→22 メンバー。到達 = kaname-tauri + 16 ライブラリ)。
+残る 5 個は**意図的に含めていない**:
+
+| クレート | 含めない理由 |
+|---|---|
+| `kaname-ai` | **Dual-LLM 推論未実装** (llm_bridge が固定文字列を返すスタブ — D2)。kaname-tests 経由でのみ到達 |
+| `kaname-mls` | **モック暗号 (単一バイト XOR)**。組み込むと「暗号化されている」と偽ることになる。`openmls` 統合まで含めない方が安全 |
+| `kaname-sandbox` | **no-op** (`spawn_vm` が VM を起動しない)。同上、隔離されていないものを隔離済みと見せない |
+| `kaname-mockserver` | 開発用の JMAP モックサーバ。製品に含めるものではない |
+| `kaname-tests` | 統合テスト・敵対テスト用クレート。同上 |
+
+削除済み (下表の判定に基づき 2026-09 にワークスペースから除去。履歴は git に残る):
+
+| 削除クレート | 削除根拠 |
+|---|---|
+| `kaname-billing` | 課金基盤。本製品のスコープ (メールセキュリティ解析) に不要。永続化も未実装だった (D6) |
+| `kaname-continuity` | デバイス間ハンドオフ。単一デバイスで完結する現スコープでは不要 |
+| `kaname-i18n` | 翻訳カタログ。フロント側 `src/i18n.ts` + `src/locales/` も呼び出し実績ゼロで削除済み (E9) — UI は日本語ハードコードのみ |
+| `kaname-tray` | トレイアイコン生成。`src-tauri` が独自にトレイを持つため重複 |
+
+**モック実装を組み込まない判断が最も重要**である。`kaname-mls` や
+`kaname-sandbox` を「到達可能クレート数」のために繋ぐと、
+動かない暗号・隔離を動いているかのように見せることになる。
+
+---
+
+## D10 (配線欠如) の解消経緯 (2026-07)
+
+First Principles 監査で以下を実コード確認し、**その後すべて配線した**。
+下表は「監査時点の状態 → 現在」の記録である。
 
 | 検証項目 | 結果 (根拠) |
 |---|---|
-| Tauri コマンド層の依存 | `crates/kaname-ui/Cargo.toml` に **`kaname-jmap`/`kaname-store`/`kaname-core` が無い** → 出荷バイナリからネットワークにも DB にも**コンパイル時点で到達経路が存在しない** |
-| メール永続化 | `messages`/`mailboxes`/`attachments` テーブルへの **INSERT/SELECT がワークスペース全体でゼロ件** (スキーマ定義のみ) |
-| メール受信 | `kaname-jmap` は RFC 8621 準拠の**本物の HTTP 実装**だが、**呼び出し元が存在しない**。`app_state.rs` の同期ループはフラグを上下させるだけでネットワーク I/O をしない |
-| メール送信 | `JmapClient::send_email()` は実装済みだが Tauri コマンド未登録。UI が呼ぶ `mail_send` は**未定義** |
-| アカウント設定 | `app_state.rs` の `let accounts: Vec<AccountConfig> = vec![];` で**常に空**。サーバ URL/認証情報を入力する UI が存在しない |
-| 検索 | 検索 `<input>` にハンドラ未バインド。FTS も JMAP テキストフィルタも無し |
-| 添付ダウンロード | blob download 実装なし (`download_url` は保持されるだけで参照ゼロ) |
+| Tauri コマンド層の依存 | ~~`kaname-jmap`/`kaname-store` が無い~~ → **両方追加済み。到達可能 19/23** |
+| メール永続化 | ~~INSERT/SELECT がゼロ件~~ → ~~実装したが Store が開かれず FK でも失敗~~ → **起動時に自動オープン + `ensure_account`/`ensure_mailbox` で実際に保存される** (D23) |
+| メール受信 | ~~呼び出し元が存在しない~~ → **`mail_fetch` が受信し各通に BEC 判定を付与** |
+| メールを開く | ~~`mail_get_body`/`bec_get_score` がスタブ~~ → **`mail_open` が生 blob を取得し `.eml` と同じパイプラインで本文・BEC・添付・DLP を返す** |
+| メール送信 | ~~Tauri コマンド未登録~~ → **`mail_send` を登録。送信前に DLP (Outbound) を実行** |
+| アカウント設定 | ~~UI が存在しない~~ → **「サーバ接続」タブを追加** (トークンは永続化しない方針) |
+| 検索 | ~~ハンドラ未バインド~~ → **`mail_search` に接続** (LIKE ベース。FTS5 は SQLCipher での有効性未確認のため見送り) |
+| 添付ダウンロード | ~~未実装~~ → **`mail_download_attachment` を実装** (blob 取得 → **書き込み前に必ず検査** → 危険なら保存せず警告のみ)。**これで D10 は完全解消** |
 
-**したがって現状は「メールクライアント」ではなく、「メールセキュリティ・
-ライブラリ集 + デモ UI」である。** 実配線 (受信→保存→表示→送信) は
-`docs/gap-analysis.md` の D10 を参照 (次セッションの最優先課題)。
+**受信→保存→表示→送信→検索→添付ダウンロードの経路はすべて実装済み**であり、
+2026-09 の到達可能性実測により**エントリポイント (`src/main.tsx`) から実際に
+到達できる**ことを確認した (それ以前は受信トレイにモック専用コンポーネントが
+描画されており、送信画面には到達経路が無かった。`docs/gap-analysis.md` D21)。
+D10 (メールクライアント配線) は**完全解消** (`docs/gap-analysis.md` D10)。
+
+### 2026-09 の続報: UI 到達可能性の逆方向まで仕分けた (v0.7.0)
+
+D10/D21 で「UI から呼ばれるコマンドはすべて実装」を達成したが、その
+**逆方向** — 「実装済みのコマンドが UI から実際に呼ばれているか」 — は
+未計測だった。`static-check.sh` 検査5で機械的に洗い出したところ、
+登録 38 コマンド中 19 件が UI から未到達だった (D24)。内訳を仕分けた:
+
+| 分類 | 件数 | 扱い |
+|---|---|---|
+| LLM 依存で意図的に未配線 | 10 | 配線しない。LLM がスタブの現状で配線すると**偽の AI 出力を表示する** |
+| 配線すべき (実装済みなのに UI に経路が無い) | 5 | **全件配線済み** ↓ |
+| 内部 API として正当 (他コマンドから使用等) | 4 | 現状維持 |
+
+配線した5件: `mail_trash` (詳細パネルの「ゴミ箱へ」ボタン)、
+`mail_download_attachment` (添付ごとのダウンロードボタン)、
+`history_mark_verified` (BEC 警告バナーの「本人確認済みにする」)、
+`oobv_recommend`・`deepfake_evaluate` (判定ロジックを `mail_open`/
+`mail_import_eml` 共通の `analyze_raw_email` に埋め込み、素の本文・
+添付一覧を UI に渡さず済む形で結果だけ `ImportedEmail` に含めた。
+独立コマンドは後に E11 で呼び出し元ゼロのため削除 — 判定自体は
+解析経路に組み込まれている)。
+
+### 2026-09 の副産物: 検証ツール自体の欠陥を2件発見・修正
+
+`cargo check`/`vitest` が使えない環境 (D20) の代替として作った
+`static-check.sh` 自身に、見逃しが2件見つかった:
+
+- **D25**: `mail_list` 削除 (PR #86) の際、同じ関数を呼ぶテストが2件
+  コンパイルエラーのまま放置されていた。検査2がハードコードされた
+  シンボル一覧しか見ておらず、一覧に無い関数の削除を検出できなかった。
+  リポジトリ全体を走査する一般的な方式に置き換えた
+- **D26**: 同じ欠陥クラスのフロントエンド版。`app.test.ts` の未使用
+  ヘルパーが、削除済みコンポーネントの型を import せず参照していた。
+  検査6 (TypeScript の未 import 型参照検出) を追加
+
+どちらも「一般化した検査の最初の実装が、検出したかったバグ自体を
+素通りさせていた」という共通の失敗を経験してから直った。合成的に
+既知のバグを再現し、検出→復元を確認する手順を経て初めて検査を
+信用できる、という教訓を `docs/socratic-review.md` に記録した。
+
+### 2026-07 の「組み立て」フェーズ (依存グラフ実測を受けて)
+
+依存グラフの実測により、**出荷バイナリに到達可能なのは 27 クレート中 10 個のみ**で、
+`kaname-bec` (看板機能) すら製品に含まれていないことが判明した (D19)。
+「部品を作る」のをやめ「組み立てる」方針に転換し、以下を実施:
+
+| 対象 | 従来 | 現在 |
+|---|---|---|
+| `ai_detect_phishing` | `score: 0.12` の固定値 | **`BecDetector::assess()` の実際の判定** |
+| `mail_list` の `bec_verdict` | モックに手書きした固定文字列 | **実際の判定結果で上書き** |
+| `mail_get_summary` | `{unread:3, bec_alerts:1, total:42}` 固定 | **同じ検出器で実集計** |
+| `mail_get_body` | `format!("<p>メール {} の本文</p>")` | **`sanitize_html` → `to_srcdoc` の実経路** (型契約不一致も解消) |
+| ~~`ai_summarize_email`~~ | 固定要約 + `local_inference: true` と偽装 | **コマンドごと削除** (E11 — 「未実装」Err を返すだけの IPC 面は攻撃面のため除去) |
+| ~~`ai_smart_reply`~~ | 内容と無関係な固定3文 | **コマンドごと削除** (E11 — 同上) |
+
+到達可能クレートは 10 → **13** に増加 (`kaname-bec` / `kaname-radar` / `kaname-dlp`)。
+さらにローカル `.eml` インポートにより**実メールがパイプラインを流れる**ようになり、
+モックに依存しない解析経路が確立した。LLM 未配線でも BEC が動くよう
+`BecDetector::deterministic_only()` (`NullLlm`) を追加し、**LLM という要件自体を削除**した
+(10 シグナルファミリーのうち 9 つはモデル不要の決定論的ロジックであるため)。
+
+その後 `mock_emails()` は**完全に削除**した (PR #64)。受信箱タブはサーバ未接続を
+正直に表示して空を返し、実データを扱うのは「ファイル解析」タブのみである。
+製品内に偽データを返す経路は存在しない。
 
 ### 2026-07 の是正 (部分的)
 - 実装済みだが `invoke_handler` 未登録で**到達不能だった arxiv 防御コマンド10件**
@@ -39,22 +227,25 @@
 
 ---
 
-## 本番出荷可 (ライブラリ単体として実装 + 実テストで検証済み。上記の通りアプリには未配線)
+## 実装済み機能 (ライブラリとして実装 + 実テストで検証済み)
+
+> ✅ = 出荷バイナリに組み込み済みで「ファイル解析」タブから実際に動作する
+> ⬜ = ライブラリとしては動作するが、まだ製品に組み付けられていない
 
 | 機能 | クレート | 備考 |
 |---|---|---|
-| BEC 多信号検出 (認証/ドメイン/履歴/内容/AiTM/Reply-To/スレッド乗っ取り/口座差替/DKIM検証) | `kaname-bec` | 110+ テスト |
-| DLP 12分類器 + 宛先ミス検出 (誤送信防止) | `kaname-dlp` | チェックディジット検証 (Luhn/マイナンバー/IBAN/法人番号/BIC) |
-| ホモグリフ/タイポスクワット/IDN Punycode検出 | `kaname-bec` | |
-| Quishing・カレンダー招待(.ics)・HTMLスマグリング検出 | `kaname-render` | |
-| SaaSリンク安全性・OAuth state検証 | `kaname-saas-guard` | |
+| BEC 多信号検出 (認証/ドメイン/履歴/内容/AiTM/Reply-To/スレッド乗っ取り/口座差替/DKIM検証) | `kaname-bec` | ✅ 組込済 / 110+ テスト |
+| DLP 12分類器 + 宛先ミス検出 (誤送信防止) | `kaname-dlp` | ✅ 組込済 (Inbound) / チェックディジット検証 (Luhn/マイナンバー/IBAN/法人番号/BIC) |
+| ホモグリフ/タイポスクワット/IDN Punycode検出 | `kaname-bec` | ✅ 組込済 | |
+| Quishing・カレンダー招待(.ics)・HTMLスマグリング検出 | `kaname-render` | ✅ 組込済 | |
+| SaaSリンク安全性・OAuth state検証 | `kaname-saas-guard` | ✅ 組込済 (本文リンクに適用) | |
 | Dual-LLM 型境界の**定義** (`Content<Untrusted>`/`Bridge`) | `kaname-ai::dual_llm` | フィールド private・`Content<Trusted>` の公開コンストラクタは2つのみ・Bridge 昇格路は `pub(crate)`・`unsafe` ゼロ・`compile_fail` テスト有り。**ただし (a) trait を実装するコードが 0 件で実推論経路 `llm_bridge` は生 `&str` API、(b) `as_text()` が `pub` で規約依存、(c) serde derive により `Content<Trusted>` を JSON 偽造可能。したがって「型で強制」は現状**未達**。詳細は gap-analysis D17 |
 | プライバシー保護 (PCR メタデータのみ/SSA数値ベクトルのみ/トラッキング遮断) | `kaname-radar`, `kaname-ssa`, `kaname-privacy` | 本文非解析設計 |
 | Out-of-Band Verification (電話確認セレモニー) | `kaname-oobv` | |
 | 入力スクリーニング (プロンプト注入検出) | `kaname-screen` | |
 | SSRF 対策 (DNS再検証込みリダイレクトガード) | `kaname-jmap::ssrf_guard` | |
-| 監査ログ (HMAC-SHA256 鍵付きハッシュチェーン) | `kaname-ai::threat_intel` | |
-| PQC ハイブリッド鍵カプセル化 (X25519 + ML-KEM) | `kaname-crypto` | **注意**: コード内の "X-Wing" 表記は独自 HKDF 合成 (`combine_kem_secrets`, info=`kaname-xwing-v1`) であり、IETF 標準の X-Wing (draft-connolly-cfrg-xwing-kem) とはワイヤ非互換。外部監査時に名称で混同しないこと。また X25519/ML-KEM の実体は `Kem` トレイト経由のバックエンド注入で、テストは MockKem のみ (実アルゴリズムバックエンドの結合は未検証) |
+| 監査ログ (SHA-256 ハッシュチェーン — 無鍵、改ざんは再計算で回避可能) | `kaname-store` | ※ maturity 表の旧記述「HMAC-SHA256 鍵付き」は未配線モジュール (threat_intel, D139 で削除) の主張であり、出荷側は無鍵 SHA-256。鍵付き化または外部アンカーは改善余地 |
+| PQC ハイブリッド鍵カプセル化 (X-Wing: X25519 + ML-KEM-768) | `kaname-mls` (openmls) | **D143 で修正**: 旧 `kaname-crypto` の Kem trait/MockKem/独自 "X-Wing" HKDF 合成 (`combine_kem_secrets`) は利用者ゼロのため全削除 — 実 PQ ハイブリッドは openmls の draft-ietf-mls-pq-ciphersuites X-Wing ciphersuite が担う (IETF 標準とワイヤ互換)。kaname-crypto は `ct_eq`/`ct_eq_ascii_ci` のみ残存 |
 
 ---
 
@@ -70,7 +261,7 @@
 | Q-LLM/P-LLM プロセス分離 | `kaname-ai::subprocess` | seccomp プロファイルのパス文字列を生成するのみ。実際の seccomp 適用は外部バイナリ `kaname-llm-runner` 側に委譲 (存在未確認) | `kaname-llm-runner` バイナリの実装、seccomp-bpf/sandbox-exec/Job Object の実適用 |
 | Firecracker microVM サンドボックス | `kaname-sandbox` | `spawn_vm`/`VsockChannel` が no-op。セマフォ管理・プール衛生は実装済みだが VM 自体は起動しない | Firecracker バイナリ統合、vsock 通信実装 |
 | 自動アップデート | `src-tauri` | `tauri.conf.json` から `updater` 設定を削除済み (2026-07 修正)。`tauri-plugin-updater` 未導入 | プラグイン導入 + 署名鍵生成 + 配信サーバー構築 |
-| 課金基盤の永続化 | `kaname-billing` | エンタイトルメント/冪等性キーが in-memory のみ (プロセス再起動で消失)。Stripe webhook ペイロードを直接信頼 (ライブAPI再取得なし) | `kaname-store` 連携、Redis 分散重複排除、台帳ハッシュチェーン検証 |
+| ~~課金基盤の永続化~~ (2026-09 解消) | ~~`kaname-billing`~~ | ~~エンタイトルメント/冪等性キーが in-memory のみ~~ | **クレートごと削除** — 課金はスコープ外 (D6) |
 
 ---
 
@@ -133,3 +324,48 @@
 
 検証: `npx tsc --noEmit` (exit 0) / `npx eslint src ... --max-warnings 0` (exit 0) /
 `npm run build` 成功 / `npx vitest run` 21 テスト全パス。
+
+### フロントエンド i18n 基盤の削除 (2026-09)
+
+`t()`/`useT()`/`setLanguage()` 等の実呼び出しが UI 内にゼロだった
+`src/i18n.ts` + `src/locales/` (~380行) を削除 (E9)。
+起動時にカタログを読むだけの空転基盤であり、UI はハードコード
+日本語のみ。kaname-i18n クレート (D19) に続きフロント側の重複も除去。
+
+### D48 完全解消 — 差分同期/プッシュ基盤の削除 (2026-09)
+
+`JmapClient::sync` の未配線問題は「配線」ではなく「削除」で解消した。
+呼び出し元がゼロのインフラ (sync/subscribe_push/SSE パーサー/jmap_state 永続化
+/futures-util 依存) は維持コストだけを生むため、D19 (未到達クレート削除) と
+同じ判断基準で ~350行を除去。全件 `Email/query`+`Email/get` 経路は現機能に
+十分であり、差分同期が必要になった時点で git 履歴から復元すればよい。
+これで kaname-jmap / kaname-store に未使用コードは残っていない。
+(#148 はコンフリクトで未マージクローズ、#149/#151/#152 と共に再適用)
+
+### 関数レベル デッドコード掃除 (2026-09)
+
+非制限クレートの `pub` 項目を外部参照の有無で全走査し、呼び出し元ゼロの
+モジュール・API 群 ~2,400行を削除した (欠陥台帳 E7)。
+主な対象: `login_limiter` (522行)、`app_state` (525行)、`zip_guard` +
+`header_sanitize` (354行)、observability の Metrics/LatencyTimer/
+TelemetryConfig (~330行)、ux_features の Screener/Snooze/SendLater/
+SafeSummary (~550行)。`verify_audit_chain` のみ改ざん検出として価値が
+あるため `history_open` に警告配線を追加して残した。
+「価値が判明したら git 履歴から復元する」方針は D19/D48 と同一。
+
+### 第2走査 — ライブクレート内デッド機能削除 (2026-09)
+
+型名が他ファイルに一度も現れない `pub` 項目を走査し、到達不能な
+機能群 ~1,100行を追加削除 (E8): `ZeroKnowledgeSearch` 群 (D40 解消)、
+saas-guard の `oauth_state`/`jwt_inspect`、radar の DNS リゾルバー群、
+ssa の `OrgStyleBaseline`/`assess_with_fallback`。さらに D142 で
+screen/memory-guard/pivot の dead チェッカー群、D143 で kaname-crypto の
+PQC trait 面、D144 で kaname-radar の infra 解決・ユーザー報告経路を削除
+(いずれも呼出元ゼロ)。
+
+### 依存クレート掃除 (2026-09, E10)
+
+`use` も derive 参照も無い `[dependencies]` 宣言を 15 クレートから
+計 48 件削除 (kaname-privacy は依存ゼロに、kaname-core は serde のみ)。
+大半は E7/E8 のコード削除に伴い不要化したもの。workspace ルート
+宣言10件、dev-dep 3件、src-tauri 2件、npm 1件も除去 (計61件)。

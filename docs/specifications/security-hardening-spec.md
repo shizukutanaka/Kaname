@@ -90,7 +90,7 @@
 ### 3.3 テスト品質
 
 - **865 件の自動テスト** (全 PASS)
-- **プロパティテスト (proptest)**: `kaname-bec`, `kaname-ssa`, `kaname-continuity`, `kaname-memory-guard`, `kaname-screen`, `kaname-dlp`
+- **プロパティテスト (proptest)**: `kaname-bec`, `kaname-ssa`, `kaname-memory-guard`, `kaname-screen`, `kaname-dlp`
 - **境界値テスト**: 25MB+1B のペイロード・NaN/Infinity スコア・未来タイムスタンプ・深いネスト
 
 ---
@@ -104,7 +104,7 @@
 | W1 | `QuarantinedLlm::analyze()` がトレイト定義のみでモック実装 | 本番 LLM 統合時の入力サイズ上限が Q-LLM バックエンド依存 | 🔴 HIGH |
 | W2 | MLS の `openmls` クレートがスタブ実装 | 実際の RFC 9420 暗号文脈でのエポック検証が未テスト | 🔴 HIGH |
 | W3 | `kaname-store` の SQLite ファイルパス生成に `PathBuf::display()` を使用 | Windows の非 UTF-8 パス (稀) で `\u{FFFD}` 置換が発生する可能性 | 🟡 MEDIUM |
-| W4 | `kaname-billing` の `DeduplicatorInMem` は in-process | プロセス再起動で dedup 状態消失 → 72h Stripe リプレイウィンドウ中に重複処理の可能性 | 🟡 MEDIUM |
+| ~~W4~~ | ~~`kaname-billing` の `DeduplicatorInMem` は in-process~~ | ~~プロセス再起動で dedup 状態消失 → 72h Stripe リプレイウィンドウ中に重複処理の可能性~~ (2026-09 クレート削除により消滅) | ~~🟡 MEDIUM~~ |
 | W5 | `kaname-screen` の `PromptScreener` は静的パターンリスト | 新しいプロンプト注入技法 (多言語混合・Unicode 絵文字埋め込み等) への対応遅延 | 🟡 MEDIUM |
 | W6 | `kaname-dlp` の正規表現は `regex` クレートで線形時間保証 | ただし Keyword リーフの `text.to_lowercase()` は全テキスト毎回アロケーション | 🟢 LOW |
 | W7 | `kaname-crypto` の `PublicKey::validate_length()` はオプショナル | デシリアライズ後の明示的呼び出しを忘れると未検証鍵がバックエンドに到達 | 🟡 MEDIUM |
@@ -116,7 +116,6 @@
 |---|---|
 | kaname-mls | `openmls` 本番バックエンドとの結合テストなし |
 | kaname-sandbox | vsock 経由の実際の VM 通信テストなし |
-| kaname-tray | システムトレイ UI のテスト困難 |
 | kaname-ui | SolidJS フロントエンドの E2E テストなし |
 
 ---
@@ -238,7 +237,7 @@ if score >= threshold { warn!() }
 
 - **WebAssembly サンドボックス**: Q-LLM を Wasm で実行し seccomp を不要にする
 - **形式検証**: `kani` でメモリ安全性の形式証明 (特に kaname-crypto の KEM 実装)
-- **ファジング**: `cargo-fuzz` で kaname-billing/kaname-jmap/kaname-dlp のエントリポイントをファジング
+- **ファジング**: `cargo-fuzz` で kaname-jmap/kaname-dlp のエントリポイントをファジング
 
 ---
 

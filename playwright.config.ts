@@ -4,10 +4,14 @@
 //
 // 機能:
 //   - クロスブラウザ (Chromium / WebKit / Firefox)
-//   - 視覚的回帰 (toHaveScreenshot)
 //   - アクセシビリティ (axe-core)
-//   - モックサーバー連携 (kaname-mockserver)
 //   - CI 並列実行
+//
+// 注: Tauri ランタイムのない vite 単体起動で実行するため、IPC は
+// e2e/tauri-mock.ts がモックする。Rust 実バックエンドと繋いだ E2E は
+// `tauri dev` 上の別途テストが必要 (mockserver 起動は spec がまだ使って
+// いないため webServer エントリは削除 — 必要になった時点で再追加する)。
+// Mobile Safari のスワイプ spec は実 UI に存在しないため除去した。
 
 import { defineConfig, devices } from "@playwright/test";
 
@@ -45,12 +49,6 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },
-    {
-      command: "cargo run -p kaname-mockserver --bin jmap-mock",
-      port: 8080,
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-    },
   ],
 
   // ブラウザマトリクス
@@ -66,12 +64,6 @@ export default defineConfig({
     {
       name: "Firefox (Desktop)",
       use: { ...devices["Desktop Firefox"] },
-    },
-    {
-      name: "Mobile Safari",
-      use: { ...devices["iPhone 15 Pro"] },
-      // モバイルではスワイプテストのみ実行
-      testMatch: /swipe.*\.spec\.ts/,
     },
     // アクセシビリティ専用 (axe-core)
     {

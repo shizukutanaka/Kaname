@@ -36,10 +36,10 @@ export default defineConfig({
     rollupOptions: {
       input: resolve(__dirname, "index.html"),
       output: {
-        // アセットの分割
-        manualChunks: {
-          "solid":   ["solid-js"],
-          "tauri":   ["@tauri-apps/api"],
+        // アセットの分割 (rolldown ではオブジェクト形式は廃止 — 関数形式)
+        manualChunks(id: string) {
+          if (id.includes("node_modules/solid-js"))       return "solid";
+          if (id.includes("node_modules/@tauri-apps/api")) return "tauri";
         },
       },
     },

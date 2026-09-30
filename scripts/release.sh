@@ -15,7 +15,7 @@
 #   5. バージョン番号を全ファイルで更新
 #   6. SBOM 生成
 #   7. git tag を作成
-#   8. CI が自動的にビルド・リリースする (実際のリリースは GitHub Actions)
+#   8. タグ push (D7: CI ワークフローは存在しない — ビルド・配布は手動で行うこと)
 
 set -euo pipefail
 
@@ -132,7 +132,8 @@ log "6/9 パフォーマンスベンチマーク"
 if [[ "${SKIP_BENCH:-}" == "1" ]]; then
     warn "SKIP_BENCH=1 によりスキップ"
 else
-    cargo bench --workspace --bench '*' -- --quick || warn "ベンチマーク失敗 (継続)"
+    # --bench '*' は glob として解釈されないため実在するベンチ名を指定する
+    cargo bench --workspace --bench core_bench -- --quick || warn "ベンチマーク失敗 (継続)"
 fi
 
 # ── 7. バージョン番号更新 ──────────────────────────────────────────────────
@@ -189,7 +190,9 @@ Apple Rules of the Road:
 - SBOM 生成
 - CHANGELOG 更新済み
 
-CI が自動的にビルドしリリースを作成します。
+注意: CI ワークフローは存在しません (docs/gap-analysis.md D7)。
+タグを push しても自動ビルド・配布は起きないため、
+手動で `cargo tauri build` → 配布物のアップロードを行ってください。
 "
 
 ok "タグ作成: v$VERSION"

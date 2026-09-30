@@ -3,6 +3,12 @@
 > WWDC 風 30 分のプロダクト発表用台本
 > Apple "Demo-driven Development" の最終形
 
+> **2026-09 注記**: この脚本は Amazon/Apple 流「Working Backwards」手法
+> (製品を作る前に発表の言葉を先に書き、そこから逆算する) に基づく
+> 到達目標であり、現時点の製品の状態を描写したものではない。
+> 現在何が実装済みで何がモック/未実装かは `docs/maturity.md` /
+> `docs/gap-analysis.md` を参照すること。
+
 ---
 
 ## OPENING (0:00 - 2:00)

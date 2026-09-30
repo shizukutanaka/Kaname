@@ -3,14 +3,16 @@ name             = "kaname-radar"
 version.workspace     = true
 edition.workspace     = true
 rust-version.workspace = true
+license.workspace     = true
+publish             = false
 
 [dependencies]
 serde      = { workspace = true }
-serde_json = { workspace = true }
-thiserror  = { workspace = true }
 tracing    = { workspace = true }
 uuid       = { workspace = true }
-kaname-error = { path = "../kaname-error" }
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[lints]
+workspace = true

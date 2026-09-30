@@ -60,7 +60,9 @@ pub fn analyze_dkim_header(header_value: &str) -> DkimHeaderAnalysis {
 
     for raw_part in header_value.split(';') {
         let part = raw_part.trim();
-        let Some((k, v)) = part.split_once('=') else { continue };
+        let Some((k, v)) = part.split_once('=') else {
+            continue;
+        };
         let k = k.trim();
         let v = v.trim();
         match k {
@@ -72,10 +74,7 @@ pub fn analyze_dkim_header(header_value: &str) -> DkimHeaderAnalysis {
             "s" => selector = Some(v.to_string()),
             "b" => {
                 // 署名値は途中で改行・空白を含む可能性 → 連結して先頭 32 文字
-                let cleaned: String = v.chars()
-                    .filter(|c| !c.is_whitespace())
-                    .take(32)
-                    .collect();
+                let cleaned: String = v.chars().filter(|c| !c.is_whitespace()).take(32).collect();
                 if !cleaned.is_empty() {
                     signature_prefix = Some(cleaned);
                 }
@@ -97,9 +96,15 @@ pub fn analyze_dkim_header(header_value: &str) -> DkimHeaderAnalysis {
 ///
 /// 同一 `(domain, signature_prefix)` を短時間に複数回受信したら警告する。
 /// インメモリ実装 — 本番では Redis 等で永続化推奨。
+/// 正常な DKIM 署名もメールごとに異なるため、上限なしでは通常受信だけで
+/// プロセス寿命分メモリが増殖する (D58)。`MAX_ENTRIES` を超えたら
+/// 最古のエントリから FIFO で退避する。
+const MAX_ENTRIES: usize = 10_000;
+
 #[derive(Debug, Default)]
 pub struct DkimReplayTracker {
     seen: std::collections::HashMap<(String, String), u32>,
+    order: std::collections::VecDeque<(String, String)>,
 }
 
 impl DkimReplayTracker {
@@ -116,9 +121,18 @@ impl DkimReplayTracker {
             return 1;
         };
         let key = (d.clone(), b.clone());
+        if !self.seen.contains_key(&key) {
+            self.order.push_back(key.clone());
+        }
         let count = self.seen.entry(key).or_insert(0);
         *count = count.saturating_add(1);
-        *count
+        let result = *count;
+        while self.seen.len() > MAX_ENTRIES {
+            if let Some(oldest) = self.order.pop_front() {
+                self.seen.remove(&oldest);
+            }
+        }
+        result
     }
 
     /// 観測数 (テスト用)。
@@ -153,8 +167,7 @@ mod tests {
     fn detects_length_tag() {
         let h = "v=1; a=rsa-sha256; d=evil.com; s=s; l=2048; b=AAAA";
         let a = analyze_dkim_header(h);
-        assert!(a.has_length_tag,
-            "l= タグが検出されていない");
+        assert!(a.has_length_tag, "l= タグが検出されていない");
         assert_eq!(a.length_value, Some(2048));
         assert!(a.is_risky(), "l= 付きはリスクと判定すべき");
     }
@@ -164,8 +177,11 @@ mod tests {
         // 実際の DKIM 署名は折り返しで空白を含む
         let h = "d=ex.com; b=AbCd Ef\n  Gh12 34;";
         let a = analyze_dkim_header(h);
-        assert_eq!(a.signature_prefix.as_deref(), Some("AbCdEfGh1234"),
-            "署名から空白・改行を除去すべき");
+        assert_eq!(
+            a.signature_prefix.as_deref(),
+            Some("AbCdEfGh1234"),
+            "署名から空白・改行を除去すべき"
+        );
     }
 
     #[test]
@@ -177,6 +193,21 @@ mod tests {
         assert_eq!(t.observe(&a), 1, "初回観測");
         assert_eq!(t.observe(&a), 2, "2 回目 → リプレイ兆候");
         assert_eq!(t.observe(&a), 3, "3 回目");
+    }
+
+    #[test]
+    fn replay_tracker_evicts_oldest_beyond_capacity() {
+        // D58: 上限を超えたら最古エントリから退避し、メモリが無制限に増えない。
+        let mut t = DkimReplayTracker::new();
+        for i in 0..=MAX_ENTRIES {
+            let h = format!("d=example{i}.com; b=SIG{i}");
+            let a = analyze_dkim_header(&h);
+            t.observe(&a);
+        }
+        assert_eq!(t.len(), MAX_ENTRIES, "上限を超えた分は退避されるべき");
+        // 最古のエントリ (i=0) は退避済み → 再観測はカウント1に戻る
+        let a0 = analyze_dkim_header("d=example0.com; b=SIG0");
+        assert_eq!(t.observe(&a0), 1, "退避済みエントリは新規扱い");
     }
 
     #[test]
@@ -195,8 +226,7 @@ mod tests {
         let a = analyze_dkim_header("v=1; a=rsa");
         // domain も signature_prefix もない → トラッキング不可
         assert_eq!(t.observe(&a), 1);
-        assert!(t.is_empty(),
-            "domain/b 不完全な署名は記録しない");
+        assert!(t.is_empty(), "domain/b 不完全な署名は記録しない");
     }
 
     #[test]

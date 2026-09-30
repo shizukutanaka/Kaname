@@ -40,21 +40,21 @@ pub struct TrackingDetector {
 #[derive(Debug, Clone)]
 pub struct TrackingAnalysis {
     /// 検出されたトラッカーの数。
-    pub tracker_count:   usize,
+    pub tracker_count: usize,
     /// ブロックされたドメインのリスト。
     pub blocked_domains: Vec<String>,
     /// 検出されたピクセル追跡の詳細。
-    pub pixels_found:    Vec<TrackingPixel>,
+    pub pixels_found: Vec<TrackingPixel>,
     /// トラッキングが試みられた場合 true。
-    pub was_tracked:     bool,
+    pub was_tracked: bool,
 }
 
 /// 検出されたトラッキングピクセル。
 #[derive(Debug, Clone)]
 pub struct TrackingPixel {
-    pub url:          String,
-    pub domain:       String,
-    pub pixel_size:   Option<(u32, u32)>,
+    pub url: String,
+    pub domain: String,
+    pub pixel_size: Option<(u32, u32)>,
     pub tracker_type: TrackerType,
 }
 
@@ -78,27 +78,52 @@ impl TrackingDetector {
         // 既知のトラッキングドメインリスト
         let trackers = [
             // メールマーケティング
-            "mailchimp.com", "list-manage.com", "salesforce.com",
-            "pardot.com", "exacttarget.com", "sendgrid.net",
-            "sendgrid.com", "mailgun.org", "mandrillapp.com",
-            "klaviyo.com", "constantcontact.com", "campaignmonitor.com",
-            "getresponse.com", "aweber.com", "hubspot.com",
-            "marketo.com", "eloqua.com",
+            "mailchimp.com",
+            "list-manage.com",
+            "salesforce.com",
+            "pardot.com",
+            "exacttarget.com",
+            "sendgrid.net",
+            "sendgrid.com",
+            "mailgun.org",
+            "mandrillapp.com",
+            "klaviyo.com",
+            "constantcontact.com",
+            "campaignmonitor.com",
+            "getresponse.com",
+            "aweber.com",
+            "hubspot.com",
+            "marketo.com",
+            "eloqua.com",
             // 分析系
-            "google-analytics.com", "analytics.google.com",
-            "doubleclick.net", "facebook.com", "fb.com",
-            "linkedin.com", "twitter.com",
+            "google-analytics.com",
+            "analytics.google.com",
+            "doubleclick.net",
+            "facebook.com",
+            "fb.com",
+            "linkedin.com",
+            "twitter.com",
             // メール開封追跡 SaaS
-            "mailtrack.io", "streak.com", "yesware.com",
-            "boomeranggmail.com", "mixmax.com", "outreach.io",
-            "salesloft.com", "groove.co", "cirrusinsight.com",
+            "mailtrack.io",
+            "streak.com",
+            "yesware.com",
+            "boomeranggmail.com",
+            "mixmax.com",
+            "outreach.io",
+            "salesloft.com",
+            "groove.co",
+            "cirrusinsight.com",
             // 日本系
-            "blastmail.jp", "cuenote.jp", "wowma.jp",
+            "blastmail.jp",
+            "cuenote.jp",
+            "wowma.jp",
         ];
         for t in &trackers {
             known.insert(t.to_string());
         }
-        Self { known_trackers: known }
+        Self {
+            known_trackers: known,
+        }
     }
 
     /// HTML ボディからトラッキングピクセルを検出する。
@@ -109,7 +134,8 @@ impl TrackingDetector {
         // MAX_HTML_BYTES がマルチバイト UTF-8 文字の中間にある場合に
         // &str スライスがパニックする。is_char_boundary() で安全な境界を探す。
         let html = if html.len() > MAX_HTML_BYTES {
-            let safe = (0..=MAX_HTML_BYTES).rev()
+            let safe = (0..=MAX_HTML_BYTES)
+                .rev()
                 .find(|&i| html.is_char_boundary(i))
                 .unwrap_or(0);
             &html[..safe]
@@ -117,13 +143,14 @@ impl TrackingDetector {
             html
         };
         let mut blocked_domains = Vec::new();
-        let mut pixels_found    = Vec::new();
+        let mut pixels_found = Vec::new();
 
         // img タグを検索
         let mut pos = 0;
         while let Some(img_start) = html[pos..].find("<img") {
             let abs_start = pos + img_start;
-            let tag_end = html[abs_start..].find('>')
+            let tag_end = html[abs_start..]
+                .find('>')
                 .map(|e| abs_start + e + 1)
                 .unwrap_or(html.len());
             let tag = &html[abs_start..tag_end];
@@ -132,13 +159,10 @@ impl TrackingDetector {
             if let Some(src) = extract_attr(tag, "src") {
                 // http/https の外部 URL (cid: は除外)
                 if src.starts_with("http://") || src.starts_with("https://") {
-                    let domain = extract_domain_from_url(src)
-                        .unwrap_or_default();
+                    let domain = extract_domain_from_url(src).unwrap_or_default();
 
-                    let width  = extract_attr(tag, "width")
-                        .and_then(|w| w.parse::<u32>().ok());
-                    let height = extract_attr(tag, "height")
-                        .and_then(|h| h.parse::<u32>().ok());
+                    let width = extract_attr(tag, "width").and_then(|w| w.parse::<u32>().ok());
+                    let height = extract_attr(tag, "height").and_then(|h| h.parse::<u32>().ok());
 
                     // 1x1 ピクセルは確実にトラッカー
                     let is_pixel = matches!((width, height), (Some(1), Some(1)))
@@ -149,16 +173,17 @@ impl TrackingDetector {
                     let tracker_type = if is_pixel {
                         TrackerType::OpenTracking
                     } else if matches_known_tracker {
-                        TrackerType::MarketingPlatform { name: domain.clone() }
+                        TrackerType::MarketingPlatform {
+                            name: domain.clone(),
+                        }
                     } else if is_tracking_url_pattern(src) {
                         TrackerType::OpenTracking
                     } else {
                         TrackerType::Unknown
                     };
 
-                    let is_tracker = is_pixel
-                        || matches_known_tracker
-                        || is_tracking_url_pattern(src);
+                    let is_tracker =
+                        is_pixel || matches_known_tracker || is_tracking_url_pattern(src);
 
                     if is_tracker {
                         blocked_domains.push(domain.clone());
@@ -179,9 +204,9 @@ impl TrackingDetector {
         blocked_domains.dedup();
 
         TrackingAnalysis {
-            tracker_count:   pixels_found.len(),
+            tracker_count: pixels_found.len(),
             blocked_domains,
-            was_tracked:     !pixels_found.is_empty(),
+            was_tracked: !pixels_found.is_empty(),
             pixels_found,
         }
     }
@@ -197,9 +222,9 @@ impl TrackingDetector {
     /// `cdn.mailchimp.com` のような正規のトラッカーサブドメインが
     /// `mailchimp.com` の登録と一致せず検出をすり抜けていた。
     fn is_known_tracker_domain(&self, domain: &str) -> bool {
-        self.known_trackers.iter().any(|known| {
-            domain == known || domain.ends_with(&format!(".{known}"))
-        })
+        self.known_trackers
+            .iter()
+            .any(|known| domain == known || domain.ends_with(&format!(".{known}")))
     }
 }
 
@@ -240,7 +265,8 @@ fn find_attr_value<'a>(tag: &'a str, attr: &str, quote: char) -> Option<&'a str>
 }
 
 fn extract_domain_from_url(url: &str) -> Option<String> {
-    let without_scheme = url.strip_prefix("https://")
+    let without_scheme = url
+        .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;
     let host_port = without_scheme.split('/').next()?;
     // ポート番号を除去: "tracker.com:8080" → "tracker.com"
@@ -251,216 +277,29 @@ fn extract_domain_from_url(url: &str) -> Option<String> {
 
 fn is_tracking_url_pattern(url: &str) -> bool {
     let patterns = [
-        "/track/", "/pixel/", "/open/", "/click/", "/beacon/",
-        "track=", "pixel=", "open=", "utm_", "trk=",
-        "/t/", ".gif?", "tracking", "analytics",
+        "/track/",
+        "/pixel/",
+        "/open/",
+        "/click/",
+        "/beacon/",
+        "track=",
+        "pixel=",
+        "open=",
+        "utm_",
+        "trk=",
+        "/t/",
+        ".gif?",
+        "tracking",
+        "analytics",
     ];
     let lower = url.to_lowercase();
     patterns.iter().any(|p| lower.contains(p))
 }
 
 impl Default for TrackingDetector {
-    fn default() -> Self { Self::new() }
-}
-
-// ============================================================================
-// ゼロ知識ローカル検索
-//
-// Tuta の優位性: ゼロ知識検索 (サーバーが何を検索したか知らない)
-// Proton Mail の弱点: フルテキスト検索でサーバー側に問い合わせ
-// Kaname の実装: SQLite FTS5 でローカル検索、サーバーには一切送信しない
-// ============================================================================
-
-/// ゼロ知識ローカル検索エンジン。
-///
-/// 全ての検索処理はデバイス上のみで実行される。
-/// サーバーには検索クエリも結果も送信されない。
-pub struct ZeroKnowledgeSearch {
-    /// ローカルインデックス (email_id → keywords)
-    /// 本番: SQLite FTS5 バーチャルテーブルを使用
-    index: Vec<IndexEntry>,
-    /// インデックスエントリ数の上限 (OOM DoS 防止)
-    max_entries: usize,
-}
-
-#[derive(Debug, Clone)]
-struct IndexEntry {
-    email_id:    String,
-    /// 件名 (ローカルのみ、サーバーには送信しない)
-    subject:     String,
-    /// 本文の要約 (ローカルのみ)
-    body_preview: String,
-    /// 送信者
-    from_name:   String,
-    from_addr:   String,
-    received_at: String,
-}
-
-/// 検索結果。
-#[derive(Debug, Clone)]
-pub struct SearchResult {
-    pub email_id:   String,
-    pub subject:    String,
-    pub from:       String,
-    pub preview:    String,
-    pub received_at: String,
-    /// マッチしたフィールド
-    pub matched_in: Vec<MatchedField>,
-    /// 関連スコア
-    pub score:      f32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MatchedField {
-    Subject, Body, Sender,
-}
-
-impl ZeroKnowledgeSearch {
-    /// 新規インスタンスを作成する。
-    pub fn new() -> Self {
-        Self { index: Vec::new(), max_entries: 1_000_000 }
+    fn default() -> Self {
+        Self::new()
     }
-
-    /// メールをローカルインデックスに追加する。
-    ///
-    /// インデックスが `max_entries` に達した場合は最古エントリを退避する。
-    pub fn index_email(
-        &mut self,
-        email_id:    &str,
-        subject:     &str,
-        body_text:   &str,
-        from_name:   Option<&str>,
-        from_addr:   &str,
-        received_at: &str,
-    ) {
-        // email_id 長さ制限: 過大な ID による find() O(n × id_len) DoS を防ぐ
-        const MAX_EMAIL_ID_BYTES: usize = 1024;
-        if email_id.len() > MAX_EMAIL_ID_BYTES {
-            return;
-        }
-        // 既存エントリを更新または追加
-        if let Some(entry) = self.index.iter_mut().find(|e| e.email_id == email_id) {
-            entry.subject     = subject.to_owned();
-            entry.body_preview = body_text.chars().take(200).collect();
-            return;
-        }
-
-        // 容量超過時は最古エントリを退避 (FIFO)
-        if self.index.len() >= self.max_entries {
-            self.index.remove(0);
-        }
-
-        self.index.push(IndexEntry {
-            email_id:    email_id.to_owned(),
-            subject:     subject.to_owned(),
-            body_preview: body_text.chars().take(200).collect(),
-            from_name:   from_name.unwrap_or("").to_owned(),
-            from_addr:   from_addr.to_owned(),
-            received_at: received_at.to_owned(),
-        });
-    }
-
-    /// ローカルインデックスで検索する (サーバーへの通信なし)。
-    ///
-    /// 検索構文:
-    ///   "from:alice@example.com" → 送信者で絞り込み
-    ///   "subject:会議" → 件名で絞り込み
-    ///   それ以外 → 全フィールドを検索
-    #[must_use]
-    pub fn search(&self, query: &str) -> Vec<SearchResult> {
-        if query.is_empty() { return Vec::new(); }
-        // 長大クエリによる O(query_len × index_size) DoS を防ぐ
-        const MAX_QUERY_BYTES: usize = 1024;
-        if query.len() > MAX_QUERY_BYTES {
-            return Vec::new();
-        }
-
-        let (field, term) = parse_search_query(query);
-        let lower_term = term.to_lowercase();
-
-        let mut results: Vec<SearchResult> = self.index.iter()
-            .filter_map(|entry| {
-                let mut matched_in = Vec::new();
-                let mut score = 0.0f32;
-
-                match field {
-                    SearchField::From => {
-                        if entry.from_addr.to_lowercase().contains(&lower_term)
-                           || entry.from_name.to_lowercase().contains(&lower_term) {
-                            matched_in.push(MatchedField::Sender);
-                            score = 1.0;
-                        }
-                    }
-                    SearchField::Subject => {
-                        if entry.subject.to_lowercase().contains(&lower_term) {
-                            matched_in.push(MatchedField::Subject);
-                            score = 1.0;
-                        }
-                    }
-                    SearchField::All => {
-                        if entry.subject.to_lowercase().contains(&lower_term) {
-                            matched_in.push(MatchedField::Subject);
-                            score += 0.8;
-                        }
-                        if entry.body_preview.to_lowercase().contains(&lower_term) {
-                            matched_in.push(MatchedField::Body);
-                            score += 0.5;
-                        }
-                        if entry.from_name.to_lowercase().contains(&lower_term)
-                           || entry.from_addr.to_lowercase().contains(&lower_term) {
-                            matched_in.push(MatchedField::Sender);
-                            score += 0.6;
-                        }
-                    }
-                }
-
-                if matched_in.is_empty() { return None; }
-
-                Some(SearchResult {
-                    email_id:   entry.email_id.clone(),
-                    subject:    entry.subject.clone(),
-                    from:       if entry.from_name.is_empty() {
-                                    entry.from_addr.clone()
-                                } else {
-                                    format!("{} <{}>", entry.from_name, entry.from_addr)
-                                },
-                    preview:    entry.body_preview.clone(),
-                    received_at: entry.received_at.clone(),
-                    matched_in,
-                    score,
-                })
-            })
-            .collect();
-
-        // スコア降順でソート
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        results
-    }
-
-    /// インデックスのサイズ (メール件数)。
-    #[must_use]
-    pub fn size(&self) -> usize { self.index.len() }
-
-    /// インデックスからメールを削除する。
-    pub fn remove(&mut self, email_id: &str) {
-        self.index.retain(|e| e.email_id != email_id);
-    }
-}
-
-impl Default for ZeroKnowledgeSearch {
-    fn default() -> Self { Self::new() }
-}
-
-enum SearchField { From, Subject, All }
-
-fn parse_search_query(query: &str) -> (SearchField, &str) {
-    if let Some(term) = query.strip_prefix("from:") {
-        return (SearchField::From, term);
-    }
-    if let Some(term) = query.strip_prefix("subject:") {
-        return (SearchField::Subject, term);
-    }
-    (SearchField::All, query)
 }
 
 // ============================================================================
@@ -479,15 +318,21 @@ mod tests {
         let result = detector.analyze_html(html);
         assert!(result.was_tracked);
         assert!(result.tracker_count > 0);
-        assert!(result.blocked_domains.contains(&"mailchimp.com".to_string()));
+        assert!(result
+            .blocked_domains
+            .contains(&"mailchimp.com".to_string()));
     }
 
     #[test]
     fn detects_1x1_tracking_pixel() {
         let detector = TrackingDetector::new();
-        let html = r#"<img src="https://unknown-tracker.example.com/pixel.gif" width="1" height="1">"#;
+        let html =
+            r#"<img src="https://unknown-tracker.example.com/pixel.gif" width="1" height="1">"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked, "1x1 ピクセルはトラッカーとして検出されるべき");
+        assert!(
+            result.was_tracked,
+            "1x1 ピクセルはトラッカーとして検出されるべき"
+        );
     }
 
     #[test]
@@ -510,88 +355,28 @@ mod tests {
         // kaname の CSP では実際には全外部画像をブロックするが、
         // このテストはトラッカー判定ロジックのみを確認
         // 200x100 の画像は 1x1 でなく、既知トラッカーでもない
-        let pixel_only = result.pixels_found.iter()
+        let pixel_only = result
+            .pixels_found
+            .iter()
             .filter(|p| matches!(p.tracker_type, TrackerType::OpenTracking))
             .count();
-        assert_eq!(pixel_only, 0, "通常サイズの画像はピクセルトラッカーではない");
+        assert_eq!(
+            pixel_only, 0,
+            "通常サイズの画像はピクセルトラッカーではない"
+        );
     }
 
     // ゼロ知識検索
-    #[test]
-    fn 件名での検索が機能する() {
-        let mut search = ZeroKnowledgeSearch::new();
-        search.index_email("e1", "プロジェクト Alpha の予算", "添付をご確認ください",
-                           Some("Alice"), "alice@company.com", "2026-04-24");
-        search.index_email("e2", "会議のご案内", "来週月曜日に会議があります",
-                           Some("Bob"), "bob@company.com", "2026-04-23");
-        search.index_email("e3", "プロジェクト Beta の進捗", "進捗報告書を送付します",
-                           Some("Carol"), "carol@company.com", "2026-04-22");
-
-        let results = search.search("subject:プロジェクト");
-        assert_eq!(results.len(), 2, "プロジェクトを含む件名が 2 件");
-        assert!(results.iter().all(|r| r.matched_in.contains(&MatchedField::Subject)));
-    }
-
-    #[test]
-    fn 送信者での検索が機能する() {
-        let mut search = ZeroKnowledgeSearch::new();
-        search.index_email("e1", "件名1", "本文1", Some("Alice"), "alice@company.com", "2026-04-24");
-        search.index_email("e2", "件名2", "本文2", Some("Bob"), "bob@company.com", "2026-04-23");
-
-        let results = search.search("from:alice");
-        assert_eq!(results.len(), 1);
-        assert!(results[0].matched_in.contains(&MatchedField::Sender));
-    }
-
-    #[test]
-    fn 全文検索が機能する() {
-        let mut search = ZeroKnowledgeSearch::new();
-        search.index_email("e1", "会議について", "来週の月曜日に会議があります", None, "a@b.com", "");
-        search.index_email("e2", "報告書", "月次報告書を添付します", None, "c@d.com", "");
-
-        let results = search.search("月");
-        assert_eq!(results.len(), 2, "「月」を含むメールが 2 件");
-    }
-
-    #[test]
-    fn 空クエリで結果なし() {
-        let search = ZeroKnowledgeSearch::new();
-        let results = search.search("");
-        assert!(results.is_empty());
-    }
-
-    #[test]
-    fn インデックス削除が機能する() {
-        let mut search = ZeroKnowledgeSearch::new();
-        search.index_email("e1", "件名", "本文", None, "a@b.com", "");
-        assert_eq!(search.size(), 1);
-        search.remove("e1");
-        assert_eq!(search.size(), 0);
-    }
-
-    #[test]
-    fn スコア降順でソートされる() {
-        let mut search = ZeroKnowledgeSearch::new();
-        // 件名のみマッチ (スコア高) と本文のみマッチ (スコア低)
-        search.index_email("e1", "重要な会議", "明日の準備をお願いします", None, "a@b.com", "");
-        search.index_email("e2", "お知らせ", "重要なお知らせがあります", None, "c@d.com", "");
-
-        let results = search.search("重要");
-        assert_eq!(results.len(), 2);
-        // 件名マッチ (e1) が本文マッチ (e2) より先に来るべき
-        assert_eq!(results[0].email_id, "e1", "件名マッチが先に来るべき");
-    }
-
-    // ── シングルクォート属性によるトラッカー回避テスト ───────────────────
-
     #[test]
     fn single_quote_src_でもトラッカーを検出する() {
         let detector = TrackingDetector::new();
         // シングルクォートで囲まれた src 属性
         let html = r#"<img src='https://mailchimp.com/track/open.gif' width='1' height='1'>"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked,
-            "シングルクォートの src 属性はトラッカー検出をバイパスしてはならない");
+        assert!(
+            result.was_tracked,
+            "シングルクォートの src 属性はトラッカー検出をバイパスしてはならない"
+        );
     }
 
     #[test]
@@ -600,10 +385,16 @@ mod tests {
         // ポート番号付き: "mailchimp.com:443" は "mailchimp.com" と同じドメイン
         let html = r#"<img src="https://mailchimp.com:443/track/open.gif" width="1" height="1">"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked,
-            "ポート番号付きドメインはトラッカー検出をバイパスしてはならない");
-        assert!(result.blocked_domains.contains(&"mailchimp.com".to_string()),
-            "blocked_domains はポートなしドメインを含むべき");
+        assert!(
+            result.was_tracked,
+            "ポート番号付きドメインはトラッカー検出をバイパスしてはならない"
+        );
+        assert!(
+            result
+                .blocked_domains
+                .contains(&"mailchimp.com".to_string()),
+            "blocked_domains はポートなしドメインを含むべき"
+        );
     }
 
     #[test]
@@ -612,22 +403,13 @@ mod tests {
         // 攻撃者が :8080 を付けて既知リストをバイパスしようとする
         let html = r#"<img src="https://mailchimp.com:8080/track/open.gif" width="1" height="1">"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked,
-            "非標準ポートによるトラッカー検出バイパスを防止する");
+        assert!(
+            result.was_tracked,
+            "非標準ポートによるトラッカー検出バイパスを防止する"
+        );
     }
 
     // ── インデックス容量制限テスト ─────────────────────────────────────────
-
-    #[test]
-    fn インデックスは上限を超えない() {
-        let mut search = ZeroKnowledgeSearch::new();
-        // max_entries を小さくしてテスト
-        search.max_entries = 5;
-        for i in 0..10u32 {
-            search.index_email(&format!("e{i}"), "件名", "本文", None, "a@b.com", "");
-        }
-        assert_eq!(search.size(), 5, "上限 5 を超えてはならない");
-    }
 
     #[test]
     fn html_サイズ上限で切り捨てる() {
@@ -653,7 +435,7 @@ mod tests {
         // → MAX バイト目がマルチバイト文字の途中になる
         let mut html = "a".repeat(MAX - 2);
         html.push('日'); // 3 バイト: 0xE6 0x97 0xA5
-        // html.len() = MAX - 2 + 3 = MAX + 1 > MAX → 切り捨て発動
+                         // html.len() = MAX - 2 + 3 = MAX + 1 > MAX → 切り捨て発動
         assert!(html.len() > MAX);
 
         // パニックしないことを確認 (パニックするとテストがクラッシュする)
@@ -675,45 +457,17 @@ mod tests {
         let _ = result; // パニックしないことが目的
     }
 
-    // ── ZeroKnowledgeSearch 入力上限回帰テスト ─────────────────────────────
-
-    #[test]
-    fn search_huge_query_returns_empty() {
-        // 攻撃: 100KB クエリ × 1M エントリ = DoS
-        let mut engine = ZeroKnowledgeSearch::new();
-        engine.index_email("id1", "会議の件", "本文", Some("山田"), "a@example.com", "2026-01-01");
-        let huge_query = "a".repeat(100_000);
-        let results = engine.search(&huge_query);
-        assert!(results.is_empty(), "過大クエリは空リストを返すべき");
-    }
-
-    #[test]
-    fn index_email_huge_id_is_ignored() {
-        // 攻撃: 50KB email_id で find() の O(n × id_len) DoS
-        let mut engine = ZeroKnowledgeSearch::new();
-        let huge_id = "X".repeat(50_000);
-        engine.index_email(&huge_id, "件名", "本文", None, "a@b.com", "2026-01-01");
-        assert_eq!(engine.index.len(), 0, "過大 email_id は無視されるべき");
-    }
-
-    #[test]
-    fn normal_search_still_works() {
-        let mut engine = ZeroKnowledgeSearch::new();
-        engine.index_email("id1", "重要な会議", "明日の議題", Some("田中"), "tanaka@corp.jp", "2026-01-01");
-        let results = engine.search("会議");
-        assert!(!results.is_empty(), "通常の検索は機能するべき");
-    }
-
-    // ── extract_attr 境界チェック回帰テスト ──────────────────────────────
-
     #[test]
     fn extract_attr_does_not_match_data_src_prefix() {
         // 修正前: tag.find("src=\"") が "data-src=\"" の部分文字列にマッチし、
         // data-src の値を誤って src の値として抽出していた。
         let tag = r#"<img data-src="https://tracker.example.com/pixel.gif" src="https://legit.com/logo.png">"#;
         let src = extract_attr(tag, "src");
-        assert_eq!(src, Some("https://legit.com/logo.png"),
-            "data-src ではなく実際の src 属性値を抽出すべき");
+        assert_eq!(
+            src,
+            Some("https://legit.com/logo.png"),
+            "data-src ではなく実際の src 属性値を抽出すべき"
+        );
     }
 
     #[test]
@@ -731,13 +485,16 @@ mod tests {
         let html = r#"<img data-src="https://tracker.example.com/pixel.gif" src="https://our-company.co.jp/logo.png" width="200" height="100">"#;
         let result = detector.analyze_html(html);
         // src (200x100, 非トラッカードメイン) がスキャン対象になるため未検出のはず
-        assert_eq!(result.tracker_count, 0,
-            "data-src の影響を受けず実際の src (無害な画像) が正しく評価されるべき");
+        assert_eq!(
+            result.tracker_count, 0,
+            "data-src の影響を受けず実際の src (無害な画像) が正しく評価されるべき"
+        );
     }
 
     #[test]
     fn extract_attr_single_quote_boundary_respected() {
-        let tag = "<img data-src='https://tracker.example.com/x.gif' src='https://legit.com/logo.png'>";
+        let tag =
+            "<img data-src='https://tracker.example.com/x.gif' src='https://legit.com/logo.png'>";
         let src = extract_attr(tag, "src");
         assert_eq!(src, Some("https://legit.com/logo.png"));
     }
@@ -750,8 +507,10 @@ mod tests {
         let detector = TrackingDetector::new();
         let html = r#"<img src="https://cdn.mailchimp.com/open/abc123" width="300" height="200">"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked,
-            "既知トラッカーのサブドメインは検出されるべき: {result:?}");
+        assert!(
+            result.was_tracked,
+            "既知トラッカーのサブドメインは検出されるべき: {result:?}"
+        );
     }
 
     #[test]
@@ -760,8 +519,10 @@ mod tests {
         let detector = TrackingDetector::new();
         let html = r#"<img src="https://notmailchimp.com/logo.png" width="300" height="200">"#;
         let result = detector.analyze_html(html);
-        assert!(!result.was_tracked,
-            "無関係なドメインは誤検知されるべきではない: {result:?}");
+        assert!(
+            !result.was_tracked,
+            "無関係なドメインは誤検知されるべきではない: {result:?}"
+        );
     }
 
     #[test]
@@ -769,6 +530,9 @@ mod tests {
         let detector = TrackingDetector::new();
         let html = r#"<img src="https://mailchimp.com/open/abc123" width="300" height="200">"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked, "完全一致トラッカーは引き続き検出されるべき");
+        assert!(
+            result.was_tracked,
+            "完全一致トラッカーは引き続き検出されるべき"
+        );
     }
 }

@@ -11,7 +11,7 @@
 
 北極星: 「AIが受信箱全体を読まない。メール1通のみ解析する。」
 
-技術スタック: Rust (27 クレート) + SolidJS + Tauri 2.x + MLS RFC 9420 + ML-KEM-768
+技術スタック: Rust (21 クレート) + SolidJS + Tauri 2.x + MLS RFC 9420 + ML-KEM-768
 
 ---
 
@@ -38,18 +38,29 @@ CLAUDE.md → Cargo.toml → docs/threat-model.md → 対象クレートの lib.
 
 ## クレート依存グラフ (単方向)
 
+実測の依存関係 (D101 — 以前の記述は設計意図であり実装と一致していなかった):
+
 ```
-kaname-error
-  └── kaname-i18n, kaname-observability, kaname-privacy, kaname-screen
-        └── kaname-crypto, kaname-store
-              └── kaname-mls, kaname-render (→ kaname-screen)
-                    └── kaname-bec, kaname-dlp, kaname-ai
-                          └── kaname-jmap, kaname-sandbox
-                                └── kaname-oobv, kaname-pivot, kaname-radar, kaname-ssa, kaname-saas-guard (→ kaname-screen)
-                                      └── kaname-ui → src-tauri
+葉クレート (kaname-* への依存なし):
+  kaname-screen, kaname-pivot, kaname-memory-guard, kaname-crypto,
+  kaname-store, kaname-jmap, kaname-privacy, kaname-observability,
+  kaname-radar, kaname-ssa, kaname-mls, kaname-sandbox, kaname-mockserver
+
+kaname-render     → kaname-screen
+kaname-saas-guard → kaname-screen
+kaname-ai         → kaname-screen
+kaname-bec        → kaname-screen, kaname-pivot, kaname-memory-guard
+kaname-dlp        → kaname-render
+kaname-oobv       → kaname-crypto, kaname-memory-guard
+kaname-tests      → kaname-ai, kaname-screen (テスト専用)
+kaname-ui         → kaname-bec, kaname-dlp, kaname-jmap, kaname-memory-guard,
+                    kaname-oobv, kaname-privacy, kaname-radar, kaname-render,
+                    kaname-saas-guard, kaname-ssa, kaname-store,
+                    kaname-observability
+src-tauri         → kaname-ui
 ```
 
-循環依存は禁止。新クレート追加時はグラフを更新すること。
+循環依存は禁止 (Cargo 自体が検出する)。新クレート追加時はグラフを更新すること。
 
 ---
 
@@ -78,7 +89,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 - [ ] `crates/kaname-xxx/src/lib.rs` に `//!` ドキュメント追加
 - [ ] `crates/kaname-xxx/README.md` に機能説明追加
 - [ ] `Cargo.toml` の workspace members に追加
-- [ ] `crates/kaname-xxx/Cargo.toml` に `kaname-error` 依存追加
 - [ ] ユニットテスト ≥ 10 件
 - [ ] `CHANGELOG.md` の `[Unreleased]` に追記
 - [ ] `docs/threat-model.md` に新しい攻撃面を追記 (必要な場合)
@@ -92,7 +102,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 - `crates/kaname-ai/` — Dual-LLM 境界
 - `crates/kaname-bec/` — BEC 検出ロジック
 - `crates/kaname-mls/` — 暗号実装
-- `crates/kaname-crypto/` — PQC ハイブリッド
+- `crates/kaname-crypto/` — 定数時間比較ユーティリティ (旧 PQC trait 面は D143 で削除)
 - `crates/kaname-dlp/` — DLP ルール
 
 **これらのクレートへの PR は `@kaname-app/security-lead` の承認が必須。**
@@ -125,15 +135,12 @@ let value = option.ok_or(KanameError::Missing("field"))?;
 let guard = lock.read().unwrap_or_else(|e| e.into_inner());
 ```
 
-### 翻訳キーを直接文字列で書く
+### UI 文字列
 
-```rust
-// ❌
-let msg = "エラーが発生しました";
-
-// ✅
-let msg = i18n.get("error.generic");
-```
+UI 文言はコンポーネント内の日本語ハードコード文字列が正規。
+i18n 基盤 (`src/i18n.ts` + `src/locales/`、Rust 側の kaname-i18n) は
+いずれも呼び出し実績ゼロのため削除済み (E9/D19)。多言語化が必要になったら
+git 履歴から復元すること。
 
 ---
 
@@ -199,14 +206,15 @@ cargo nextest run --workspace --no-fail-fast 2>&1 | tail -5
 | 入力スクリーニング | kaname-screen `PromptScreener` | arxiv 2505.22852 §2.1 |
 | 出力監査 | kaname-screen `OutputAuditor` | arxiv 2505.22852 §2.2 |
 | UserUpload provenance | kaname-ai `Provenance::UserUpload` | arxiv 2505.22852 §2.3 |
-| Tiered-Risk アクセス制御 | kaname-ai `tiered_risk` | arxiv 2505.22852 §3 |
+| ~~Tiered-Risk アクセス制御~~ (削除済み D140 — 呼出元ゼロ) | — | arxiv 2505.22852 §3 |
 | メモリ汚染防御 | kaname-memory-guard | arxiv 2601.05504 |
 
-UI コマンド (commands.rs):
-- `screen_user_input` — 入力スクリーニング
-- `audit_ai_output` — 出力監査
-- `check_action_risk` — Tiered-Risk 判定
-- `check_memory_trust` — メモリ信頼スコア
+これらのクレートはライブラリとして残っているが、エージェント監視 UI が
+製品に存在しないため IPC コマンド層 (screen_user_input / audit_ai_output /
+check_action_risk / check_memory_trust / check_rule_of_two /
+validate_tool_argument / record_agent_step / reset_trajectory) は
+呼び出し元ゼロで削除済み (2026-09, gap-analysis E11)。クレートの機能は
+`kaname_memory_guard::normalize_for_matching*` 等として解析経路で利用中。
 
 ## よく使うコマンド (Makefile)
 

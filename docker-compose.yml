@@ -24,7 +24,7 @@ services:
   # JMAP モックサーバー
   # ────────────────────────────────────────────────────────────
   mock:
-    image: rust:1.82-bookworm
+    image: rust:bookworm
     container_name: kaname-mock
     working_dir: /workspace
     volumes:
@@ -79,7 +79,7 @@ services:
   # CI シミュレーター (オプション)
   # ────────────────────────────────────────────────────────────
   ci:
-    image: rust:1.82-bookworm
+    image: rust:bookworm
     container_name: kaname-ci
     working_dir: /workspace
     volumes:

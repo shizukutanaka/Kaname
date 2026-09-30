@@ -16,7 +16,6 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use kaname_render::mime;
 
 fuzz_target!(|data: &[u8]| {
     // パニックしないことを保証
@@ -24,7 +23,7 @@ fuzz_target!(|data: &[u8]| {
     //   1. 正常にパース成功
     //   2. parse error (Result::Err) を返す
     //   3. マルチパートの再帰深度制限に達する (DoS 防止)
-    let _ = mime::parse_message(data);
+    let _ = kaname_render::parse(data);
 });
 
 // 派生ファジング: 既知の攻撃パターンをシード

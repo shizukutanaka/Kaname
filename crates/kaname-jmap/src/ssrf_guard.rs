@@ -57,7 +57,9 @@ pub async fn check_url_for_ssrf(url: &str) -> Result<(), SsrfError> {
     // スキームチェック
     if !url.starts_with("https://") {
         let scheme = url.split("://").next().unwrap_or("unknown");
-        return Err(SsrfError::NonHttpsScheme { scheme: scheme.to_string() });
+        return Err(SsrfError::NonHttpsScheme {
+            scheme: scheme.to_string(),
+        });
     }
 
     let host = extract_host(url).ok_or_else(|| SsrfError::InvalidUrl(url.to_string()))?;
@@ -83,7 +85,9 @@ pub async fn check_url_for_ssrf(url: &str) -> Result<(), SsrfError> {
         .collect();
 
     if addrs.is_empty() {
-        return Err(SsrfError::DnsResolutionFailed(format!("{host} → アドレスなし")));
+        return Err(SsrfError::DnsResolutionFailed(format!(
+            "{host} → アドレスなし"
+        )));
     }
 
     for ip in &addrs {
@@ -188,7 +192,12 @@ fn is_private_ip(ip: &IpAddr) -> bool {
                 return true;
             }
             // NAT64: 64:ff9b::/96 (RFC 6052) — IPv4 プライベートへのトンネル
-            if segments[0] == 0x0064 && segments[1] == 0xff9b && segments[2] == 0 && segments[3] == 0 && segments[4] == 0 {
+            if segments[0] == 0x0064
+                && segments[1] == 0xff9b
+                && segments[2] == 0
+                && segments[3] == 0
+                && segments[4] == 0
+            {
                 let v4 = std::net::Ipv4Addr::new(
                     (segments[6] >> 8) as u8,
                     segments[6] as u8,
@@ -293,7 +302,9 @@ fn is_obfuscated_ip(host: &str) -> bool {
     if host.starts_with('0') && host.contains('.') {
         let segments: Vec<&str> = host.split('.').collect();
         if (2..=4).contains(&segments.len())
-            && segments.iter().all(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
+            && segments
+                .iter()
+                .all(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
         {
             return true;
         }
@@ -314,7 +325,9 @@ fn extract_host(url: &str) -> Option<&str> {
     let host = host_and_rest.split(':').next()?;
     // IPv6 リテラル [::1] の処理
     if host.starts_with('[') {
-        after_scheme.split('/').next()
+        after_scheme
+            .split('/')
+            .next()
             .and_then(|h| h.strip_prefix('['))
             .and_then(|h| h.split(']').next())
     } else {
@@ -408,8 +421,14 @@ mod tests {
 
     #[test]
     fn host_extraction() {
-        assert_eq!(extract_host("https://example.com/path"), Some("example.com"));
-        assert_eq!(extract_host("https://example.com:8443/path"), Some("example.com"));
+        assert_eq!(
+            extract_host("https://example.com/path"),
+            Some("example.com")
+        );
+        assert_eq!(
+            extract_host("https://example.com:8443/path"),
+            Some("example.com")
+        );
         assert_eq!(extract_host("https://example.com"), Some("example.com"));
         assert_eq!(extract_host("http://example.com"), None);
     }
@@ -427,14 +446,20 @@ mod tests {
         // 修正前は to_ipv4_mapped() のみを使っており `::ffff:0:0/96` しか
         // 認識しないため、この形式は素通りしていた。
         let ip = IpAddr::V6("::127.0.0.1".parse().unwrap());
-        assert!(is_private_ip(&ip), "::127.0.0.1 (IPv4-compatible) はブロックされるべき");
+        assert!(
+            is_private_ip(&ip),
+            "::127.0.0.1 (IPv4-compatible) はブロックされるべき"
+        );
     }
 
     #[test]
     fn ipv6_compatible_legacy_link_local_blocked() {
         // ::169.254.169.254 — クラウドメタデータエンドポイントの IPv4-compatible 表現
         let ip = IpAddr::V6("::169.254.169.254".parse().unwrap());
-        assert!(is_private_ip(&ip), "::169.254.169.254 (IMDS) はブロックされるべき");
+        assert!(
+            is_private_ip(&ip),
+            "::169.254.169.254 (IMDS) はブロックされるべき"
+        );
     }
 
     #[test]
@@ -507,9 +532,18 @@ mod tests {
         // 修正前は "0" で始まりドットを含むだけで誤って IP 難読化とみなし
         // InvalidUrl でブロックしていた (over-blocking バグ)。
         // 数字始まりの正規サブドメインは許可されるべき。
-        assert!(!is_obfuscated_ip("0.mycdn.com"), "0.mycdn.com は正規ホスト名");
-        assert!(!is_obfuscated_ip("007.example.org"), "007.example.org は正規ホスト名");
-        assert!(!is_obfuscated_ip("0-tier.cdn.net"), "0-tier.cdn.net は正規ホスト名");
+        assert!(
+            !is_obfuscated_ip("0.mycdn.com"),
+            "0.mycdn.com は正規ホスト名"
+        );
+        assert!(
+            !is_obfuscated_ip("007.example.org"),
+            "007.example.org は正規ホスト名"
+        );
+        assert!(
+            !is_obfuscated_ip("0-tier.cdn.net"),
+            "0-tier.cdn.net は正規ホスト名"
+        );
     }
 
     #[test]

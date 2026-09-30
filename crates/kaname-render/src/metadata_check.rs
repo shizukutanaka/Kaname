@@ -31,16 +31,13 @@ pub enum MetadataRisk {
 impl std::fmt::Display for MetadataRisk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PdfAuthorInfo { excerpt } =>
-                write!(f, "PDF 作成者情報: {excerpt:?}"),
-            Self::PdfCreatorInfo { excerpt } =>
-                write!(f, "PDF 作成ソフト情報: {excerpt:?}"),
-            Self::ExifGpsCoordinates =>
-                write!(f, "JPEG EXIF GPS 座標が含まれている"),
-            Self::ExifDeviceInfo =>
-                write!(f, "JPEG EXIF 機器情報が含まれている"),
-            Self::OoxmlAuthorInfo { excerpt } =>
-                write!(f, "Office ドキュメント作成者情報: {excerpt:?}"),
+            Self::PdfAuthorInfo { excerpt } => write!(f, "PDF 作成者情報: {excerpt:?}"),
+            Self::PdfCreatorInfo { excerpt } => write!(f, "PDF 作成ソフト情報: {excerpt:?}"),
+            Self::ExifGpsCoordinates => write!(f, "JPEG EXIF GPS 座標が含まれている"),
+            Self::ExifDeviceInfo => write!(f, "JPEG EXIF 機器情報が含まれている"),
+            Self::OoxmlAuthorInfo { excerpt } => {
+                write!(f, "Office ドキュメント作成者情報: {excerpt:?}")
+            }
         }
     }
 }
@@ -54,7 +51,11 @@ impl std::fmt::Display for MetadataRisk {
 /// 誤検知よりも見逃しを優先する (送信前警告用途)。
 #[must_use]
 pub fn detect_metadata_risks(filename: &str, bytes: &[u8]) -> Vec<MetadataRisk> {
-    let ext = filename.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    let ext = filename
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
     match ext.as_str() {
         "pdf" => detect_pdf_metadata(bytes),
         "jpg" | "jpeg" | "tif" | "tiff" | "heic" => detect_exif_metadata(bytes),
@@ -84,6 +85,7 @@ fn detect_pdf_metadata(bytes: &[u8]) -> Vec<MetadataRisk> {
 /// PDF の文字列リテラルは 2 形式ある:
 /// - literal string: `(Alice)`
 /// - hex string:     `<416c696365>` (= "Alice")
+///
 /// 両方に対応する (以前は `(...)` のみ対応し、hex string を握り潰していたため
 /// 作成者名等が hex エンコードされた PDF でメタデータ検出が漏れていた)。
 fn find_pdf_field(text: &str, field: &str) -> Option<String> {
@@ -101,7 +103,10 @@ fn find_pdf_field(text: &str, field: &str) -> Option<String> {
     } else if let Some(body) = rest.strip_prefix('<') {
         // hex string: "<...>" — hex ペアを ASCII にデコードする
         let end = body.find('>')?;
-        let hex: String = body[..end].chars().filter(|c| !c.is_ascii_whitespace()).collect();
+        let hex: String = body[..end]
+            .chars()
+            .filter(|c| !c.is_ascii_whitespace())
+            .collect();
         if hex.is_empty() {
             return None;
         }
@@ -126,13 +131,24 @@ fn decode_pdf_hex_string(hex: &str) -> Option<String> {
     while i < chars.len() {
         let hi = chars[i].to_digit(16)?;
         // 奇数桁は末尾 0 補完 (PDF 仕様)
-        let lo = if i + 1 < chars.len() { chars[i + 1].to_digit(16)? } else { 0 };
+        let lo = if i + 1 < chars.len() {
+            chars[i + 1].to_digit(16)?
+        } else {
+            0
+        };
         bytes.push((hi * 16 + lo) as u8);
         i += 2;
     }
     // 印字可能な文字のみ残し、制御文字は '.' に (メタデータ excerpt の安全化)
-    let s: String = bytes.iter()
-        .map(|&b| if (0x20..0x7f).contains(&b) { b as char } else { '.' })
+    let s: String = bytes
+        .iter()
+        .map(|&b| {
+            if (0x20..0x7f).contains(&b) {
+                b as char
+            } else {
+                '.'
+            }
+        })
         .collect();
     Some(s)
 }
@@ -205,7 +221,10 @@ fn truncate_utf8(s: &str, max_bytes: usize) -> String {
     if s.len() <= max_bytes {
         return s.to_string();
     }
-    let cut = (0..=max_bytes).rev().find(|&i| s.is_char_boundary(i)).unwrap_or(0);
+    let cut = (0..=max_bytes)
+        .rev()
+        .find(|&i| s.is_char_boundary(i))
+        .unwrap_or(0);
     format!("{}…", &s[..cut])
 }
 
@@ -221,8 +240,12 @@ mod tests {
     fn pdf_author_detected() {
         let pdf = b"%PDF-1.4\n/Author (Alice Smith)\n/Creator (Microsoft Word 2019)\n";
         let risks = detect_pdf_metadata(pdf);
-        assert!(risks.iter().any(|r| matches!(r, MetadataRisk::PdfAuthorInfo { .. })));
-        assert!(risks.iter().any(|r| matches!(r, MetadataRisk::PdfCreatorInfo { .. })));
+        assert!(risks
+            .iter()
+            .any(|r| matches!(r, MetadataRisk::PdfAuthorInfo { .. })));
+        assert!(risks
+            .iter()
+            .any(|r| matches!(r, MetadataRisk::PdfCreatorInfo { .. })));
     }
 
     #[test]
@@ -239,7 +262,9 @@ mod tests {
         let pdf = b"%PDF-1.4\n/Author <416c696365>\n";
         let risks = detect_pdf_metadata(pdf);
         assert!(
-            risks.iter().any(|r| matches!(r, MetadataRisk::PdfAuthorInfo { .. })),
+            risks
+                .iter()
+                .any(|r| matches!(r, MetadataRisk::PdfAuthorInfo { .. })),
             "hex string の作成者名が検出されるべき: {risks:?}"
         );
     }
@@ -247,7 +272,10 @@ mod tests {
     #[test]
     fn pdf_hex_string_decodes_to_ascii() {
         // <48656c6c6f> = "Hello"
-        assert_eq!(decode_pdf_hex_string("48656c6c6f").as_deref(), Some("Hello"));
+        assert_eq!(
+            decode_pdf_hex_string("48656c6c6f").as_deref(),
+            Some("Hello")
+        );
         // 奇数桁は末尾 0 補完: <41> = "A", <4> → 0x40 = "@"
         assert_eq!(decode_pdf_hex_string("41").as_deref(), Some("A"));
         // 非 hex 文字は None
@@ -261,7 +289,9 @@ mod tests {
         jpeg.extend_from_slice(b"Exif\x00\x00");
         jpeg.extend_from_slice(b"\x88\x25"); // GPS IFD tag
         let risks = detect_exif_metadata(&jpeg);
-        assert!(risks.iter().any(|r| matches!(r, MetadataRisk::ExifGpsCoordinates)));
+        assert!(risks
+            .iter()
+            .any(|r| matches!(r, MetadataRisk::ExifGpsCoordinates)));
     }
 
     #[test]
@@ -297,7 +327,9 @@ mod tests {
         let mut docx = b"PK\x03\x04".to_vec();
         docx.extend_from_slice(b"...some content...dc:creator>Alice Smith</dc:creator...");
         let risks = detect_ooxml_metadata(&docx);
-        assert!(risks.iter().any(|r| matches!(r, MetadataRisk::OoxmlAuthorInfo { .. })));
+        assert!(risks
+            .iter()
+            .any(|r| matches!(r, MetadataRisk::OoxmlAuthorInfo { .. })));
     }
 
     #[test]

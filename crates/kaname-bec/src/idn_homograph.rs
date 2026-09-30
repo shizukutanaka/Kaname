@@ -39,14 +39,14 @@ pub enum IdnRisk {
 impl std::fmt::Display for IdnRisk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PunycodeLabel { label } =>
-                write!(f, "punycode ラベル検出: {label:?}"),
+            Self::PunycodeLabel { label } => write!(f, "punycode ラベル検出: {label:?}"),
             Self::HomoglyphCharacters { chars } => {
                 let s: String = chars.iter().collect();
                 write!(f, "ホモグリフ文字検出: {s:?}")
             }
-            Self::MixedScript { scripts } =>
-                write!(f, "混在スクリプト検出: {}", scripts.join(", ")),
+            Self::MixedScript { scripts } => {
+                write!(f, "混在スクリプト検出: {}", scripts.join(", "))
+            }
         }
     }
 }
@@ -62,7 +62,9 @@ pub fn analyze_domain(domain: &str) -> Vec<IdnRisk> {
     for label in domain.split('.') {
         let lower = label.to_ascii_lowercase();
         if lower.starts_with("xn--") {
-            risks.push(IdnRisk::PunycodeLabel { label: label.to_string() });
+            risks.push(IdnRisk::PunycodeLabel {
+                label: label.to_string(),
+            });
         }
     }
 
@@ -87,9 +89,9 @@ pub fn idn_risk_score(risks: &[IdnRisk]) -> f32 {
     let mut score: f32 = 0.0;
     for risk in risks {
         score += match risk {
-            IdnRisk::PunycodeLabel { .. }      => 0.4,
+            IdnRisk::PunycodeLabel { .. } => 0.4,
             IdnRisk::HomoglyphCharacters { .. } => 0.5,
-            IdnRisk::MixedScript { .. }         => 0.4,
+            IdnRisk::MixedScript { .. } => 0.4,
         };
     }
     score.min(1.0)
@@ -100,7 +102,8 @@ pub fn idn_risk_score(risks: &[IdnRisk]) -> f32 {
 /// 代表的な Cyrillic/Greek/Armenian の Latin 類似文字をリストアップ。
 /// 完全なリストは Unicode Confusables (https://unicode.org/reports/tr36/) に準拠。
 fn is_homoglyph(c: char) -> bool {
-    matches!(c,
+    matches!(
+        c,
         // Cyrillic: Latin に酷似
         '\u{0430}' // а (Cyrillic a)
         | '\u{0435}' // е (Cyrillic e)
@@ -124,7 +127,8 @@ fn is_homoglyph(c: char) -> bool {
         | '\u{0585}' // փ (Armenian ≈ q)
         | '\u{0578}' // ո (Armenian ≈ o)
         // Fullwidth Latin (ａ, ｂ 等)
-        | '\u{FF01}'..='\u{FF5E}'
+        | '\u{FF01}'
+            ..='\u{FF5E}'
         // Latin Extended lookalikes
         | '\u{01A1}' // ơ
         | '\u{0261}' // ɡ (script small g)
@@ -244,13 +248,17 @@ fn detect_mixed_scripts(domain: &str) -> Vec<&'static str> {
 
     for c in domain.chars() {
         if c.is_ascii_alphabetic() && !has_latin {
-            has_latin = true; found.push("Latin");
+            has_latin = true;
+            found.push("Latin");
         } else if matches!(c, '\u{0400}'..='\u{04FF}') && !has_cyrillic {
-            has_cyrillic = true; found.push("Cyrillic");
+            has_cyrillic = true;
+            found.push("Cyrillic");
         } else if matches!(c, '\u{0370}'..='\u{03FF}') && !has_greek {
-            has_greek = true; found.push("Greek");
+            has_greek = true;
+            found.push("Greek");
         } else if matches!(c, '\u{0530}'..='\u{058F}') && !has_armenian {
-            has_armenian = true; found.push("Armenian");
+            has_armenian = true;
+            found.push("Armenian");
         }
     }
 
@@ -275,7 +283,9 @@ mod tests {
     fn punycode_label_detected() {
         let risks = analyze_domain("xn--mcrsoft-k2d.com");
         assert!(
-            risks.iter().any(|r| matches!(r, IdnRisk::PunycodeLabel { .. })),
+            risks
+                .iter()
+                .any(|r| matches!(r, IdnRisk::PunycodeLabel { .. })),
             "xn-- ラベルは検出されるべき"
         );
     }
@@ -286,7 +296,9 @@ mod tests {
         let domain = "\u{0430}mazon.com";
         let risks = analyze_domain(domain);
         assert!(
-            risks.iter().any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })),
+            risks
+                .iter()
+                .any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })),
             "Cyrillic 'а' は ホモグリフとして検出されるべき"
         );
     }
@@ -296,9 +308,9 @@ mod tests {
         // Cyrillic 'і' (U+0456)
         let domain = "m\u{0456}crosoft.com";
         let risks = analyze_domain(domain);
-        assert!(
-            risks.iter().any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })),
-        );
+        assert!(risks
+            .iter()
+            .any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })),);
     }
 
     #[test]
@@ -307,7 +319,9 @@ mod tests {
         let domain = "\u{0430}mazon.com";
         let risks = analyze_domain(domain);
         assert!(
-            risks.iter().any(|r| matches!(r, IdnRisk::MixedScript { .. })),
+            risks
+                .iter()
+                .any(|r| matches!(r, IdnRisk::MixedScript { .. })),
             "Latin + Cyrillic 混在は MixedScript として検出されるべき"
         );
     }
@@ -317,7 +331,9 @@ mod tests {
         // Greek ο (U+03BF)
         let domain = "micr\u{03BF}s\u{03BF}ft.com";
         let risks = analyze_domain(domain);
-        assert!(risks.iter().any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })));
+        assert!(risks
+            .iter()
+            .any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })));
     }
 
     #[test]
@@ -328,9 +344,15 @@ mod tests {
     #[test]
     fn idn_risk_score_multiple_risks_capped_at_1() {
         let risks = vec![
-            IdnRisk::PunycodeLabel { label: "xn--test".to_string() },
-            IdnRisk::HomoglyphCharacters { chars: vec!['\u{0430}'] },
-            IdnRisk::MixedScript { scripts: vec!["Latin", "Cyrillic"] },
+            IdnRisk::PunycodeLabel {
+                label: "xn--test".to_string(),
+            },
+            IdnRisk::HomoglyphCharacters {
+                chars: vec!['\u{0430}'],
+            },
+            IdnRisk::MixedScript {
+                scripts: vec!["Latin", "Cyrillic"],
+            },
         ];
         assert_eq!(idn_risk_score(&risks), 1.0, "スコアは 1.0 を超えない");
     }
@@ -339,12 +361,16 @@ mod tests {
     fn subdomain_punycode_detected() {
         // サブドメインの xn-- も検出
         let risks = analyze_domain("xn--e1afmkfd.example.com");
-        assert!(risks.iter().any(|r| matches!(r, IdnRisk::PunycodeLabel { .. })));
+        assert!(risks
+            .iter()
+            .any(|r| matches!(r, IdnRisk::PunycodeLabel { .. })));
     }
 
     #[test]
     fn display_formats_readable() {
-        let risk = IdnRisk::PunycodeLabel { label: "xn--test".to_string() };
+        let risk = IdnRisk::PunycodeLabel {
+            label: "xn--test".to_string(),
+        };
         let s = risk.to_string();
         assert!(s.contains("punycode"));
     }
@@ -353,7 +379,8 @@ mod tests {
     fn multiple_punycode_labels_detected() {
         // 複数の xn-- ラベル
         let risks = analyze_domain("xn--test.xn--foo.example");
-        let punycode_count = risks.iter()
+        let punycode_count = risks
+            .iter()
             .filter(|r| matches!(r, IdnRisk::PunycodeLabel { .. }))
             .count();
         assert_eq!(punycode_count, 2, "2 つの xn-- ラベルが検出されるべき");
@@ -366,11 +393,15 @@ mod tests {
         // "Suppοrt" 風に Cyrillic/Greek を混ぜた表示名
         let risks = analyze_display_name("Su\u{0440}\u{0440}ort Center");
         assert!(
-            risks.iter().any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })),
+            risks
+                .iter()
+                .any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })),
             "表示名のホモグリフが検出されていない: {risks:?}"
         );
         assert!(
-            risks.iter().any(|r| matches!(r, IdnRisk::MixedScript { .. })),
+            risks
+                .iter()
+                .any(|r| matches!(r, IdnRisk::MixedScript { .. })),
             "Latin と Cyrillic の混在が検出されていない: {risks:?}"
         );
     }
@@ -387,7 +418,9 @@ mod tests {
         // MixedScript としては報告されない (誤検出防止)
         let risks = analyze_display_name("経理部 佐藤");
         assert!(
-            !risks.iter().any(|r| matches!(r, IdnRisk::MixedScript { .. })),
+            !risks
+                .iter()
+                .any(|r| matches!(r, IdnRisk::MixedScript { .. })),
             "日本語表示名を誤検出した: {risks:?}"
         );
     }

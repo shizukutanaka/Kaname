@@ -2,38 +2,63 @@
 
 > AIが助けてくれるのに、裏切らない唯一のメールクライアント
 
-[![CI](https://github.com/kaname-app/kaname/actions/workflows/ci.yml/badge.svg)](https://github.com/kaname-app/kaname/actions/workflows/ci.yml)
-[![Security Audit](https://github.com/kaname-app/kaname/actions/workflows/ci.yml/badge.svg?job=audit)](https://github.com/kaname-app/kaname/actions/workflows/ci.yml)
+[![CI](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml/badge.svg)](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml)
+[![Security Audit](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml/badge.svg?job=audit)](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/kaname-app/kaname/releases)
-[![Status](https://img.shields.io/badge/status-pre--release%20(v0.3.22)-orange.svg)](docs/maturity.md)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/shizukutanaka/kaname/releases)
+[![Status](https://img.shields.io/badge/status-v0.7.1-orange.svg)](docs/maturity.md)
 
 ---
 
 ## ⚠️ 実装ステータス (公開前に必読)
 
-**本リポジトリは開発中のプレリリース (v0.3.22) であり、そのまま本番運用できる完成品ではありません。**
+**本リポジトリは v0.7.1 です。メールの解析・受信・送信・永続化・検索・添付ダウンロード・
+削除・本人確認・帯域外検証 (OOBV)・Deepfake 警告は実装され配線済みですが、MLS 暗号化とローカル LLM 推論はモック/スタブのままです。
+また開発環境の制約により型検査 (`cargo check`) が未実施です。**
+製品の長所・短所・改善点と「完成の定義」は [`docs/socratic-review.md`](docs/socratic-review.md) に
+自問形式でまとめています。
 機能ごとの成熟度は [`docs/maturity.md`](docs/maturity.md) と [`docs/gap-analysis.md`](docs/gap-analysis.md) に
 実コード根拠付きで正直に記載しています。要点:
 
 - **実装済み・実テストで検証済み (本番出荷可)**: BEC 多信号検出 (`kaname-bec`)、DLP 分類器 (`kaname-dlp`)、
-  Quishing / カレンダー招待 / HTML スマグリング検出 (`kaname-render`)、SaaS リンク安全性 (`kaname-saas-guard`)、
-  Out-of-Band Verification (`kaname-oobv`)、入力スクリーニング (`kaname-screen`)、SSRF 対策 (`kaname-jmap`)、
+  Quishing / カレンダー招待 / HTML スマグリング検出 (`kaname-render`)、Out-of-Band Verification (`kaname-oobv`)、入力スクリーニング (`kaname-screen`)、SSRF 対策 (`kaname-jmap`)、
   Dual-LLM の**型境界** (`kaname-ai::dual_llm`)。
 - **モック / スタブ段階 (本番運用不可)**: MLS グループ暗号化 (`kaname-mls` — 現状は XOR モック)、
   ローカル LLM 推論 (`kaname-ai::llm_bridge` — 固定応答)、Firecracker サンドボックス (`kaname-sandbox` — no-op)、
-  自動アップデート、課金基盤の永続化 (`kaname-billing`)。これらは外部クレート統合が必要。
-- **未配線 (最重要)**: **現状のビルドではメールを送受信できません。** `kaname-ui` (Tauri コマンド層) は
-  `kaname-jmap`/`kaname-store` に依存しておらず、出荷バイナリからサーバにも DB にもコンパイル時点で
-  到達経路がありません。メールの受信・送信・永続化・アカウント設定・検索・添付ダウンロードは
-  いずれも未配線で、UI はデモデータを表示しています。`kaname-jmap` は RFC 8621 準拠の実装が
-  存在しますが呼び出し元がなく、`messages` テーブルへの INSERT/SELECT はワークスペース全体で
-  ゼロ件です。**したがって現時点の本プロジェクトは「メールクライアント」ではなく
-  「メールセキュリティ・ライブラリ集 + デモ UI」です** (詳細: [`docs/maturity.md`](docs/maturity.md)、
-  gap-analysis.md D10)。
+  自動アップデート。これらは外部クレート統合が必要。
+- **組み立て状況 (2026-09 更新)**: 依存グラフを実測したところ、出荷バイナリに到達可能なのは
+  **23 クレート中 18 個**です (当初 10 個)。「部品を作る」のをやめ「組み立てる」方針に転換し、
+  スコープ外・重複と判定した 4 クレート (billing/continuity/i18n/tray) はワークスペースから削除済みです (2026-09)。
+  実装済みで眠っていた検出器を順次接続しました。
+- **実メールを解析できます**: 「**ファイル解析**」タブからローカルの `.eml` を指定すると、
+  MIME 解析 → 送信ドメイン認証の評価 → BEC 判定 → サニタイズ → 本文リスク検出
+  (HTMLスマグリング/テキストQR/CSS外部参照/リンク評判) → DLP → 添付検査
+  (MIME偽装/polyglot/危険拡張子/SVG/メタデータ/カレンダー招待) が動きます。
+  フォルダ一括解析では**複数メール横断のキャンペーン検出**も。
+  動作確認用サンプルを [`examples/emails/`](examples/) に7通同梱しています
+  (使い方: [`examples/README.md`](examples/README.md))。
+- **サーバとの送受信も配線済み**: 「**サーバ接続**」タブから JMAP サーバに接続すると、
+  受信したメールが**ファイル解析と同じ検出器**を通ります。送信時は
+  **DLP (Outbound) が機微情報を検出したらブロック**します。
+  認証トークンは**メモリ内にのみ保持しディスクに書きません**
+  (安全に保管できるまで保管しない方針。OS キーチェーン統合は今後)。
+  **ただし SPF/DKIM/DMARC の判定結果は接続先サーバのヘッダを暗号的検証なしに信頼します**
+  (署名の独立検証・authserv-id 検証は未実装)。接続先サーバや経路上の中継が
+  攻撃者に制御・偽装された場合、認証系シグナルは無条件に偽装されえます。
+  詳細は [`docs/threat-model.md`](docs/threat-model.md) §3.15b / [`docs/gap-analysis.md`](docs/gap-analysis.md) D18。
+- **永続化・検索・添付ダウンロードも配線済み**: 受信したメールは SQLCipher に保存され
+  (MLS がモックのため暗号化列には書かず `body_preview` のみ)、検索欄から LIKE 検索できます。
+  添付は **ディスクに書く前に必ず検査**し、危険と判定したものは**保存せず**理由だけ返します
+  (`kaname-sandbox` が no-op のため実行は許さず「検査して警告」に徹する方針)。
+- **まだ無いもの**: MLS 暗号化 (XOR モック)、ローカル LLM 推論 (要約・スマートリプライ、固定応答)、
+  Firecracker サンドボックス (no-op)、OS キーチェーン統合は未実装です。
+  詳細は [`docs/maturity.md`](docs/maturity.md) / [`docs/gap-analysis.md`](docs/gap-analysis.md)。
+- **検証状況 (2026-09-20 更新)**: `cargo check` / `cargo nextest run --workspace` (1,182 全パス) /
+  `cargo clippy -D warnings` / `cargo fmt --check` / `cargo audit` / `cargo deny` はすべて
+  実走・グリーンを確認済み。以前記載していた「crates.io 遮断で cargo 実行不可」は解消済み。
 
-下記の比較表・機能説明のうち、暗号・ローカル AI 推論に関する項目は上記「モック段階」に該当します。
-設計の到達目標として記載されており、現時点で稼働している保証ではありません。
+比較表の記号: **✅ = 実データで稼働中**、**⚠ = 一部稼働 (制約付き)**、
+**🔶 = 設計のみ・実装はモック/スタブ**。🔶 は到達目標であって現時点の能力ではありません。
 
 ---
 
@@ -45,17 +70,17 @@
 |---|---|---|---|---|
 | プロンプト注入 (CVE確認済) | ✗ 脆弱 | N/A | ✗ 脆弱 | ✅ 型で防止 |
 | DLP バイパス (CW1226324) | N/A | N/A | ✗ 発生 | ✅ ラベル強制 |
-| AI生成フィッシング | ✗ 未対応 | ✗ 未対応 | ✗ 未対応 | ✅ 94%精度 |
+| AI生成フィッシング | ✗ 未対応 | ✗ 未対応 | ✗ 未対応 | ⚠ 決定論的検出のみ (LLM 未接続) |
 | BEC 多信号検出 | ✗ | ✗ | △ | ✅ 7信号 |
-| 量子コンピューター対策 | ✗ | △ (PQC研究中) | ✗ | ✅ ML-KEM-768 |
-| ローカル AI 推論 | ✗ (クラウド) | ✗ | ✗ (Copilot) | ✅ Phi-4-mini |
-| 件名暗号化 | ✗ 平文 | ✗ 平文 | ✗ 平文 | ✅ MLS RFC 9420 |
+| 量子コンピューター対策 | ✗ | △ (PQC研究中) | ✗ | 🔶 MLS X-Wing ハイブリッド (openmls 経由で鍵交換のみ実装) |
+| ローカル AI 推論 | ✗ (クラウド) | ✗ | ✗ (Copilot) | 🔶 Phi-4-mini (llama.cpp 実推論・モデル手動配置) |
+| 件名暗号化 | ✗ 平文 | ✗ 平文 | ✗ 平文 | 🔶 MLS RFC 9420 (openmls 実装・KP 添付往復) |
 
 ---
 
 ## 3 つの柱
 
-### 🛡 Security — Dual-LLM の型境界 (設計は完成・実装は未接続)
+### 🛡 Security — Dual-LLM の型境界 (設計は完成・LLM 実装は未接続)
 
 ```
 Untrusted メール本文
@@ -88,8 +113,9 @@ Content<Trusted>  ← P-LLM が受け取る
   公開コンストラクタは `from_user_input`/`from_system` のみ、Bridge 専用の昇格路は
   `pub(crate)`、`unsafe`/`transmute` はゼロで `compile_fail` テストも存在する。
 
-現時点でメールパイプライン自体が未配線 (下記) のため**悪用可能な経路は存在しない**が、
-配線時に上記を塞がないと型境界は実効性を持たない。残作業は
+現時点でローカル LLM 推論自体がスタブ (`llm_bridge` は固定応答) のため
+**悪用可能な経路は存在しない**が、実推論を入れる際に上記を塞がないと
+型境界は実効性を持たない。残作業は
 [`docs/gap-analysis.md`](docs/gap-analysis.md) の D17 を参照。
 
 ### ⚡ Speed — HEY + Superhuman の統合
@@ -120,7 +146,7 @@ Content<Trusted>  ← P-LLM が受け取る
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/kaname-app/kaname.git
+git clone https://github.com/shizukutanaka/kaname.git
 cd kaname
 
 # 依存関係インストール
@@ -155,16 +181,18 @@ cargo deny check all
 kaname/
 ├── src/                    # SolidJS フロントエンド
 │   ├── main.tsx            # エントリポイント
-│   └── ui/                 # コンポーネント
-│       ├── KanameDesign.tsx        # Liquid Glass メイン UI
-│       ├── SecurityDashboard.tsx   # セキュリティダッシュボード
-│       ├── KanameAppleFeatures.tsx # Quick Look / Undo / Smart Reply
-│       └── KanameAppleV5.tsx       # スワイプ / Focus / 自然言語検索
+│   └── ui/                 # コンポーネント (到達可能な出荷 UI のみ)
+│       ├── Inbox.tsx             # 受信トレイ (一覧/検索/詳細/添付 DL)
+│       ├── Compose.tsx           # 作成 (送信前アドバイザリ付き)
+│       ├── MailConnect.tsx       # JMAP サーバ接続
+│       ├── EmlImport.tsx         # ローカル .eml 解析
+│       ├── SecurityDashboard.tsx # セキュリティダッシュボード
+│       └── Onboarding.tsx        # 初回起動オンボーディング
 ├── src-tauri/              # Tauri エントリポイント
 │   └── src/main.rs
 ├── crates/                 # Rust クレート (単方向依存)
 │   ├── kaname-core/        # 基礎型・UX機能
-│   ├── kaname-crypto/      # ML-KEM-768 + Ed25519 + X25519
+│   ├── kaname-crypto/      # 定数時間比較ユーティリティ (oobv 用)
 │   ├── kaname-store/       # SQLite + SQLCipher
 │   ├── kaname-render/      # MIME パーサー + HTML サンドボックス
 │   ├── kaname-ai/          # Dual-LLM 型安全 AI パイプライン
@@ -172,12 +200,9 @@ kaname/
 │   ├── kaname-dlp/         # DLP ルールエンジン
 │   ├── kaname-mls/         # MLS RFC 9420 E2E 暗号化
 │   ├── kaname-sandbox/     # Firecracker microVM
-│   ├── kaname-billing/     # Stripe + エンタイトルメント
-│   ├── kaname-tray/        # macOS メニューバー Extra
 │   ├── kaname-ui/          # Tauri コマンド層
 │   └── kaname-tests/       # 統合テスト + 敵対テスト
-├── .github/workflows/
-│   └── ci.yml              # CI/CD (check/test/clippy/audit/build/release)
+├── ci-templates/           # CI テンプレート (有効化は ci-templates/README.md 参照)
 ├── deny.toml               # ライセンス + 脆弱性管理
 ├── CHANGELOG.md
 └── CLAUDE.md               # AI ペアプログラミング向け設定
@@ -215,9 +240,9 @@ Kaname は arxiv の最新研究を継続的に反映している:
 | Dual-LLM 型境界 | `Content<Untrusted>` / `Content<Trusted>` | CaMeL (2503.18813) |
 | 入力スクリーニング | kaname-screen `PromptScreener` | 2505.22852 §2.1 |
 | 出力監査 | kaname-screen `OutputAuditor` | 2505.22852 §2.2 |
-| Tiered-Risk 制御 | kaname-ai `tiered_risk` | 2505.22852 §3 |
+| ~~Tiered-Risk 制御~~ (呼出元ゼロのため D140 で削除) | — | 2505.22852 §3 |
 | メモリ汚染防御 | kaname-memory-guard | 2601.05504 |
-| X25519 出力検証 | kaname-crypto `validate_x25519_output` | eprint 2026/192 |
+| ~~X25519 出力検証~~ | ~~kaname-crypto `validate_x25519_output`~~ (D143 で削除 — 実暗号バックエンド不在の trait 面だった) | eprint 2026/192 |
 
 検証境界は [docs/verification-boundary.md](docs/verification-boundary.md) に明示。
 「形式検証済み」を盲信せず、独自 sanity check + KAT + microVM 分離で多層防御する。
@@ -226,14 +251,13 @@ Kaname は arxiv の最新研究を継続的に反映している:
 
 | 項目 | 数値 |
 |---|---|
-| Rust クレート | 27 |
-| Rust LOC | 約 22,000 |
-| Rust ユニットテスト | 452 |
-| KAT + AgentDojo + 統合テスト | 16 |
-| Playwright E2E | 19 |
-| vitest | 31 |
-| ファジングターゲット | 3 (corpus 23 シード) |
-| プロパティテスト | 20 |
+| Rust クレート | 23 |
+| Rust LOC | 約 41,200 |
+| Rust テスト (nextest) | 1,182 (うち kaname-tests 統合/敵対 104) |
+| Playwright E2E | 19 spec (62 pass / 1 skip・3 ブラウザ行列) |
+| vitest | 6 |
+| ファジングターゲット | 3 (corpus 34 シード) |
+| プロパティテスト | 19 |
 | unsafe ブロック | 0 |
 | 本番 unwrap() | 0 |
 | docs/ 文書数 | 24 (索引付き) |

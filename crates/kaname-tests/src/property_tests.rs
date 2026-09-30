@@ -34,7 +34,10 @@ fn evaluate_bec_score(from_addr: &str, subject: &str, body: &str) -> f32 {
     let domain = from_addr.split('@').nth(1).unwrap_or("");
     let suspicious_domains = ["arnazon", "amaz0n", "g00gle", "rakuten-secure"];
     for d in &suspicious_domains {
-        if domain.contains(d) { score += 0.40; break; }
+        if domain.contains(d) {
+            score += 0.40;
+            break;
+        }
     }
 
     score.min(1.0)
@@ -105,17 +108,25 @@ fn levenshtein(a: &str, b: &str) -> usize {
     let b: Vec<char> = b.chars().collect();
     let m = a.len();
     let n = b.len();
-    if m == 0 { return n; }
-    if n == 0 { return m; }
+    if m == 0 {
+        return n;
+    }
+    if n == 0 {
+        return m;
+    }
     let mut dp = vec![vec![0usize; n + 1]; m + 1];
-    for (i, row) in dp.iter_mut().enumerate() { row[0] = i; }
-    for (j, cell) in dp[0].iter_mut().enumerate() { *cell = j; }
+    for (i, row) in dp.iter_mut().enumerate() {
+        row[0] = i;
+    }
+    for (j, cell) in dp[0].iter_mut().enumerate() {
+        *cell = j;
+    }
     for i in 1..=m {
         for j in 1..=n {
-            dp[i][j] = if a[i-1] == b[j-1] {
-                dp[i-1][j-1]
+            dp[i][j] = if a[i - 1] == b[j - 1] {
+                dp[i - 1][j - 1]
             } else {
-                1 + dp[i-1][j].min(dp[i][j-1]).min(dp[i-1][j-1])
+                1 + dp[i - 1][j].min(dp[i][j - 1]).min(dp[i - 1][j - 1])
             };
         }
     }

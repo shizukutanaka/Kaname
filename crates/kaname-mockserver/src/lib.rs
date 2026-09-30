@@ -30,26 +30,26 @@ use std::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JmapEmail {
-    pub id:           String,
-    pub mailbox_ids:  HashMap<String, bool>,
-    pub keywords:     HashMap<String, bool>,
-    pub from:         Vec<EmailAddress>,
-    pub to:           Vec<EmailAddress>,
-    pub subject:      Option<String>,
-    pub received_at:  String,   // ISO-8601
-    pub preview:      String,
-    pub body_values:  HashMap<String, BodyValue>,
+    pub id: String,
+    pub mailbox_ids: HashMap<String, bool>,
+    pub keywords: HashMap<String, bool>,
+    pub from: Vec<EmailAddress>,
+    pub to: Vec<EmailAddress>,
+    pub subject: Option<String>,
+    pub received_at: String, // ISO-8601
+    pub preview: String,
+    pub body_values: HashMap<String, BodyValue>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailAddress {
-    pub name:  Option<String>,
+    pub name: Option<String>,
     pub email: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BodyValue {
-    pub value:        String,
+    pub value: String,
     pub is_truncated: bool,
 }
 
@@ -137,10 +137,18 @@ fn hm(pairs: &[(&str, bool)]) -> HashMap<String, bool> {
 }
 
 fn hm_body(pairs: &[(&str, &str)]) -> HashMap<String, BodyValue> {
-    pairs.iter().map(|(k, v)| (
-        k.to_string(),
-        BodyValue { value: v.to_string(), is_truncated: false }
-    )).collect()
+    pairs
+        .iter()
+        .map(|(k, v)| {
+            (
+                k.to_string(),
+                BodyValue {
+                    value: v.to_string(),
+                    is_truncated: false,
+                },
+            )
+        })
+        .collect()
 }
 
 // ============================================================================
@@ -149,7 +157,7 @@ fn hm_body(pairs: &[(&str, &str)]) -> HashMap<String, BodyValue> {
 
 #[derive(Debug, Deserialize)]
 pub struct JmapRequest {
-    pub using:        Vec<String>,
+    pub using: Vec<String>,
     pub method_calls: Vec<MethodCall>,
 }
 
@@ -159,13 +167,13 @@ pub struct MethodCall(pub String, pub serde_json::Value, pub String);
 #[derive(Debug, Serialize)]
 pub struct JmapResponse {
     pub method_responses: Vec<MethodCall>,
-    pub session_state:    String,
+    pub session_state: String,
 }
 
 /// モックサーバー本体。
 pub struct MockServer {
     emails: Mutex<Vec<JmapEmail>>,
-    state:  Mutex<u64>,
+    state: Mutex<u64>,
 }
 
 impl MockServer {
@@ -173,7 +181,7 @@ impl MockServer {
     pub fn new() -> Self {
         Self {
             emails: Mutex::new(fixture_emails()),
-            state:  Mutex::new(1),
+            state: Mutex::new(1),
         }
     }
 
@@ -183,11 +191,11 @@ impl MockServer {
 
         for call in req.method_calls {
             let response = match call.0.as_str() {
-                "Email/get"    => self.email_get(&call.1),
-                "Email/query"  => self.email_query(&call.1),
-                "Email/set"    => self.email_set(&call.1),
-                "Mailbox/get"  => self.mailbox_get(&call.1),
-                "Core/echo"    => call.1.clone(),
+                "Email/get" => self.email_get(&call.1),
+                "Email/query" => self.email_query(&call.1),
+                "Email/set" => self.email_set(&call.1),
+                "Mailbox/get" => self.mailbox_get(&call.1),
+                "Core/echo" => call.1.clone(),
                 _ => serde_json::json!({ "error": "method not supported" }),
             };
             // (メソッド名, 結果, リクエスト ID)
@@ -196,14 +204,23 @@ impl MockServer {
 
         JmapResponse {
             method_responses: responses,
-            session_state:    self.state.lock().unwrap_or_else(|e| e.into_inner()).to_string(),
+            session_state: self
+                .state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .to_string(),
         }
     }
 
     fn email_get(&self, args: &serde_json::Value) -> serde_json::Value {
-        let ids: Vec<String> = args.get("ids")
+        let ids: Vec<String> = args
+            .get("ids")
             .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
 
         let emails = self.emails.lock().unwrap_or_else(|e| e.into_inner());
@@ -258,7 +275,10 @@ impl MockServer {
 
     /// 新しいメール (BEC 攻撃) を注入する (E2E テスト用)。
     pub fn inject_email(&self, email: JmapEmail) {
-        self.emails.lock().unwrap_or_else(|e| e.into_inner()).push(email);
+        self.emails
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(email);
         *self.state.lock().unwrap_or_else(|e| e.into_inner()) += 1;
     }
 
@@ -270,7 +290,9 @@ impl MockServer {
 }
 
 impl Default for MockServer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ============================================================================
@@ -288,13 +310,21 @@ mod tests {
         assert_eq!(emails.len(), 5, "5 通のフィクスチャがある");
 
         // 各カテゴリ存在確認
-        assert!(emails.iter().any(|e| e.subject.as_deref() == Some("Q2予算会議のご案内")));
+        assert!(emails
+            .iter()
+            .any(|e| e.subject.as_deref() == Some("Q2予算会議のご案内")));
         // BEC
-        assert!(emails.iter().any(|e| e.from.iter().any(|a| a.email.contains("arnazon"))));
+        assert!(emails
+            .iter()
+            .any(|e| e.from.iter().any(|a| a.email.contains("arnazon"))));
         // ニュースレター
-        assert!(emails.iter().any(|e| e.from.iter().any(|a| a.email.contains("newsletter"))));
+        assert!(emails
+            .iter()
+            .any(|e| e.from.iter().any(|a| a.email.contains("newsletter"))));
         // 領収書
-        assert!(emails.iter().any(|e| e.from.iter().any(|a| a.email.contains("no-reply"))));
+        assert!(emails
+            .iter()
+            .any(|e| e.from.iter().any(|a| a.email.contains("no-reply"))));
     }
 
     #[test]
@@ -310,7 +340,11 @@ mod tests {
         };
         let resp = server.handle(req);
         assert_eq!(resp.method_responses.len(), 1);
-        let total = resp.method_responses[0].1.get("total").and_then(|v| v.as_u64()).unwrap();
+        let total = resp.method_responses[0]
+            .1
+            .get("total")
+            .and_then(|v| v.as_u64())
+            .unwrap();
         assert_eq!(total, 5);
     }
 
@@ -326,10 +360,19 @@ mod tests {
             )],
         };
         let resp = server.handle(req);
-        let list = resp.method_responses[0].1.get("list").and_then(|v| v.as_array()).unwrap();
+        let list = resp.method_responses[0]
+            .1
+            .get("list")
+            .and_then(|v| v.as_array())
+            .unwrap();
         assert_eq!(list.len(), 1);
         // BEC メール
-        assert!(list[0].get("subject").unwrap().as_str().unwrap().contains("至急"));
+        assert!(list[0]
+            .get("subject")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("至急"));
     }
 
     #[test]
@@ -344,8 +387,15 @@ mod tests {
             )],
         };
         let resp = server.handle(req);
-        let list = resp.method_responses[0].1.get("list").and_then(|v| v.as_array()).unwrap();
-        let names: Vec<&str> = list.iter().filter_map(|m| m.get("role").and_then(|r| r.as_str())).collect();
+        let list = resp.method_responses[0]
+            .1
+            .get("list")
+            .and_then(|v| v.as_array())
+            .unwrap();
+        let names: Vec<&str> = list
+            .iter()
+            .filter_map(|m| m.get("role").and_then(|r| r.as_str()))
+            .collect();
         assert!(names.contains(&"inbox"));
         assert!(names.contains(&"sent"));
         assert!(names.contains(&"trash"));
@@ -365,7 +415,10 @@ mod tests {
             )],
         };
         server.handle(req);
-        assert!(*server.state.lock().unwrap_or_else(|e| e.into_inner()) > initial_state, "state がインクリメントされるべき");
+        assert!(
+            *server.state.lock().unwrap_or_else(|e| e.into_inner()) > initial_state,
+            "state がインクリメントされるべき"
+        );
     }
 
     #[test]
@@ -377,7 +430,10 @@ mod tests {
             id: "injected-1".into(),
             mailbox_ids: hm(&[("inbox", true)]),
             keywords: hm(&[]),
-            from: vec![EmailAddress { name: None, email: "test@example.com".into() }],
+            from: vec![EmailAddress {
+                name: None,
+                email: "test@example.com".into(),
+            }],
             to: vec![],
             subject: Some("注入されたテストメール".into()),
             received_at: "2026-04-27T12:00:00Z".into(),

@@ -2,9 +2,8 @@
 //!
 //! - HTTPS over TLS 1.3 のみ
 //! - Email/get、Email/query、Email/set、Mailbox/get
-//! - Push/EventSource でリアルタイム同期
 
-// crates/kaname-core/src/jmap.rs
+// (旧 crates/kaname-core/src/jmap.rs 由来 — kaname-core は D97 で削除済み)
 //
 // JMAP クライアント完全実装 (reqwest HTTP wire)。
 //
@@ -25,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::mpsc;
+use zeroize::Zeroizing;
 
 // ============================================================================
 // セッション (RFC 8620 §2)
@@ -35,20 +34,35 @@ use tokio::sync::mpsc;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Session {
-    pub capabilities:     HashMap<String, serde_json::Value>,
-    pub accounts:         HashMap<String, Account>,
+    pub capabilities: HashMap<String, serde_json::Value>,
+    pub accounts: HashMap<String, Account>,
     pub primary_accounts: HashMap<String, String>,
-    pub api_url:          String,
-    pub download_url:     String,
-    pub upload_url:       String,
-    pub event_source_url: Option<String>,
-    pub state:            String,
+    /// RFC 8620 §2: 認証に使われたユーザー名 (通常はメールアドレス)。
+    /// 準拠しないサーバが省略してもパースを失敗させないよう Option。
+    #[serde(default)]
+    pub username: Option<String>,
+    pub api_url: String,
+    pub download_url: String,
+    pub upload_url: String,
+    pub state: String,
+}
+
+/// 送信メールの添付パート。`send_email` が RFC822 multipart/mixed に
+/// 直列化して 1 本の BLOB としてアップロードする (Email/import 経路)。
+#[derive(Debug, Clone)]
+pub struct OutgoingAttachment {
+    /// ファイル名 — CR/LF・引用符・制御文字は拒否される。
+    /// 非 ASCII は RFC 5987 `filename*=UTF-8''…` で送出する。
+    pub filename: String,
+    /// Content-Type (例: `application/mls-envelope+cbor`)
+    pub mime_type: String,
+    /// 添付バイト列 (base64 で送出)
+    pub data: Vec<u8>,
 }
 
 impl Session {
     pub const JMAP_CORE: &'static str = "urn:ietf:params:jmap:core";
     pub const JMAP_MAIL: &'static str = "urn:ietf:params:jmap:mail";
-    pub const KANAME_MLS: &'static str = "urn:kaname:params:jmap:mls";
 
     #[must_use]
     pub fn has_capability(&self, urn: &str) -> bool {
@@ -56,7 +70,17 @@ impl Session {
     }
     #[must_use]
     pub fn primary_mail_account(&self) -> Option<&str> {
-        self.primary_accounts.get(Self::JMAP_MAIL).map(String::as_str)
+        self.primary_accounts
+            .get(Self::JMAP_MAIL)
+            .map(String::as_str)
+    }
+
+    /// メールアドレス文字列からドメイン部を取り出す (小文字化)。
+    /// アドレス形でなければ None。
+    fn domain_part(addr: &str) -> Option<String> {
+        let (_, domain) = addr.rsplit_once('@')?;
+        let domain = domain.trim().to_lowercase();
+        (!domain.is_empty()).then_some(domain)
     }
 }
 
@@ -64,9 +88,9 @@ impl Session {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
-    pub name:                 String,
-    pub is_personal:          bool,
-    pub is_read_only:         bool,
+    pub name: String,
+    pub is_personal: bool,
+    pub is_read_only: bool,
     pub account_capabilities: HashMap<String, serde_json::Value>,
 }
 
@@ -75,23 +99,40 @@ pub struct Account {
 // ============================================================================
 
 /// JMAP クライアント設定
-#[derive(Debug, Clone)]
+///
+/// `bearer_token` は Zeroizing で保持し、クライアント破棄時にヒープから
+/// 消去する (切断後もメモリダンプからトークンが回復されないようにするため)。
+/// なお `derive(Debug)` はトークンを平文で出力してしまうため、手動実装で
+/// 伏せている (I5: ログに秘密を出さない)。
+#[derive(Clone)]
 pub struct ClientConfig {
-    pub bearer_token:   String,
+    pub bearer_token: Zeroizing<String>,
     pub connect_timeout: Duration,
     pub request_timeout: Duration,
-    pub max_retries:    u32,
-    pub user_agent:     String,
+    pub max_retries: u32,
+    pub user_agent: String,
+}
+
+impl std::fmt::Debug for ClientConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClientConfig")
+            .field("bearer_token", &"[redacted]")
+            .field("connect_timeout", &self.connect_timeout)
+            .field("request_timeout", &self.request_timeout)
+            .field("max_retries", &self.max_retries)
+            .field("user_agent", &self.user_agent)
+            .finish()
+    }
 }
 
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
-            bearer_token:    String::new(),
-            connect_timeout:  Duration::from_secs(10),
-            request_timeout:  Duration::from_secs(30),
-            max_retries:      3,
-            user_agent:       format!("Kaname/{}", env!("CARGO_PKG_VERSION")),
+            bearer_token: Zeroizing::new(String::new()),
+            connect_timeout: Duration::from_secs(10),
+            request_timeout: Duration::from_secs(30),
+            max_retries: 3,
+            user_agent: format!("Kaname/{}", env!("CARGO_PKG_VERSION")),
         }
     }
 }
@@ -101,18 +142,19 @@ impl Default for ClientConfig {
 // ============================================================================
 
 pub struct JmapClient {
-    session:    Session,
+    session: Session,
     account_id: String,
-    http:       reqwest::Client,
-    api_url:    String,
-    config:     ClientConfig,
+    http: reqwest::Client,
+    api_url: String,
+    config: ClientConfig,
 }
 
 impl JmapClient {
     /// /.well-known/jmap を検出して接続する。
     pub async fn connect(base_url: &str, config: ClientConfig) -> Result<Self, JmapError> {
         // SSRF: DNS 解決後 IP がプライベートアドレスでないか確認
-        ssrf_guard::check_url_for_ssrf(base_url).await
+        ssrf_guard::check_url_for_ssrf(base_url)
+            .await
             .map_err(|e| JmapError::Ssrf(e.to_string()))?;
 
         let http = reqwest::Client::builder()
@@ -129,32 +171,69 @@ impl JmapClient {
             .build()
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
-        let resp = http
-            .get(format!("{base_url}/.well-known/jmap"))
-            .bearer_auth(&config.bearer_token)
-            .send()
-            .await
-            .map_err(|e| JmapError::Http(e.to_string()))?;
+        // セッション発見 GET は冪等 — 一過性の接続失敗は max_retries 回まで再試行
+        let mut last_err: Option<JmapError> = None;
+        let mut resp_opt = None;
+        for attempt in 0..=config.max_retries {
+            if attempt > 0 {
+                tokio::time::sleep(Duration::from_millis(50 * (1 << (attempt - 1)))).await;
+            }
+            match http
+                .get(format!("{base_url}/.well-known/jmap"))
+                .bearer_auth(config.bearer_token.as_str())
+                .send()
+                .await
+            {
+                Ok(r) => {
+                    resp_opt = Some(r);
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(JmapError::Http(e.to_string()));
+                }
+            }
+        }
+        let resp = resp_opt
+            .ok_or_else(|| last_err.unwrap_or_else(|| JmapError::Http("接続失敗".into())))?;
 
         if !resp.status().is_success() {
-            return Err(JmapError::Http(format!("セッション検出失敗: HTTP {}", resp.status())));
+            return Err(JmapError::Http(format!(
+                "セッション検出失敗: HTTP {}",
+                resp.status()
+            )));
         }
 
-        let session: Session = resp.json().await
+        let session: Session = resp
+            .json()
+            .await
             .map_err(|e| JmapError::Deserialize(e.to_string()))?;
+
+        // セッション応答の URL (apiUrl/downloadUrl/uploadUrl) は
+        // Bearer 認証付きリクエストの宛先になる。悪意ある/侵害された
+        // サーバが別ホストを返せばトークンが流出するため、接続先と
+        // 同一ホスト (またはそのサブドメイン) であることを検証し、
+        // 各 URL について SSRF 再検査も行う (DNS リバインディング対策)。
+        verify_session_url_origins(base_url, &session).await?;
 
         if !session.has_capability(Session::JMAP_MAIL) {
             return Err(JmapError::MissingCapability(Session::JMAP_MAIL.to_string()));
         }
 
-        let account_id = session.primary_mail_account()
+        let account_id = session
+            .primary_mail_account()
             .ok_or_else(|| JmapError::MissingCapability("プライマリメールアカウントなし".into()))?
             .to_string();
 
         let api_url = session.api_url.clone();
         tracing::info!(api_url = %api_url, account_id = %account_id, "JMAP 接続完了");
 
-        Ok(Self { session, account_id, http, api_url, config })
+        Ok(Self {
+            session,
+            account_id,
+            http,
+            api_url,
+            config,
+        })
     }
 
     // JMAP API にマルチコールリクエストを送信する内部ヘルパー
@@ -172,22 +251,29 @@ impl JmapClient {
             ]).collect::<Vec<_>>(),
         });
 
-        let resp = self.http
-            .post(&self.api_url)
-            .bearer_auth(&self.config.bearer_token)
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| JmapError::Http(e.to_string()))?;
+        // リトライは全呼出しが冪等 (読み取り専用メソッドのみ) のとき限る。
+        // Email/set や EmailSubmission/set を再送すると二重送信/二重作成に
+        // なり得るため (D84)。
+        let idempotent = calls.iter().all(|(m, _, _)| is_idempotent_method(m));
+        let resp = self
+            .send_with_retry(idempotent, || {
+                self.http
+                    .post(&self.api_url)
+                    .bearer_auth(self.config.bearer_token.as_str())
+                    .header("Content-Type", "application/json")
+                    .json(&body)
+            })
+            .await?;
 
         let status = resp.status();
-        let raw: serde_json::Value = resp.json().await
+        let raw: serde_json::Value = resp
+            .json()
+            .await
             .map_err(|e| JmapError::Deserialize(e.to_string()))?;
 
         if !status.is_success() {
             return Err(JmapError::JmapProblem {
-                r#type:      raw["type"].as_str().unwrap_or("serverError").into(),
+                r#type: raw["type"].as_str().unwrap_or("serverError").into(),
                 description: raw["detail"].as_str().unwrap_or("").into(),
             });
         }
@@ -197,8 +283,8 @@ impl JmapClient {
             .unwrap_or(&vec![])
             .iter()
             .map(|r| MethodResponse {
-                method:  r[0].as_str().unwrap_or("").into(),
-                args:    r[1].clone(),
+                method: r[0].as_str().unwrap_or("").into(),
+                args: r[1].clone(),
                 call_id: r[2].as_str().unwrap_or("").into(),
             })
             .collect())
@@ -206,11 +292,16 @@ impl JmapClient {
 
     /// 全メールボックスを取得する。
     pub async fn get_mailboxes(&self) -> Result<Vec<Mailbox>, JmapError> {
-        let rs = self.call(vec![
-            ("Mailbox/get".into(),
-             serde_json::json!({ "accountId": self.account_id, "ids": null }),
-             "mb".into())
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        let rs = self
+            .call(
+                vec![(
+                    "Mailbox/get".into(),
+                    serde_json::json!({ "accountId": self.account_id, "ids": null }),
+                    "mb".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
 
         find_result(&rs, "mb", "list")
     }
@@ -220,55 +311,104 @@ impl JmapClient {
     /// `limit` は最大 500 に制限する (RFC 8620 §2 推奨上限、サーバー負荷と
     /// クライアント OOM を防ぐ)。
     pub async fn query_emails(
-        &self, mailbox_id: &str, position: u32, limit: u32,
+        &self,
+        mailbox_id: &str,
+        position: u32,
+        limit: u32,
     ) -> Result<Vec<EmailListItem>, JmapError> {
-        const MAX_QUERY_LIMIT: u32 = 500;
-        let limit = limit.min(MAX_QUERY_LIMIT);
-        let rs = self.call(vec![
-            ("Email/query".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "filter":    { "inMailbox": mailbox_id },
-                "sort":      [{ "property": "receivedAt", "isAscending": false }],
-                "position":  position,
-                "limit":     limit,
-                "calculateTotal": false,
-            }), "q".into()),
-            ("Email/get".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "#ids": { "resultOf": "q", "name": "Email/query", "path": "/ids" },
-                "properties": [
-                    "id","mailboxIds","keywords","size",
-                    "receivedAt","sentAt","subject",
-                    "from","to","preview","hasAttachment","threadId",
-                ],
-            }), "emails".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
-
-        find_result(&rs, "emails", "list")
+        Ok(self
+            .query_emails_page(mailbox_id, position, limit)
+            .await?
+            .items)
     }
 
-    /// 単一メールの完全な本文を取得する。
+    /// `query_emails` に応答メタ (実効 limit / position) を付けて返す。
+    ///
+    /// `applied_limit` はサーバーが `Email/query` 応答でエコーした
+    /// 実効 limit (RFC 8620 §5.5)。呼び出し側は
+    /// `position == 0 && items.len() < min(要求limit, applied_limit)` で
+    /// 「メールボックス全体を見た」を判定でき、ローカル reconcile の
+    /// 前提条件に使う (サーバーが要求より小さい limit を適用した
+    /// 場合に「短いページ」を全件と誤認しないため)。
+    pub async fn query_emails_page(
+        &self,
+        mailbox_id: &str,
+        position: u32,
+        limit: u32,
+    ) -> Result<EmailQueryPage, JmapError> {
+        const MAX_QUERY_LIMIT: u32 = 500;
+        let limit = limit.min(MAX_QUERY_LIMIT);
+        let rs = self
+            .call(
+                vec![
+                    (
+                        "Email/query".into(),
+                        serde_json::json!({
+                            "accountId": self.account_id,
+                            "filter":    { "inMailbox": mailbox_id },
+                            "sort":      [{ "property": "receivedAt", "isAscending": false }],
+                            "position":  position,
+                            "limit":     limit,
+                            "calculateTotal": false,
+                        }),
+                        "q".into(),
+                    ),
+                    (
+                        "Email/get".into(),
+                        serde_json::json!({
+                            "accountId": self.account_id,
+                            "#ids": { "resultOf": "q", "name": "Email/query", "path": "/ids" },
+                            "properties": [
+                                "id","mailboxIds","keywords","size",
+                                "receivedAt","sentAt","subject",
+                                "from","to","replyTo","preview","threadId",
+                                "messageId","inReplyTo","references",
+                                "header:DKIM-Signature:asText",
+                                "header:Authentication-Results:asText",
+                                "header:Return-Path:asText",
+                            ],
+                        }),
+                        "emails".into(),
+                    ),
+                ],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
+
+        let items: Vec<EmailListItem> = find_result(&rs, "emails", "list")?;
+        // "q" 応答の実効 limit / position を拾う (エコーが無いサーバーは None/要求値)
+        let q = rs.iter().find(|r| r.call_id == "q");
+        let applied_limit = q.and_then(|r| r.args["limit"].as_u64());
+        let applied_position = q
+            .and_then(|r| r.args["position"].as_u64())
+            .unwrap_or(position as u64);
+        Ok(EmailQueryPage {
+            items,
+            position: applied_position,
+            applied_limit,
+        })
+    }
+
+    /// 単一メールのメタ情報 (blobId・添付一覧) を取得する。
+    ///
+    /// 本文表示は blobId 経由の `download_blob` (生 RFC5322) で行うため、
+    /// `bodyValues`/`fetch*BodyValues` は要求しない — 以前は読み手ゼロの
+    /// まま最大 ~1MB/通を転送していた (D93)。
     pub async fn get_email_body(&self, email_id: &str) -> Result<EmailFull, JmapError> {
-        let rs = self.call(vec![
-            ("Email/get".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "ids": [email_id],
-                "properties": [
-                    "id","blobId","bodyStructure","bodyValues",
-                    "textBody","htmlBody","attachments","headers",
-                ],
-                "bodyProperties": [
-                    "partId","blobId","type","size","name",
-                    "charset","disposition","subParts",
-                ],
-                "fetchTextBodyValues": true,
-                "fetchHTMLBodyValues": true,
-                "maxBodyValueBytes":   524288,
-            }), "body".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        let rs = self
+            .call(
+                vec![(
+                    "Email/get".into(),
+                    email_body_get_args(&self.account_id, email_id),
+                    "body".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
 
         let list: Vec<EmailFull> = find_result(&rs, "body", "list")?;
-        list.into_iter().next()
+        list.into_iter()
+            .next()
             .ok_or_else(|| JmapError::NotFound(email_id.to_string()))
     }
 
@@ -278,61 +418,120 @@ impl JmapClient {
         const MAX_MARK_READ_IDS: usize = 1000;
         if ids.len() > MAX_MARK_READ_IDS {
             return Err(JmapError::InvalidInput(format!(
-                "一度に既読化できる ID 数の上限を超えました: {} > {MAX_MARK_READ_IDS}", ids.len()
+                "一度に既読化できる ID 数の上限を超えました: {} > {MAX_MARK_READ_IDS}",
+                ids.len()
             )));
         }
-        let patch: serde_json::Value = ids.iter()
-            .map(|id| (id.to_string(), serde_json::json!({ "keywords/$seen": true })))
+        let patch: serde_json::Value = ids
+            .iter()
+            .map(|id| {
+                (
+                    id.to_string(),
+                    serde_json::json!({ "keywords/$seen": true }),
+                )
+            })
             .collect::<serde_json::Map<_, _>>()
             .into();
 
-        self.call(vec![
-            ("Email/set".into(), serde_json::json!({
-                "accountId": self.account_id, "update": patch,
-            }), "read".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        let rs = self
+            .call(
+                vec![(
+                    "Email/set".into(),
+                    serde_json::json!({
+                        "accountId": self.account_id, "update": patch,
+                    }),
+                    "read".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
+        // notUpdated を検査しないとサーバーが $seen を拒否しても
+        // 「既読にした」と誤って返す (D79)
+        check_set_errors(&rs, "read")?;
         Ok(())
     }
 
     /// メールをゴミ箱に移動する。
     pub async fn trash(&self, email_id: &str) -> Result<(), JmapError> {
         let mailboxes = self.get_mailboxes().await?;
-        let trash_id = mailboxes.iter()
+        let trash_id = mailboxes
+            .iter()
             .find(|m| m.role.as_deref() == Some("trash"))
             .map(|m| m.id.clone())
             .ok_or_else(|| JmapError::NotFound("ゴミ箱なし".into()))?;
 
-        self.call(vec![
-            ("Email/set".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "update": {
-                    email_id: {
-                        "mailboxIds": { trash_id: true },
-                        "keywords/$seen": true,
-                    }
-                },
-            }), "trash".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        // RFC 8621 §4.6: Email/set の mailboxIds はパッチ意味論で
+        // `true` は追加のみ。`{trash: true}` だけ書くと受信トレイに
+        // 残ったままになるため、現在の所属を取得して全て null で除去する。
+        let rs = self
+            .call(
+                vec![(
+                    "Email/get".into(),
+                    serde_json::json!({
+                        "accountId": self.account_id,
+                        "ids": [email_id],
+                        "properties": ["id", "mailboxIds"],
+                    }),
+                    "get".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
+        let current: Vec<EmailListItem> = find_result(&rs, "get", "list")?;
+        let mailbox_patch = trash_mailbox_patch(
+            current
+                .first()
+                .map(|e| &e.mailbox_ids)
+                .unwrap_or(&HashMap::new()),
+            &trash_id,
+        );
+
+        let rs = self
+            .call(
+                vec![(
+                    "Email/set".into(),
+                    serde_json::json!({
+                        "accountId": self.account_id,
+                        "update": {
+                            email_id: {
+                                "mailboxIds": mailbox_patch,
+                                "keywords/$seen": true,
+                            }
+                        },
+                    }),
+                    "trash".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
+        // 同上: notUpdated の拒否を「移動成功」と誤認しない
+        check_set_errors(&rs, "trash")?;
         Ok(())
     }
 
     /// メールを送信する。
     pub async fn send_email(
-        &self, from: &str, to: &[&str], subject: &str, body: &str,
-        draft_id: Option<&str>,
+        &self,
+        from: &str,
+        to: &[&str],
+        subject: &str,
+        body: &str,
+        attachments: &[OutgoingAttachment],
     ) -> Result<String, JmapError> {
         // 宛先数の上限 (DoS 防止: 100 件超えは拒否)
         const MAX_RECIPIENTS: usize = 100;
         if to.len() > MAX_RECIPIENTS {
             return Err(JmapError::InvalidInput(format!(
-                "宛先が多すぎます: {} > {MAX_RECIPIENTS}", to.len()
+                "宛先が多すぎます: {} > {MAX_RECIPIENTS}",
+                to.len()
             )));
         }
         // メール本文サイズ上限 (OOM 防止: 25 MB)
         const MAX_BODY_BYTES: usize = 25 * 1024 * 1024;
         if body.len() > MAX_BODY_BYTES {
             return Err(JmapError::InvalidInput(format!(
-                "本文が大きすぎます: {} バイト > {MAX_BODY_BYTES}", body.len()
+                "本文が大きすぎます: {} バイト > {MAX_BODY_BYTES}",
+                body.len()
             )));
         }
 
@@ -340,7 +539,8 @@ impl JmapClient {
         const MAX_SUBJECT_BYTES: usize = 2048;
         if subject.len() > MAX_SUBJECT_BYTES {
             return Err(JmapError::InvalidInput(format!(
-                "件名が長すぎます: {} バイト > {MAX_SUBJECT_BYTES}", subject.len()
+                "件名が長すぎます: {} バイト > {MAX_SUBJECT_BYTES}",
+                subject.len()
             )));
         }
 
@@ -350,9 +550,56 @@ impl JmapClient {
         // (Postfix/Exim/Sendmail 影響、Outlook Express 仕様差を悪用)
         if contains_smtp_terminator(body) {
             return Err(JmapError::InvalidInput(
-                "本文に SMTP DATA 終端シーケンス (CRLF.CRLF / LF.LF) が含まれています"
-                    .to_string(),
+                "本文に SMTP DATA 終端シーケンス (CRLF.CRLF / LF.LF) が含まれています".to_string(),
             ));
+        }
+
+        // 添付の検証 — MIME ヘッダへ展開される値は直列化前に潰す。
+        // filename は Content-Disposition / name パラメータに入るため
+        // `"`/`\`・制御文字・CR/LF を拒否 (ヘッダインジェクション防止)。
+        const MAX_ATTACHMENTS: usize = 32;
+        const MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
+        const MAX_TOTAL_BYTES: usize = 25 * 1024 * 1024; // 本文+添付の合計
+        if attachments.len() > MAX_ATTACHMENTS {
+            return Err(JmapError::InvalidInput(format!(
+                "添付が多すぎます: {} > {MAX_ATTACHMENTS}",
+                attachments.len()
+            )));
+        }
+        let mut total_bytes = body.len();
+        for a in attachments {
+            if a.data.len() > MAX_ATTACHMENT_BYTES {
+                return Err(JmapError::InvalidInput(format!(
+                    "添付が大きすぎます: {} バイト > {MAX_ATTACHMENT_BYTES}",
+                    a.data.len()
+                )));
+            }
+            total_bytes = total_bytes.saturating_add(a.data.len());
+            if total_bytes > MAX_TOTAL_BYTES {
+                return Err(JmapError::InvalidInput(format!(
+                    "本文+添付の合計が大きすぎます: {total_bytes} バイト > {MAX_TOTAL_BYTES}"
+                )));
+            }
+            if a.filename.is_empty()
+                || a.filename
+                    .chars()
+                    .any(|c| c == '"' || c == '\\' || c.is_control())
+            {
+                return Err(JmapError::InvalidInput(format!(
+                    "添付名が不正です: {:?}",
+                    &a.filename[..a.filename.len().min(40)]
+                )));
+            }
+            if a.mime_type.is_empty()
+                || a.mime_type
+                    .chars()
+                    .any(|c| c.is_control() || c == '"' || c == ';')
+            {
+                return Err(JmapError::InvalidInput(format!(
+                    "添付の MIME 型が不正です: {:?}",
+                    &a.mime_type[..a.mime_type.len().min(40)]
+                )));
+            }
         }
 
         // RFC 5322 ヘッダーインジェクション防止: \r\n を含む入力を拒否
@@ -360,207 +607,224 @@ impl JmapClient {
         // 任意の宛先にメールを送れてしまう
         let sanitize_header = |s: &str| -> Result<String, JmapError> {
             if s.contains('\r') || s.contains('\n') {
-                return Err(JmapError::InvalidInput(
-                    format!("ヘッダーに改行文字は使用できません: {:?}", &s[..s.len().min(40)])
-                ));
+                return Err(JmapError::InvalidInput(format!(
+                    "ヘッダーに改行文字は使用できません: {:?}",
+                    &s[..s.len().min(40)]
+                )));
             }
             Ok(s.to_owned())
         };
-        let from    = sanitize_header(from)?;
+        let from = sanitize_header(from)?;
+        validate_addr(&from)?;
         let subject = sanitize_header(subject)?;
         for addr in to {
             sanitize_header(addr)?;
+            // `\r\n` を拒否しても `,` や `<`/`>` は残る — `To: a@b, <x@y>` の
+            // ようにヘッダ値内でアドレスリスト化/表示名注入できてしまうため
+            // (D90)、envelope (rcptTo) とヘッダの宛先を一致させるには
+            // アドレス自体も単一 addr-spec に限定する必要がある。
+            validate_addr(addr)?;
         }
 
         let mailboxes = self.get_mailboxes().await?;
-        let sent_id = mailboxes.iter()
+        // `trash()` と同じ理由で `unwrap_or("sent")` のような架空 ID へのフォールバックは
+        // 使わない。role="sent" のメールボックスが無いまま送信済みフォルダの ID として
+        // 文字列 "sent" を渡すと、大抵のサーバーでは実在しないメールボックス ID として
+        // Email/import が失敗する — その場合エラーメッセージが「インポート ID なし」という
+        // 無関係な文言になり、根本原因 (送信済みフォルダ未検出) が分かりにくくなる。
+        let sent_id = mailboxes
+            .iter()
             .find(|m| m.role.as_deref() == Some("sent"))
-            .map(|m| m.id.as_str())
-            .unwrap_or("sent");
+            .map(|m| m.id.clone())
+            .ok_or_else(|| JmapError::NotFound("送信済みフォルダなし".into()))?;
 
         let now = chrono::Utc::now().to_rfc2822();
         let msg_id = format!("<{}@kaname.app>", uuid::Uuid::new_v4().simple());
-        let raw = format!(
-            "Message-ID: {msg_id}\r\nFrom: {from}\r\nTo: {}\r\nSubject: {subject}\r\nDate: {now}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{body}",
-            to.join(", ")
+        let raw = build_raw_message(
+            &from,
+            &to.join(", "),
+            &subject,
+            body,
+            &msg_id,
+            &now,
+            attachments,
         );
 
         // BLOB アップロード → Email/import → EmailSubmission/set
         let blob_id = self.upload_blob(raw.as_bytes()).await?;
 
-        let import_rs = self.call(vec![
-            ("Email/import".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "emails": {
-                    "d1": {
-                        "blobId":    blob_id,
-                        "mailboxIds": { sent_id: true },
-                        "keywords": { "$seen": true },
-                    }
-                },
-            }), "imp".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        let import_rs = self
+            .call(
+                vec![(
+                    "Email/import".into(),
+                    serde_json::json!({
+                        "accountId": self.account_id,
+                        "emails": {
+                            "d1": {
+                                "blobId":    blob_id,
+                                "mailboxIds": { sent_id: true },
+                                "keywords": { "$seen": true },
+                            }
+                        },
+                    }),
+                    "imp".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
 
-        let email_id = import_rs.iter().find(|r| r.call_id == "imp")
+        let email_id = import_rs
+            .iter()
+            .find(|r| r.call_id == "imp")
             .and_then(|r| r.args["created"]["d1"]["id"].as_str())
             .ok_or_else(|| JmapError::NotFound("インポート ID なし".into()))?
             .to_string();
 
-        let rcpt: Vec<_> = to.iter().map(|a| serde_json::json!({ "email": a })).collect();
-        self.call(vec![
-            ("EmailSubmission/set".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "create": { "s1": {
-                    "emailId": &email_id,
-                    "envelope": {
-                        "mailFrom": { "email": from },
-                        "rcptTo":   rcpt,
-                    },
-                }},
-            }), "sub".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
-
-        if let Some(id) = draft_id {
-            if let Err(e) = self.call(vec![
-                ("Email/set".into(), serde_json::json!({
-                    "accountId": self.account_id, "destroy": [id],
-                }), "del".into()),
-            ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await {
-                // 送信は既に成功しているため致命的ではないが、下書きが残留する
-                // ことをログに残さないと利用者もサポートも気付けない。
-                tracing::warn!(error = %e, "送信後の下書き削除に失敗しました (下書きが残留している可能性があります)");
-            }
-        }
+        let rcpt: Vec<_> = to
+            .iter()
+            .map(|a| serde_json::json!({ "email": a }))
+            .collect();
+        let sub_rs = self
+            .call(
+                vec![(
+                    "EmailSubmission/set".into(),
+                    serde_json::json!({
+                        "accountId": self.account_id,
+                        "create": { "s1": {
+                            "emailId": &email_id,
+                            "envelope": {
+                                "mailFrom": { "email": from },
+                                "rcptTo":   rcpt,
+                            },
+                        }},
+                    }),
+                    "sub".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
+        // EmailSubmission/set が notCreated で拒否されても transport は
+        // 成功を返す — 検査しないと「送信したが実は送信されていない」
+        // になる (D79)
+        check_set_errors(&sub_rs, "sub")?;
 
         Ok(email_id)
     }
 
     /// BLOB をアップロードする。
+    /// blob をダウンロードする (RFC 8620 §6.2)。
+    ///
+    /// `upload_blob` と対称。`session.download_url` の
+    /// `{accountId}`/`{blobId}`/`{type}`/`{name}` を置換して GET する。
+    ///
+    /// 添付ファイルの実体を取得する唯一の経路。DoS 対策として応答は
+    /// 25 MB までに制限する (それを超える添付は取得を拒否)。
+    pub async fn download_blob(
+        &self,
+        blob_id: &str,
+        mime_type: &str,
+        name: &str,
+    ) -> Result<Vec<u8>, JmapError> {
+        const MAX_BLOB_BYTES: usize = 25 * 1024 * 1024;
+
+        // RFC 8620 §6.2 のダウンロード URL テンプレート。変数の値は
+        // URL エンコードして埋め込む — 送信者制御の添付ファイル名や
+        // MIME 型に `?`/`#`/`..`/`%2F` 等が含まれると、パスを
+        // 改変して意図しないエンドポイントに Authorization 付きで
+        // リクエストを送り得るため (D82)。
+        let url = self
+            .session
+            .download_url
+            .replace("{accountId}", &encode_template_value(&self.account_id))
+            .replace("{blobId}", &encode_template_value(blob_id))
+            .replace("{type}", &encode_template_value(mime_type))
+            .replace("{name}", &encode_template_value(name));
+
+        let resp = self
+            .send_with_retry(true, || {
+                self.http
+                    .get(&url)
+                    .bearer_auth(self.config.bearer_token.as_str())
+            })
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(JmapError::Http(format!(
+                "blob 取得失敗: HTTP {}",
+                resp.status()
+            )));
+        }
+
+        // Content-Length で事前に上限を弾く (ストリームを読み切る前に拒否)。
+        if let Some(len) = resp.content_length() {
+            if len as usize > MAX_BLOB_BYTES {
+                return Err(JmapError::Http(format!(
+                    "添付が大きすぎます ({len} バイト > {MAX_BLOB_BYTES} バイト上限)"
+                )));
+            }
+        }
+
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| JmapError::Http(e.to_string()))?;
+        if bytes.len() > MAX_BLOB_BYTES {
+            return Err(JmapError::Http("添付が上限を超えました".into()));
+        }
+        Ok(bytes.to_vec())
+    }
+
     async fn upload_blob(&self, data: &[u8]) -> Result<String, JmapError> {
-        let url = self.session.upload_url.replace("{accountId}", &self.account_id);
-        let resp = self.http.post(&url)
-            .bearer_auth(&self.config.bearer_token)
+        let url = self
+            .session
+            .upload_url
+            .replace("{accountId}", &encode_template_value(&self.account_id));
+        let resp = self
+            .http
+            .post(&url)
+            .bearer_auth(self.config.bearer_token.as_str())
             .header("Content-Type", "application/octet-stream")
             .body(data.to_vec())
-            .send().await
-            .map_err(|e| JmapError::Http(e.to_string()))?;
-
-        let json: serde_json::Value = resp.json().await
-            .map_err(|e| JmapError::Deserialize(e.to_string()))?;
-        json["blobId"].as_str().map(String::from)
-            .ok_or_else(|| JmapError::Deserialize("blobId なし".into()))
-    }
-
-    /// 変更を同期する。
-    pub async fn sync(
-        &self, mailbox_state: &str, email_state: &str,
-    ) -> Result<SyncResult, JmapError> {
-        let rs = self.call(vec![
-            ("Mailbox/changes".into(), serde_json::json!({
-                "accountId": self.account_id, "sinceState": mailbox_state, "maxChanges": 500,
-            }), "mc".into()),
-            ("Email/changes".into(), serde_json::json!({
-                "accountId": self.account_id, "sinceState": email_state, "maxChanges": 500,
-            }), "ec".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
-
-        let parse = |id: &str| -> ChangesResult {
-            let a = &rs.iter().find(|r| r.call_id == id).map(|r| &r.args).cloned()
-                .unwrap_or(serde_json::Value::Null);
-            // 想定される JSON 形状 (newState 文字列フィールド) が欠落している場合、
-            // サーバーが不正な応答を返したか、レスポンスに call_id が見つからなかった
-            // ことを意味する。修正前は空文字列/空配列へ黙ってフォールバックしており、
-            // "変更なし" と "サーバー応答が壊れていた" が区別できず、
-            // メールボックスの同期状態が誰にも気付かれずに乖離するリスクがあった。
-            if a["newState"].as_str().is_none() {
-                tracing::warn!(
-                    call_id = id,
-                    "JMAP changes 応答に newState が見つかりません (不正な応答またはサーバーエラーの可能性)"
-                );
-            }
-            ChangesResult {
-                new_state:       a["newState"].as_str().unwrap_or("").into(),
-                has_more_changes: a["hasMoreChanges"].as_bool().unwrap_or(false),
-                created:  str_arr(&a["created"]),
-                updated:  str_arr(&a["updated"]),
-                destroyed: str_arr(&a["destroyed"]),
-            }
-        };
-
-        Ok(SyncResult {
-            mailbox_changes: parse("mc"),
-            email_changes:   parse("ec"),
-        })
-    }
-
-    /// EventSource プッシュを購読する (SSE / RFC 6202)。
-    ///
-    /// `reqwest` のバイトストリームで SSE を受信し、`data:` 行を JSON として
-    /// パースして `PushNotification` を `tx` に送信する。
-    /// `shutdown` を受信したら接続を閉じて返る。
-    pub async fn subscribe_push(
-        &self,
-        tx: mpsc::Sender<PushNotification>,
-        mut shutdown: tokio::sync::broadcast::Receiver<()>,
-    ) -> Result<(), JmapError> {
-        use futures_util::StreamExt;
-
-        let url = self.session.event_source_url.as_deref()
-            .ok_or(JmapError::PushNotSupported)?;
-        tracing::info!(url = %url, "EventSource プッシュ購読開始");
-
-        let resp = self.http
-            .get(url)
-            .header("Accept", "text/event-stream")
-            .header("Cache-Control", "no-cache")
             .send()
             .await
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
-        let mut stream = resp.bytes_stream();
-        let mut buf = String::new();
-        // SSE バッファ上限: 悪意あるサーバーが \n\n なしで送り続けることによる
-        // メモリ DoS を防ぐ。JMAP push notification は通常 < 4KB
-        const MAX_SSE_BUF_BYTES: usize = 1024 * 1024; // 1 MB
-
-        loop {
-            tokio::select! {
-                _ = shutdown.recv() => {
-                    tracing::info!("EventSource 購読を正常終了");
-                    return Ok(());
-                }
-                chunk = stream.next() => {
-                    let Some(chunk) = chunk else {
-                        tracing::info!("EventSource ストリームが終了");
-                        return Ok(());
-                    };
-                    let bytes = chunk.map_err(|e| JmapError::Http(e.to_string()))?;
-                    if buf.len() + bytes.len() > MAX_SSE_BUF_BYTES {
-                        tracing::warn!("SSE バッファ上限超過 — 接続をリセット");
-                        return Err(JmapError::Http("SSE バッファ超過".into()));
-                    }
-                    buf.push_str(&String::from_utf8_lossy(&bytes));
-
-                    // SSE イベントは空行 (\n\n) で区切られる
-                    while let Some(event_end) = find_sse_event_end(&buf) {
-                        let event_str = buf[..event_end].to_string();
-                        buf = buf[event_end + 2..].to_string(); // skip \n\n
-
-                        if let Some(notif) = parse_sse_event(&event_str) {
-                            if tx.send(notif).await.is_err() {
-                                // 受信側がドロップ — 終了
-                                return Ok(());
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| JmapError::Deserialize(e.to_string()))?;
+        json["blobId"]
+            .as_str()
+            .map(String::from)
+            .ok_or_else(|| JmapError::Deserialize("blobId なし".into()))
     }
 
     #[must_use]
-    pub fn account_id(&self) -> &str  { &self.account_id }
-    pub fn session_state(&self) -> &str { &self.session.state }
+    pub fn account_id(&self) -> &str {
+        &self.account_id
+    }
+    pub fn session_state(&self) -> &str {
+        &self.session.state
+    }
+
+    /// 接続中アカウントのメールドメインを返す (D44: 自組織ドメインの自動導出)。
+    ///
+    /// セッションの `username` (RFC 8620 §2、多くのサーバでメールアドレス) の
+    /// ドメイン部を優先し、アドレス形でなければアカウント `name` も試す。
+    /// どちらもアドレス形でなければ None — 推測はしない。
+    #[must_use]
+    pub fn account_domain(&self) -> Option<String> {
+        self.session
+            .username
+            .as_deref()
+            .and_then(Session::domain_part)
+            .or_else(|| {
+                self.session
+                    .accounts
+                    .get(&self.account_id)
+                    .and_then(|a| Session::domain_part(&a.name))
+            })
+    }
 }
 
 // ============================================================================
@@ -570,85 +834,129 @@ impl JmapClient {
 /// JMAP メソッドレスポンス
 #[derive(Debug)]
 pub struct MethodResponse {
-    pub method:  String,
-    pub args:    serde_json::Value,
+    pub method: String,
+    pub args: serde_json::Value,
     pub call_id: String,
+}
+
+/// `query_emails_page` の結果: メール一覧 + `Email/query` 応答メタ。
+#[derive(Debug)]
+pub struct EmailQueryPage {
+    /// 取得できたメール (最大 `limit` 件)。
+    pub items: Vec<EmailListItem>,
+    /// サーバーが返した `position` (結果の先頭インデックス)。
+    pub position: u64,
+    /// サーバーが応答でエコーした実効 `limit` (未エコーなら None)。
+    pub applied_limit: Option<u64>,
 }
 
 /// メールボックス
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Mailbox {
-    pub id:             String,
-    pub name:           String,
-    pub parent_id:      Option<String>,
-    pub role:           Option<String>,
-    pub sort_order:     u32,
-    pub total_emails:   u32,
-    pub unread_emails:  u32,
-    pub total_threads:  u32,
+    pub id: String,
+    pub name: String,
+    pub parent_id: Option<String>,
+    pub role: Option<String>,
+    pub sort_order: u32,
+    pub total_emails: u32,
+    pub unread_emails: u32,
+    pub total_threads: u32,
     pub unread_threads: u32,
     #[serde(default)]
-    pub is_subscribed:  bool,
+    pub is_subscribed: bool,
 }
 
 /// メールリストアイテム
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailListItem {
-    pub id:             String,
+    pub id: String,
     #[serde(default)]
-    pub mailbox_ids:    HashMap<String, bool>,
+    pub mailbox_ids: HashMap<String, bool>,
     #[serde(default)]
-    pub keywords:       HashMap<String, bool>,
-    pub size:           Option<u64>,
-    pub received_at:    Option<String>,
-    pub sent_at:        Option<String>,
-    pub subject:        Option<String>,
-    pub from:           Option<Vec<EmailAddress>>,
-    pub to:             Option<Vec<EmailAddress>>,
-    pub preview:        Option<String>,
-    pub has_attachment: Option<bool>,
-    pub thread_id:      Option<String>,
+    pub keywords: HashMap<String, bool>,
+    pub size: Option<u64>,
+    pub received_at: Option<String>,
+    pub sent_at: Option<String>,
+    pub subject: Option<String>,
+    pub from: Option<Vec<EmailAddress>>,
+    pub to: Option<Vec<EmailAddress>>,
+    /// Reply-To アドレス群 (BEC の返信横取り検出に使用)。
+    pub reply_to: Option<Vec<EmailAddress>>,
+    pub preview: Option<String>,
+    pub thread_id: Option<String>,
+    /// RFC 5322 Message-ID (スレッド乗っ取り検出・スレッド保存用)。
+    #[serde(default)]
+    pub message_id: Option<Vec<String>>,
+    /// In-Reply-To 参照 Message-ID 群。
+    #[serde(default)]
+    pub in_reply_to: Option<Vec<String>>,
+    /// References 参照 Message-ID 群。
+    #[serde(default)]
+    pub references: Option<Vec<String>>,
+    /// DKIM-Signature ヘッダーの生値 (`header:DKIM-Signature:asText`)。
+    /// `l=` タグ乱用・リプレイ検出に使用。
+    #[serde(rename = "header:DKIM-Signature:asText", default)]
+    pub dkim_signature: Option<String>,
+    /// Authentication-Results ヘッダーの生値
+    /// (`header:Authentication-Results:asText`)。一覧時点の SPF/DKIM/DMARC
+    /// 評価に使用。ヘッダ値は受信 MTA の記述であり暗号学的検証ではない
+    /// (gap-analysis D18/D44)。
+    #[serde(rename = "header:Authentication-Results:asText", default)]
+    pub auth_results: Option<String>,
+    /// Return-Path ヘッダーの生値 (`header:Return-Path:asText`)。
+    /// From と Return-Path のドメイン不一致は BEC/スプーフィングの古典的
+    /// シグナルで、kaname-bec の `return_path` シグナルに供給する。
+    /// 取得していない間は一覧評価でこの検査が構造的に不発だった (D106)。
+    #[serde(rename = "header:Return-Path:asText", default)]
+    pub return_path: Option<String>,
 }
 
 impl EmailListItem {
     #[must_use]
-    pub fn is_read(&self)    -> bool { self.keywords.get("$seen").copied().unwrap_or(false) }
-    pub fn is_starred(&self) -> bool { self.keywords.get("$flagged").copied().unwrap_or(false) }
+    pub fn is_read(&self) -> bool {
+        self.keywords.get("$seen").copied().unwrap_or(false)
+    }
+    pub fn is_starred(&self) -> bool {
+        self.keywords.get("$flagged").copied().unwrap_or(false)
+    }
 }
 
 /// メールアドレス
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct EmailAddress { pub name: Option<String>, pub email: String }
+pub struct EmailAddress {
+    pub name: Option<String>,
+    pub email: String,
+}
 
 /// メール完全本文
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailFull {
-    pub id:             String,
-    pub blob_id:        Option<String>,
+    pub id: String,
+    pub blob_id: Option<String>,
     pub body_structure: Option<BodyPart>,
-    pub body_values:    Option<HashMap<String, BodyValue>>,
-    pub text_body:      Option<Vec<BodyPart>>,
-    pub html_body:      Option<Vec<BodyPart>>,
-    pub attachments:    Option<Vec<BodyPart>>,
-    pub headers:        Option<Vec<Header>>,
+    pub body_values: Option<HashMap<String, BodyValue>>,
+    pub text_body: Option<Vec<BodyPart>>,
+    pub html_body: Option<Vec<BodyPart>>,
+    pub attachments: Option<Vec<BodyPart>>,
+    pub headers: Option<Vec<Header>>,
 }
 
 /// MIME ボディパート
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BodyPart {
-    pub part_id:     Option<String>,
-    pub blob_id:     Option<String>,
+    pub part_id: Option<String>,
+    pub blob_id: Option<String>,
     #[serde(rename = "type")]
-    pub mime_type:   Option<String>,
-    pub size:        Option<u64>,
-    pub name:        Option<String>,
-    pub charset:     Option<String>,
+    pub mime_type: Option<String>,
+    pub size: Option<u64>,
+    pub name: Option<String>,
+    pub charset: Option<String>,
     pub disposition: Option<String>,
-    pub sub_parts:   Option<Vec<BodyPart>>,
+    pub sub_parts: Option<Vec<BodyPart>>,
 }
 
 impl BodyPart {
@@ -669,30 +977,9 @@ pub struct BodyValue {
 
 /// ヘッダー
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Header { pub name: String, pub value: String }
-
-/// 同期結果
-#[derive(Debug)]
-pub struct SyncResult {
-    pub mailbox_changes: ChangesResult,
-    pub email_changes:   ChangesResult,
-}
-
-/// 変更結果
-#[derive(Debug)]
-pub struct ChangesResult {
-    pub new_state:        String,
-    pub has_more_changes: bool,
-    pub created:          Vec<String>,
-    pub updated:          Vec<String>,
-    pub destroyed:        Vec<String>,
-}
-
-/// プッシュ通知
-#[derive(Debug)]
-pub struct PushNotification {
-    pub changed_types: Vec<String>,
-    pub account_id:    String,
+pub struct Header {
+    pub name: String,
+    pub value: String,
 }
 
 // ============================================================================
@@ -716,9 +1003,6 @@ pub enum JmapError {
     /// レスポンスのデシリアライズ失敗。
     #[error("デシリアライズ: {0}")]
     Deserialize(String),
-    /// サーバーが EventSource プッシュに非対応。
-    #[error("プッシュ非対応")]
-    PushNotSupported,
     /// 対象オブジェクトが見つからない。
     #[error("見つからない: {0}")]
     NotFound(String),
@@ -737,40 +1021,415 @@ pub enum JmapError {
 // ユーティリティ
 // ============================================================================
 
+/// URI テンプレート変数の値をパーセントエンコードする (RFC 3986)。
+///
+/// RFC 8620 の downloadUrl/uploadUrl は URI テンプレートであり、
+/// 変数は URL エンコードして埋め込む決まり。unreserved 文字
+/// (A-Z a-z 0-9 `-` `_` `.` `~`) 以外は全て %XX に変換する。
+/// これにより添付ファイル名に `/`/`?`/`#`/`..` が含まれても
+/// URL のパス構造を改変できない (D82)。
+fn encode_template_value(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for &b in value.as_bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(char::from(b));
+            }
+            _ => {
+                out.push('%');
+                const HEX: &[u8; 16] = b"0123456789ABCDEF";
+                out.push(char::from(HEX[(b >> 4) as usize]));
+                out.push(char::from(HEX[(b & 0xF) as usize]));
+            }
+        }
+    }
+    out
+}
+
+/// セッション応答の `apiUrl`/`downloadUrl`/`uploadUrl` が接続先の
+/// オリジン内であることを検証する (D83)。
+///
+/// これらの URL は `bearer_auth` を付けてリクエストを送る宛先であり、
+/// サーバ応答に外部ホストを含めるとトークンが外部へ流出する。
+/// 許可条件: スキーム https かつホストが接続先と同一、または
+/// そのサブドメイン (例: `api.example.com` vs `example.com`)。
+/// 併せて各 URL に SSRF 検査 (DNS 解決 → プライベート IP 拒否) を行う。
+async fn verify_session_url_origins(base_url: &str, session: &Session) -> Result<(), JmapError> {
+    let base = reqwest::Url::parse(base_url)
+        .map_err(|e| JmapError::Ssrf(format!("base_url が URL として不正: {e}")))?;
+    let base_host = base.host_str().unwrap_or_default().to_ascii_lowercase();
+
+    for (name, raw) in [
+        ("apiUrl", session.api_url.as_str()),
+        ("downloadUrl", session.download_url.as_str()),
+        ("uploadUrl", session.upload_url.as_str()),
+    ] {
+        session_url_origin_ok(&base_host, name, raw)?;
+        // DNS リバインディング対策: 個別 URL についても IP を再検査する
+        ssrf_guard::check_url_for_ssrf(raw)
+            .await
+            .map_err(|e| JmapError::Ssrf(format!("{name}: {e}")))?;
+    }
+    Ok(())
+}
+
+/// `raw` が接続先 `base_host` のオリジン内 https URL かを検査する (純粋関数)。
+fn session_url_origin_ok(base_host: &str, name: &str, raw: &str) -> Result<(), JmapError> {
+    let url = reqwest::Url::parse(raw)
+        .map_err(|e| JmapError::Ssrf(format!("{name} が URL として不正 ({raw}): {e}")))?;
+    if url.scheme() != "https" {
+        return Err(JmapError::Ssrf(format!(
+            "{name} が https でありません: {raw}"
+        )));
+    }
+    let host = url
+        .host_str()
+        .map(|h| h.to_ascii_lowercase())
+        .ok_or_else(|| JmapError::Ssrf(format!("{name} にホストがありません: {raw}")))?;
+    if host != base_host && !host.ends_with(&format!(".{base_host}")) {
+        return Err(JmapError::Ssrf(format!(
+            "{name} のホスト {host} は接続先 {base_host} のオリジン外です"
+        )));
+    }
+    Ok(())
+}
+
+/// `ClientConfig.max_retries` を使った冪等リクエストのリトライ。
+///
+/// `idempotent` が true のときのみ `max_retries` 回まで再試行する
+/// (一過性エラー: timeout / connect / HTTP 5xx / 429)。
+/// 非冪等呼出し (Email/set 等) では絶対に再送しない —
+/// リトライは「もう一度送っても安全」と分かっている時だけの機能 (D84)。
+fn is_idempotent_method(method: &str) -> bool {
+    matches!(
+        method,
+        "Email/get"
+            | "Email/query"
+            | "Email/parse"
+            | "Mailbox/get"
+            | "Mailbox/query"
+            | "Thread/get"
+            | "Identity/get"
+            | "EmailSubmission/get"
+            | "Blob/get"
+            | "PushSubscription/get"
+    )
+}
+
+impl JmapClient {
+    /// `build` で作ったリクエストを送信する。`idempotent` なら
+    /// 一過性エラーに限り `config.max_retries` 回まで指数バックオフで再試行。
+    async fn send_with_retry<F>(
+        &self,
+        idempotent: bool,
+        build: F,
+    ) -> Result<reqwest::Response, JmapError>
+    where
+        F: Fn() -> reqwest::RequestBuilder,
+    {
+        let tries = if idempotent {
+            self.config.max_retries.max(1) + 1 // 初回 + リトライ回数
+        } else {
+            1
+        };
+        let mut delay = Duration::from_millis(100);
+        for attempt in 1..=tries {
+            let result = build().send().await;
+            let retryable = match &result {
+                Ok(r) => r.status().is_server_error() || r.status().as_u16() == 429,
+                Err(e) => e.is_timeout() || e.is_connect(),
+            };
+            match result {
+                r if !retryable || attempt == tries => {
+                    return r.map_err(|e| JmapError::Http(e.to_string()));
+                }
+                _ => {
+                    tracing::warn!(attempt, "JMAP リクエストが一過性エラー — リトライします");
+                    tokio::time::sleep(delay).await;
+                    delay *= 2;
+                }
+            }
+        }
+        unreachable!()
+    }
+}
+
 fn find_result<T: for<'de> Deserialize<'de>>(
-    rs: &[MethodResponse], call_id: &str, key: &str,
+    rs: &[MethodResponse],
+    call_id: &str,
+    key: &str,
 ) -> Result<T, JmapError> {
-    let r = rs.iter().find(|r| r.call_id == call_id)
+    let r = rs
+        .iter()
+        .find(|r| r.call_id == call_id)
         .ok_or_else(|| JmapError::NotFound(format!("{} のレスポンスなし", call_id)))?;
     if r.method == "error" {
         return Err(JmapError::JmapProblem {
-            r#type:      r.args["type"].as_str().unwrap_or("").into(),
+            r#type: r.args["type"].as_str().unwrap_or("").into(),
             description: r.args["description"].as_str().unwrap_or("").into(),
         });
     }
-    serde_json::from_value(r.args[key].clone())
-        .map_err(|e| JmapError::Deserialize(e.to_string()))
+    serde_json::from_value(r.args[key].clone()).map_err(|e| JmapError::Deserialize(e.to_string()))
 }
 
+/// 送信用の生 RFC 5322 メッセージを構築する。
+///
+/// RFC 5322 ヘッダーは US-ASCII のみ許容 — 非 ASCII 件名は RFC 2047
+/// encoded-word にエンコードする (SMTPUTF8 非対応経路での文字化け防止)。
+/// 本文は base64 + MIME-Version/CTE で送出する: 生 UTF-8 のままだと
+/// 7bit 前提の下流 MTA で破壊されうる (base64 は `.` を含まないため
+/// SMTP Smuggling の終端シーケンスも構造的に起きない) (D94)。
+fn build_raw_message(
+    from: &str,
+    to_header: &str,
+    subject: &str,
+    body: &str,
+    msg_id: &str,
+    date: &str,
+    attachments: &[OutgoingAttachment],
+) -> String {
+    let subject = encode_header_utf8(subject);
+    let body_b64 = wrap76(&base64_encode(body.as_bytes()));
+    if attachments.is_empty() {
+        return format!(
+            "Message-ID: {msg_id}\r\nFrom: {from}\r\nTo: {to_header}\r\nSubject: {subject}\r\nDate: {date}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{body_b64}"
+        );
+    }
+
+    // multipart/mixed: 第1パートが text/plain 本文、以降が添付。
+    // 境界文字列はメッセージごとにランダム生成 (本文/添付との衝突を
+    // 統計的に排除 — 32 hex 桁)。
+    let boundary = format!("kaname-{}", uuid::Uuid::new_v4().simple());
+    let mut raw = format!(
+        "Message-ID: {msg_id}\r\nFrom: {from}\r\nTo: {to_header}\r\nSubject: {subject}\r\nDate: {date}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\nThis is a multi-part message in MIME format.\r\n\r\n--{boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{body_b64}\r\n"
+    );
+    for att in attachments {
+        let (name_param, fname_param) = filename_params(&att.filename);
+        raw.push_str(&format!(
+            "--{boundary}\r\nContent-Type: {mime}; {name_param}\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; {fname_param}\r\n\r\n{data}\r\n",
+            mime = att.mime_type,
+            data = wrap76(&base64_encode(&att.data)),
+        ));
+    }
+    raw.push_str(&format!("--{boundary}--\r\n"));
+    raw
+}
+
+/// RFC 2183/5987 の添付名パラメータ (`name=`, `filename=`) のペア。
+///
+/// ASCII の安全な名前は `name="…"`/`filename="…"` の quoted-string、
+/// 非 ASCII を含む場合は `name*=UTF-8''<pct-encoded>` の extended
+/// パラメータ (パラメータ名も `*` 付きに変わる)。
+/// pct エンコードは既存の `encode_template_value` と同じ unreserved
+/// ポリシーで、`'`・空白等も全て %XX に落ちる。
+fn filename_params(filename: &str) -> (String, String) {
+    let is_plain_safe = filename
+        .bytes()
+        .all(|b| b.is_ascii() && !matches!(b, b'"' | b'\\' | b'(' | b')' | b';'));
+    if is_plain_safe {
+        return (
+            format!("name=\"{filename}\""),
+            format!("filename=\"{filename}\""),
+        );
+    }
+    let enc = encode_template_value(filename);
+    (
+        format!("name*=UTF-8''{enc}"),
+        format!("filename*=UTF-8''{enc}"),
+    )
+}
+
+/// `Email/set`/`Email/import`/`EmailSubmission/set` 等の set 系メソッドの
+/// `notCreated`/`notUpdated`/`notDestroyed` を検査する。
+///
+/// RFC 8620 §5.3: set 系メソッドは transport が成功してもアイテム単位の
+/// 失敗を `notXxx` マップで返す。これを検査しないと、サーバーが更新を
+/// 拒否していても呼び出し側は「操作成功」と誤認する (D79)。
+/// 複数失敗時は最初の一件を報告する (呼び出し側に返るのは失敗の有無
+/// と内容で十分であり、全件列挙は情報量に対して重い)。
+fn check_set_errors(rs: &[MethodResponse], call_id: &str) -> Result<(), JmapError> {
+    let r = rs
+        .iter()
+        .find(|r| r.call_id == call_id)
+        .ok_or_else(|| JmapError::NotFound(format!("{call_id} のレスポンスなし")))?;
+    if r.method == "error" {
+        return Err(JmapError::JmapProblem {
+            r#type: r.args["type"].as_str().unwrap_or("").into(),
+            description: r.args["description"].as_str().unwrap_or("").into(),
+        });
+    }
+    for key in ["notCreated", "notUpdated", "notDestroyed"] {
+        if let Some((id, err)) = r.args[key].as_object().and_then(|m| m.iter().next()) {
+            return Err(JmapError::JmapProblem {
+                r#type: err["type"].as_str().unwrap_or("setError").into(),
+                description: format!(
+                    "{id}: {}",
+                    err["description"].as_str().unwrap_or("理由不明")
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// `get_email_body` の Email/get 引数を構築する。
+///
+/// 消費されるのは `blobId` と `attachments` のみ。本文表示は blobId 経由の
+/// `download_blob` (生 RFC5322) で行うため `bodyValues`/`fetch*BodyValues`
+/// (最大 ~1MB/通) は要求しない (D93)。
+fn email_body_get_args(account_id: &str, email_id: &str) -> serde_json::Value {
+    serde_json::json!({
+        "accountId": account_id,
+        "ids": [email_id],
+        "properties": [
+            "id","blobId","attachments",
+        ],
+        "bodyProperties": [
+            "partId","blobId","type","size","name",
+            "charset","disposition","subParts",
+        ],
+    })
+}
+
+/// Email/set `mailboxIds` パッチを構築する: `trash_id` を追加し、
+/// 現在所属する他の全メールボックスを `null` で除去する。
+/// (RFC 8621 §4.6: パッチは `true`=追加・`null`=除去)
+fn trash_mailbox_patch(current: &HashMap<String, bool>, trash_id: &str) -> serde_json::Value {
+    let mut m = serde_json::Map::new();
+    m.insert(trash_id.to_string(), true.into());
+    for id in current.keys() {
+        if id != trash_id {
+            m.insert(id.clone(), serde_json::Value::Null);
+        }
+    }
+    serde_json::Value::Object(m)
+}
+
+/// JSON 配列から文字列のみを抽出するヘルパー (テストから利用)。
+#[cfg(test)]
 fn str_arr(v: &serde_json::Value) -> Vec<String> {
-    v.as_array().unwrap_or(&vec![])
-        .iter().filter_map(|x| x.as_str().map(str::to_owned)).collect()
+    v.as_array().map_or_else(Vec::new, |a| {
+        a.iter()
+            .filter_map(|x| x.as_str().map(str::to_owned))
+            .collect()
+    })
 }
 
-/// SSE イベントの終端 (`\n\n`) のオフセットを返す。
-fn find_sse_event_end(buf: &str) -> Option<usize> {
-    buf.find("\n\n")
+/// RFC 4648 base64 (標準 alphabet、パディングあり)。
+///
+/// 外部依存を増やさないため自前実装 (kaname-screen の decode_base64 と対称)。
+/// 本クレートでは RFC 2047 encoded-word と MIME 本文の base64 に使う。
+fn base64_encode(data: &[u8]) -> String {
+    const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for c in data.chunks(3) {
+        let b0 = u32::from(c[0]);
+        let b1 = u32::from(*c.get(1).unwrap_or(&0));
+        let b2 = u32::from(*c.get(2).unwrap_or(&0));
+        let v = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TBL[(v >> 18) as usize & 63] as char);
+        out.push(TBL[(v >> 12) as usize & 63] as char);
+        out.push(if c.len() > 1 {
+            TBL[(v >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            TBL[v as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// 非 ASCII を含むヘッダー値を RFC 2047 encoded-word にエンコードする。
+///
+/// 件名などの非構造化ヘッダーは RFC 5322 では US-ASCII しか許容されない。
+/// 生の UTF-8 を書くと SMTPUTF8 非対応の経路で文字化けするため、
+/// `=?UTF-8?B?<base64>?=` にエンコードする (全 MUA がデコード可能)。
+/// encoded-word は 75 文字上限 (RFC 2047 §2) のため 45 バイト単位で分割
+/// (UTF-8 文字境界を跨がない)。アドレス (addr-spec) に encoded-word は
+/// 使えないため呼び出し側は件名などのテキストヘッダーに限ること。
+fn encode_header_utf8(s: &str) -> String {
+    if s.is_ascii() {
+        return s.to_owned();
+    }
+    const MAX_RAW_BYTES_PER_WORD: usize = 45; // base64 で 60 文字 → word 全体 ≤ 75
+    let mut out = String::new();
+    let mut chunk = String::new();
+    for ch in s.chars() {
+        if chunk.len() + ch.len_utf8() > MAX_RAW_BYTES_PER_WORD {
+            out.push_str("=?UTF-8?B?");
+            out.push_str(&base64_encode(chunk.as_bytes()));
+            out.push_str("?= ");
+            chunk.clear();
+        }
+        chunk.push(ch);
+    }
+    // 非 ASCII を含む場合 chunk は必ず非空 (ループは常に push する)。
+    out.push_str("=?UTF-8?B?");
+    out.push_str(&base64_encode(chunk.as_bytes()));
+    out.push_str("?=");
+    out
+}
+
+/// 76 桁で CRLF 折り返し (MIME base64 の行長上限)。
+fn wrap76(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + s.len() / 76 * 2);
+    for (i, c) in s.as_bytes().chunks(76).enumerate() {
+        if i > 0 {
+            out.push_str("\r\n");
+        }
+        out.push_str(std::str::from_utf8(c).unwrap_or_default());
+    }
+    out
 }
 
 /// ヘッダー値のバリデーション (テストからも利用)。
 #[cfg(test)]
 fn sanitize_header_value(s: &str) -> Result<String, JmapError> {
     if s.contains('\r') || s.contains('\n') {
-        return Err(JmapError::InvalidInput(
-            format!("ヘッダーに改行文字は使用できません: {:?}", &s[..s.len().min(40)])
-        ));
+        return Err(JmapError::InvalidInput(format!(
+            "ヘッダーに改行文字は使用できません: {:?}",
+            &s[..s.len().min(40)]
+        )));
     }
     Ok(s.to_owned())
+}
+
+/// アドレスが「単一の addr-spec」かを検査する (D90)。
+///
+/// `\r\n` を拒否するだけでは `,`・`<`/`>`・`"` が残り、`To: a@b, <x@y>` の
+/// ようにヘッダ値内でアドレスを増殖させたり表示名を注入できてしまう。
+/// envelope (`rcptTo`) とヘッダの宛先を一致させるため、RFC 5322 の
+/// specials と空白・制御文字を含む入力を拒否する。
+/// EAI の UTF-8 ローカル部は許す (非 ASCII で specials を含まなければよい)。
+fn validate_addr(addr: &str) -> Result<(), JmapError> {
+    let reject = |reason: &str| {
+        Err(JmapError::InvalidInput(format!(
+            "メールアドレスの形式が不正です ({reason}): {:?}",
+            &addr[..addr.len().min(40)]
+        )))
+    };
+    if addr.is_empty() {
+        return reject("空");
+    }
+    if addr.chars().any(|c| {
+        c.is_control()
+            || c.is_whitespace()
+            || matches!(
+                c,
+                ',' | ';' | '<' | '>' | '(' | ')' | '[' | ']' | '"' | '\'' | '\\' | ':'
+            )
+    }) {
+        return reject("特殊文字を含む");
+    }
+    // '@' は1つだけ — 複数は quoted-string/domain-literal 偽装を許す
+    if addr.matches('@').count() != 1 {
+        return reject("'@' がちょうど1個でない");
+    }
+    Ok(())
 }
 
 /// SMTP DATA 終端シーケンスを本文に含むか判定する (SMTP Smuggling 対策)。
@@ -796,26 +1455,6 @@ fn contains_smtp_terminator(body: &str) -> bool {
     false
 }
 
-/// SSE テキストブロックを `PushNotification` にパースする。
-///
-/// JMAP push notification (RFC 8620 §7.3) の `data:` フィールドを解析する。
-fn parse_sse_event(event: &str) -> Option<PushNotification> {
-    let data_line = event.lines().find(|l| l.starts_with("data:"))?;
-    let json_str = data_line.trim_start_matches("data:").trim();
-    let v: serde_json::Value = serde_json::from_str(json_str).ok()?;
-
-    // RFC 8620 §7.3: {"@type":"StateChange","changed":{accountId:{type:newState}}}
-    if v["@type"].as_str() != Some("StateChange") {
-        return None;
-    }
-    let changed = v["changed"].as_object()?;
-    let account_id = changed.keys().next()?.clone();
-    let type_obj = changed[&account_id].as_object()?;
-    let changed_types: Vec<String> = type_obj.keys().cloned().collect();
-
-    Some(PushNotification { changed_types, account_id })
-}
-
 // ============================================================================
 // テスト
 // ============================================================================
@@ -825,29 +1464,244 @@ fn parse_sse_event(event: &str) -> Option<PushNotification> {
 mod tests {
     use super::*;
 
+    fn resp(call_id: &str, args: serde_json::Value) -> MethodResponse {
+        MethodResponse {
+            method: "Email/set".to_string(),
+            args,
+            call_id: call_id.to_string(),
+        }
+    }
+
+    /// D79: set 系応答の `notUpdated`/`notCreated`/`notDestroyed` を
+    /// 検査しないと、サーバーが更新を拒否しても「操作成功」と
+    /// 誤認する。3 分岐すべてが Err を返すことを固定する。
+    #[test]
+    fn check_set_errors_は拒否を検出する() {
+        let ok = vec![resp(
+            "read",
+            serde_json::json!({ "accountId": "a1", "updated": { "e1": null } }),
+        )];
+        assert!(check_set_errors(&ok, "read").is_ok());
+
+        let bad_update = vec![resp(
+            "read",
+            serde_json::json!({
+                "notUpdated": { "e1": { "type": "forbidden", "description": "read-only" } }
+            }),
+        )];
+        let JmapError::JmapProblem { description, .. } =
+            check_set_errors(&bad_update, "read").unwrap_err()
+        else {
+            panic!("JmapProblem を返すべき");
+        };
+        assert!(description.contains("e1"), "ID を含めるべき: {description}");
+
+        let bad_create = vec![resp(
+            "sub",
+            serde_json::json!({
+                "notCreated": { "s1": { "type": "invalidProperties", "description": "bad envelope" } }
+            }),
+        )];
+        assert!(check_set_errors(&bad_create, "sub").is_err());
+
+        let bad_destroy = vec![resp(
+            "del",
+            serde_json::json!({
+                "notDestroyed": { "d1": { "type": "notFound", "description": "gone" } }
+            }),
+        )];
+        assert!(check_set_errors(&bad_destroy, "del").is_err());
+
+        // メソッドレベルの error 応答も拾う
+        let err_resp = vec![MethodResponse {
+            method: "error".to_string(),
+            args: serde_json::json!({ "type": "serverFail", "description": "x" }),
+            call_id: "read".to_string(),
+        }];
+        assert!(check_set_errors(&err_resp, "read").is_err());
+
+        // 対象 call_id の応答自体が無い場合も失敗 (黙って成功扱いしない)
+        assert!(check_set_errors(&[], "read").is_err());
+    }
+
+    /// D82: URL テンプレート変数はパーセントエンコード必須。
+    /// 送信者制御のファイル名が URL パス構造を改変できないことを固定。
+    #[test]
+    fn encode_template_value_はパス改変文字をエンコードする() {
+        // 通常値はそのまま
+        assert_eq!(encode_template_value("report.pdf"), "report.pdf");
+        assert_eq!(encode_template_value("id-123_abc~x"), "id-123_abc~x");
+        // パス区切り・クエリ・フラグメント・パーセント自身を全てエンコード
+        assert_eq!(
+            encode_template_value("../admin?name=x#f"),
+            "..%2Fadmin%3Fname%3Dx%23f"
+        );
+        assert_eq!(encode_template_value("100%"), "100%25");
+        // MIME 型の / もエンコードされる (RFC 8620: 変数は URL エンコード)
+        assert_eq!(encode_template_value("message/rfc822"), "message%2Frfc822");
+        // 非 ASCII (UTF-8 バイト列) も安全にエンコード
+        assert_eq!(encode_template_value("表.pdf"), "%E8%A1%A8.pdf");
+        // 空文字は空
+        assert_eq!(encode_template_value(""), "");
+    }
+
+    /// D83: セッション応答 URL は Bearer 認証付きリクエストの宛先。
+    /// 別ホストを返す悪意あるサーバへのトークン流出を防ぐオリジン検査。
+    #[test]
+    fn session_url_origin_ok_は外部ホストと非httpsを拒否する() {
+        // 同一ホスト・サブドメインは許可
+        assert!(session_url_origin_ok(
+            "mail.example.com",
+            "apiUrl",
+            "https://mail.example.com/jmap/"
+        )
+        .is_ok());
+        assert!(session_url_origin_ok(
+            "mail.example.com",
+            "apiUrl",
+            "https://api.mail.example.com/x"
+        )
+        .is_ok());
+        assert!(
+            session_url_origin_ok("mail.example.com", "apiUrl", "https://MAIL.EXAMPLE.COM/x")
+                .is_ok()
+        );
+        // 別ホストは拒否 (トークン流出経路)
+        assert!(session_url_origin_ok("mail.example.com", "apiUrl", "https://evil.com/x").is_err());
+        // 末尾一致で誤魔化す偽装ドメインは拒否
+        assert!(session_url_origin_ok(
+            "mail.example.com",
+            "apiUrl",
+            "https://notmail.example.com.evil.com/x"
+        )
+        .is_err());
+        assert!(
+            session_url_origin_ok("example.com", "apiUrl", "https://badexample.com/x").is_err()
+        );
+        // http は拒否
+        assert!(
+            session_url_origin_ok("mail.example.com", "apiUrl", "http://mail.example.com/x")
+                .is_err()
+        );
+        // ホストなし/不正 URL も拒否
+        assert!(session_url_origin_ok("mail.example.com", "apiUrl", "not a url").is_err());
+        assert!(session_url_origin_ok("mail.example.com", "apiUrl", "https:///x").is_err());
+    }
+
+    /// D84: リトライは冪等メソッドに限る。set 系 (書き込み) を再送すると
+    /// 二重送信/二重作成になるため絶対に対象外であることを固定。
+    #[test]
+    fn is_idempotent_method_は書き込みメソッドを除外する() {
+        // 読み取り専用は true
+        for m in [
+            "Email/get",
+            "Email/query",
+            "Mailbox/get",
+            "Thread/get",
+            "Blob/get",
+        ] {
+            assert!(is_idempotent_method(m), "{m} は冪等");
+        }
+        // 書き込み系は全て false — リトライすると二重実行になり得る
+        for m in [
+            "Email/set",
+            "Email/import",
+            "EmailSubmission/set",
+            "Mailbox/set",
+            "Identity/set",
+            "PushSubscription/set",
+        ] {
+            assert!(!is_idempotent_method(m), "{m} は非冪等 — リトライ禁止");
+        }
+    }
+
+    #[test]
+    fn trash_mailbox_patch_は現所属を全てnullにしてtrashを追加する() {
+        let mut current = HashMap::new();
+        current.insert("mbx-inbox".to_string(), true);
+        current.insert("mbx-archive".to_string(), true);
+        let p = trash_mailbox_patch(&current, "mbx-trash");
+        assert_eq!(p["mbx-trash"], serde_json::json!(true));
+        assert!(p["mbx-inbox"].is_null());
+        assert!(p["mbx-archive"].is_null());
+        // trash 自体が既所属でも二重挿入しない
+        let mut cur2 = HashMap::new();
+        cur2.insert("mbx-trash".to_string(), true);
+        let p2 = trash_mailbox_patch(&cur2, "mbx-trash");
+        assert_eq!(p2.as_object().unwrap().len(), 1);
+        // 未所属が空なら trash 追加のみ
+        let p3 = trash_mailbox_patch(&HashMap::new(), "mbx-trash");
+        assert_eq!(p3.as_object().unwrap().len(), 1);
+    }
+
     #[test]
     fn email_list_item_フラグ判定() {
         let mut kw = HashMap::new();
         kw.insert("$seen".to_string(), true);
         let e = EmailListItem {
-            id: "e1".into(), mailbox_ids: HashMap::new(), keywords: kw,
-            size: None, received_at: None, sent_at: None, subject: None,
-            from: None, to: None, preview: None, has_attachment: None, thread_id: None,
+            id: "e1".into(),
+            mailbox_ids: HashMap::new(),
+            keywords: kw,
+            size: None,
+            received_at: None,
+            sent_at: None,
+            subject: None,
+            from: None,
+            to: None,
+            reply_to: None,
+            preview: None,
+            thread_id: None,
+            message_id: None,
+            in_reply_to: None,
+            references: None,
+            dkim_signature: None,
+            auth_results: None,
+            return_path: None,
         };
         assert!(e.is_read());
         assert!(!e.is_starred());
     }
 
+    // D106: `header:Return-Path:asText` が `return_path` にデシリアライズ
+    // されること (serde rename の固定)。無ければ BEC の From/Return-Path
+    // 不一致シグナルは一覧経路で構造的に不発のまま。
+    #[test]
+    fn email_list_item_はカスタムヘッダプロパティをデシリアライズする() {
+        let json = serde_json::json!({
+            "id": "e1",
+            "mailboxIds": {},
+            "keywords": {},
+            "header:Return-Path:asText": "<bounce@evil.example>",
+            "header:Authentication-Results:asText": "mx; spf=fail",
+            "header:DKIM-Signature:asText": "v=1; d=sig.example; s=sel",
+        });
+        let e: EmailListItem = serde_json::from_value(json).unwrap();
+        assert_eq!(e.return_path.as_deref(), Some("<bounce@evil.example>"));
+        assert_eq!(e.auth_results.as_deref(), Some("mx; spf=fail"));
+        assert_eq!(
+            e.dkim_signature.as_deref(),
+            Some("v=1; d=sig.example; s=sel")
+        );
+    }
+
     #[test]
     fn mls_エンベロープパートの検出() {
         let part = BodyPart {
-            part_id: None, blob_id: None,
+            part_id: None,
+            blob_id: None,
             mime_type: Some("application/mls-envelope+cbor".into()),
-            size: None, name: None, charset: None, disposition: None, sub_parts: None,
+            size: None,
+            name: None,
+            charset: None,
+            disposition: None,
+            sub_parts: None,
         };
         assert!(part.is_mls_envelope());
 
-        let plain = BodyPart { mime_type: Some("text/plain".into()), ..part.clone() };
+        let plain = BodyPart {
+            mime_type: Some("text/plain".into()),
+            ..part.clone()
+        };
         assert!(!plain.is_mls_envelope());
     }
 
@@ -863,50 +1717,6 @@ mod tests {
         let v = serde_json::json!(["a", "b"]);
         assert_eq!(str_arr(&v), vec!["a", "b"]);
         assert!(str_arr(&serde_json::Value::Null).is_empty());
-    }
-
-    // ── SSE パーサーテスト ────────────────────────────────────────────────────
-
-    #[test]
-    fn sse_find_event_end_returns_offset() {
-        let buf = "data: hello\n\ndata: world\n\n";
-        assert_eq!(find_sse_event_end(buf), Some(11));
-    }
-
-    #[test]
-    fn sse_find_event_end_returns_none_for_incomplete() {
-        let buf = "data: incomplete";
-        assert!(find_sse_event_end(buf).is_none());
-    }
-
-    #[test]
-    fn sse_parse_jmap_state_change() {
-        // RFC 8620 §7.3 形式
-        let event = r#"data: {"@type":"StateChange","changed":{"acc001":{"Email":"s1","Mailbox":"s2"}}}"#;
-        let notif = parse_sse_event(event).expect("パースに失敗");
-        assert_eq!(notif.account_id, "acc001");
-        assert!(notif.changed_types.contains(&"Email".to_string()));
-        assert!(notif.changed_types.contains(&"Mailbox".to_string()));
-    }
-
-    #[test]
-    fn sse_parse_ignores_non_state_change_events() {
-        let event = r#"data: {"@type":"Something","changed":{}}"#;
-        assert!(parse_sse_event(event).is_none());
-    }
-
-    #[test]
-    fn sse_parse_ignores_non_data_lines() {
-        // SSE の comment 行と event: 行は無視される
-        let event = ": heartbeat\nevent: ping\ndata: {\"@type\":\"StateChange\",\"changed\":{\"a\":{\"Email\":\"s\"}}}";
-        let notif = parse_sse_event(event).expect("パースに失敗");
-        assert_eq!(notif.account_id, "a");
-    }
-
-    #[test]
-    fn sse_parse_returns_none_for_invalid_json() {
-        let event = "data: not-valid-json";
-        assert!(parse_sse_event(event).is_none());
     }
 
     // ── ヘッダーインジェクション防止テスト ──────────────────────────────────
@@ -929,7 +1739,42 @@ mod tests {
         let result = sanitize_header_value("プロジェクト Alpha の報告");
         assert!(result.is_ok(), "正常な件名はエラーになってはならない");
         let result = sanitize_header_value("alice@example.com");
-        assert!(result.is_ok(), "正常なメールアドレスはエラーになってはならない");
+        assert!(
+            result.is_ok(),
+            "正常なメールアドレスはエラーになってはならない"
+        );
+    }
+
+    // ── validate_addr (D90): To ヘッダ内のアドレス増殖/表示名注入防止 ────────
+
+    #[test]
+    fn validate_addr_は通常アドレスを通す() {
+        for ok in [
+            "alice@example.com",
+            "a.b+tag@sub.example.co.jp",
+            "ユーザー@example.com", // EAI
+        ] {
+            assert!(validate_addr(ok).is_ok(), "{ok} は通るべき");
+        }
+    }
+
+    #[test]
+    fn validate_addr_はアドレス増殖と特殊文字を拒否する() {
+        for bad in [
+            "",                     // 空
+            "no-at-sign",           // @ なし
+            "a@@b.com",             // @ 2個
+            "a@b.com, c@d.com",     // アドレスリスト化
+            "a@b.com>, <x@y.com",   // <> 注入
+            "\"Quoted\" <a@b.com>", // display-name 形式
+            "a@b.com (コメント)",   // comment 構文
+            "Group:a@b.com;",       // group 構文
+            "a@[127.0.0.1]",        // domain literal
+            "a\\b@c.com",           // バックスラッシュ
+            "a b@c.com",            // 空白
+        ] {
+            assert!(validate_addr(bad).is_err(), "{bad} は拒否されるべき");
+        }
     }
 
     // ── query_emails limit キャップテスト ─────────────────────────────────────
@@ -940,7 +1785,10 @@ mod tests {
         const MAX_QUERY_LIMIT: u32 = 500;
         let user_limit = u32::MAX;
         let effective = user_limit.min(MAX_QUERY_LIMIT);
-        assert_eq!(effective, 500, "u32::MAX を渡しても 500 に切り捨てられるべき");
+        assert_eq!(
+            effective, 500,
+            "u32::MAX を渡しても 500 に切り捨てられるべき"
+        );
 
         let small_limit = 10u32;
         let effective = small_limit.min(MAX_QUERY_LIMIT);
@@ -953,10 +1801,10 @@ mod tests {
     fn send_email_宛先数上限ロジック() {
         // JmapClient を構築できないのでロジックを直接テスト
         const MAX_RECIPIENTS: usize = 100;
-        let to_ok:  Vec<&str> = (0..100).map(|_| "a@b.com").collect();
-        let to_ng:  Vec<&str> = (0..101).map(|_| "a@b.com").collect();
-        assert!(to_ok.len() <= MAX_RECIPIENTS,  "100件は上限以内");
-        assert!(to_ng.len() >  MAX_RECIPIENTS,  "101件は上限超過");
+        let to_ok: Vec<&str> = (0..100).map(|_| "a@b.com").collect();
+        let to_ng: Vec<&str> = (0..101).map(|_| "a@b.com").collect();
+        assert!(to_ok.len() <= MAX_RECIPIENTS, "100件は上限以内");
+        assert!(to_ng.len() > MAX_RECIPIENTS, "101件は上限超過");
     }
 
     #[test]
@@ -965,7 +1813,7 @@ mod tests {
         let ok_body = "a".repeat(MAX_BODY_BYTES);
         let ng_body = "a".repeat(MAX_BODY_BYTES + 1);
         assert!(ok_body.len() <= MAX_BODY_BYTES, "25MB は許可されるべき");
-        assert!(ng_body.len() >  MAX_BODY_BYTES, "25MB+1 は拒否されるべき");
+        assert!(ng_body.len() > MAX_BODY_BYTES, "25MB+1 は拒否されるべき");
     }
 
     // ── SSE バッファ上限テスト ──────────────────────────────────────────────
@@ -976,12 +1824,16 @@ mod tests {
         let current_buf_len = MAX_SSE_BUF_BYTES - 10;
         let chunk_len = 100;
         // 合計が上限を超える → エラーになるべき
-        assert!(current_buf_len + chunk_len > MAX_SSE_BUF_BYTES,
-            "バッファ超過チェックが機能しない");
+        assert!(
+            current_buf_len + chunk_len > MAX_SSE_BUF_BYTES,
+            "バッファ超過チェックが機能しない"
+        );
         // 合計が上限以下 → 正常
         let small_chunk_len = 5;
-        assert!(current_buf_len + small_chunk_len <= MAX_SSE_BUF_BYTES,
-            "上限以下のチャンクは正常に処理されるべき");
+        assert!(
+            current_buf_len + small_chunk_len <= MAX_SSE_BUF_BYTES,
+            "上限以下のチャンクは正常に処理されるべき"
+        );
     }
 
     // ── 入力上限回帰テスト ───────────────────────────────────────────────────
@@ -1010,22 +1862,28 @@ mod tests {
     #[test]
     fn smtp_terminator_crlf_dot_crlf_detected() {
         let body = "通常テキスト\r\n.\r\n攻撃者が追加した本文";
-        assert!(contains_smtp_terminator(body),
-            "CRLF.CRLF パターンは検出されるべき");
+        assert!(
+            contains_smtp_terminator(body),
+            "CRLF.CRLF パターンは検出されるべき"
+        );
     }
 
     #[test]
     fn smtp_terminator_lf_dot_lf_detected() {
         let body = "通常テキスト\n.\n攻撃者が追加した本文";
-        assert!(contains_smtp_terminator(body),
-            "LF.LF パターンは Exim/Postfix で DATA 終端と解釈されうる");
+        assert!(
+            contains_smtp_terminator(body),
+            "LF.LF パターンは Exim/Postfix で DATA 終端と解釈されうる"
+        );
     }
 
     #[test]
     fn smtp_terminator_leading_dot_detected() {
         let body = ".\r\n後続テキスト";
-        assert!(contains_smtp_terminator(body),
-            "本文先頭の .CRLF は dot-stuffing 不在の早期終端として拒否");
+        assert!(
+            contains_smtp_terminator(body),
+            "本文先頭の .CRLF は dot-stuffing 不在の早期終端として拒否"
+        );
     }
 
     #[test]
@@ -1039,7 +1897,202 @@ mod tests {
     #[test]
     fn smtp_terminator_dot_in_middle_of_line_safe() {
         // ドットが行末ではない場合は安全
-        assert!(!contains_smtp_terminator("前文\r\n. これは終端ではない\r\n後文"));
+        assert!(!contains_smtp_terminator(
+            "前文\r\n. これは終端ではない\r\n後文"
+        ));
+    }
+
+    // ── D44: 自組織ドメイン導出テスト ───────────────────────────────────────
+
+    fn session_json(username: Option<&str>) -> serde_json::Value {
+        let mut v = serde_json::json!({
+            "capabilities": {},
+            "accounts": {},
+            "primaryAccounts": {},
+            "apiUrl": "https://x.test/api",
+            "downloadUrl": "https://x.test/d",
+            "uploadUrl": "https://x.test/u",
+            "state": "s1"
+        });
+        if let Some(u) = username {
+            v["username"] = serde_json::json!(u);
+        }
+        v
+    }
+
+    #[test]
+    fn session_username_がパースされる() {
+        let s: Session = serde_json::from_value(session_json(Some("alice@corp.com")))
+            .expect("username 付きセッションはパースできるべき");
+        assert_eq!(s.username.as_deref(), Some("alice@corp.com"));
+    }
+
+    #[test]
+    fn session_username_省略時はnone() {
+        // RFC 8620 では必須だが、準拠しないサーバが省略しても失敗させない (D44)
+        let s: Session = serde_json::from_value(session_json(None))
+            .expect("username なしセッションもパースできるべき");
+        assert!(s.username.is_none());
+    }
+
+    #[test]
+    fn domain_part_アドレスからドメイン抽出() {
+        assert_eq!(
+            Session::domain_part("alice@Corp.COM"),
+            Some("corp.com".into())
+        );
+        assert_eq!(
+            Session::domain_part("a@b@corp.com"),
+            Some("corp.com".into())
+        );
+        assert_eq!(Session::domain_part("plain-name"), None);
+        assert_eq!(Session::domain_part("alice@"), None);
+        assert_eq!(Session::domain_part(""), None);
+    }
+
+    #[test]
+    fn base64_encode_はrfc4648準拠() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
+        assert_eq!(base64_encode("要".as_bytes()), "6KaB");
+    }
+
+    #[test]
+    fn encode_header_utf8_はasciiをそのまま返し非asciiをencoded_word化する() {
+        assert_eq!(encode_header_utf8("hello"), "hello");
+        assert_eq!(encode_header_utf8(""), "");
+        // 「テスト」= E3 83 86 E3 82 B9 E3 83 88 → base64 "44OG44K544OI"
+        let enc = encode_header_utf8("テスト");
+        assert_eq!(enc, "=?UTF-8?B?44OG44K544OI?=");
+        // 長い件名は 75 文字上限の encoded-word に分割される
+        let long = encode_header_utf8(&"あ".repeat(40)); // 120 bytes → 3 words
+        for w in long.split(' ') {
+            assert!(w.len() <= 75, "encoded-word が 75 文字超: {w}");
+            assert!(w.starts_with("=?UTF-8?B?") && w.ends_with("?="));
+        }
+        assert!(long.contains(' '));
+        // 混在: ASCII 部分も word 化される (RFC 2047 は非 ASCII 値全体を対象)
+        let mixed = encode_header_utf8("Re: 確認");
+        assert!(mixed.starts_with("=?UTF-8?B?"));
+    }
+
+    #[test]
+    fn build_raw_message_はrfc5322_準拠のヘッダとbase64本文を出力する() {
+        let raw = build_raw_message(
+            "alice@example.com",
+            "bob@example.com",
+            "会議の件",
+            "本文です。\r\n2 行目",
+            "<m@x>",
+            "Mon, 01 Jan 2024 00:00:00 +0000",
+            &[],
+        );
+        // ヘッダーは全て ASCII (件名は encoded-word)
+        let (head, body) = raw.split_once("\r\n\r\n").expect("ヘッダ/本文区切り");
+        assert!(head.is_ascii(), "ヘッダーに非 ASCII: {head}");
+        assert!(head.contains("Subject: =?UTF-8?B?"));
+        assert!(head.contains("MIME-Version: 1.0"));
+        assert!(head.contains("Content-Transfer-Encoding: base64"));
+        // 本文は base64 で折り返し 76 桁以下 — 「本文です。\r\n2 行目」の base64
+        for line in body.split("\r\n") {
+            assert!(line.len() <= 76);
+            assert!(line
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='));
+        }
+        // 既知値: "本文です。\r\n2 行目" UTF-8 → base64
+        assert_eq!(
+            base64_encode("本文です。\r\n2 行目".as_bytes()),
+            body.replace("\r\n", "")
+        );
+    }
+
+    #[test]
+    fn build_raw_message_は添付をmultipart_mixedで直列化する() {
+        let att = OutgoingAttachment {
+            filename: "kaname-mls-key-package.bin".into(),
+            mime_type: "application/mls-key-package".into(),
+            data: b"\x01\x02\x03keypackage".to_vec(),
+        };
+        let raw = build_raw_message(
+            "alice@kaname.app",
+            "bob@kaname.app",
+            "MLS",
+            "KeyPackage を添付します",
+            "<m@x>",
+            "Mon, 01 Jan 2024 00:00:00 +0000",
+            &[att],
+        );
+        let (head, rest) = raw.split_once("\r\n\r\n").expect("ヘッダ区切り");
+        assert!(head.contains("Content-Type: multipart/mixed; boundary=\"kaname-"));
+        let boundary = head
+            .split("boundary=\"")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .expect("boundary 抽出");
+        // 構造: --B 本文 / --B 添付 / --B-- 終端
+        assert!(rest.contains(&format!("--{boundary}\r\nContent-Type: text/plain")));
+        assert!(rest.contains(&format!(
+            "--{boundary}\r\nContent-Type: application/mls-key-package; name=\"kaname-mls-key-package.bin\""
+        )));
+        assert!(rest
+            .contains("Content-Disposition: attachment; filename=\"kaname-mls-key-package.bin\""));
+        assert!(rest.trim_end().ends_with(&format!("--{boundary}--")));
+        // 添付データは base64 で埋め込まれている
+        assert!(rest.contains(&wrap76(&base64_encode(b"\x01\x02\x03keypackage"))));
+    }
+
+    #[test]
+    fn filename_params_は非asciiをrfc5987の拡張パラメータにする() {
+        let (n, f) = filename_params("report.pdf");
+        assert_eq!(n, "name=\"report.pdf\"");
+        assert_eq!(f, "filename=\"report.pdf\"");
+        let (n2, f2) = filename_params("請求書.pdf");
+        assert!(n2.starts_with("name*=UTF-8''"), "{n2}");
+        assert!(f2.starts_with("filename*=UTF-8''"), "{f2}");
+        assert!(
+            !f2.contains("請求書"),
+            "非 ASCII は percent-encode される: {f2}"
+        );
+    }
+
+    #[test]
+    fn email_body_get_args_は読み手の無い本文取得を要求しない() {
+        // D93: 消費されるのは blobId と attachments のみ。bodyValues 系を
+        // 要求するとメールを開くたび最大 ~1MB の未使用転送が発生する。
+        // fetch フラグ・bodyValues プロパティの再追加を検出する。
+        let args = email_body_get_args("acct", "mail-1");
+        assert_eq!(args["accountId"], "acct");
+        assert_eq!(args["ids"], serde_json::json!(["mail-1"]));
+        let props = args["properties"].as_array().expect("properties は配列");
+        let prop_strs: Vec<&str> = props.iter().filter_map(|p| p.as_str()).collect();
+        assert!(prop_strs.contains(&"blobId"));
+        assert!(prop_strs.contains(&"attachments"));
+        for dead in [
+            "bodyValues",
+            "textBody",
+            "htmlBody",
+            "bodyStructure",
+            "headers",
+        ] {
+            assert!(
+                !prop_strs.contains(&dead),
+                "未消費プロパティ {dead} が再要求されている"
+            );
+        }
+        let obj = args.as_object().expect("args はオブジェクト");
+        for flag in [
+            "fetchTextBodyValues",
+            "fetchHTMLBodyValues",
+            "maxBodyValueBytes",
+        ] {
+            assert!(
+                !obj.contains_key(flag),
+                "未消費の fetch フラグ {flag} が再要求されている"
+            );
+        }
     }
 }
-

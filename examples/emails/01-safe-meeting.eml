@@ -1,0 +1,15 @@
+From: Hanako Tanaka <hanako@company.co.jp>
+To: you@example.com
+Subject: Q2 budget meeting
+Date: Mon, 26 Apr 2026 09:00:00 +0900
+Message-ID: <safe-001@company.co.jp>
+Authentication-Results: mx.example.com; spf=pass smtp.mailfrom=company.co.jp; dkim=pass header.d=company.co.jp; dmarc=pass header.from=company.co.jp
+Content-Type: text/plain; charset=utf-8
+
+Hi,
+
+I have scheduled the Q2 budget meeting for next Tuesday at 14:00.
+Please let me know if you can attend.
+
+Thanks,
+Hanako

@@ -58,25 +58,26 @@ pub fn analyze_spoof(
     // 2. 表示名詐称チェック
     // 表示名が既知連絡先と一致し、かつ送信元ドメインが期待ドメインと異なる場合のみ詐称。
     // 正規ドメインから送られた場合 (from_domain == expected_domain) は詐称ではない。
-    let display_name_impersonation = if let (Some(ref name), Some(ref fd)) = (&display_name, &from_domain) {
-        // ホモグリフを畳み込んでから比較する。`to_lowercase()` だけでは
-        // `"СЕО 山田"` (Cyrillic С/Е/О) が `"CEO 山田"` と一致せず、
-        // 視覚的に同一の表示名によるなりすましを素通りさせていた。
-        // 2025-2026 の観測ではホモグリフ悪用の主戦場が URL から
-        // From ヘッダーの表示名へ移っている (crate::idn_homograph 参照)。
-        let folded = crate::idn_homograph::fold_homoglyphs(name);
-        let name_lower = folded.trim();
-        known_contacts.iter().any(|(known_name, expected_domain)| {
-            let known_lower = crate::idn_homograph::fold_homoglyphs(known_name);
-            let name_matches = name_lower == known_lower.trim()
-                || name_lower.contains(known_lower.trim())
-                || known_lower.trim().contains(name_lower);
-            // 名前が一致し、かつ送信元ドメインが期待ドメインと異なれば詐称
-            name_matches && fd != &expected_domain.to_lowercase().trim().to_string()
-        })
-    } else {
-        false
-    };
+    let display_name_impersonation =
+        if let (Some(ref name), Some(ref fd)) = (&display_name, &from_domain) {
+            // ホモグリフを畳み込んでから比較する。`to_lowercase()` だけでは
+            // `"СЕО 山田"` (Cyrillic С/Е/О) が `"CEO 山田"` と一致せず、
+            // 視覚的に同一の表示名によるなりすましを素通りさせていた。
+            // 2025-2026 の観測ではホモグリフ悪用の主戦場が URL から
+            // From ヘッダーの表示名へ移っている (crate::idn_homograph 参照)。
+            let folded = crate::idn_homograph::fold_homoglyphs(name);
+            let name_lower = folded.trim();
+            known_contacts.iter().any(|(known_name, expected_domain)| {
+                let known_lower = crate::idn_homograph::fold_homoglyphs(known_name);
+                let name_matches = name_lower == known_lower.trim()
+                    || name_lower.contains(known_lower.trim())
+                    || known_lower.trim().contains(name_lower);
+                // 名前が一致し、かつ送信元ドメインが期待ドメインと異なれば詐称
+                name_matches && fd != &expected_domain.to_lowercase().trim().to_string()
+            })
+        } else {
+            false
+        };
 
     // スコア計算
     let mut score = 0.0f32;
@@ -97,7 +98,11 @@ pub fn analyze_spoof(
         reply_to_domain_mismatch,
         reply_to_domain,
         display_name_impersonation,
-        suspicious_display_name: if display_name_impersonation { display_name } else { None },
+        suspicious_display_name: if display_name_impersonation {
+            display_name
+        } else {
+            None
+        },
         risk_score: score.min(1.0),
     }
 }
@@ -126,7 +131,11 @@ fn is_free_mail_domain(domain: &str) -> bool {
 fn extract_domain_from_header(header: &str) -> Option<String> {
     let email = if let Some(start) = header.rfind('<') {
         let end = header.rfind('>')?;
-        if end > start { &header[start + 1..end] } else { return None; }
+        if end > start {
+            &header[start + 1..end]
+        } else {
+            return None;
+        }
     } else {
         header.trim()
     };
@@ -171,17 +180,16 @@ mod tests {
             &[("CEO 山田", "company.com")],
         );
         assert!(!result.reply_to_domain_mismatch);
-        assert!(!result.display_name_impersonation, "正規ドメインからの送信は詐称ではない");
+        assert!(
+            !result.display_name_impersonation,
+            "正規ドメインからの送信は詐称ではない"
+        );
         assert_eq!(result.risk_score, 0.0);
     }
 
     #[test]
     fn reply_to_different_domain_is_suspicious() {
-        let result = analyze_spoof(
-            "\"CEO 山田\" <ceo@company.com>",
-            Some("ceo@gmail.com"),
-            &[],
-        );
+        let result = analyze_spoof("\"CEO 山田\" <ceo@company.com>", Some("ceo@gmail.com"), &[]);
         assert!(result.reply_to_domain_mismatch);
         assert_eq!(result.reply_to_domain.as_deref(), Some("gmail.com"));
         assert!(result.risk_score >= 0.5);
@@ -189,23 +197,19 @@ mod tests {
 
     #[test]
     fn reply_to_free_mail_increases_score() {
-        let result = analyze_spoof(
-            "ceo@company.com",
-            Some("ceo@gmail.com"),
-            &[],
-        );
+        let result = analyze_spoof("ceo@company.com", Some("ceo@gmail.com"), &[]);
         assert!(result.reply_to_domain_mismatch);
-        assert!(result.risk_score >= 0.7, "フリーメール Reply-To はスコア 0.7 以上: {}", result.risk_score);
+        assert!(
+            result.risk_score >= 0.7,
+            "フリーメール Reply-To はスコア 0.7 以上: {}",
+            result.risk_score
+        );
         assert!(result.is_high_risk());
     }
 
     #[test]
     fn reply_to_same_domain_is_ok() {
-        let result = analyze_spoof(
-            "alice@company.com",
-            Some("alice@company.com"),
-            &[],
-        );
+        let result = analyze_spoof("alice@company.com", Some("alice@company.com"), &[]);
         assert!(!result.reply_to_domain_mismatch);
         assert_eq!(result.risk_score, 0.0);
     }
@@ -274,7 +278,10 @@ mod tests {
             None,
             &[("CEO 山田", "company.com")],
         );
-        assert!(!result.display_name_impersonation, "正規ドメインは詐称ではない");
+        assert!(
+            !result.display_name_impersonation,
+            "正規ドメインは詐称ではない"
+        );
     }
 
     #[test]

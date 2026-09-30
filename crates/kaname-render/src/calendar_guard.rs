@@ -64,7 +64,7 @@ pub enum CalendarRisk {
     ///
     /// CVE-2023-35636 型攻撃: Outlook が CN を自動解決する際に UNC を参照し
     /// NTLMv2 ハッシュが漏洩する。
-    /// 出典: https://codebook.machinarecord.com/threatreport/31520/
+    /// 出典: <https://codebook.machinarecord.com/threatreport/31520/>
     UncPathInAttendeeCn {
         /// 問題の CN 値
         cn: String,
@@ -102,6 +102,33 @@ pub enum CalendarRisk {
         method: String,
         /// 併存したフィッシング兆候の説明
         reason: String,
+    },
+    /// RFC 5545 を意図的に逸脱した構造 (D1263 — Mimecast 2026-06 観測)。
+    ///
+    /// 攻撃者は QR 抽出ツールをパース段階で破壊するため、
+    /// (a) `BEGIN:VCALENDAR` より前に大量の X- 行を置き (パーサの
+    ///     「カレンダーか」判定とスキャン深度を狂わせる)、
+    /// (b) `X-GENERATION; FUTURE:` のように `;` 後のパラメータが
+    ///     `name=value` 形を取らない無意味な X- プロパティ行を撒く。
+    /// どちらも正当な ICS 生成器は出力しない形状であり、それ自体が
+    /// 回避の兆候となる。
+    MalformedStructure {
+        /// BEGIN:VCALENDAR より前にあった非空行の数
+        leading_lines: usize,
+        /// パラメータ部が `name=value` 形を取らない X- プロパティ行の数
+        malformed_x_props: usize,
+    },
+    /// ATTACH プロパティが外部 URI を参照している (D1264)。
+    ///
+    /// Mimecast (2026-06) 観測の malformed-ICS quishing キャンペーンでは
+    /// QR 画像を `ATTACH;VALUE=URI:` で外部参照し、カレンダーアプリが
+    /// 招待を表示した時点でリモート画像を取得させる。URI 参照は
+    /// `ENCODING=BASE64` のバイナリ埋め込み (EmbeddedBinaryAttachment) と
+    /// 別経路 — 中身を持たず「表示時フェッチ」のためスキャンを完全に
+    /// 回避し、取得先の変更でキャンペーンを差し替えられる。
+    ExternalAttachUri {
+        /// 参照先 URI
+        uri: String,
     },
 }
 
@@ -149,8 +176,12 @@ impl CalendarGuard {
         }
 
         // 3. 緊急性の偽装キーワード
-        let desc = extract_field(ics_content, "DESCRIPTION").unwrap_or_default().to_lowercase();
-        let summary = extract_field(ics_content, "SUMMARY").unwrap_or_default().to_lowercase();
+        let desc = extract_field(ics_content, "DESCRIPTION")
+            .unwrap_or_default()
+            .to_lowercase();
+        let summary = extract_field(ics_content, "SUMMARY")
+            .unwrap_or_default()
+            .to_lowercase();
         let combined = format!("{desc} {summary}");
 
         let urgency_keywords = [
@@ -175,7 +206,12 @@ impl CalendarGuard {
         }
 
         // 4. 会議リンク (CONFERENCE/LOCATION フィールド)
-        for field in ["CONFERENCE", "LOCATION", "X-GOOGLE-CONFERENCE", "X-ZOOM-JOIN-URL"] {
+        for field in [
+            "CONFERENCE",
+            "LOCATION",
+            "X-GOOGLE-CONFERENCE",
+            "X-ZOOM-JOIN-URL",
+        ] {
             if let Some(value) = extract_field(ics_content, field) {
                 if value.starts_with("http") {
                     if let Some(_reason) = self.evaluate_url(&value) {
@@ -240,6 +276,18 @@ impl CalendarGuard {
             risks.push(auto_reg);
         }
 
+        // 10. 構造の意図的破壊 (D1263 — Mimecast 2026-06)。
+        //     BEGIN:VCALENDAR より前の非空行と、`name=value` 形を取らない
+        //     パラメータを持つ X- プロパティ行は、正当な ICS 生成器が
+        //     出力しない形状 — QR 抽出ツールをパース段階で破壊するための
+        //     回避工作として兆候を記録する。
+        risks.extend(detect_malformed_structure(ics_content));
+
+        // 11. 外部 URI 参照の ATTACH (D1264)。
+        //     `ATTACH;VALUE=URI:` は招待の表示時にリモートから内容を
+        //     フェッチさせる — QR 画像・次段ペイロードの配送経路。
+        risks.extend(detect_external_attach_uri(ics_content));
+
         let risk_level = Self::calculate_level(&risks);
         CalendarScan { risks, risk_level }
     }
@@ -273,8 +321,16 @@ impl CalendarGuard {
                 if let Some(q_pos) = lower.find('?') {
                     let query = &lower[q_pos..];
                     // ?url=, ?dest=, ?to=, ?link=, ?redirect= 等の外部リダイレクト
-                    let redirect_keys = ["url=http", "dest=http", "to=http", "link=http",
-                                         "redirect=http", "r=http", "next=http", "continue=http"];
+                    let redirect_keys = [
+                        "url=http",
+                        "dest=http",
+                        "to=http",
+                        "link=http",
+                        "redirect=http",
+                        "r=http",
+                        "next=http",
+                        "continue=http",
+                    ];
                     for key in redirect_keys {
                         if query.contains(key) {
                             return Some(format!(
@@ -327,7 +383,12 @@ impl CalendarGuard {
         }
 
         // 正規ドメインを装った偽サブドメイン
-        let legit = ["microsoft.com", "google.com", "zoom.us", "teams.microsoft.com"];
+        let legit = [
+            "microsoft.com",
+            "google.com",
+            "zoom.us",
+            "teams.microsoft.com",
+        ];
         for domain in &legit {
             if lower.contains(domain) {
                 let host = extract_host(&lower).unwrap_or_default();
@@ -345,7 +406,9 @@ impl CalendarGuard {
         let lower = organizer.to_lowercase();
         // mailto: から email を抽出
         let email = if lower.contains("mailto:") {
-            lower.split("mailto:").nth(1)
+            lower
+                .split("mailto:")
+                .nth(1)
                 .map(|s| s.split('"').next().unwrap_or(s).trim().to_string())
         } else {
             Some(lower.clone())
@@ -353,7 +416,13 @@ impl CalendarGuard {
 
         if let Some(email) = email {
             // フリーメール (法人招待としては不自然)
-            let free_providers = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "qq.com"];
+            let free_providers = [
+                "gmail.com",
+                "yahoo.com",
+                "hotmail.com",
+                "outlook.com",
+                "qq.com",
+            ];
             for provider in &free_providers {
                 if email.ends_with(provider) {
                     return Some(format!("法人会議にフリーメール ({provider}) を使用"));
@@ -369,14 +438,32 @@ impl CalendarGuard {
             return CalendarRiskLevel::Safe;
         }
 
-        let has_suspicious_url = risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. }));
-        let has_suspicious_meeting = risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousMeetingLink { .. }));
-        let has_unc = risks.iter().any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. }));
-        let has_binary = risks.iter().any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. }));
-        let has_auto_reg = risks.iter().any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. }));
-        let has_injection = risks.iter().any(|r| matches!(r, CalendarRisk::PromptInjectionAttempt { .. }));
+        let has_suspicious_url = risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. }));
+        let has_suspicious_meeting = risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::SuspiciousMeetingLink { .. }));
+        let has_unc = risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. }));
+        let has_binary = risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. }));
+        let has_auto_reg = risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. }));
+        let has_injection = risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::PromptInjectionAttempt { .. }));
 
-        if has_suspicious_url || has_suspicious_meeting || has_unc || has_binary || has_auto_reg || has_injection {
+        if has_suspicious_url
+            || has_suspicious_meeting
+            || has_unc
+            || has_binary
+            || has_auto_reg
+            || has_injection
+        {
             CalendarRiskLevel::Danger
         } else {
             CalendarRiskLevel::Caution
@@ -385,7 +472,9 @@ impl CalendarGuard {
 }
 
 impl Default for CalendarGuard {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 // ============================================================================
@@ -400,7 +489,7 @@ impl Default for CalendarGuard {
 /// ```
 /// Outlook 等が CN を UI 表示のために解決しようとすると UNC を参照し、
 /// NTLMv2 ハッシュが攻撃者サーバーに漏洩する。
-/// 出典: https://codebook.machinarecord.com/threatreport/31520/ (2024)
+/// 出典: <https://codebook.machinarecord.com/threatreport/31520/> (2024)
 fn detect_unc_in_attendee(content: &str) -> Vec<CalendarRisk> {
     let mut risks = Vec::new();
     for line in content.lines() {
@@ -475,9 +564,9 @@ fn detect_binary_attachments(content: &str) -> Vec<CalendarRisk> {
     // base64 デコード後のバイナリシグネチャ (先頭バイト)
     // base64 の先頭文字でマジックバイトを推定 (完全デコードなしで高速判定)
     const SUSPICIOUS_B64_PREFIXES: &[(&str, &str)] = &[
-        ("TVoA", "Windows PE (MZ ヘッダー)"),  // MZ\x00\x00
-        ("TVqQ", "Windows PE (MZ ヘッダー)"),  // MZ\x90\x00 (最一般的な PE)
-        ("TVpA", "Windows PE (MZ ヘッダー)"),  // MZ@\x00
+        ("TVoA", "Windows PE (MZ ヘッダー)"), // MZ\x00\x00
+        ("TVqQ", "Windows PE (MZ ヘッダー)"), // MZ\x90\x00 (最一般的な PE)
+        ("TVpA", "Windows PE (MZ ヘッダー)"), // MZ@\x00
         ("UEsDB", "ZIP アーカイブ (PK ヘッダー)"),
         ("7z/A", "7-Zip アーカイブ"),
         ("AAAA", "汎用バイナリ (高エントロピー)"),
@@ -491,9 +580,16 @@ fn detect_binary_attachments(content: &str) -> Vec<CalendarRisk> {
     for line in content.lines() {
         let upper = line.to_uppercase();
         // ATTACH プロパティで ENCODING=BASE64 かつ VALUE=BINARY のもの
-        if upper.contains("ATTACH") && upper.contains("ENCODING=BASE64") && upper.contains("VALUE=BINARY") {
+        if upper.contains("ATTACH")
+            && upper.contains("ENCODING=BASE64")
+            && upper.contains("VALUE=BINARY")
+        {
             // コロン以降が base64 データ
-            let b64_data = line.split_once(':').map(|x| x.1.trim()).unwrap_or("").trim();
+            let b64_data = line
+                .split_once(':')
+                .map(|x| x.1.trim())
+                .unwrap_or("")
+                .trim();
             if b64_data.is_empty() {
                 continue;
             }
@@ -523,7 +619,10 @@ fn detect_binary_attachments(content: &str) -> Vec<CalendarRisk> {
 /// 受信時に自動 tentative 登録され、元メールを削除してもエントリが残る。
 /// 自動登録自体は正規招待でも使われるため、**既に検出済みの他のフィッシング
 /// 兆候と併存する場合のみ** リスクとして報告する (誤検出防止)。
-fn detect_auto_registration_abuse(content: &str, existing_risks: &[CalendarRisk]) -> Option<CalendarRisk> {
+fn detect_auto_registration_abuse(
+    content: &str,
+    existing_risks: &[CalendarRisk],
+) -> Option<CalendarRisk> {
     let method = extract_field(content, "METHOD")?;
     let method_upper = method.to_uppercase();
     if method_upper != "REQUEST" && method_upper != "PUBLISH" {
@@ -531,16 +630,19 @@ fn detect_auto_registration_abuse(content: &str, existing_risks: &[CalendarRisk]
     }
 
     // 併存するフィッシング兆候 (自動登録リスク自身は除く) を要約
-    let companion: Vec<&str> = existing_risks.iter().filter_map(|r| match r {
-        CalendarRisk::SuspiciousUrl { .. } => Some("不審URL"),
-        CalendarRisk::SuspiciousOrganizer { .. } => Some("不審な主催者"),
-        CalendarRisk::UrgencyManipulation { .. } => Some("緊急性偽装"),
-        CalendarRisk::SuspiciousMeetingLink { .. } => Some("不審会議リンク"),
-        CalendarRisk::EmbeddedBinaryAttachment { .. } => Some("バイナリ埋め込み"),
-        CalendarRisk::UncPathInAttendeeCn { .. } => Some("UNCパス"),
-        CalendarRisk::PromptInjectionAttempt { .. } => Some("プロンプト注入"),
-        _ => None,
-    }).collect();
+    let companion: Vec<&str> = existing_risks
+        .iter()
+        .filter_map(|r| match r {
+            CalendarRisk::SuspiciousUrl { .. } => Some("不審URL"),
+            CalendarRisk::SuspiciousOrganizer { .. } => Some("不審な主催者"),
+            CalendarRisk::UrgencyManipulation { .. } => Some("緊急性偽装"),
+            CalendarRisk::SuspiciousMeetingLink { .. } => Some("不審会議リンク"),
+            CalendarRisk::EmbeddedBinaryAttachment { .. } => Some("バイナリ埋め込み"),
+            CalendarRisk::UncPathInAttendeeCn { .. } => Some("UNCパス"),
+            CalendarRisk::PromptInjectionAttempt { .. } => Some("プロンプト注入"),
+            _ => None,
+        })
+        .collect();
 
     if companion.is_empty() {
         return None; // 正規招待の METHOD:REQUEST は問題なし
@@ -553,6 +655,100 @@ fn detect_auto_registration_abuse(content: &str, existing_risks: &[CalendarRisk]
             companion.join(", ")
         ),
     })
+}
+
+/// RFC 5545 を意図的に逸脱した構造を検出する (D1263 — Mimecast 2026-06 観測)。
+///
+/// - `BEGIN:VCALENDAR` より前の非空行: パーサの「これはカレンダーか」判定と
+///   先頭限定スキャンを狂わせる先頭ジャンク。
+/// - `X-GENERATION; FUTURE:` 型の X- プロパティ行: `;` 後のパラメータが
+///   `name=value` 形を取らない (RFC 5545 §3.1 違反)。正規の X- プロパティは
+///   `X-NAME:value` または `X-NAME;PARAM=value:value` のみ。
+fn detect_malformed_structure(content: &str) -> Vec<CalendarRisk> {
+    let mut leading_lines = 0usize;
+    for raw in content.lines() {
+        let line = raw.trim_end_matches('\r');
+        if line.starts_with("BEGIN:VCALENDAR") {
+            break;
+        }
+        // 継続行 (space/tab 始まり) は先行行の一部 — 単独で数えない
+        if line.starts_with([' ', '\t']) {
+            continue;
+        }
+        if !line.is_empty() {
+            leading_lines += 1;
+        }
+    }
+
+    let mut malformed_x_props = 0usize;
+    for raw in content.lines() {
+        let line = raw.trim_end_matches('\r');
+        if line.starts_with([' ', '\t']) {
+            continue;
+        }
+        if !line.to_ascii_uppercase().starts_with("X-") {
+            continue;
+        }
+        match line.find(':') {
+            Some(colon) => {
+                let params = &line[..colon];
+                if let Some((_, rest)) = params.split_once(';') {
+                    if rest
+                        .split(';')
+                        .any(|p| !p.trim().is_empty() && !p.contains('='))
+                    {
+                        malformed_x_props += 1;
+                    }
+                }
+            }
+            // コロン自体が無い X- 行はプロパティとして成立しない
+            None => malformed_x_props += 1,
+        }
+    }
+
+    if leading_lines > 0 || malformed_x_props > 0 {
+        vec![CalendarRisk::MalformedStructure {
+            leading_lines,
+            malformed_x_props,
+        }]
+    } else {
+        Vec::new()
+    }
+}
+
+/// `ATTACH` プロパティの外部 URI 参照を検出する (D1264)。
+///
+/// `ATTACH;VALUE=URI:https://...` / `ATTACH:https://...` — 招待の表示時に
+/// リモートから内容をフェッチさせる形式。RFC 5545 の正規機能だが、
+/// メール経由の招待では QR 画像や次段ペイロードの配送に悪用される
+/// (Mimecast 2026-06)。CID: 埋め込み参照は対象外。
+fn detect_external_attach_uri(content: &str) -> Vec<CalendarRisk> {
+    let mut risks = Vec::new();
+    for raw in content.lines() {
+        let line = raw.trim();
+        let upper = line.to_ascii_uppercase();
+        if !upper.starts_with("ATTACH") {
+            continue;
+        }
+        // VALUE=URI パラメータ、または値部が直接 http で始まる参照
+        let uri_attach = upper.contains("VALUE=URI")
+            || line
+                .split_once(':')
+                .map(|(_, v)| v.trim_start().starts_with("http"))
+                .unwrap_or(false);
+        if !uri_attach {
+            continue;
+        }
+        if let Some((_, value)) = line.split_once(':') {
+            let uri = value.trim();
+            if !uri.is_empty() && !uri.to_ascii_uppercase().starts_with("CID:") {
+                risks.push(CalendarRisk::ExternalAttachUri {
+                    uri: uri.to_string(),
+                });
+            }
+        }
+    }
+    risks
 }
 
 fn extract_ics_urls(content: &str) -> Vec<String> {
@@ -568,11 +764,16 @@ fn extract_ics_urls(content: &str) -> Vec<String> {
             }
         }
         // DESCRIPTION や LOCATION 内の URL
-        if trimmed.to_uppercase().starts_with("DESCRIPTION:") || trimmed.to_uppercase().starts_with("LOCATION:") {
+        if trimmed.to_uppercase().starts_with("DESCRIPTION:")
+            || trimmed.to_uppercase().starts_with("LOCATION:")
+        {
             let value = trimmed.split_once(':').map_or("", |x| x.1);
             // 簡易 URL 抽出
             if let Some(start) = value.find("http") {
-                let url_part: String = value[start..].chars().take_while(|c| !c.is_whitespace()).collect();
+                let url_part: String = value[start..]
+                    .chars()
+                    .take_while(|c| !c.is_whitespace())
+                    .collect();
                 if !url_part.is_empty() {
                     urls.push(url_part);
                 }
@@ -603,8 +804,12 @@ fn extract_field(content: &str, field_name: &str) -> Option<String> {
 }
 
 fn extract_host(url: &str) -> Option<String> {
-    let without_scheme = url.trim_start_matches("https://").trim_start_matches("http://");
-    let end = without_scheme.find(['/', '?']).unwrap_or(without_scheme.len());
+    let without_scheme = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
+    let end = without_scheme
+        .find(['/', '?'])
+        .unwrap_or(without_scheme.len());
     if end > 0 {
         Some(without_scheme[..end].to_string())
     } else {
@@ -642,7 +847,9 @@ URL:http://phishing.tk/steal
 END:VEVENT
 END:VCALENDAR"#;
 
-    fn guard() -> CalendarGuard { CalendarGuard }
+    fn guard() -> CalendarGuard {
+        CalendarGuard
+    }
 
     #[test]
     fn normal_meeting_is_safe() {
@@ -652,7 +859,8 @@ END:VCALENDAR"#;
         // 正規 Teams URL は危険でない
         assert!(
             scan.risk_level == CalendarRiskLevel::Safe || scan.risks.is_empty(),
-            "通常の会議は安全: {:?}", scan.risks
+            "通常の会議は安全: {:?}",
+            scan.risks
         );
     }
 
@@ -669,7 +877,10 @@ END:VCALENDAR"#;
         let g = guard();
         let ics = "BEGIN:VCALENDAR\nURL:http://meeting.tk/join\nEND:VCALENDAR";
         let scan = g.analyze(ics);
-        assert!(scan.risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })));
     }
 
     #[test]
@@ -677,7 +888,10 @@ END:VCALENDAR"#;
         let g = guard();
         let ics = "BEGIN:VCALENDAR\nURL:https://amaz0n.com/verify\nEND:VCALENDAR";
         let scan = g.analyze(ics);
-        assert!(scan.risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })));
     }
 
     #[test]
@@ -685,7 +899,10 @@ END:VCALENDAR"#;
         let g = guard();
         let ics = "BEGIN:VCALENDAR\nSUMMARY:Account Suspended - verify now\nEND:VCALENDAR";
         let scan = g.analyze(ics);
-        assert!(scan.risks.iter().any(|r| matches!(r, CalendarRisk::UrgencyManipulation { .. })));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::UrgencyManipulation { .. })));
     }
 
     #[test]
@@ -693,7 +910,10 @@ END:VCALENDAR"#;
         let g = guard();
         let ics = "BEGIN:VCALENDAR\nORGANIZER:mailto:cfo@gmail.com\nEND:VCALENDAR";
         let scan = g.analyze(ics);
-        assert!(scan.risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousOrganizer { .. })));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::SuspiciousOrganizer { .. })));
     }
 
     #[test]
@@ -710,7 +930,10 @@ END:VCALENDAR"#;
             url: "http://phish.tk".into(),
             reason: "free TLD".into(),
         }];
-        assert_eq!(CalendarGuard::calculate_level(&risks), CalendarRiskLevel::Danger);
+        assert_eq!(
+            CalendarGuard::calculate_level(&risks),
+            CalendarRiskLevel::Danger
+        );
     }
 
     #[test]
@@ -718,7 +941,10 @@ END:VCALENDAR"#;
         let risks = vec![CalendarRisk::UrgencyManipulation {
             keyword: "verify now".into(),
         }];
-        assert_eq!(CalendarGuard::calculate_level(&risks), CalendarRiskLevel::Caution);
+        assert_eq!(
+            CalendarGuard::calculate_level(&risks),
+            CalendarRiskLevel::Caution
+        );
     }
 
     #[test]
@@ -744,8 +970,11 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
-            "PE バイナリが検出されるべき: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
+            "PE バイナリが検出されるべき: {:?}",
+            scan.risks
         );
         assert_ne!(scan.risk_level, CalendarRiskLevel::Safe);
     }
@@ -777,7 +1006,10 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            !scan.risks.iter().any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
             "URL 形式の ATTACH はバイナリとして検出しない"
         );
     }
@@ -796,8 +1028,11 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. })),
-            "ATTENDEE CN の UNC パスが検出されるべき: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. })),
+            "ATTENDEE CN の UNC パスが検出されるべき: {:?}",
+            scan.risks
         );
         assert_eq!(scan.risk_level, CalendarRiskLevel::Danger);
     }
@@ -810,7 +1045,9 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. })),
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. })),
             "ORGANIZER CN の UNC パスが検出されるべき"
         );
     }
@@ -822,8 +1059,14 @@ END:VCALENDAR"#;
                    ATTENDEE;CN=\"Alice Smith\":mailto:alice@company.co.jp\n\
                    END:VCALENDAR";
         let scan = g.analyze(ics);
-        assert!(!scan.risks.iter().any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. })),
-            "通常の CN は問題なし: {:?}", scan.risks);
+        assert!(
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. })),
+            "通常の CN は問題なし: {:?}",
+            scan.risks
+        );
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -836,7 +1079,13 @@ END:VCALENDAR"#;
         let content = "BEGIN:VCALENDAR\nSEQUENCE:2\nEND:VCALENDAR";
         let risk = check_sequence_monotonicity(content, 5);
         assert!(
-            matches!(risk, Some(CalendarRisk::SequenceNotMonotonic { received: 2, expected_min: 5 })),
+            matches!(
+                risk,
+                Some(CalendarRisk::SequenceNotMonotonic {
+                    received: 2,
+                    expected_min: 5
+                })
+            ),
             "SEQUENCE 後退はリスクとして検出されるべき: {risk:?}"
         );
     }
@@ -871,8 +1120,11 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })),
-            "Google Forms リダイレクトが検出されなかった: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })),
+            "Google Forms リダイレクトが検出されなかった: {:?}",
+            scan.risks
         );
     }
 
@@ -888,8 +1140,11 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })),
-            "Google Drawings ランディングページが検出されなかった: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })),
+            "Google Drawings ランディングページが検出されなかった: {:?}",
+            scan.risks
         );
     }
 
@@ -903,7 +1158,9 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })),
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })),
             "forms.gle リダイレクトが検出されなかった"
         );
     }
@@ -919,9 +1176,13 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            !scan.risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl {
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::SuspiciousUrl {
                 reason, .. } if reason.contains("中継点"))),
-            "正規の Google Forms が誤検出された: {:?}", scan.risks
+            "正規の Google Forms が誤検出された: {:?}",
+            scan.risks
         );
     }
 
@@ -940,8 +1201,11 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, CalendarRisk::PromptInjectionAttempt { .. })),
-            "DESCRIPTION 内のプロンプト注入が検出されるべき: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::PromptInjectionAttempt { .. })),
+            "DESCRIPTION 内のプロンプト注入が検出されるべき: {:?}",
+            scan.risks
         );
         assert_eq!(scan.risk_level, CalendarRiskLevel::Danger);
     }
@@ -956,8 +1220,11 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, CalendarRisk::PromptInjectionAttempt { .. })),
-            "SUMMARY 内の ChatML 特殊トークンが検出されるべき: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::PromptInjectionAttempt { .. })),
+            "SUMMARY 内の ChatML 特殊トークンが検出されるべき: {:?}",
+            scan.risks
         );
     }
 
@@ -974,8 +1241,12 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            !scan.risks.iter().any(|r| matches!(r, CalendarRisk::PromptInjectionAttempt { .. })),
-            "正規の日本語 DESCRIPTION が注入と誤検出された: {:?}", scan.risks
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::PromptInjectionAttempt { .. })),
+            "正規の日本語 DESCRIPTION が注入と誤検出された: {:?}",
+            scan.risks
         );
     }
 
@@ -992,8 +1263,11 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. })),
-            "注入マーカー併存時の METHOD:REQUEST は自動登録リスクになるべき: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. })),
+            "注入マーカー併存時の METHOD:REQUEST は自動登録リスクになるべき: {:?}",
+            scan.risks
         );
     }
 
@@ -1002,7 +1276,10 @@ END:VCALENDAR"#;
         let risks = vec![CalendarRisk::PromptInjectionAttempt {
             finding: "OverridePhrase(\"ignore all previous\")".into(),
         }];
-        assert_eq!(CalendarGuard::calculate_level(&risks), CalendarRiskLevel::Danger);
+        assert_eq!(
+            CalendarGuard::calculate_level(&risks),
+            CalendarRiskLevel::Danger
+        );
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -1022,8 +1299,11 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. })),
-            "CalPhishing 自動登録リスクが検出されるべき: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. })),
+            "CalPhishing 自動登録リスクが検出されるべき: {:?}",
+            scan.risks
         );
         assert_eq!(scan.risk_level, CalendarRiskLevel::Danger);
     }
@@ -1041,8 +1321,10 @@ END:VCALENDAR"#;
             _ => None,
         });
         match auto_reg {
-            Some(reason) => assert!(reason.contains("元メールを削除しても"),
-                "永続化 (メール削除で消えない) の警告文が含まれるべき: {reason}"),
+            Some(reason) => assert!(
+                reason.contains("元メールを削除しても"),
+                "永続化 (メール削除で消えない) の警告文が含まれるべき: {reason}"
+            ),
             None => panic!("AutoRegistrationAbuse が検出されるべき: {:?}", scan.risks),
         }
     }
@@ -1061,8 +1343,12 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            !scan.risks.iter().any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. })),
-            "正規の METHOD:REQUEST 招待が誤検出された: {:?}", scan.risks
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. })),
+            "正規の METHOD:REQUEST 招待が誤検出された: {:?}",
+            scan.risks
         );
     }
 
@@ -1077,10 +1363,17 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            !scan.risks.iter().any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. })),
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. })),
             "METHOD なしで AutoRegistrationAbuse が検出された"
         );
-        assert_eq!(scan.risk_level, CalendarRiskLevel::Danger, "不審URL自体は Danger のまま");
+        assert_eq!(
+            scan.risk_level,
+            CalendarRiskLevel::Danger,
+            "不審URL自体は Danger のまま"
+        );
     }
 
     #[test]
@@ -1095,7 +1388,8 @@ END:VCALENDAR"#;
         assert!(
             scan.risks.iter().any(|r| matches!(
                 r, CalendarRisk::AutoRegistrationAbuse { method, .. } if method == "PUBLISH")),
-            "METHOD:PUBLISH の自動登録型も検出されるべき: {:?}", scan.risks
+            "METHOD:PUBLISH の自動登録型も検出されるべき: {:?}",
+            scan.risks
         );
     }
 
@@ -1103,10 +1397,18 @@ END:VCALENDAR"#;
     fn auto_registration_alone_escalates_to_danger() {
         // 緊急性偽装 (単独では Caution) + 自動登録 → Danger に格上げ
         let risks = vec![
-            CalendarRisk::UrgencyManipulation { keyword: "verify now".into() },
-            CalendarRisk::AutoRegistrationAbuse { method: "REQUEST".into(), reason: "test".into() },
+            CalendarRisk::UrgencyManipulation {
+                keyword: "verify now".into(),
+            },
+            CalendarRisk::AutoRegistrationAbuse {
+                method: "REQUEST".into(),
+                reason: "test".into(),
+            },
         ];
-        assert_eq!(CalendarGuard::calculate_level(&risks), CalendarRiskLevel::Danger);
+        assert_eq!(
+            CalendarGuard::calculate_level(&risks),
+            CalendarRiskLevel::Danger
+        );
     }
 
     #[test]
@@ -1120,8 +1422,127 @@ END:VCALENDAR"#;
                    END:VCALENDAR";
         let scan = g.analyze(ics);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
             "未知バイナリも検出されるべき"
+        );
+    }
+
+    // ── D1263: 構造の意図的破壊 (Mimecast malformed-ICS quishing) ────────────
+
+    #[test]
+    fn content_before_begin_vcalendar_is_flagged() {
+        let g = guard();
+        // BEGIN:VCALENDAR 前のジャンク X- 行 — パーサ破壊の兆候
+        let ics = "X-JUNK-DATA;FOO:aAbBcC\n\
+                   X-RANDOM;BAR:dDdEeF\n\
+                   BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   SUMMARY:Meeting\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(
+                r,
+                CalendarRisk::MalformedStructure {
+                    leading_lines: 2,
+                    ..
+                }
+            )),
+            "先頭ジャンクが検出されない: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn malformed_x_prop_without_param_value_is_flagged() {
+        let g = guard();
+        // `X-ADULT; CUSTOMER:` — `;` 後が `name=value` 形でない RFC 違反
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   X-GENERATION; FUTURE:junk\n\
+                   X-ADULT; CUSTOMER:junk\n\
+                   SUMMARY:Meeting\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(
+                r,
+                CalendarRisk::MalformedStructure {
+                    malformed_x_props: 2,
+                    ..
+                }
+            )),
+            "malformed X- 行が検出されない: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn wellformed_x_props_do_not_flag() {
+        let g = guard();
+        // 正当な X- プロパティ (Outlook/Google が出力する形) は対象外
+        let ics = "BEGIN:VCALENDAR\n\
+                   X-WR-CALNAME:Team Calendar\n\
+                   X-MS-OLK-WKHRSTART;TZID=Tokyo Standard Time:080000\n\
+                   BEGIN:VEVENT\n\
+                   SUMMARY:Weekly sync\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::MalformedStructure { .. })),
+            "正規 ICS で誤検出: {:?}",
+            scan.risks
+        );
+    }
+
+    // ── D1264: ATTACH の外部 URI 参照 ────────────────────────────────────────
+
+    #[test]
+    fn attach_value_uri_is_flagged() {
+        let g = guard();
+        // QR 画像を外部参照する ATTACH (Mimecast 2026-06 キャンペーンの型)
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   SUMMARY:Review document\n\
+                   ATTACH;FMTTYPE=image/png;VALUE=URI:https://evil.example/qr.png\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::ExternalAttachUri { .. })),
+            "外部 URI ATTACH が検出されない: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn attach_cid_and_binary_do_not_flag_external_uri() {
+        let g = guard();
+        // CID 埋め込み参照と BASE64 バイナリ埋め込みは外部フェッチでない
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   ATTACH;VALUE=URI:CID:logo@inline\n\
+                   ATTACH;ENCODING=BASE64;VALUE=BINARY:AAAA\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::ExternalAttachUri { .. })),
+            "CID/BINARY ATTACH で誤検出: {:?}",
+            scan.risks
         );
     }
 }

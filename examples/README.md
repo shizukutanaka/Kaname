@@ -1,27 +1,63 @@
-# Kaname Examples
+# サンプルメール — Kaname を実データで動かす
 
-Kaname の各機能の動作確認・デモ用サンプル。全サンプルにテストが付属。
+`examples/emails/` には、Kaname の解析パイプラインを**実際に動かして確かめる**ための
+`.eml` サンプルが入っています。サーバ接続もアカウント設定も不要です。
 
-## 実行
+## 使い方
 
-```bash
-cargo run --example oobv_basic
-cargo run --example html_smuggling_check
-cargo run --example dual_llm_safety
-cargo run --example pivot_detect
-```
+1. アプリを起動する
 
-## テスト実行
+   ```bash
+   npm run tauri dev
+   ```
 
-```bash
-cargo test --examples
-```
+2. ナビゲーションの「**ファイル解析**」タブを開く
 
-## ファイル一覧
+3. 1 通だけ解析する場合 — パス欄に `.eml` のフルパスを入力し「**1通を解析**」
 
-| ファイル | 機能 | テスト数 |
+   ```
+   /path/to/kaname/examples/emails/02-bec-wire-transfer.eml
+   ```
+
+4. まとめて解析する場合 — パス欄に**フォルダ**のフルパスを入力し「**フォルダを一括解析**」
+
+   ```
+   /path/to/kaname/examples/emails
+   ```
+
+## 各サンプルが何を試すか
+
+| ファイル | 想定される判定 | 検出されるはずのもの |
 |---|---|---|
-| `oobv_basic.rs` | Out-of-Band Verification | 5 |
-| `html_smuggling_check.rs` | HTML スマグリング検出 | 6 |
-| `dual_llm_safety.rs` | Dual-LLM 型安全 | デモ |
-| `pivot_detect.rs` | Cross-Channel Pivot Detection | デモ |
+| `01-safe-meeting.eml` | SAFE | SPF/DKIM/DMARC がすべて pass。緊急性も金銭要求もない通常の業務メール |
+| `02-bec-wire-transfer.eml` | SUSPICIOUS 〜 DANGEROUS | 認証の全失敗、`arnazon-billing.com` (`amazon` のタイポスクワット)、緊急性 + 送金要求の共起、Reply-To がフリーメールで送信元ドメインと不一致 |
+| `03-quishing-textqr.eml` | SUSPICIOUS 以上 + 本文リスク | 認証失敗に加え、**本文に文字で描かれた QR コード** (画像スキャンを回避する quishing) を検出 |
+| `04-sensitive-data.eml` | SAFE + **DLP 検出あり** | 認証はすべて pass の正規メールだが、本文に**区切り付きのクレジットカード番号と IBAN** が含まれる。転送・返信時の漏洩リスクとして DLP が検出する (区切り付き表記は検出漏れしやすい典型例) |
+| `05-malicious-link.eml` | SUSPICIOUS 以上 + **リンク警告** | 認証失敗に加え、本文のリンクが**短縮 URL (`bit.ly`)** と **`amaz0n-verify.tk` (数字置換タイポスクワット + 自由 TLD)**。本文リンクの評判判定と BEC の URL シグナルの両方が発火する |
+| `07-malicious-calendar.eml` | SUSPICIOUS 以上 + **カレンダー警告** | `.ics` 招待が添付。`METHOD:REQUEST` による**自動登録の永続化** (元メールを削除してもカレンダーに残る CalPhishing)、DESCRIPTION 内の**プロンプト注入**、緊急性の煽り、短縮 URL を検出する |
+| `06-dangerous-attachment.eml` | SUSPICIOUS 以上 + **添付「危険」2件** | 添付が2つ: (1) `invoice.pdf.lnk` — **二重拡張子で PDF に見せかけた Windows ショートカット** (任意コマンド実行に悪用される)、(2) `receipt.png` — **`image/png` と宣言されているが実体は `MZ` 始まりの PE 実行ファイル** (MIME 偽装)。添付検査が両方を「危険」と判定する |
+
+### フォルダ一括解析でのみ見えるもの
+
+`02` と `03` は**同じ攻撃インフラ (`arnazon-billing.com`) を共有**しています。
+1 通ずつ解析しても分かりませんが、フォルダ一括解析では
+`kaname-radar` (ポリモーフィック・キャンペーン検出) が両者を結び付け、
+「**複数メールにまたがるキャンペーン**」として警告します。
+
+これは「複数のメールを見比べて初めて意味を持つ」検出であり、
+一括解析がこの機能を使う唯一の入口です。
+
+## 実装状況について
+
+これらのサンプルは**実際のメールファイル**であり、モックデータではありません。
+MIME 解析・送信ドメイン認証の評価・BEC 判定・HTML サニタイズ・本文リスク検出は
+すべて本物の実装が動きます。
+
+**サーバとのメール送受信 (JMAP) も「サーバ接続」タブから配線済み**です
+(受信・送信・添付ダウンロード・削除・本人確認・検索・永続化)。ここで示す
+検出器は受信メールにも同じものが適用されます。ここに挙げたサンプルは
+サーバ接続なしで**今すぐ**同じ検出器を試せる、という位置づけです。
+
+MLS 暗号化とローカル LLM 推論 (要約・スマートリプライ) はモック/スタブの
+ままです。詳細は [`docs/maturity.md`](../docs/maturity.md) と
+[`docs/gap-analysis.md`](../docs/gap-analysis.md) を参照してください。

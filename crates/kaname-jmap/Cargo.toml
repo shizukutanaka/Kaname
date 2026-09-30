@@ -3,6 +3,8 @@ name             = "kaname-jmap"
 version.workspace     = true
 edition.workspace     = true
 rust-version.workspace = true
+license.workspace     = true
+publish             = false
 
 [dependencies]
 serde      = { workspace = true }
@@ -10,12 +12,13 @@ serde_json = { workspace = true }
 thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
-kaname-error = { path = "../kaname-error" }
-reqwest      = { workspace = true, features = ["stream"] }
-futures-util = { workspace = true }
+reqwest      = { workspace = true }
 uuid       = { workspace = true }
 chrono     = { workspace = true }
+# bearer_token を Zeroizing で保持 (切断後にヒープへ残さない)
+zeroize    = { workspace = true }
 
 [dev-dependencies]
-mockito = "1.4"
-tokio-test = "0.4"
+
+[lints]
+workspace = true

@@ -1,0 +1,14 @@
+From: "CEO Yamada" <ceo@arnazon-billing.com>
+To: you@example.com
+Subject: URGENT wire transfer needed today
+Date: Mon, 26 Apr 2026 10:15:00 +0900
+Message-ID: <bec-002@arnazon-billing.com>
+Authentication-Results: mx.example.com; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=fail header.d=arnazon-billing.com; dmarc=fail header.from=arnazon-billing.com
+Reply-To: ceo.yamada.private@gmail.com
+Content-Type: text/plain; charset=utf-8
+
+I need you to process an urgent wire transfer immediately.
+Our bank account has changed. Please send the payment to the new
+account below before end of day. Do not discuss this with anyone.
+
+Please confirm once the transfer is complete.

@@ -31,7 +31,7 @@ sudo apt install -y \
 ## クイックスタート (3 コマンド)
 
 ```bash
-git clone https://github.com/kaname-app/kaname.git
+git clone https://github.com/shizukutanaka/kaname.git
 cd kaname
 npm install && cargo build --workspace
 ```
@@ -47,20 +47,22 @@ npm run tauri:dev
 
 ```
 kaname/
-├── Cargo.toml              # Rust workspace (19 クレート)
+├── Cargo.toml              # Rust workspace (23 クレート — 出荷 18 + kaname-tauri + 開発用4)
 ├── package.json            # Node 依存
 ├── index.html              # Vite エントリ
 ├── vite.config.ts          # Vite 設定 (ポート 1420 固定)
 ├── tauri.conf.json         # → src-tauri/
 │
 ├── src/                    # SolidJS フロントエンド
-│   ├── main.tsx            # エントリポイント (4 ビューのルーター)
+│   ├── main.tsx            # エントリポイント (タブルーター)
 │   ├── ui/                 # UI コンポーネント
-│   │   ├── KanameDesign.tsx       # Liquid Glass メイン UI
-│   │   ├── KanameAppleFeatures.tsx # Quick Look / Undo / Smart Reply
-│   │   ├── KanameApp.tsx          # スワイプ / Focus / 自然言語検索
+│   │   ├── Inbox.tsx              # 受信箱 / メール開封ビュー
+│   │   ├── Compose.tsx            # 作成画面 (送信前アドバイザリ)
+│   │   ├── EmlImport.tsx          # .eml ファイル解析
+│   │   ├── MailConnect.tsx        # サーバ接続設定
+│   │   ├── Onboarding.tsx         # 初回オンボーディング
+│   │   ├── OobvCeremony.tsx       # OOBV 電話確認セレモニー
 │   │   └── SecurityDashboard.tsx  # セキュリティポスチャー
-│   ├── locales/            # i18n カタログ (ja / en)
 │   └── __tests__/          # vitest ユニットテスト
 │
 ├── src-tauri/              # Tauri バックエンド
@@ -82,9 +84,6 @@ kaname/
 │   ├── kaname-render/      # MIME + HTML サニタイズ
 │   ├── kaname-jmap/        # JMAP クライアント
 │   ├── kaname-sandbox/     # Firecracker microVM
-│   ├── kaname-billing/     # Stripe ライセンス
-│   ├── kaname-tray/        # macOS メニューバー
-│   ├── kaname-i18n/        # 国際化
 │   ├── kaname-observability/ # Metrics + Privacy フィルター
 │   ├── kaname-privacy/     # トラッキング検出・匿名化
 │   ├── kaname-mockserver/  # JMAP モックサーバー (E2E 用)
@@ -115,7 +114,9 @@ kaname/
 │   └── generate-icons.sh   # アイコン生成
 │
 ├── .github/                # GitHub 統合
-│   ├── workflows/          # CI: ci.yml + sbom.yml + release.yml
+│   ├── workflows/          # 2026-09 時点で空 (D7: workflows 権限の都合で
+│   │                       #   ci-templates/*.yml から移動できていない。
+│   │                       #   docs/gap-analysis.md D7 参照)
 │   ├── ISSUE_TEMPLATE/     # バグ・機能要望
 │   └── pull_request_template.md
 │
@@ -175,7 +176,9 @@ cargo bench --bench core_bench
 ### リリース
 ```bash
 ./scripts/release.sh 0.2.0     # 9 ステップ自動化 + git tag
-git push origin v0.2.0         # CI が自動的にビルド・配布
+git push origin v0.2.0         # 2026-09 時点で CI 自体が存在しないため
+                                # 自動ビルド・配布は行われない (D7)。
+                                # 手動でビルド・配布する必要がある
 ```
 
 ---
@@ -195,9 +198,10 @@ npm run tauri:dev
 #    → 赤色バナー表示
 #    → 「危険・BEC攻撃の可能性」テキスト
 
-# 4. 「AI で要約」をクリック
-#    → 「このメール 1 通のみ分析」セキュリティ証明
-#    → 受信箱全体にアクセスしないことが UI で明示
+# 4. BEC 警告の操作を確認
+#    → OOBV セレモニー (📞 電話確認パネル) が表示される
+#    → 「本人確認済みにする」ボタンで信頼度が上がる
+#    (AI 要約機能は固定応答を返すスタブだったためコマンドごと削除済み — E11)
 
 # 5. 視覚的確認
 #    Liquid Glass サイドバー (backdrop-blur)
@@ -222,7 +226,7 @@ npm run tauri:dev
 
 - 設計を理解する: `docs/design.md`、`docs/adr/`
 - 脅威モデル: `docs/threat-model.md`
-- 製品ビジョン: `docs/keynote.md`
+- 製品ビジョン: `docs/vision-keynote.md`
 - リリースプロセス: `LAUNCH.md`
 - セキュリティ報告: `SECURITY.md`
 

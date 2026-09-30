@@ -1,13 +1,10 @@
 # Cargo.toml — Kaname workspace root
 # 設計: resolver="2", 全バージョン一元管理, release 最適化済み
-# 27 クレート + src-tauri = 28 メンバー (CLAUDE.md のクレート数と整合)
+# 21 クレート + src-tauri = 22 メンバー (CLAUDE.md のクレート数と整合)
 
 [workspace]
 resolver = "2"
 members = [
-    "crates/kaname-core",
-    "crates/kaname-error",
-    "crates/kaname-i18n",
     "crates/kaname-observability",
     "crates/kaname-privacy",
 
@@ -23,8 +20,6 @@ members = [
     "crates/kaname-bec",
     "crates/kaname-dlp",
 
-    "crates/kaname-billing",
-    "crates/kaname-tray",
     "crates/kaname-mockserver",
     "crates/kaname-oobv",
     "crates/kaname-saas-guard",
@@ -33,7 +28,6 @@ members = [
     "crates/kaname-screen",
     "crates/kaname-memory-guard",
     "crates/kaname-pivot",
-    "crates/kaname-continuity",
 
     "crates/kaname-ui",
     "crates/kaname-tests",
@@ -43,7 +37,7 @@ members = [
 exclude = ["fuzz"]
 
 [workspace.package]
-version      = "0.3.22"
+version      = "0.7.1"
 edition      = "2021"
 # rust-version は「この crate が要求する最低 Rust バージョン」(MSRV)。
 # 開発・CI で実際に使うツールチェインは rust-toolchain.toml の 1.94.1 (より新しい)。
@@ -59,36 +53,29 @@ tokio        = { version = "1.41", features = ["full"] }
 serde        = { version = "1.0", features = ["derive"] }
 serde_json   = "1.0"
 thiserror    = "1.0"
-anyhow       = "1.0"
 tracing      = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest      = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 axum         = { version = "0.7", features = ["json"] }
-tower        = "0.4"
 tower-http   = { version = "0.5", features = ["cors", "trace"] }
 rand         = "0.8"
 sha2         = "0.10"
 hkdf         = "0.12"
 ammonia      = "4.0"
 hmac         = "0.12"
-aes-gcm      = "0.10"
-ed25519-dalek = "2.1"
-x25519-dalek = "2.0"
 zeroize      = { version = "1.7", features = ["derive"] }
-rusqlite     = { version = "0.31", features = ["bundled"] }
-scraper      = "0.19"
+# 0.37 に揃える: openmls (kaname-mls) が内部で openmls_sqlite_storage→
+# rusqlite 0.37 を要求し、libsqlite3-sys の links="sqlite3" が
+# 0.31 (libsqlite3-sys 0.28) と競合するため。
+rusqlite     = { version = "0.37", features = ["bundled-sqlcipher"] }
 tauri        = { version = "2.1", features = ["tray-icon", "macos-private-api"] }
 tauri-build  = { version = "2.0" }
 proptest     = "1.4"
-criterion    = { version = "0.5", features = ["html_reports"] }
 tempfile     = "3.10"
 dirs         = "6.0"
 uuid         = { version = "1.11", features = ["v4"] }
 chrono       = { version = "0.4", default-features = false, features = ["clock"] }
-tokio-test   = "0.4"
-mockito      = "1.4"
 regex        = { version = "1.11", features = ["unicode"] }
-futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 mail-parser  = { version = "0.9", features = ["full_encoding"] }
 
 # ────────────────────────────────────────────────────────────────
@@ -110,8 +97,9 @@ strip         = "symbols"
 panic         = "abort"
 
 [profile.dev]
-opt-level = 1
-debug     = true
+opt-level       = 1
+debug           = true
+split-debuginfo = "unpacked"
 
 [profile.bench]
 opt-level = 3

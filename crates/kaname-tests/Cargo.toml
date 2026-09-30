@@ -3,17 +3,14 @@ name             = "kaname-tests"
 version.workspace     = true
 edition.workspace     = true
 rust-version.workspace = true
+license.workspace     = true
+publish             = false
 
 [dependencies]
 kaname-ai = { path = "../kaname-ai" }
+kaname-mls = { path = "../kaname-mls" }
 kaname-screen = { path = "../kaname-screen" }
-kaname-bec = { path = "../kaname-bec" }
-kaname-dlp = { path = "../kaname-dlp" }
-serde      = { workspace = true }
 serde_json = { workspace = true }
-thiserror  = { workspace = true }
-tokio      = { workspace = true }
-tracing    = { workspace = true }
 
 proptest  = { workspace = true }
 
@@ -23,3 +20,6 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bench]]
 name    = "core_bench"
 harness = false
+
+[lints]
+workspace = true

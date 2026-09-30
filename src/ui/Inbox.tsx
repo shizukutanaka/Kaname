@@ -14,6 +14,7 @@
 
 import { createSignal, createEffect, For, Show, Switch, Match } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { OobvCeremony } from "./OobvCeremony";
 
 // ============================================================================
 // 型定義
@@ -45,12 +46,85 @@ interface BodyDto {
   sandbox: string;
   csp: string;
   is_mls: boolean;
+  /** 本文に対するレンダリング系セキュリティ検出の結果 (人間可読)。 */
+  render_risks: string[];
 }
 
-interface BecScoreDto {
-  score: number;
-  verdict: string;
-  signals: { family: string; label: string; contribution: number }[];
+/** `mail_search` / `mail_list_stored` が返す保存済みメール。 */
+interface StoredMessage {
+  id: string;
+  from_addr: string;
+  from_name: string | null;
+  subject: string | null;
+  body_preview: string | null;
+  received_at: string | null;
+  is_read: boolean;
+  bec_score: number | null;
+  bec_verdict: string | null;
+  /** 宛先アドレス (addr-spec の配列。旧行は空)。 */
+  to_addrs: string[];
+}
+
+/** "表示名 <addr>" または生アドレスから、実際のメールアドレスだけを取り出す。 */
+const extractEmailAddr = (from: string): string => {
+  const m = from.match(/<([^>]+)>/);
+  return (m ? m[1] : from).trim();
+};
+
+/**
+ * 保存済みメールを一覧表示用に詰め替える。
+ *
+ * starred / MLS の情報は保存していないため false を入れる
+ * (不明な値を true と偽らない)。
+ */
+const storedToListItem = (m: StoredMessage): EmailListItem => ({
+  id:          m.id,
+  from_name:   m.from_name,
+  from_addr:   m.from_addr,
+  subject:     m.subject,
+  preview:     m.body_preview,
+  received_at: m.received_at,
+  is_read:     m.is_read,
+  is_starred:  false,
+  bec_verdict: m.bec_verdict,
+  is_mls:      false,
+});
+
+/** `mail_open` の戻り値。ローカル .eml 解析 (`mail_import_eml`) と同じ形。 */
+interface OpenedEmail {
+  from: string;
+  subject: string;
+  auth: string;
+  bec_verdict: string;
+  bec_score: number;
+  bec_signals: string[];
+  attachments: {
+    filename: string;
+    declared_mime: string;
+    size_bytes: number;
+    risks: string[];
+    is_dangerous: boolean;
+  }[];
+  body: BodyDto;
+  dlp_findings: string[];
+  /** 帯域外検証 (OOBV) の推奨度: "none" | "optional" | "strong"。 */
+  oobv_level: string;
+  /** 上記の人間可読メッセージ (oobv_level === "none" のときは空文字列)。 */
+  oobv_message: string;
+  deepfake_advisory: DeepfakeAdvisory;
+  /** MLS エンベロープの処理イベント (D1 Phase 4)。旧モックでは欠落可。 */
+  mls_events?: string[];
+  /** MLS で復号された本文 (平文)。 */
+  mls_plaintexts?: string[];
+}
+
+/** `AdvisoryReport` (kaname-render::deepfake_advisory) の JSON 表現。 */
+interface DeepfakeAdvisory {
+  severity: "None" | "Info" | "Medium" | "High";
+  affected_attachments: { filename: string; mime: string; kind: string }[];
+  has_financial_context: boolean;
+  has_urgency: boolean;
+  recommended_action: "None" | "ShowAdvisory" | "PlayInSandbox" | "OobvBeforePlay";
 }
 
 // ============================================================================
@@ -62,12 +136,18 @@ const BecBadge = (props: { verdict: string | null }) => {
   const colors: Record<string, string> = {
     ADVISORY:   "#F5A623",
     SUSPICIOUS: "#E5A500",
-    DANGEROUS:  "#E5484D",
+    DANGEROUS:  "#FF6B70",
+    // BEC 判定自体がエラーで失敗した場合 (commands.rs: assess_listing の
+    // Err 分岐)、SAFE と偽らず "UNKNOWN" を返す設計になっている。以前は
+    // このケースをラベルマップに含めておらず、内部の生文字列 "UNKNOWN"
+    // がそのまま UI に漏れていた。
+    UNKNOWN:    "#8B96A5",
   };
   const labels: Record<string, string> = {
     ADVISORY:   "要確認",
     SUSPICIOUS: "不審",
     DANGEROUS:  "危険",
+    UNKNOWN:    "判定失敗",
   };
   const color = colors[props.verdict] || "#8B96A5";
   return (
@@ -111,8 +191,8 @@ const MlsBadge = () => (
 
 const SenderAvatar = (props: { name: string | null; addr: string; bec: string | null }) => {
   const initial = (props.name || props.addr)[0]?.toUpperCase() || "?";
-  const bg = props.bec === "DANGEROUS" ? "#E5484D20" : "#1A2129";
-  const color = props.bec === "DANGEROUS" ? "#E5484D" : "#8B96A5";
+  const bg = props.bec === "DANGEROUS" ? "#FF6B7020" : "#1A2129";
+  const color = props.bec === "DANGEROUS" ? "#FF6B70" : "#8B96A5";
   return (
     <div style={{
       width: "36px",
@@ -211,7 +291,7 @@ const EmailItem = (props: {
           <span style={{
             "font-size": "13px",
             "font-weight": email.is_read ? "400" : "600",
-            color: email.bec_verdict === "DANGEROUS" ? "#E5484D" : "#F5F7FA",
+            color: email.bec_verdict === "DANGEROUS" ? "#FF6B70" : "#F5F7FA",
             "white-space": "nowrap",
             overflow: "hidden",
             "text-overflow": "ellipsis",
@@ -225,7 +305,7 @@ const EmailItem = (props: {
           <BecBadge verdict={email.bec_verdict} />
           <span style={{
             "font-size": "11px",
-            color: "#5A6473",
+            color: "#8B96A5",
             "white-space": "nowrap",
           }}>
             {formatDate(email.received_at)}
@@ -248,7 +328,7 @@ const EmailItem = (props: {
         {/* 3行目: プレビュー */}
         <div style={{
           "font-size": "12px",
-          color: "#5A6473",
+          color: "#8B96A5",
           "white-space": "nowrap",
           overflow: "hidden",
           "text-overflow": "ellipsis",
@@ -267,26 +347,109 @@ const EmailItem = (props: {
 const EmailDetailPanel = (props: {
   emailId: string | null;
   onClose: () => void;
+  onTrashed: () => void;
+  onRead: (id: string) => void;
 }) => {
-  const [body, setBody] = createSignal<BodyDto | null>(null);
-  const [bec, setBec] = createSignal<BecScoreDto | null>(null);
+  const [opened, setOpened] = createSignal<OpenedEmail | null>(null);
+  const [openError, setOpenError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
+  const [trashing, setTrashing] = createSignal(false);
+  // key は `${filename}::${declared_mime}::${size_bytes}` (同名添付の区別)
+  const [attachmentBlobs, setAttachmentBlobs] = createSignal<Record<string, { blobId: string; mime: string }>>({});
+  const [downloading, setDownloading] = createSignal<string | null>(null);
+  const [downloadMsg, setDownloadMsg] = createSignal<string | null>(null);
+  const [verifying, setVerifying] = createSignal(false);
+  const [verifiedMsg, setVerifiedMsg] = createSignal<string | null>(null);
+  // 以前は mail_get_body と bec_get_score の 2 コマンドを呼んでいたが、
+  // どちらもスタブで、メールを開くたびに必ず失敗していた。
+  // mail_open は生 RFC 5322 をサーバから取得し、ローカル .eml と同じ
+  // パイプラインで本文・BEC・添付・DLP をまとめて返す。
+  const body = () => opened()?.body ?? null;
+  const bec  = () => opened();
 
   createEffect(async () => {
     if (!props.emailId) return;
     setLoading(true);
+    setOpenError(null);
     try {
-      const [bodyData, becData] = await Promise.all([
-        invoke<BodyDto>("mail_get_body", { emailId: props.emailId }),
-        invoke<BecScoreDto>("bec_get_score", { emailId: props.emailId }),
-      ]);
-      setBody(bodyData);
-      setBec(becData);
-      await invoke("mail_mark_read", { ids: [props.emailId] });
+      const data = await invoke<OpenedEmail>("mail_open", { emailId: props.emailId });
+      setOpened(data);
+      await invoke("mail_mark_read", { ids: [props.emailId] })
+        .then(() => props.onRead(props.emailId as string))
+        .catch(() => {});
+      try {
+        const refs = await invoke<{ filename: string; blob_id: string; mime: string; size: number }[]>(
+          "mail_list_attachment_blobs", { emailId: props.emailId }
+        );
+        // 同名添付があると filename だけでは区別できない (D91) — (filename, mime, size)
+        // の三つ組で突き合わせる。完全に同一の三つ組は byte-identical 相当なので
+        // どちらを取っても同じ。
+        const map: Record<string, { blobId: string; mime: string }> = {};
+        for (const r of refs) map[`${r.filename}::${r.mime}::${r.size}`] = { blobId: r.blob_id, mime: r.mime };
+        setAttachmentBlobs(map);
+      } catch {
+        // blobId が取れなくてもメール本体の表示は継続する。
+        setAttachmentBlobs({});
+      }
+    } catch (e) {
+      setOpened(null);
+      setOpenError(String(e));
     } finally {
       setLoading(false);
     }
   });
+
+  const handleTrash = async () => {
+    if (!props.emailId || trashing()) return;
+    if (!confirm("このメールをゴミ箱に移動しますか?")) return;
+    setTrashing(true);
+    try {
+      await invoke("mail_trash", { emailId: props.emailId });
+      props.onTrashed();
+      props.onClose();
+    } catch (e) {
+      setOpenError(String(e));
+    } finally {
+      setTrashing(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    const email = opened();
+    if (!email || verifying()) return;
+    if (!confirm("電話などの帯域外手段で本人確認が取れましたか?\n確認済みにすると、今後このアドレスからのメールは信頼度が上がります。")) return;
+    setVerifying(true);
+    setVerifiedMsg(null);
+    try {
+      await invoke("history_mark_verified", { email: extractEmailAddr(email.from) });
+      setVerifiedMsg("確認済みにしました。今後のメールからこの信頼を反映します。");
+    } catch (e) {
+      setVerifiedMsg(`失敗しました: ${String(e)}`);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleDownload = async (filename: string, mime: string, size: number) => {
+    const ref = attachmentBlobs()[`${filename}::${mime}::${size}`];
+    if (!ref || !props.emailId) return;
+    setDownloading(filename);
+    setDownloadMsg(null);
+    try {
+      const result = await invoke<{
+        filename: string; is_dangerous: boolean; risks: string[]; saved_path: string | null;
+      }>("mail_download_attachment", { emailId: props.emailId, blobId: ref.blobId });
+      setDownloadMsg(
+        result.is_dangerous
+          ? `⚠ 危険と判定されたため保存しませんでした: ${result.risks.join(", ")}`
+          : `保存しました: ${result.saved_path}`
+      );
+    } catch (e) {
+      setDownloadMsg(`ダウンロードに失敗しました: ${String(e)}`);
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   return (
     <div style={{
@@ -296,14 +459,41 @@ const EmailDetailPanel = (props: {
       background: "#0A0E14",
       overflow: "hidden",
     }}>
+      {/* ツールバー: 閉じる / ゴミ箱へ移動 */}
+      <div style={{
+        display: "flex", "align-items": "center", "justify-content": "flex-end",
+        gap: "8px", padding: "8px 16px", "border-bottom": "0.5px solid #1A2129",
+      }}>
+        <button
+          onClick={handleTrash}
+          disabled={trashing()}
+          style={{
+            background: "transparent", border: "1px solid #FF6B7040", color: "#FF6B70",
+            "border-radius": "6px", padding: "5px 12px", "font-size": "12px",
+            cursor: trashing() ? "not-allowed" : "pointer", opacity: trashing() ? 0.6 : 1,
+          }}
+        >
+          {trashing() ? "削除中..." : "🗑 ゴミ箱へ"}
+        </button>
+        <button
+          onClick={props.onClose}
+          style={{
+            background: "transparent", border: "1px solid #2A3441", color: "#8B96A5",
+            "border-radius": "6px", padding: "5px 12px", "font-size": "12px", cursor: "pointer",
+          }}
+        >
+          ✕ 閉じる
+        </button>
+      </div>
+
       {/* BEC 警告バナー */}
-      <Show when={bec() && bec()!.verdict !== "SAFE"}>
+      <Show when={bec() && bec()!.bec_verdict !== "SAFE"}>
         <div style={{
           padding: "10px 20px",
-          background: bec()!.verdict === "DANGEROUS" ? "#E5484D12" :
-                      bec()!.verdict === "SUSPICIOUS" ? "#E5A50012" : "#F5A62312",
+          background: bec()!.bec_verdict === "DANGEROUS" ? "#FF6B7012" :
+                      bec()!.bec_verdict === "SUSPICIOUS" ? "#E5A50012" : "#F5A62312",
           "border-bottom": `1px solid ${
-            bec()!.verdict === "DANGEROUS" ? "#E5484D40" : "#F5A62340"
+            bec()!.bec_verdict === "DANGEROUS" ? "#FF6B7040" : "#F5A62340"
           }`,
           display: "flex",
           "align-items": "center",
@@ -312,18 +502,34 @@ const EmailDetailPanel = (props: {
           <div style={{
             "font-size": "12px",
             "font-weight": "600",
-            color: bec()!.verdict === "DANGEROUS" ? "#E5484D" : "#F5A623",
+            color: bec()!.bec_verdict === "DANGEROUS" ? "#FF6B70" : "#F5A623",
           }}>
-            ⚠ {bec()!.verdict === "DANGEROUS"
+            ⚠ {bec()!.bec_verdict === "DANGEROUS"
               ? "このメールは差出人を証明できません — BEC 攻撃の可能性があります"
               : "このメールについて注意が必要な点があります"}
           </div>
           <div style={{ flex: "1" }} />
-          <Show when={bec()!.signals.length > 0}>
+          <Show when={bec()!.bec_signals.length > 0}>
             <span style={{ "font-size": "11px", color: "#8B96A5" }}>
-              検出シグナル: {bec()!.signals.map(s => s.label).join(", ")}
+              検出シグナル: {bec()!.bec_signals.join(", ")}
             </span>
           </Show>
+          <button
+            onClick={handleVerify}
+            disabled={verifying()}
+            style={{
+              background: "transparent", border: "1px solid #8B96A540", color: "#8B96A5",
+              "border-radius": "4px", padding: "3px 10px", "font-size": "11px",
+              cursor: verifying() ? "not-allowed" : "pointer", "white-space": "nowrap",
+            }}
+          >
+            {verifying() ? "処理中..." : "本人確認済みにする"}
+          </button>
+        </div>
+      </Show>
+      <Show when={verifiedMsg()}>
+        <div style={{ padding: "6px 20px", "font-size": "11px", color: "#8B96A5" }}>
+          {verifiedMsg()}
         </div>
       </Show>
 
@@ -333,17 +539,160 @@ const EmailDetailPanel = (props: {
           <div style={{
             position: "absolute", inset: "0",
             display: "flex", "align-items": "center", "justify-content": "center",
-            color: "#5A6473", "font-size": "14px",
+            color: "#8B96A5", "font-size": "14px",
           }}>
             読み込み中...
           </div>
         </Show>
 
         <Show when={!loading() && body()}>
+          {/* レンダリング系の検出結果 (HTMLスマグリング / テキストQR / CSS外部参照)。
+              kaname-render の検出器を実際に実行した結果をここに表示する。 */}
+          <Show when={bec()!.attachments.some(a => a.is_dangerous) || bec()!.dlp_findings.length > 0}>
+            <div style={{ padding: "8px 16px", "font-size": "12px", color: "#E5A500", background: "#E5A50012", "border-bottom": "0.5px solid #E5A50040" }}>
+              <For each={bec()!.attachments.filter(a => a.is_dangerous)}>
+                {a => <div>⚠ 危険な添付: {a.filename} — {a.risks.join(", ")}</div>}
+              </For>
+              <For each={bec()!.dlp_findings}>
+                {f => <div>🔒 機微情報: {f}</div>}
+              </For>
+            </div>
+          </Show>
+          <Show when={bec()!.oobv_level !== "none"}>
+            <div style={{ padding: "8px 16px" }}>
+              <OobvCeremony
+                level={bec()!.oobv_level}
+                message={bec()!.oobv_message}
+                emailId={props.emailId ?? ""}
+                sender={bec()!.from}
+              />
+            </div>
+          </Show>
+          <Show when={bec()!.deepfake_advisory.severity !== "None"}>
+            {(() => {
+              const adv = bec()!.deepfake_advisory;
+              const strong = adv.severity === "High";
+              return (
+                <div style={{
+                  padding: strong ? "8px 16px" : "6px 16px", "font-size": strong ? "12px" : "11px",
+                  "font-weight": strong ? "600" : "400", color: strong ? "#FF6B70" : "#F5A623",
+                  background: strong ? "#FF6B7012" : "#F5A62312",
+                  "border-bottom": `0.5px solid ${strong ? "#FF6B7040" : "#F5A62340"}`,
+                }}>
+                  🎭 音声/動画添付 ({adv.affected_attachments.map(a => a.filename).join(", ")})
+                  {adv.has_financial_context && " があり、送金・認証情報に関する本文です"}
+                  {adv.recommended_action === "OobvBeforePlay" &&
+                    " — 再生前に電話など別経路で本人確認することを強く推奨します"}
+                  {adv.recommended_action === "PlayInSandbox" &&
+                    " — 実行環境の制約により、再生は自己責任で行ってください"}
+                </div>
+              );
+            })()}
+          </Show>
+          <Show when={bec()!.attachments.length > 0}>
+            <div style={{ padding: "8px 16px", "font-size": "12px", "border-bottom": "0.5px solid #1A2129" }}>
+              <For each={bec()!.attachments}>
+                {a => (
+                  <div style={{
+                    display: "flex", "align-items": "center", gap: "8px", padding: "4px 0",
+                  }}>
+                    <span style={{ color: a.is_dangerous ? "#FF6B70" : "#8B96A5" }}>
+                      📎 {a.filename}
+                    </span>
+                    <Show when={attachmentBlobs()[`${a.filename}::${a.declared_mime}::${a.size_bytes}`]}>
+                      <button
+                        onClick={() => handleDownload(a.filename, a.declared_mime, a.size_bytes)}
+                        disabled={downloading() === a.filename}
+                        style={{
+                          background: "transparent", border: "1px solid #2A3441", color: "#00C4CC",
+                          "border-radius": "4px", padding: "2px 8px", "font-size": "11px",
+                          cursor: downloading() === a.filename ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {downloading() === a.filename ? "取得中..." : "ダウンロード"}
+                      </button>
+                    </Show>
+                  </div>
+                )}
+              </For>
+              <Show when={downloadMsg()}>
+                <div style={{ color: "#8B96A5", "font-size": "11px", "margin-top": "4px" }}>
+                  {downloadMsg()}
+                </div>
+              </Show>
+            </div>
+          </Show>
+          {/* MLS E2E: 処理イベント + 復号本文 (D1 Phase 4)。
+              エンベロープを処理した結果をここに表示する。 */}
+          <Show when={(bec()!.mls_events ?? []).length > 0}>
+            <div style={{
+              margin: "0",
+              padding: "8px 16px",
+              "font-size": "12px",
+              color: "#00B368",
+              background: "#00B36812",
+              "border-bottom": "0.5px solid #00B36840",
+            }}>
+              <For each={bec()!.mls_events}>
+                {(e) => <div>🔐 {e}</div>}
+              </For>
+            </div>
+          </Show>
+          <Show when={(bec()!.mls_plaintexts ?? []).length > 0}>
+            <div style={{
+              margin: "12px 16px",
+              padding: "10px 12px",
+              "border-radius": "8px",
+              background: "#00B36812",
+              border: "1px solid #00B36840",
+            }}>
+              <div style={{
+                "font-weight": "600", "font-size": "12px", color: "#00B368",
+                "margin-bottom": "4px",
+              }}>
+                復号された本文 (E2E — サーバでは読めない内容)
+              </div>
+              <For each={bec()!.mls_plaintexts}>
+                {(t) => (
+                  <pre style={{
+                    "font-size": "13px", color: "#D0D5DD",
+                    "white-space": "pre-wrap", "font-family": "inherit",
+                    margin: "0", "line-height": "1.6",
+                  }}>{t}</pre>
+                )}
+              </For>
+            </div>
+          </Show>
+
+          <Show when={(body()!.render_risks ?? []).length > 0}>
+            <div style={{
+              margin: "0 0 12px 0",
+              padding: "10px 12px",
+              "border-radius": "8px",
+              background: "#FFF4E5",
+              border: "1px solid #F0B37E",
+              color: "#7A4A00",
+              "font-size": "13px",
+              "line-height": "1.6",
+            }}>
+              <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>
+                本文の解析で注意点が見つかりました
+              </div>
+              <For each={body()!.render_risks}>
+                {(risk) => <div>・{risk}</div>}
+              </For>
+            </div>
+          </Show>
+
           {/* サンドボックス化された iframe */}
           <iframe
+            data-iframe-content
             srcdoc={body()!.srcdoc}
             sandbox={body()!.sandbox}
+            // バックエンドの CSP を iframe csp 属性としても強制する
+            // (srcdoc 内 <meta> CSP に加え、ブラウザ側でも独立に適用される
+            // 二重防御 — ADR-010)。
+            csp={body()!.csp}
             style={{
               width: "100%",
               height: "100%",
@@ -357,9 +706,9 @@ const EmailDetailPanel = (props: {
         <Show when={!loading() && !body() && props.emailId}>
           <div style={{
             display: "flex", "align-items": "center", "justify-content": "center",
-            height: "100%", color: "#5A6473",
+            height: "100%", color: "#8B96A5",
           }}>
-            メールを読み込めませんでした
+            {openError() ?? "メールを読み込めませんでした"}
           </div>
         </Show>
       </div>
@@ -371,13 +720,133 @@ const EmailDetailPanel = (props: {
 // メインInboxコンポーネント
 // ============================================================================
 
-export const Inbox = () => {
+export const Inbox = (props: { becAlerts?: number }) => {
   const [mailboxes, setMailboxes]       = createSignal<Mailbox[]>([]);
   const [selectedMbx, setSelectedMbx]  = createSignal<string | null>(null);
   const [emails, setEmails]             = createSignal<EmailListItem[]>([]);
   const [selectedEmail, setSelectedEmail] = createSignal<string | null>(null);
   const [loading, setLoading]           = createSignal(false);
   const [error, setError]               = createSignal<string | null>(null);
+  // 検索: 保存済みメール (mail_search) を対象にする。
+  // 従来この検索欄はハンドラ未バインドで機能していなかった (D10)。
+  const [searchQuery, setSearchQuery]   = createSignal("");
+  const [searching, setSearching]       = createSignal(false);
+  /** サーバから取得できず、保存済みメールを表示していることを示す。 */
+  const [offline, setOffline]           = createSignal(false);
+  /** 一覧は PAGE 件ずつ取得する。直近のページが満杯なら続きがあるとみなす。 */
+  const PAGE = 50;
+  const [hasMore, setHasMore]           = createSignal(false);
+  const [loadingMore, setLoadingMore]   = createSignal(false);
+
+  /** ページネーション用: 新着ページを既存一覧に重複なく連結する。 */
+  const appendEmails = (next: EmailListItem[]) => {
+    setEmails(prev => {
+      const seen = new Set(prev.map(e => e.id));
+      return [...prev, ...next.filter(e => !seen.has(e.id))];
+    });
+  };
+
+  /** サーバからメールを取得して一覧に反映する。 */
+  const loadEmails = async (mbxId: string | null) => {
+    if (!mbxId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      // 未配線の mail_query_emails ではなく、実装済みの mail_fetch を使う。
+      // mail_fetch は取得と同時に BEC 判定を行い、保存も行う。
+      const items = await invoke<EmailListItem[]>("mail_fetch", {
+        mailboxId: mbxId,
+        limit:     PAGE,
+        offset:    0,
+      });
+      setEmails(items);
+      setHasMore(items.length === PAGE);
+      setOffline(false);
+    } catch (e) {
+      // サーバに繋がらないときは、保存済みのメールを表示する。
+      // 「取得できない」ことは「読めない」ことを意味しない。
+      try {
+        const stored = await invoke<StoredMessage[]>("mail_list_stored", {
+          mailboxId: mbxId,
+          limit:     PAGE,
+          offset:    0,
+        });
+        setEmails(stored.map(storedToListItem));
+        setHasMore(stored.length === PAGE);
+        setOffline(true);
+        setError(stored.length === 0 ? String(e) : null);
+      } catch {
+        setError(String(e));
+        setOffline(false);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** 一覧・検索・オフラインのどの表示状態でも、次ページを末尾に追加する。 */
+  const loadMore = async () => {
+    const mbxId = selectedMbx();
+    if (!mbxId || loading() || loadingMore()) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      if (searching()) {
+        const found = await invoke<StoredMessage[]>("mail_search", {
+          query:  searchQuery().trim(),
+          limit:  PAGE,
+          offset: emails().length,
+        });
+        appendEmails(found.map(storedToListItem));
+        setHasMore(found.length === PAGE);
+      } else if (offline()) {
+        const stored = await invoke<StoredMessage[]>("mail_list_stored", {
+          mailboxId: mbxId,
+          limit:     PAGE,
+          offset:    emails().length,
+        });
+        appendEmails(stored.map(storedToListItem));
+        setHasMore(stored.length === PAGE);
+      } else {
+        const items = await invoke<EmailListItem[]>("mail_fetch", {
+          mailboxId: mbxId,
+          limit:     PAGE,
+          offset:    emails().length,
+        });
+        appendEmails(items);
+        setHasMore(items.length === PAGE);
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  /** 保存済みメールを検索し、一覧を結果で置き換える。 */
+  const runSearch = async () => {
+    const q = searchQuery().trim();
+    if (!q) {
+      // 空文字で Enter → 検索を解除して通常の一覧に戻す。
+      setSearching(false);
+      setError(null);
+      void loadEmails(selectedMbx());
+      return;
+    }
+    setSearching(true);
+    setError(null);
+    try {
+      // StoredMessage は EmailListItem と形が異なるため詰め替える。
+      // 保存済みメールには starred/mls の情報が無いので false を入れる
+      // (不明な値を true と偽らない)。
+      const found = await invoke<StoredMessage[]>("mail_search", { query: q, limit: PAGE, offset: 0 });
+      setEmails(found.map(storedToListItem));
+      setHasMore(found.length === PAGE);
+    } catch (e) {
+      setError(String(e));
+      setEmails([]);
+    }
+  };
 
   // 起動時にメールボックスを読み込む
   createEffect(async () => {
@@ -392,24 +861,11 @@ export const Inbox = () => {
     }
   });
 
-  // メールボックス変更時にメールを読み込む
+  // メールボックス変更時にメールを読み込む (検索中は上書きしない)
   createEffect(async () => {
     const mbxId = selectedMbx();
-    if (!mbxId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const items = await invoke<EmailListItem[]>("mail_query_emails", {
-        mailboxId: mbxId,
-        position:  0,
-        limit:     50,
-      });
-      setEmails(items);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
+    if (!mbxId || searching()) return;
+    await loadEmails(mbxId);
   });
 
   const selectedMbxInfo = () => mailboxes().find(m => m.id === selectedMbx());
@@ -505,24 +961,34 @@ export const Inbox = () => {
           </For>
         </nav>
 
-        {/* セキュリティポスチャー */}
-        <div style={{
-          padding: "12px 16px",
-          "border-top": "1px solid #1F2833",
-          display: "flex",
-          "align-items": "center",
-          gap: "6px",
-          "font-size": "11px",
-          color: "#00B368",
-        }}>
-          <div style={{
-            width: "6px", height: "6px",
-            "border-radius": "50%",
-            background: "#00B368",
-            animation: "pulse 2s infinite",
-          }} />
-          全サブシステム正常
-        </div>
+        {/* セキュリティポスチャー — 実状態を表示する。
+            BEC 警戒がある・オフラインのときに緑を偽らない。 */}
+        {(() => {
+          const bec = props.becAlerts ?? 0;
+          const [text, color] =
+            offline()        ? ["オフライン — 保存済みを表示", "#8B96A5"] :
+            bec > 0          ? [`警戒メール ${bec} 件`, "#FF6B70"] :
+                               ["全サブシステム正常", "#00B368"];
+          return (
+            <div style={{
+              padding: "12px 16px",
+              "border-top": "1px solid #1F2833",
+              display: "flex",
+              "align-items": "center",
+              gap: "6px",
+              "font-size": "11px",
+              color,
+            }}>
+              <div style={{
+                width: "6px", height: "6px",
+                "border-radius": "50%",
+                background: color,
+                animation: "pulse 2s infinite",
+              }} />
+              {text}
+            </div>
+          );
+        })()}
       </aside>
 
       {/* ── メールリスト ── */}
@@ -539,17 +1005,21 @@ export const Inbox = () => {
           padding: "14px 16px 12px",
           "border-bottom": "1px solid #1F2833",
         }}>
-          <div style={{
+          <h1 style={{
             "font-size": "15px",
             "font-weight": "600",
             "margin-bottom": "8px",
           }}>
             {selectedMbxInfo()?.name || "受信トレイ"}
-          </div>
-          {/* 検索バー */}
+          </h1>
+          {/* 検索バー — 保存済みメールを対象に検索する。
+              従来はハンドラが未バインドで「飾り」だった (D10)。 */}
           <input
             type="text"
             placeholder="検索..."
+            value={searchQuery()}
+            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }}
             style={{
               width: "100%",
               background: "#12181F",
@@ -564,20 +1034,30 @@ export const Inbox = () => {
           />
         </div>
 
+        {/* オフライン表示中のバナー: 何を見ているかを偽らない */}
+        <Show when={offline()}>
+          <div style={{
+            padding: "6px 16px", "font-size": "11px", color: "#F5A623",
+            background: "#F5A62312", "border-bottom": "0.5px solid #F5A62340",
+          }}>
+            サーバに接続できないため、保存済みのメールを表示しています
+          </div>
+        </Show>
+
         {/* メールリスト本体 */}
         <div style={{ flex: "1", "overflow-y": "auto" }}>
           <Switch>
             <Match when={loading()}>
               <div style={{
                 display: "flex", "align-items": "center", "justify-content": "center",
-                height: "200px", color: "#5A6473", "font-size": "13px",
+                height: "200px", color: "#8B96A5", "font-size": "13px",
               }}>
                 読み込み中...
               </div>
             </Match>
             <Match when={error()}>
               <div style={{
-                padding: "20px", color: "#E5484D", "font-size": "13px",
+                padding: "20px", color: "#FF6B70", "font-size": "13px",
                 "text-align": "center",
               }}>
                 エラー: {error()}
@@ -590,7 +1070,7 @@ export const Inbox = () => {
                 height: "200px", gap: "8px",
               }}>
                 <div style={{ "font-size": "32px", opacity: "0.3" }}>📭</div>
-                <div style={{ color: "#5A6473", "font-size": "13px" }}>メールなし</div>
+                <div style={{ color: "#8B96A5", "font-size": "13px" }}>メールなし</div>
               </div>
             </Match>
             <Match when={true}>
@@ -603,6 +1083,26 @@ export const Inbox = () => {
                   />
                 )}
               </For>
+              <Show when={hasMore()}>
+                <button
+                  type="button"
+                  disabled={loadingMore()}
+                  onClick={() => void loadMore()}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "10px",
+                    "border": "none",
+                    "border-top": "1px solid #E3E8EE",
+                    background: "transparent",
+                    color: "#4A6FA5",
+                    "font-size": "13px",
+                    cursor: loadingMore() ? "default" : "pointer",
+                  }}
+                >
+                  {loadingMore() ? "読み込み中…" : "さらに読み込む"}
+                </button>
+              </Show>
             </Match>
           </Switch>
         </div>
@@ -618,7 +1118,7 @@ export const Inbox = () => {
             "flex-direction": "column",
             "align-items": "center",
             "justify-content": "center",
-            color: "#5A6473",
+            color: "#8B96A5",
             gap: "12px",
           }}>
             <div style={{ "font-size": "48px", opacity: "0.2" }}>✉</div>
@@ -629,6 +1129,15 @@ export const Inbox = () => {
         <EmailDetailPanel
           emailId={selectedEmail()}
           onClose={() => setSelectedEmail(null)}
+          onTrashed={() => void loadEmails(selectedMbx())}
+          onRead={(id) => {
+            setEmails(list => list.map(e => (e.id === id ? { ...e, is_read: true } : e)));
+            setMailboxes(list =>
+              list.map(m => (m.id === selectedMbx() && m.unread_emails > 0
+                ? { ...m, unread_emails: m.unread_emails - 1 }
+                : m))
+            );
+          }}
         />
       </Show>
 
@@ -642,7 +1151,7 @@ export const Inbox = () => {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #2A3441; border-radius: 2px; }
         button:hover { opacity: 0.9; }
-        input::placeholder { color: #5A6473; }
+        input::placeholder { color: #8B96A5; }
         input:focus { border-color: #00C4CC40 !important; }
       `}</style>
     </div>

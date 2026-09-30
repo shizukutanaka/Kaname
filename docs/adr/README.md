@@ -239,6 +239,11 @@ Tauri コマンドは `Result<T, String>` を返す。各クレートが個別�
 
 `crates/kaname-error/src/lib.rs` (200行、テスト 7件)
 
+> **Superseded (2026-09, gap-analysis D85)**: `kaname-error` は利用クレートが
+> ゼロのまま残存していたため削除。実際のエラー体系は「各クレートが固有 enum
+> (`JmapError`/`StoreError`/`UiError` …) を持ち Tauri 境界で String 化」であり、
+> 共通型への移行は一度も開始されなかった。
+
 ---
 
 ## ADR インデックス
