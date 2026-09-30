@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1878: `Message-ID: }<a>` 等の `}` 先立ちを検出 — `Envelope` に `msgid_rbrace_lead` を追加 (lead-sep 系は D1755–D1874)。
+### Security — D1877: `Received:` の `from` 節の `<` を検出 — `Envelope` に `received_from_lt` を追加 (`from` の `!`/`%`/`@`/`=`/クオートは D1781–D1861)。
+### Security — D1876: `Content-Transfer-Encoding: base~64` の値内 `~` を検出 — `Envelope` に `cte_tilde` を追加 (`{`/`}`/`[`/`]`/`|`/`^` は D1860–D1872)。
+### Security — D1875: `;file$name=x` の param 名 `$` を検出 — `Envelope` に `param_dollar_name` を追加 (`~`/`^`/`|`/`}` は D1871–D1859)。
 ### Security — D1874: `Message-ID: {<a>` 等の `{` 先立ちを検出 — `Envelope` に `msgid_lbrace_lead` を追加 (lead-sep 系は D1755–D1870)。
 ### Security — D1873: `Received:` の `id` 節の `<` を検出 — `Envelope` に `received_id_lt` を追加 (`id` の `!`/`%`/`@`/`=`/複数は D1785–D1849)。
 ### Security — D1872: `Content-Transfer-Encoding: base^64` の値内 `^` を検出 — `Envelope` に `cte_caret` を追加 (`{`/`}`/`[`/`]`/`|` は D1860–D1868)。
