@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1846: `Message-ID: (<a>` 等の `(` 先立ち (識別子がコメント内) を検出 — `Envelope` に `msgid_lparen_lead` を追加 (lead-sep 系は D1755–D1842、合法 `(note)<a>` は不発火)。
+### Security — D1845: `Received:` の `by` 節の `=` を検出 — `Envelope` に `received_by_eq` を追加 (`by` の `!`/`%`/`@` は D1813/D1793/D1773、`via` の `=` は D1841)。
+### Security — D1844: `Content-Transfer-Encoding: base?64` の値内 `?` を検出 — `Envelope` に `cte_qmark` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`%`/`!` は D1756–D1840)。
+### Security — D1843: `;file,name=x` の param 名 `,` を検出 — `Envelope` に `param_comma_name` を追加 (`@`/`/`/`` ` ``/`?`/`!`/`&`/`:`/`%` は D1713–D1839)。
 ### Security — D1842: `Message-ID: )<a>` 等の `)` 先立ちを検出 — `Envelope` に `msgid_rparen_lead` を追加 (lead-sep 系は D1755–D1838)。
 ### Security — D1841: `Received:` の `via` 節の `=` を検出 — `Envelope` に `received_via_eq` を追加 (`via` の `!`/`@` は D1817/D1789)。
 ### Security — D1840: `Content-Transfer-Encoding: base!64` の値内 `!` を検出 — `Envelope` に `cte_bang` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`%` は D1756–D1836)。

@@ -1256,3 +1256,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1840 | `Content-Transfer-Encoding:` 値内の `!` | 値継続 vs 欄破棄で復号ずれ |
 | D1841 | `Received:` の `via` 節の `=` | 代入式読み vs 欄破棄で経路ずれ |
 | D1842 | msgid 系の `)` 先立ち | 読み飛ばし vs 欄破棄で照合ずれ |
+| D1843 | param 名の `,` | 名継続 vs 欄破棄で param ずれ |
+| D1844 | `Content-Transfer-Encoding:` 値内の `?` | 値継続 vs 欄破棄で復号ずれ |
+| D1845 | `Received:` の `by` 節の `=` | 代入式読み vs 欄破棄で経路ずれ |
+| D1846 | msgid 系の `(` 先立ち (識別子がコメント内) | コメント読み vs 識別子拾いで照合ずれ |
