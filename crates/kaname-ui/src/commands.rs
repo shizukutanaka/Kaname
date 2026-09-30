@@ -880,6 +880,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+||||||| eec80fc
     // D1270: HTML 本文のリモートリソース参照 — 描画時には除去されるが、
     //    参照の存在自体が開封確認トラッキング (生存確認の偵察) の兆候。
     if html_extract
