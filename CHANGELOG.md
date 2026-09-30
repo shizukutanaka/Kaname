@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1994: `References:`/`In-Reply-To:` の値頭の `*` を検出 — `Envelope` に `refs_star_lead` を追加 (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`)。
+### Security — D1993: `References:`/`In-Reply-To:` の値頭の `:` を検出 — `Envelope` に `refs_colon_lead` を追加 (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`)。
+### Security — D1992: `References:`/`In-Reply-To:` の値頭の `=` を検出 — `Envelope` に `refs_eq_lead` を追加 (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`)。
+### Security — D1991: `References:`/`In-Reply-To:` の値頭の `!` を検出 — `Envelope` に `refs_bang_lead` を追加 (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`)。
 ### Security — D1990: `References:`/`In-Reply-To:` が `(` 始まりで識別子がコメント内になる異形を検出 — `Envelope` に `refs_comment_lead` を追加 (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`)。
 ### Security — D1989: `Received:` の `by` 節の `}` を検出 — `Envelope` に `received_by_rbrace` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'`/`"`/`*`/`+`/`[`/`]`/`{` は D1845–D1988)。
 ### Security — D1988: `Received:` の `by` 節の `{` を検出 — `Envelope` に `received_by_lbrace` を追加 (`by` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`|`/`&`/`$`/`?`/`,`/`:`/`\`/`~`/`'`/`"`/`*`/`+`/`[`/`]` は D1845–D1981)。

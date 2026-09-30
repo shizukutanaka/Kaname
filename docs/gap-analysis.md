@@ -1404,3 +1404,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1988 | `Received:` の `by` 節の `{` | 語継続 vs 欄破棄で経路ずれ |
 | D1989 | `Received:` の `by` 節の `}` | 語継続 vs 欄破棄で経路ずれ |
 | D1990 | `References:`/`In-Reply-To:` の `(` 始まり値 | コメント内識別子読み vs 欄破棄で糸参照ずれ |
+| D1991 | `References:`/`In-Reply-To:` の値頭の `!` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D1992 | `References:`/`In-Reply-To:` の値頭の `=` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D1993 | `References:`/`In-Reply-To:` の値頭の `:` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
+| D1994 | `References:`/`In-Reply-To:` の値頭の `*` | 欄名継続読み vs 識別子拾いで糸参照ずれ |
