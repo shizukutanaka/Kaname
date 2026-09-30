@@ -1670,6 +1670,14 @@ pub struct Envelope {
     pub received_by_rbracket: bool,
     /// `Received:` の `via` 節の `+` (D1982 — 経路解析ずれ)。
     pub received_via_plus: bool,
+    /// `Received:` の `via` 節の `{` (D1983 — 経路ずれ)。
+    pub received_via_lbrace: bool,
+    /// `Received:` の `via` 節の `}` (D1984 — 経路解析ずれ)。
+    pub received_via_rbrace: bool,
+    /// `Received:` の `with` 節の `[` (D1985 — 経路ずれ)。
+    pub received_with_lbracket: bool,
+    /// `Received:` の `with` 節の `]` (D1986 — 経路解析ずれ)。
+    pub received_with_rbracket: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4610,6 +4618,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let received_with_rbrace = has_received_with_rbrace(bytes);
     let received_by_rbracket = has_received_by_rbracket(bytes);
     let received_via_plus = has_received_via_plus(bytes);
+    let received_via_lbrace = has_received_via_lbrace(bytes);
+    let received_via_rbrace = has_received_via_rbrace(bytes);
+    let received_with_lbracket = has_received_with_lbracket(bytes);
+    let received_with_rbracket = has_received_with_rbracket(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5350,6 +5362,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_with_rbrace,
         received_by_rbracket,
         received_via_plus,
+        received_via_lbrace,
+        received_via_rbrace,
+        received_with_lbracket,
+        received_with_rbracket,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -39217,6 +39233,182 @@ pub fn has_received_via_plus(raw: &[u8]) -> bool {
     false
 }
 
+/// `Received: … via a{b` — `{` は便り名の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で経路がずれる
+/// (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/`/`\\`/`[`/`]`/`*`/`+` は D1766–D1982)。
+#[must_use]
+pub fn has_received_via_lbrace(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("via") && i + 1 < toks.len()
+                && toks[i + 1].contains('{')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received: … via a}b` — `}` は便り名の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で経路がずれる
+/// (`via` の `<`/`>`/`=`/`!`/`%`/`@`/`#`/`'`/`~`/`$`/`&`/`?`/`:`/`,`/`"`/`^`/`|`/`/`/`\\`/`[`/`]`/`*`/`+`/`{` は D1766–D1983)。
+#[must_use]
+pub fn has_received_via_rbrace(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("via") && i + 1 < toks.len()
+                && toks[i + 1].contains('}')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received: … with a[b` — `[` は渡し方名の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で経路がずれる
+/// (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#`/`'`/`*`/`+`/`{`/`}` は D1825–D1980)。
+#[must_use]
+pub fn has_received_with_lbracket(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("with") && i + 1 < toks.len()
+                && toks[i + 1].contains('[')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received: … with a]b` — `]` は渡し方名の字集合に書けない。
+/// 語の一部として継続する実装と欄ごと捨てる実装で経路がずれる
+/// (`with` の `<`/`>`/`=`/`!`/`%`/`@`/`:`/`&`/`?`/`,`/`"`/`~`/`|`/`$`/`^`/`#`/`'`/`*`/`+`/`{`/`}`/`[` は D1825–D1985)。
+#[must_use]
+pub fn has_received_with_rbracket(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("with") && i + 1 < toks.len()
+                && toks[i + 1].contains(']')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -58858,6 +59050,82 @@ mod tests {
             b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
         ));
         assert!(!has_received_via_plus(b""));
+    }
+
+    #[test]
+    fn received_via_lbrace_via節の開き波括弧を検出する() {
+        // D1983 — `Received: … via a{b`
+        assert!(has_received_via_lbrace(
+            b"Received: from m.example by s.example via a{b id 1\r\n\r\nx"
+        ));
+        assert!(has_received_via_lbrace(
+            b"Received: from m.example by s.example via {a id 1\r\n\r\nx"
+        ));
+        // 節なし・通常の via は不発火
+        assert!(!has_received_via_lbrace(
+            b"Received: from m.example by s.example via a-b id 1\r\n\r\nx"
+        ));
+        assert!(!has_received_via_lbrace(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_via_lbrace(b""));
+    }
+
+    #[test]
+    fn received_via_rbrace_via節の閉じ波括弧を検出する() {
+        // D1984 — `Received: … via a}b`
+        assert!(has_received_via_rbrace(
+            b"Received: from m.example by s.example via a}b id 1\r\n\r\nx"
+        ));
+        assert!(has_received_via_rbrace(
+            b"Received: from m.example by s.example via }a id 1\r\n\r\nx"
+        ));
+        // 節なし・通常の via は不発火
+        assert!(!has_received_via_rbrace(
+            b"Received: from m.example by s.example via a-b id 1\r\n\r\nx"
+        ));
+        assert!(!has_received_via_rbrace(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_via_rbrace(b""));
+    }
+
+    #[test]
+    fn received_with_lbracket_with節の開き角括弧を検出する() {
+        // D1985 — `Received: … with a[b`
+        assert!(has_received_with_lbracket(
+            b"Received: from m.example by s.example with a[b id 1\r\n\r\nx"
+        ));
+        assert!(has_received_with_lbracket(
+            b"Received: from m.example by s.example with [a id 1\r\n\r\nx"
+        ));
+        // 節なし・通常の with は不発火
+        assert!(!has_received_with_lbracket(
+            b"Received: from m.example by s.example with a-b id 1\r\n\r\nx"
+        ));
+        assert!(!has_received_with_lbracket(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_with_lbracket(b""));
+    }
+
+    #[test]
+    fn received_with_rbracket_with節の閉じ角括弧を検出する() {
+        // D1986 — `Received: … with a]b`
+        assert!(has_received_with_rbracket(
+            b"Received: from m.example by s.example with a]b id 1\r\n\r\nx"
+        ));
+        assert!(has_received_with_rbracket(
+            b"Received: from m.example by s.example with ]a id 1\r\n\r\nx"
+        ));
+        // 節なし・通常の with は不発火
+        assert!(!has_received_with_rbracket(
+            b"Received: from m.example by s.example with a-b id 1\r\n\r\nx"
+        ));
+        assert!(!has_received_with_rbracket(
+            b"Received: from m.example; Tue, 1 Jan 2019 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_received_with_rbracket(b""));
     }
 
     #[test]
