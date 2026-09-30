@@ -1702,6 +1702,14 @@ pub struct Envelope {
     pub refs_at_lead: bool,
     /// `References:`/`In-Reply-To:` の値頭の `?` (D1998 — スレッドずれ)。
     pub refs_qmark_lead: bool,
+    /// `References:`/`In-Reply-To:` の値頭の `&` (D1999 — スレッドずれ)。
+    pub refs_amp_lead: bool,
+    /// `References:`/`In-Reply-To:` の値頭の `'` (D2000 — スレッドずれ)。
+    pub refs_apos_lead: bool,
+    /// `References:`/`In-Reply-To:` の値頭の `+` (D2001 — スレッドずれ)。
+    pub refs_plus_lead: bool,
+    /// `References:`/`In-Reply-To:` の値頭の `/` (D2002 — スレッドずれ)。
+    pub refs_slash_lead: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4658,6 +4666,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let refs_dollar_lead = has_refs_dollar_lead(bytes);
     let refs_at_lead = has_refs_at_lead(bytes);
     let refs_qmark_lead = has_refs_qmark_lead(bytes);
+    let refs_amp_lead = has_refs_amp_lead(bytes);
+    let refs_apos_lead = has_refs_apos_lead(bytes);
+    let refs_plus_lead = has_refs_plus_lead(bytes);
+    let refs_slash_lead = has_refs_slash_lead(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5414,6 +5426,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         refs_dollar_lead,
         refs_at_lead,
         refs_qmark_lead,
+        refs_amp_lead,
+        refs_apos_lead,
+        refs_plus_lead,
+        refs_slash_lead,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -39940,6 +39956,162 @@ pub fn has_refs_qmark_lead(raw: &[u8]) -> bool {
     false
 }
 
+/// `References: &<a@b>` / `In-Reply-To: &<a@b>` — 値頭の `&`。
+/// 欄名の継続として読む実装と識別子を拾う実装でスレッド関連がずれる
+/// (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`、
+/// `!`/`=`/`:`/`*`/`#`/`$`/`@`/`?` は D1991–D1998)。
+#[must_use]
+pub fn has_refs_amp_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "references" && name != "in-reply-to" {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if v.starts_with('&') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `References: '<a@b>` / `In-Reply-To: '<a@b>` — 値頭の `'`。
+/// 欄名の継続として読む実装と識別子を拾う実装でスレッド関連がずれる
+/// (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`、
+/// `!`/`=`/`:`/`*`/`#`/`$`/`@`/`?` は D1991–D1998)。
+#[must_use]
+pub fn has_refs_apos_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "references" && name != "in-reply-to" {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if v.starts_with('\'') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `References: +<a@b>` / `In-Reply-To: +<a@b>` — 値頭の `+`。
+/// 欄名の継続として読む実装と識別子を拾う実装でスレッド関連がずれる
+/// (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`、
+/// `!`/`=`/`:`/`*`/`#`/`$`/`@`/`?` は D1991–D1998)。
+#[must_use]
+pub fn has_refs_plus_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "references" && name != "in-reply-to" {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if v.starts_with('+') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `References: /<a@b>` / `In-Reply-To: /<a@b>` — 値頭の `/`。
+/// 欄名の継続として読む実装と識別子を拾う実装でスレッド関連がずれる
+/// (値頭の `;`/`,` は `ref_lead_sep`、`>` は `ref_gt_lead`、`(` は `refs_comment_lead`、
+/// `!`/`=`/`:`/`*`/`#`/`$`/`@`/`?` は D1991–D1998)。
+#[must_use]
+pub fn has_refs_slash_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "references" && name != "in-reply-to" {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if v.starts_with('/') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -59869,6 +60041,74 @@ mod tests {
             b"References: <a@b.example> <c@d.example>\r\n\r\nx"
         ));
         assert!(!has_refs_qmark_lead(b""));
+    }
+
+    #[test]
+    fn refs_amp_lead_値頭の連結符を検出する() {
+        // D1999 — `References: &<a@b>` / `In-Reply-To: &<a@b>`
+        assert!(has_refs_amp_lead(
+            b"References: &<a@b.example>\r\n\r\nx"
+        ));
+        assert!(has_refs_amp_lead(
+            b"In-Reply-To: &<a@b.example>\r\n\r\nx"
+        ));
+        // 字のみの値・通常の参照列は不発火
+        assert!(!has_refs_amp_lead(b"References: &\r\n\r\nx"));
+        assert!(!has_refs_amp_lead(
+            b"References: <a@b.example> <c@d.example>\r\n\r\nx"
+        ));
+        assert!(!has_refs_amp_lead(b""));
+    }
+
+    #[test]
+    fn refs_apos_lead_値頭の単一引用符を検出する() {
+        // D2000 — `References: '<a@b>` / `In-Reply-To: '<a@b>`
+        assert!(has_refs_apos_lead(
+            b"References: '<a@b.example>\r\n\r\nx"
+        ));
+        assert!(has_refs_apos_lead(
+            b"In-Reply-To: '<a@b.example>\r\n\r\nx"
+        ));
+        // 字のみの値・通常の参照列は不発火
+        assert!(!has_refs_apos_lead(b"References: '\r\n\r\nx"));
+        assert!(!has_refs_apos_lead(
+            b"References: <a@b.example> <c@d.example>\r\n\r\nx"
+        ));
+        assert!(!has_refs_apos_lead(b""));
+    }
+
+    #[test]
+    fn refs_plus_lead_値頭の加符を検出する() {
+        // D2001 — `References: +<a@b>` / `In-Reply-To: +<a@b>`
+        assert!(has_refs_plus_lead(
+            b"References: +<a@b.example>\r\n\r\nx"
+        ));
+        assert!(has_refs_plus_lead(
+            b"In-Reply-To: +<a@b.example>\r\n\r\nx"
+        ));
+        // 字のみの値・通常の参照列は不発火
+        assert!(!has_refs_plus_lead(b"References: +\r\n\r\nx"));
+        assert!(!has_refs_plus_lead(
+            b"References: <a@b.example> <c@d.example>\r\n\r\nx"
+        ));
+        assert!(!has_refs_plus_lead(b""));
+    }
+
+    #[test]
+    fn refs_slash_lead_値頭の斜線を検出する() {
+        // D2002 — `References: /<a@b>` / `In-Reply-To: /<a@b>`
+        assert!(has_refs_slash_lead(
+            b"References: /<a@b.example>\r\n\r\nx"
+        ));
+        assert!(has_refs_slash_lead(
+            b"In-Reply-To: /<a@b.example>\r\n\r\nx"
+        ));
+        // 字のみの値・通常の参照列は不発火
+        assert!(!has_refs_slash_lead(b"References: /\r\n\r\nx"));
+        assert!(!has_refs_slash_lead(
+            b"References: <a@b.example> <c@d.example>\r\n\r\nx"
+        ));
+        assert!(!has_refs_slash_lead(b""));
     }
 
     #[test]

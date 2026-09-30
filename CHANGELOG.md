@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D2002: `References:`/`In-Reply-To:` の値頭の `/` を検出 — `Envelope` に `refs_slash_lead` を追加 (値頭の `;`/`,`/`>`/`(`/`"`/`!`/`=`/`:`/`*`/`#`/`$`/`@`/`?` は `ref_lead_sep`/`ref_gt_lead`/`refs_comment_lead` 及び D1991–D1998)。
+### Security — D2001: `References:`/`In-Reply-To:` の値頭の `+` を検出 — `Envelope` に `refs_plus_lead` を追加 (同上)。
+### Security — D2000: `References:`/`In-Reply-To:` の値頭の `'` を検出 — `Envelope` に `refs_apos_lead` を追加 (同上)。
+### Security — D1999: `References:`/`In-Reply-To:` の値頭の `&` を検出 — `Envelope` に `refs_amp_lead` を追加 (同上)。
 ### Security — D1998: `References:`/`In-Reply-To:` の値頭の `?` を検出 — `Envelope` に `refs_qmark_lead` を追加 (値頭の `;`/`,`/`>`/`(`/`"`/`!`/`=`/`:`/`*` は D1931 前後の `ref_lead_sep`/`ref_gt_lead`/`refs_comment_lead` 及び D1991–D1994)。
 ### Security — D1997: `References:`/`In-Reply-To:` の値頭の `@` を検出 — `Envelope` に `refs_at_lead` を追加 (同上)。
 ### Security — D1996: `References:`/`In-Reply-To:` の値頭の `$` を検出 — `Envelope` に `refs_dollar_lead` を追加 (同上)。
