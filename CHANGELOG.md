@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1826: `Message-ID: |<a>` 等の `|` 先立ちを検出 — `Envelope` に `msgid_pipe_lead` を追加 (lead-sep 系は D1755–D1822)。
+### Security — D1825: `Received:` の `with` 節の `%` を検出 — `Envelope` に `received_with_pct` を追加 (`by`/`via`/`for` の `%`/`!` は D1793/D1809/D1804/D1817/D1821)。
+### Security — D1824: `Content-Type: text]plain` の型本体内 `]` を検出 — `Envelope` に `ct_rbracket_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`?`/`,`/`[` は D1758–D1820)。
+### Security — D1823: `To: a'b@c` のローカル部 `'` を検出 — `Envelope` に `addr_apos_local` を追加 (`*` D1819、`#` D1815、`%` D1811、`$` D1806、`|` D1802、`&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
 ### Security — D1822: `Message-ID: ~<a>` 等の `~` 先立ちを検出 — `Envelope` に `msgid_tilde_lead` を追加 (lead-sep 系は D1755–D1818)。
 ### Security — D1821: `Received:` の `for` 節の `!` を検出 — `Envelope` に `received_for_bang` を追加 (`from`/`by`/`id`/`via` の `!` は D1781/D1813/D1785/D1817)。
 ### Security — D1820: `Content-Type: text[plain` の型本体内 `[` を検出 — `Envelope` に `ct_lbracket_type` を追加 (`=`/`:`/括弧/`\`/`>`/`<`/`@`/`?`/`,` は D1758–D1816)。
