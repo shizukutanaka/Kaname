@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2183: `Disposition-Notification-To:` の宛名でない値 (開封通知先の非宛名値) を検出 — `Envelope` に `disposition_to_non_addr` を追加。
+### Security — D2184: `Return-Receipt-To:` の宛名でない値 (受領通知先の非宛名値) を検出 — `Envelope` に `return_receipt_to_non_addr` を追加。
+### Security — D2185: `X-Confirm-Reading-To:` の宛名でない値 (閲覧確認先の非宛名値) を検出 — `Envelope` に `confirm_reading_non_addr` を追加。
+### Security — D2186: `Resent-Reply-To:` の宛名でない値 (再送返信口の非宛名値) を検出 — `Envelope` に `resent_reply_to_non_addr` を追加。
 ### Security — D2179: `X-Original-To:` の宛名でない値 (元宛先記録の非宛名値) を検出 — `Envelope` に `x_orig_to_non_addr` を追加。
 ### Security — D2180: `X-Original-From:` の宛名でない値 (元差出人記録の非宛名値) を検出 — `Envelope` に `x_orig_from_non_addr` を追加。
 ### Security — D2181: `X-Original-Cc:` の宛名でない値 (元副宛先記録の非宛名値) を検出 — `Envelope` に `x_orig_cc_non_addr` を追加。
