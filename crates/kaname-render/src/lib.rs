@@ -2036,6 +2036,14 @@ pub struct Envelope {
     pub x_forwarded_empty: bool,
     /// `Apparently-Resent-*` 群の空値 (D2166 — 再送履歴ずれ)。
     pub apparently_resent_empty: bool,
+    /// `X-Original-To-Headers:` の空値 (D2167 — 届け先履歴ずれ)。
+    pub x_orig_to_headers_empty: bool,
+    /// `X-Original-Rcpt-To:` 系の空値 (D2168 — 届け先履歴ずれ)。
+    pub x_orig_rcpt_to_empty: bool,
+    /// `X-Original-Authentication-Results:` の空値 (D2169 — 認証履歴ずれ)。
+    pub x_orig_ar_empty: bool,
+    /// `X-OriginalArrivalTime:` 系の空値 (D2170 — 日時履歴ずれ)。
+    pub x_orig_arrival_empty: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5159,6 +5167,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let fcc_empty = has_fcc_empty(bytes);
     let x_forwarded_empty = has_x_forwarded_empty(bytes);
     let apparently_resent_empty = has_apparently_resent_empty(bytes);
+    let x_orig_to_headers_empty = has_x_orig_to_headers_empty(bytes);
+    let x_orig_rcpt_to_empty = has_x_orig_rcpt_to_empty(bytes);
+    let x_orig_ar_empty = has_x_orig_ar_empty(bytes);
+    let x_orig_arrival_empty = has_x_orig_arrival_empty(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6082,6 +6094,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         fcc_empty,
         x_forwarded_empty,
         apparently_resent_empty,
+        x_orig_to_headers_empty,
+        x_orig_rcpt_to_empty,
+        x_orig_ar_empty,
+        x_orig_arrival_empty,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42609,6 +42625,161 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Original-To-Headers:` の値が空か判定する (D2167)。
+///
+/// 宛先欄ごと書き換えられた場合に元の宛先欄全体を記録
+/// する欄なのに値を持たない形 — 空欄を破棄する実装と
+/// 空の記録として扱う実装で届け先の履歴がずれる。
+#[must_use]
+pub fn has_x_orig_to_headers_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(
+            l[..c].trim(),
+            "x-original-to-headers" | "x-orig-to-headers"
+        ) && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系の値が空か判定する (D2168)。
+///
+/// RCPT 段階の受取人を記録する欄なのに値を持たない形 —
+/// 空欄を破棄する実装と空の記録として扱う実装で届け先
+/// の履歴がずれる。
+#[must_use]
+pub fn has_x_orig_rcpt_to_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(
+            l[..c].trim(),
+            "x-original-rcpt-to"
+                | "x-orig-rcpt-to"
+                | "x-rcpt-to"
+                | "x-envelope-rcpt-to"
+        ) && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `X-Original-Authentication-Results:` の値が空か判定する
+/// (D2169)。
+///
+/// 書き換え前の認証結果を記録する欄なのに値を持たない
+/// 形 — 空欄を破棄する実装と空の記録として扱う実装で
+/// 認証履歴がずれる。
+#[must_use]
+pub fn has_x_orig_ar_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(
+            l[..c].trim(),
+            "x-original-authentication-results"
+                | "x-orig-authentication-results"
+        ) && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `X-OriginalArrivalTime:` 系の値が空か判定する (D2170)。
+///
+/// 到着時刻を記録する欄なのに値を持たない形 — 空欄を
+/// 破棄する実装と空の記録として扱う実装で日時の履歴が
+/// ずれる。
+#[must_use]
+pub fn has_x_orig_arrival_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(
+            l[..c].trim(),
+            "x-originalarrivaltime"
+                | "x-original-arrival-time"
+                | "x-orig-arrival-time"
+        ) && l[c + 1..].trim().is_empty()
+    })
+}
+
 /// `X-Original-Bcc:` の値が空か判定する (D2163)。
 ///
 /// 見せないはずの隠し宛先を記録する欄なのに値を持たない
@@ -67722,6 +67893,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元宛先欄記録が空なら発火() {
+        assert!(has_x_orig_to_headers_empty(
+            b"From: a@x\r\nX-Original-To-Headers:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_headers_empty(
+            b"From: a@x\r\nX-Original-To-Headers: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人記録が空なら発火() {
+        assert!(has_x_orig_rcpt_to_empty(
+            b"From: a@x\r\nX-Original-Rcpt-To:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_empty(
+            b"From: a@x\r\nX-Rcpt-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元認証結果記録が空なら発火() {
+        assert!(has_x_orig_ar_empty(
+            b"From: a@x\r\nX-Original-Authentication-Results:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_ar_empty(
+            b"From: a@x\r\nX-Orig-Authentication-Results: spf=pass\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元到着時刻記録が空なら発火() {
+        assert!(has_x_orig_arrival_empty(
+            b"From: a@x\r\nX-OriginalArrivalTime:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_arrival_empty(
+            b"From: a@x\r\nX-Original-Arrival-Time: Sat, 11 Jul 2026 10:00:00.0000 (UTC)\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

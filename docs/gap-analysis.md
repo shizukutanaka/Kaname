@@ -1580,3 +1580,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2164 | Fcc/X-Fcc の空値 (送信控え欄の空欄) | 控え行き先ずれ |
 | D2165 | X-Forwarded-* 群の空値 (転送元記録の空欄) | 転送履歴ずれ |
 | D2166 | Apparently-Resent-* 群の空値 (再送残渣記録の空欄) | 再送履歴ずれ |
+| D2167 | X-Original-To-Headers の空値 (元宛先欄記録の空欄) | 届け先履歴ずれ |
+| D2168 | X-Original-Rcpt-To 系の空値 (元受取人記録の空欄) | 届け先履歴ずれ |
+| D2169 | X-Original-Authentication-Results の空値 (元認証結果記録の空欄) | 認証履歴ずれ |
+| D2170 | X-OriginalArrivalTime 系の空値 (元到着時刻記録の空欄) | 日時履歴ずれ |
