@@ -1480,3 +1480,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2064 | Resent-Cc == Resent-From | 再送ずれ |
 | D2065 | Resent-Sender == Resent-From (ブロック内冗長代行) | 再送ずれ |
 | D2066 | Resent-Cc == Resent-To (ブロック内役割重複) | 再送ずれ |
+| D2067 | Resent-Cc == To (主宛先の降格) | 再送ずれ |
+| D2068 | Resent-Cc == From (差出人宛の副宛再送) | 再送ずれ |
+| D2069 | Resent-To == Resent-Sender (代行宛の再送) | 再送ずれ |
+| D2070 | Resent-Cc == Resent-Sender | 再送ずれ |
