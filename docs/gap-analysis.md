@@ -1548,3 +1548,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2132 | Apparently-To/X-Apparently-To の重複出現 (見せ宛記録の多重化) | 届け先ずれ |
 | D2133 | X-Envelope-From 系の重複出現 (封書差出人記録の多重化) | 差出人ずれ |
 | D2134 | Apparently-From/Sender 系の重複出現 (表差出人記録の多重化) | 差出人ずれ |
+| D2135 | X-Original-To の重複出現 (元宛先記録の多重化) | 届け先履歴ずれ |
+| D2136 | X-Original-From の重複出現 (元差出人記録の多重化) | 差出人履歴ずれ |
+| D2137 | X-Original-Message-ID の重複出現 (元識別子記録の多重化) | 識別子履歴ずれ |
+| D2138 | X-Original-Subject の重複出現 (元件名記録の多重化) | 件名履歴ずれ |

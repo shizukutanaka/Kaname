@@ -1972,6 +1972,14 @@ pub struct Envelope {
     pub multi_env_from: bool,
     /// `Apparently-From:`/`Apparently-Sender:` 系の重複出現 (D2134 — 差出人ずれ)。
     pub multi_apparently_from: bool,
+    /// `X-Original-To:` の重複出現 (D2135 — 受取履歴ずれ)。
+    pub multi_x_orig_to: bool,
+    /// `X-Original-From:` の重複出現 (D2136 — 差出人履歴ずれ)。
+    pub multi_x_orig_from: bool,
+    /// `X-Original-Message-ID:` の重複出現 (D2137 — 識別子履歴ずれ)。
+    pub multi_x_orig_msgid: bool,
+    /// `X-Original-Subject:` の重複出現 (D2138 — 件名履歴ずれ)。
+    pub multi_x_orig_subject: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5063,6 +5071,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let multi_apparently_to = has_multi_apparently_to(bytes);
     let multi_env_from = has_multi_env_from(bytes);
     let multi_apparently_from = has_multi_apparently_from(bytes);
+    let multi_x_orig_to = has_multi_x_orig_to(bytes);
+    let multi_x_orig_from = has_multi_x_orig_from(bytes);
+    let multi_x_orig_msgid = has_multi_x_orig_msgid(bytes);
+    let multi_x_orig_subject = has_multi_x_orig_subject(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5954,6 +5966,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         multi_apparently_to,
         multi_env_from,
         multi_apparently_from,
+        multi_x_orig_to,
+        multi_x_orig_from,
+        multi_x_orig_msgid,
+        multi_x_orig_subject,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42481,6 +42497,99 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Original-To:` が2回以上現れるか判定する (D2135)。
+///
+/// 「元の宛先」書き換え記録は書き換えのたびに1行残る欄 — 単一の
+/// 書き換え記録を読む実装と一覧化する実装で受取人履歴の読みが
+/// 分かれる。
+#[must_use]
+pub fn has_multi_x_orig_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("x-original-to:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// `X-Original-From:` が2回以上現れるか判定する (D2136)。
+///
+/// 「元の差出人」書き換え記録は1度だけ付く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/一覧化する」で差出人履歴の読みが
+/// 分かれる。
+#[must_use]
+pub fn has_multi_x_orig_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("x-original-from:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// `X-Original-Message-ID:` が2回以上現れるか判定する
+/// (D2137)。
+///
+/// 「元の識別子」書き換え記録は1度だけ付く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/一覧化する」で識別子履歴の読みが
+/// 分かれる。
+#[must_use]
+pub fn has_multi_x_orig_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("x-original-message-id:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// `X-Original-Subject:` が2回以上現れるか判定する (D2138)。
+///
+/// 「元の件名」書き換え記録は1度だけ付く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/一覧化する」で件名履歴の読みが
+/// 分かれる。
+#[must_use]
+pub fn has_multi_x_orig_subject(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("x-original-subject:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` が2回以上現れるか判定する
 /// (D2131)。
 ///
@@ -66587,6 +66696,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元宛記録が重複すれば発火() {
+        assert!(has_multi_x_orig_to(
+            b"From: a@x\r\nX-Original-To: a@x\r\nX-Original-To: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_x_orig_to(
+            b"From: a@x\r\nX-Original-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人記録が重複すれば発火() {
+        assert!(has_multi_x_orig_from(
+            b"From: a@x\r\nX-Original-From: a@x\r\nX-Original-From: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_x_orig_from(
+            b"From: a@x\r\nX-Original-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元識別子記録が重複すれば発火() {
+        assert!(has_multi_x_orig_msgid(
+            b"From: a@x\r\nX-Original-Message-ID: <a@x>\r\nX-Original-Message-ID: <b@x>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_x_orig_msgid(
+            b"From: a@x\r\nX-Original-Message-ID: <a@x>\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元件名記録が重複すれば発火() {
+        assert!(has_multi_x_orig_subject(
+            b"From: a@x\r\nX-Original-Subject: a\r\nX-Original-Subject: b\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_x_orig_subject(
+            b"From: a@x\r\nX-Original-Subject: a\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
