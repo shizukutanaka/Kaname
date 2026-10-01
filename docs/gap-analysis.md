@@ -1564,3 +1564,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2148 | Apparently-To/X-Apparently-To の空値 (見せ宛記録の空欄) | 届け先ずれ |
 | D2149 | X-Envelope-From 系の空値 (封書差出人記録の空欄) | 差出人ずれ |
 | D2150 | Apparently-From/Sender 系の空値 (表差出人記録の空欄) | 差出人ずれ |
+| D2151 | Disposition-Notification-To の空値 (開封通知要求先の空欄) | 通知行き先ずれ |
+| D2152 | Return-Receipt-To の空値 (受領通知要求先の空欄) | 通知行き先ずれ |
+| D2153 | X-Confirm-Reading-To の空値 (閲覧確認要求先の空欄) | 通知行き先ずれ |
+| D2154 | Resent-Reply-To の空値 (旧式再送返信口の空欄) | 返信先ずれ |

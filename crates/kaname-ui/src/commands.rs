@@ -7121,6 +7121,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.apparently_from_empty {
         render_risks.push("表差出人記録が空です—空欄の扱いで差出人がずれます".to_string());
     }
+    if env.disposition_to_empty {
+        render_risks.push("開封通知の要求先が空です—空欄の扱いで通知の行き先がずれます".to_string());
+    }
+    if env.return_receipt_to_empty {
+        render_risks.push("受領通知の要求先が空です—空欄の扱いで通知の行き先がずれます".to_string());
+    }
+    if env.confirm_reading_empty {
+        render_risks.push("閲覧確認の要求先が空です—空欄の扱いで通知の行き先がずれます".to_string());
+    }
+    if env.resent_reply_to_empty {
+        render_risks.push("再送返信口が空です—空欄の扱いで返信先がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

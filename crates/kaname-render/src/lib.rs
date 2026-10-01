@@ -2004,6 +2004,14 @@ pub struct Envelope {
     pub env_from_empty: bool,
     /// `Apparently-From:`/`Apparently-Sender:` 系の空値 (D2150 — 差出人ずれ)。
     pub apparently_from_empty: bool,
+    /// `Disposition-Notification-To:` の空値 (D2151 — 通知行き先ずれ)。
+    pub disposition_to_empty: bool,
+    /// `Return-Receipt-To:` の空値 (D2152 — 通知行き先ずれ)。
+    pub return_receipt_to_empty: bool,
+    /// `X-Confirm-Reading-To:` の空値 (D2153 — 通知行き先ずれ)。
+    pub confirm_reading_empty: bool,
+    /// `Resent-Reply-To:` の空値 (D2154 — 返信先ずれ)。
+    pub resent_reply_to_empty: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5111,6 +5119,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_to_empty = has_apparently_to_empty(bytes);
     let env_from_empty = has_env_from_empty(bytes);
     let apparently_from_empty = has_apparently_from_empty(bytes);
+    let disposition_to_empty = has_disposition_to_empty(bytes);
+    let return_receipt_to_empty = has_return_receipt_to_empty(bytes);
+    let confirm_reading_empty = has_confirm_reading_empty(bytes);
+    let resent_reply_to_empty = has_resent_reply_to_empty(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6018,6 +6030,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_to_empty,
         env_from_empty,
         apparently_from_empty,
+        disposition_to_empty,
+        return_receipt_to_empty,
+        confirm_reading_empty,
+        resent_reply_to_empty,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42545,6 +42561,145 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Disposition-Notification-To:` の値が空か判定する
+/// (D2151)。
+///
+/// 開封通知の要求先を書く欄なのに値を持たない形 — 空欄を
+/// 破棄する実装と「通知要求あり・宛先不明」と読む実装で
+/// 通知の行き先がずれる。
+#[must_use]
+pub fn has_disposition_to_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim() == "disposition-notification-to"
+            && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `Return-Receipt-To:` の値が空か判定する (D2152)。
+///
+/// 旧式受領通知の要求先を書く欄なのに値を持たない形 —
+/// 空欄を破棄する実装と「通知要求あり・宛先不明」と読む
+/// 実装で通知の行き先がずれる。
+#[must_use]
+pub fn has_return_receipt_to_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim() == "return-receipt-to" && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `X-Confirm-Reading-To:` の値が空か判定する (D2153)。
+///
+/// 旧式閲覧確認の要求先を書く欄なのに値を持たない形 —
+/// 空欄を破棄する実装と「確認要求あり・宛先不明」と読む
+/// 実装で通知の行き先がずれる。
+#[must_use]
+pub fn has_confirm_reading_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim() == "x-confirm-reading-to"
+            && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `Resent-Reply-To:` の値が空か判定する (D2154)。
+///
+/// 旧式の再送返信口を書く欄なのに値を持たない形 — 空欄を
+/// 破棄する実装と空の返信先として扱う実装で返信先が
+/// ずれる。
+#[must_use]
+pub fn has_resent_reply_to_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim() == "resent-reply-to" && l[c + 1..].trim().is_empty()
+    })
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` の値が空か判定する
 /// (D2147)。
 ///
@@ -67091,6 +67246,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 開封通知先が空なら発火() {
+        assert!(has_disposition_to_empty(
+            b"From: a@x\r\nDisposition-Notification-To:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_empty(
+            b"From: a@x\r\nDisposition-Notification-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領通知先が空なら発火() {
+        assert!(has_return_receipt_to_empty(
+            b"From: a@x\r\nReturn-Receipt-To: \r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_to_empty(
+            b"From: a@x\r\nReturn-Receipt-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 閲覧確認先が空なら発火() {
+        assert!(has_confirm_reading_empty(
+            b"From: a@x\r\nX-Confirm-Reading-To:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_empty(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口が空なら発火() {
+        assert!(has_resent_reply_to_empty(
+            b"From: a@x\r\nResent-Reply-To:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_empty(
+            b"From: a@x\r\nResent-Reply-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

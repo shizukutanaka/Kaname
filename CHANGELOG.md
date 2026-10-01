@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2151: `Disposition-Notification-To:` の空値 (開封通知要求先の空欄) を検出 — `Envelope` に `disposition_to_empty` を追加。
+### Security — D2152: `Return-Receipt-To:` の空値 (旧式受領通知要求先の空欄) を検出 — `Envelope` に `return_receipt_to_empty` を追加。
+### Security — D2153: `X-Confirm-Reading-To:` の空値 (旧式閲覧確認要求先の空欄) を検出 — `Envelope` に `confirm_reading_empty` を追加。
+### Security — D2154: `Resent-Reply-To:` の空値 (旧式再送返信口の空欄) を検出 — `Envelope` に `resent_reply_to_empty` を追加。
 ### Security — D2147: `Envelope-To:`/`X-Envelope-To:` の空値 (封書受取人記録の空欄) を検出 — `Envelope` に `env_to_empty` を追加。
 ### Security — D2148: `Apparently-To:`/`X-Apparently-To:` の空値 (見せかけ宛先記録の空欄) を検出 — `Envelope` に `apparently_to_empty` を追加。
 ### Security — D2149: `X-Envelope-From:` 等エンベロープ差出人記録欄の空値 (封書差出人記録の空欄) を検出 — `Envelope` に `env_from_empty` を追加。
