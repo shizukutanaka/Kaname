@@ -1812,6 +1812,14 @@ pub struct Envelope {
     pub irt_no_refs: bool,
     /// `Resent-From:` と `From:` の同一アドレス (D2054 — 再送ずれ)。
     pub resent_from_same_as_from: bool,
+    /// `Resent-To:` と `To:` の同一アドレス (D2055 — 再送ずれ)。
+    pub resent_to_same_as_to: bool,
+    /// `Resent-To:` と `From:` の同一アドレス (D2056 — 再送ずれ)。
+    pub resent_to_same_as_from: bool,
+    /// `Resent-Sender:` と `Sender:` の同一アドレス (D2057 — 再送ずれ)。
+    pub resent_sender_same_as_sender: bool,
+    /// `Resent-Date:` と `Date:` の同一値 (D2058 — 再送ずれ)。
+    pub resent_date_same_as_date: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4823,6 +4831,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let reply_to_same_as_from = has_reply_to_same_as_from(bytes);
     let irt_no_refs = has_irt_no_refs(bytes);
     let resent_from_same_as_from = has_resent_from_same_as_from(bytes);
+    let resent_to_same_as_to = has_resent_to_same_as_to(bytes);
+    let resent_to_same_as_from = has_resent_to_same_as_from(bytes);
+    let resent_sender_same_as_sender = has_resent_sender_same_as_sender(bytes);
+    let resent_date_same_as_date = has_resent_date_same_as_date(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5634,6 +5646,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         reply_to_same_as_from,
         irt_no_refs,
         resent_from_same_as_from,
+        resent_to_same_as_to,
+        resent_to_same_as_from,
+        resent_sender_same_as_sender,
+        resent_date_same_as_date,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42145,6 +42161,155 @@ pub fn has_msgid_dup_pair(raw: &[u8]) -> bool {
     false
 }
 
+/// `Resent-To:` と `To:` が同一アドレスか判定する (D2055)。
+///
+/// 再送は別の宛先へ届ける欄 — 宛先が元信と同じ再送は
+/// 体裁だけの偽転送の兆候で、再送系と通常欄の扱いが
+/// ずれる (`Resent-From == From` は `resent_from_same_as_from`
+/// が担当)。
+#[must_use]
+pub fn has_resent_to_same_as_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(t), Some(r)) = (
+        first_addr_of(&logical, "to"),
+        first_addr_of(&logical, "resent-to"),
+    ) else {
+        return false;
+    };
+    !t.is_empty() && t.eq_ignore_ascii_case(&r)
+}
+
+/// `Resent-To:` と `From:` が同一アドレスか判定する (D2056)。
+///
+/// 差出人へ再送が向かう形は返信ループとも読める配置 —
+/// 再送として辿る実装とループ警戒として畳む実装で
+/// 届け先履歴の読みがずれる。
+#[must_use]
+pub fn has_resent_to_same_as_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(f), Some(r)) = (
+        first_addr_of(&logical, "from"),
+        first_addr_of(&logical, "resent-to"),
+    ) else {
+        return false;
+    };
+    !f.is_empty() && f.eq_ignore_ascii_case(&r)
+}
+
+/// `Resent-Sender:` と `Sender:` が同一アドレスか判定する
+/// (D2057)。
+///
+/// 再送ブロックの送信者が元信の送信者と一致する形 —
+/// 別人による再送を装う実装と同一系として畳む実装で
+/// 再送履歴の読みがずれる。
+#[must_use]
+pub fn has_resent_sender_same_as_sender(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(s), Some(r)) = (
+        first_addr_of(&logical, "sender"),
+        first_addr_of(&logical, "resent-sender"),
+    ) else {
+        return false;
+    };
+    !s.is_empty() && s.eq_ignore_ascii_case(&r)
+}
+
+/// `Resent-Date:` と `Date:` が同一値か判定する (D2058)。
+///
+/// 再送信の日時が元信と完全一致する形は、再送欄をそのまま
+/// 複写した型 — 元信日時で並べる実装と再送日時で並べる
+/// 実装で履歴の順番がずれる。
+#[must_use]
+pub fn has_resent_date_same_as_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut date = "";
+    let mut rdate = "";
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        let v = l[colon + 1..].trim();
+        if name == "date" {
+            date = v;
+        } else if name == "resent-date" {
+            rdate = v;
+        }
+    }
+    !date.is_empty() && !rdate.is_empty() && date == rdate
+}
+
 /// 指定ヘッダの最初の角括弧アドレス (または裸値の先頭語) を
 /// 取り出すヘルパ — 欄間同一性検査用。
 fn first_addr_of<'a>(logical: &'a str, name: &str) -> Option<String> {
@@ -63359,6 +63524,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 再送先が宛先と同一では発火() {
+        assert!(has_resent_to_same_as_to(
+            b"From: a@x\r\nTo: b@y\r\nResent-From: s@z\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-To: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_to_same_as_to(
+            b"From: a@x\r\nTo: b@y\r\nResent-To: c@z\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送先が差出人と同一では発火() {
+        assert!(has_resent_to_same_as_from(
+            b"From: a@x\r\nResent-From: s@z\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-To: a@x\r\n\r\nx"
+        ));
+        assert!(!has_resent_to_same_as_from(
+            b"From: a@x\r\nResent-To: c@z\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送送信者が送信者と同一では発火() {
+        assert!(has_resent_sender_same_as_sender(
+            b"From: a@x\r\nSender: s@z\r\nResent-From: r@y\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-Sender: s@z\r\n\r\nx"
+        ));
+        assert!(!has_resent_sender_same_as_sender(
+            b"From: a@x\r\nSender: s@z\r\nResent-Sender: t@w\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送日時が元信と同値では発火() {
+        assert!(has_resent_date_same_as_date(
+            b"From: a@x\r\nDate: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-From: s@z\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-To: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_date_same_as_date(
+            b"Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-Date: Tue, 2 Feb 2021 10:00:00 +0900\r\n\r\nx"
+        ));
     }
 
     #[test]

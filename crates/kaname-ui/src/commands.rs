@@ -6833,6 +6833,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.resent_from_same_as_from {
         render_risks.push("再送信者が差出人と同一です—再送系と通常欄の扱いがずれます".to_string());
     }
+    if env.resent_to_same_as_to {
+        render_risks.push("再送先が宛先と同一です—体裁だけの偽転送で届け先履歴がずれます".to_string());
+    }
+    if env.resent_to_same_as_from {
+        render_risks.push("再送先が差出人と同一です—返信ループ警戒と再送解釈でずれます".to_string());
+    }
+    if env.resent_sender_same_as_sender {
+        render_risks.push("再送送信者が送信者と同一です—別人再送と同一系畳みでずれます".to_string());
+    }
+    if env.resent_date_same_as_date {
+        render_risks.push("再送日時が元信と同値です—並べ方の違いで履歴の順番がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

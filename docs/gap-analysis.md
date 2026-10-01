@@ -1468,3 +1468,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2052 | Reply-To == From | 返信先ずれ |
 | D2053 | In-Reply-To あるのに References 無し | 糸参照ずれ |
 | D2054 | Resent-From == From | 再送ずれ |
+| D2055 | Resent-To == To | 再送ずれ |
+| D2056 | Resent-To == From (差出人への再送) | 再送ずれ |
+| D2057 | Resent-Sender == Sender | 再送ずれ |
+| D2058 | Resent-Date == Date | 再送ずれ |
