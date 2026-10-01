@@ -2172,6 +2172,14 @@ pub struct Envelope {
     pub disposition_to_spaced: bool,
     /// `Return-Receipt-To:` の値が空白入り宛名形 (D2234 — 通知先ずれ)。
     pub return_receipt_spaced: bool,
+    /// `X-Confirm-Reading-To:` の値が空白入り宛名形 (D2235 — 通知先ずれ)。
+    pub confirm_reading_spaced: bool,
+    /// `Resent-Reply-To:` の値が空白入り宛名形 (D2236 — 返信先ずれ)。
+    pub resent_reply_to_spaced: bool,
+    /// `Apparently-Resent-*:` 系の値が空白入り宛名形 (D2237 — 再送記録ずれ)。
+    pub apparently_resent_spaced: bool,
+    /// `X-Original-Rcpt-To:` 系の値が空白入り宛名形 (D2238 — 届け先履歴ずれ)。
+    pub x_orig_rcpt_to_spaced: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5363,6 +5371,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_spaced = has_x_orig_reply_to_spaced(bytes);
     let disposition_to_spaced = has_disposition_to_spaced(bytes);
     let return_receipt_spaced = has_return_receipt_spaced(bytes);
+    let confirm_reading_spaced = has_confirm_reading_spaced(bytes);
+    let resent_reply_to_spaced = has_resent_reply_to_spaced(bytes);
+    let apparently_resent_spaced = has_apparently_resent_spaced(bytes);
+    let x_orig_rcpt_to_spaced = has_x_orig_rcpt_to_spaced(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6354,6 +6366,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_spaced,
         disposition_to_spaced,
         return_receipt_spaced,
+        confirm_reading_spaced,
+        resent_reply_to_spaced,
+        apparently_resent_spaced,
+        x_orig_rcpt_to_spaced,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42881,6 +42897,186 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Confirm-Reading-To:` の値が空白入りの宛名形か判定する
+/// (D2235)。
+///
+/// 旧式閲覧確認の要求先を記す欄なのに `a @x` のように `@` の前
+/// 後に空白を挟む形 — 空白で割って先を読む実装と結合して読む
+/// 実装で通知先がずれる (括弧囲み値は D2219)。
+#[must_use]
+pub fn has_confirm_reading_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-confirm-reading-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
+/// `Resent-Reply-To:` の値が空白入りの宛名形か判定する (D2236)。
+///
+/// 旧式再送返信口を記す欄なのに `@` の前後に空白を挟む形 —
+/// 分割して読む実装と結合して読む実装で返信先がずれる (括弧囲
+/// み値は D2220)。
+#[must_use]
+pub fn has_resent_reply_to_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "resent-reply-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
+/// `Apparently-Resent-*:` 系の値が空白入りの宛名形か判定する
+/// (D2237)。
+///
+/// sendmail 再送モードの残渣欄なのに `@` の前後に空白を挟む形 —
+/// 分割して読む実装と結合して読む実装で再送記録がずれる (括弧
+/// 囲み値は D2221)。
+#[must_use]
+pub fn has_apparently_resent_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ) && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系の値が空白入りの宛名形か判定する
+/// (D2238)。
+///
+/// 元の受取人を記す欄なのに `@` の前後に空白を挟む形 — 分割し
+/// て読む実装と結合して読む実装で届け先の履歴がずれる (括弧囲
+/// み値は D2222)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "x-original-rcpt-to" | "x-orig-rcpt-to" | "x-rcpt-to" | "x-envelope-rcpt-to"
+        ) && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
 /// `X-Original-Cc:` の値が空白入りの宛名形か判定する (D2231)。
 ///
 /// 書き換え前の副宛先を記す欄なのに `c @y` のように `@` の前後に
@@ -70716,6 +70912,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 閲覧先が空白入りなら発火() {
+        assert!(has_confirm_reading_spaced(
+            b"From: a@x\r\nX-Confirm-Reading-To: a @x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_spaced(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口が空白入りなら発火() {
+        assert!(has_resent_reply_to_spaced(
+            b"From: a@x\r\nResent-From: a@x\r\nResent-Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nResent-Reply-To: r @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_spaced(
+            b"From: a@x\r\nResent-From: a@x\r\nResent-Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nResent-Reply-To: r@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣が空白入りなら発火() {
+        assert!(has_apparently_resent_spaced(
+            b"From: a@x\r\nApparently-Resent-To: b @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_spaced(
+            b"From: a@x\r\nApparently-Resent-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人が空白入りなら発火() {
+        assert!(has_x_orig_rcpt_to_spaced(
+            b"From: a@x\r\nX-Original-Rcpt-To: b @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_spaced(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

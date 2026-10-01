@@ -1648,3 +1648,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2232 | X-Original-Reply-To の空白入り値 (元返信口記録の a @x 形) | 返信先履歴ずれ |
 | D2233 | Disposition-Notification-To の空白入り値 (開封通知先記録の a @x 形) | 通知先ずれ |
 | D2234 | Return-Receipt-To の空白入り値 (受領通知先記録の a @x 形) | 通知先ずれ |
+| D2235 | X-Confirm-Reading-To の空白入り値 (閲覧確認先記録の a @x 形) | 通知先ずれ |
+| D2236 | Resent-Reply-To の空白入り値 (再送返信口記録の a @x 形) | 返信先ずれ |
+| D2237 | Apparently-Resent-* 系の空白入り値 (再送残渣記録の a @x 形) | 再送記録ずれ |
+| D2238 | X-Original-Rcpt-To 系の空白入り値 (元受取人記録の a @x 形) | 届け先履歴ずれ |
