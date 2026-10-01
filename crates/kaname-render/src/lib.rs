@@ -2092,6 +2092,14 @@ pub struct Envelope {
     pub env_from_addr_list: bool,
     /// `Errors-To:` の値がカンマ連結の複数値 (D2194 — 返送先評価ずれ)。
     pub errors_to_addr_list: bool,
+    /// `Apparently-To:` 系の値がカンマ連結の複数値 (D2195 — 届け先ずれ)。
+    pub apparently_to_addr_list: bool,
+    /// `Apparently-From:` 系の値がカンマ連結の複数値 (D2196 — 差出人ずれ)。
+    pub apparently_from_addr_list: bool,
+    /// `X-Original-To:` の値がカンマ連結の複数値 (D2197 — 届け先履歴ずれ)。
+    pub x_orig_to_addr_list: bool,
+    /// `X-Original-From:` の値がカンマ連結の複数値 (D2198 — 差出人履歴ずれ)。
+    pub x_orig_from_addr_list: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5243,6 +5251,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_addr_list = has_delivered_to_addr_list(bytes);
     let env_from_addr_list = has_env_from_addr_list(bytes);
     let errors_to_addr_list = has_errors_to_addr_list(bytes);
+    let apparently_to_addr_list = has_apparently_to_addr_list(bytes);
+    let apparently_from_addr_list = has_apparently_from_addr_list(bytes);
+    let x_orig_to_addr_list = has_x_orig_to_addr_list(bytes);
+    let x_orig_from_addr_list = has_x_orig_from_addr_list(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6194,6 +6206,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_addr_list,
         env_from_addr_list,
         errors_to_addr_list,
+        apparently_to_addr_list,
+        apparently_from_addr_list,
+        x_orig_to_addr_list,
+        x_orig_from_addr_list,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42721,6 +42737,157 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Apparently-To:`/`X-Apparently-To:` の値がカンマ連結の複数値
+/// か判定する (D2195)。
+///
+/// 単一受取人を記す欄なのに `a@x, b@y` のような列の形 —
+/// 列として割る実装と一塊として読む実装で届け先がずれる
+/// (非宛名値は D2176)。
+#[must_use]
+pub fn has_apparently_to_addr_list(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(l[..c].trim(), "apparently-to" | "x-apparently-to")
+            && v.contains('@')
+            && v.contains(',')
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系の値がカンマ連結の
+/// 複数値か判定する (D2196)。
+///
+/// 単一差出人を記す欄なのにカンマ連結の列の形 — 列として割る
+/// 実装と一塊として読む実装で差出人がずれる (非宛名値は
+/// D2178)。
+#[must_use]
+pub fn has_apparently_from_addr_list(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "apparently-from"
+                | "x-apparently-from"
+                | "apparently-sender"
+                | "x-apparently-sender"
+        ) && v.contains('@')
+            && v.contains(',')
+    })
+}
+
+/// `X-Original-To:` の値がカンマ連結の複数値か判定する (D2197)。
+///
+/// 書き換え前の受取人を記す欄なのにカンマ連結の列の形 —
+/// 列として割る実装と一塊として読む実装で届け先の履歴が
+/// ずれる (非宛名値は D2179)。
+#[must_use]
+pub fn has_x_orig_to_addr_list(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-to" && v.contains('@') && v.contains(',')
+    })
+}
+
+/// `X-Original-From:` の値がカンマ連結の複数値か判定する (D2198)。
+///
+/// 書き換え前の差出人を記す欄なのにカンマ連結の列の形 —
+/// 列として割る実装と一塊として読む実装で差出人の履歴が
+/// ずれる (非宛名値は D2180)。
+#[must_use]
+pub fn has_x_orig_from_addr_list(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-from" && v.contains('@') && v.contains(',')
+    })
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` の値がカンマ連結の複数値か
 /// 判定する (D2191)。
 ///
@@ -68889,6 +69056,49 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 見せ宛が列なら発火() {
+        assert!(has_apparently_to_addr_list(
+            b"From: a@x\r\nApparently-To: b@y, c@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_addr_list(
+            b"From: a@x\r\nApparently-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_addr_list(
+            b"From: a@x\r\nApparently-To: undisclosed\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表札差出人が列なら発火() {
+        assert!(has_apparently_from_addr_list(
+            b"From: a@x\r\nApparently-From: a@x, d@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_addr_list(
+            b"From: a@x\r\nApparently-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛先が列なら発火() {
+        assert!(has_x_orig_to_addr_list(
+            b"From: a@x\r\nX-Original-To: b@y, c@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_addr_list(
+            b"From: a@x\r\nX-Original-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人が列なら発火() {
+        assert!(has_x_orig_from_addr_list(
+            b"From: a@x\r\nX-Original-From: a@x, d@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_addr_list(
+            b"From: a@x\r\nX-Original-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

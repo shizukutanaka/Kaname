@@ -7253,6 +7253,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.errors_to_addr_list {
         render_risks.push("返送先記録が複数値です—値の割り方で返送先の評価がずれます".to_string());
     }
+    if env.apparently_to_addr_list {
+        render_risks.push("見せかけ宛先記録が複数値です—値の割り方で届け先がずれます".to_string());
+    }
+    if env.apparently_from_addr_list {
+        render_risks.push("表差出人記録が複数値です—値の割り方で差出人がずれます".to_string());
+    }
+    if env.x_orig_to_addr_list {
+        render_risks.push("元宛先記録が複数値です—値の割り方で届け先の履歴がずれます".to_string());
+    }
+    if env.x_orig_from_addr_list {
+        render_risks.push("元差出人記録が複数値です—値の割り方で差出人の履歴がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
