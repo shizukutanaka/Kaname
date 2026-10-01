@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2223: `Envelope-To:`/`X-Envelope-To:` の空白入り宛名値 (`a @x` 形) を検出 — `Envelope` に `env_to_spaced` を追加。
+### Security — D2224: `Delivered-To:` の空白入り宛名値 (配達記録の空白形) を検出 — `Envelope` に `delivered_to_spaced` を追加。
+### Security — D2225: `X-Envelope-From:`/`X-MailFrom:` 系の空白入り宛名値 (封書差出人記録の空白形) を検出 — `Envelope` に `env_from_spaced` を追加。
+### Security — D2226: `Errors-To:` の空白入り宛名値 (返送先記録の空白形) を検出 — `Envelope` に `errors_to_spaced` を追加。
 ### Security — D2219: `X-Confirm-Reading-To:` の括弧・引用囲い値 (閲覧確認先記録の囲い形) を検出 — `Envelope` に `confirm_reading_bracketed` を追加。
 ### Security — D2220: `Resent-Reply-To:` の括弧・引用囲い値 (再送返信口記録の囲い形) を検出 — `Envelope` に `resent_reply_to_bracketed` を追加。
 ### Security — D2221: `Apparently-Resent-*:` 系の括弧・引用囲い値 (再送残渣記録の囲い形) を検出 — `Envelope` に `apparently_resent_bracketed` を追加。

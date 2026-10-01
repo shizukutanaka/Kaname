@@ -2148,6 +2148,14 @@ pub struct Envelope {
     pub apparently_resent_bracketed: bool,
     /// `X-Original-Rcpt-To:` 系の値が括弧・引用囲い (D2222 — 届け先履歴ずれ)。
     pub x_orig_rcpt_to_bracketed: bool,
+    /// `Envelope-To:` 系の値が空白入り宛名形 (D2223 — 届け先ずれ)。
+    pub env_to_spaced: bool,
+    /// `Delivered-To:` の値が空白入り宛名形 (D2224 — 配達履歴ずれ)。
+    pub delivered_to_spaced: bool,
+    /// `X-Envelope-From:` 系の値が空白入り宛名形 (D2225 — 差出人履歴ずれ)。
+    pub env_from_spaced: bool,
+    /// `Errors-To:` の値が空白入り宛名形 (D2226 — 返送先ずれ)。
+    pub errors_to_spaced: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5327,6 +5335,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let resent_reply_to_bracketed = has_resent_reply_to_bracketed(bytes);
     let apparently_resent_bracketed = has_apparently_resent_bracketed(bytes);
     let x_orig_rcpt_to_bracketed = has_x_orig_rcpt_to_bracketed(bytes);
+    let env_to_spaced = has_env_to_spaced(bytes);
+    let delivered_to_spaced = has_delivered_to_spaced(bytes);
+    let env_from_spaced = has_env_from_spaced(bytes);
+    let errors_to_spaced = has_errors_to_spaced(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6306,6 +6318,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_reply_to_bracketed,
         apparently_resent_bracketed,
         x_orig_rcpt_to_bracketed,
+        env_to_spaced,
+        delivered_to_spaced,
+        env_from_spaced,
+        errors_to_spaced,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42833,6 +42849,183 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` の値が空白入りの宛名形か判定する
+/// (D2223)。
+///
+/// 封書の宛先を記す欄なのに `a @x`/`a@ x` のように `@` の前後に
+/// 空白を挟む形 — 空白で割って先を読む実装と結合して読む実装で
+/// 届け先がずれる (括弧囲み値は D2207)。
+#[must_use]
+pub fn has_env_to_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(l[..c].trim(), "envelope-to" | "x-envelope-to")
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
+/// `Delivered-To:` の値が空白入りの宛名形か判定する (D2224)。
+///
+/// 最終配達先を記す欄なのに `@` の前後に空白を挟む形 — 分割して
+/// 読む実装と結合して読む実装で配達履歴がずれる (括弧囲み値は
+/// D2208)。
+#[must_use]
+pub fn has_delivered_to_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "delivered-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:` 等の値が空白入りの宛名形か
+/// 判定する (D2225)。
+///
+/// 封書の差出人を記す欄なのに `@` の前後に空白を挟む形 —
+/// 分割して読む実装と結合して読む実装で差出人履歴がずれる
+/// (括弧囲み値は D2209)。
+#[must_use]
+pub fn has_env_from_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "x-envelope-from"
+                | "x-envelope-sender"
+                | "x-mailfrom"
+                | "x-mail-from"
+                | "x-original-sender"
+                | "x-orig-sender"
+        ) && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
+/// `Errors-To:` の値が空白入りの宛名形か判定する (D2226)。
+///
+/// 配送エラーの返送先を記す欄なのに `@` の前後に空白を挟む形 —
+/// 分割して読む実装と結合して読む実装で返送先がずれる (括弧囲
+/// み値は D2210)。
+#[must_use]
+pub fn has_errors_to_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "errors-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
 /// `X-Confirm-Reading-To:` の値が括弧・引用で囲まれた形か判定する
 /// (D2219)。
 ///
@@ -70148,6 +70341,49 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 封書宛が空白入りなら発火() {
+        assert!(has_env_to_spaced(
+            b"From: a@x\r\nEnvelope-To: b @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_spaced(
+            b"From: a@x\r\nEnvelope-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_spaced(
+            b"From: a@x\r\nEnvelope-To: <b@y>\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 配達記録が空白入りなら発火() {
+        assert!(has_delivered_to_spaced(
+            b"From: a@x\r\nDelivered-To: b @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_spaced(
+            b"From: a@x\r\nDelivered-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人が空白入りなら発火() {
+        assert!(has_env_from_spaced(
+            b"From: a@x\r\nX-Envelope-From: a @x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_spaced(
+            b"From: a@x\r\nX-Envelope-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先が空白入りなら発火() {
+        assert!(has_errors_to_spaced(
+            b"From: a@x\r\nErrors-To: e @z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_spaced(
+            b"From: a@x\r\nErrors-To: e@z\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
