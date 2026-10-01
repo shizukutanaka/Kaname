@@ -1868,6 +1868,14 @@ pub struct Envelope {
     pub delivered_to_same_as_cc: bool,
     /// `Return-Path:` と `From:` の相違アドレス (D2082 — 差出人ずれ)。
     pub return_path_differs_from: bool,
+    /// `Delivered-To:` と `From:` の同一アドレス (D2083 — 届け先ずれ)。
+    pub delivered_to_same_as_from: bool,
+    /// `Delivered-To:` と `Reply-To:` の同一アドレス (D2084 — 届け先ずれ)。
+    pub delivered_to_same_as_reply_to: bool,
+    /// `Envelope-To:`/`X-Envelope-To:` と `Cc:` の同一アドレス (D2085 — 届け先ずれ)。
+    pub envelope_to_same_as_cc: bool,
+    /// `Delivered-To:` と `Sender:` の同一アドレス (D2086 — 届け先ずれ)。
+    pub delivered_to_same_as_sender: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4907,6 +4915,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let envelope_to_differs_to = has_envelope_to_differs_to(bytes);
     let delivered_to_same_as_cc = has_delivered_to_same_as_cc(bytes);
     let return_path_differs_from = has_return_path_differs_from(bytes);
+    let delivered_to_same_as_from = has_delivered_to_same_as_from(bytes);
+    let delivered_to_same_as_reply_to = has_delivered_to_same_as_reply_to(bytes);
+    let envelope_to_same_as_cc = has_envelope_to_same_as_cc(bytes);
+    let delivered_to_same_as_sender = has_delivered_to_same_as_sender(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5746,6 +5758,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         envelope_to_differs_to,
         delivered_to_same_as_cc,
         return_path_differs_from,
+        delivered_to_same_as_from,
+        delivered_to_same_as_reply_to,
+        envelope_to_same_as_cc,
+        delivered_to_same_as_sender,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42257,6 +42273,151 @@ pub fn has_msgid_dup_pair(raw: &[u8]) -> bool {
     false
 }
 
+/// `Delivered-To:` と `From:` が同一アドレスか判定する
+/// (D2083)。
+///
+/// 実配達先が差出人と同一 — 自分へ戻る配送の形で、
+/// 返信ループを煽る配置にも使われ、エンベロープ参照系と
+/// ヘッダ表示系で届け先の読みがずれる。
+#[must_use]
+pub fn has_delivered_to_same_as_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(d), Some(f)) = (
+        first_addr_of(&logical, "delivered-to"),
+        first_addr_of(&logical, "from"),
+    ) else {
+        return false;
+    };
+    !d.is_empty() && d.eq_ignore_ascii_case(&f)
+}
+
+/// `Delivered-To:` と `Reply-To:` が同一アドレスか判定する
+/// (D2084)。
+///
+/// 実配達先が返信上書き欄と一致 — 宛名・返信口・実配の
+/// 三つが畳まれる配置で、役割を区別する実装と素通し
+/// する実装で届け先・返信先の解釈がずれる。
+#[must_use]
+pub fn has_delivered_to_same_as_reply_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(d), Some(r)) = (
+        first_addr_of(&logical, "delivered-to"),
+        first_addr_of(&logical, "reply-to"),
+    ) else {
+        return false;
+    };
+    !d.is_empty() && d.eq_ignore_ascii_case(&r)
+}
+
+/// `Envelope-To:`/`X-Envelope-To:` と `Cc:` が同一アドレスか
+/// 判定する (D2085)。
+///
+/// 封書欄の実配達先が副宛先と一致 — `Delivered-To` と
+/// 同じ見せかけ宛先の作り分けで、封書欄を読む実装と
+/// 無視する実装で真の届け先がずれる (`Delivered-To` 側は
+/// `delivered_to_same_as_cc` が担当)。
+#[must_use]
+pub fn has_envelope_to_same_as_cc(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let et = first_addr_of(&logical, "envelope-to")
+        .or_else(|| first_addr_of(&logical, "x-envelope-to"));
+    let c = first_addr_of(&logical, "cc");
+    let (Some(e), Some(c)) = (et, c) else {
+        return false;
+    };
+    !e.is_empty() && e.eq_ignore_ascii_case(&c)
+}
+
+/// `Delivered-To:` と `Sender:` が同一アドレスか判定する
+/// (D2086)。
+///
+/// 実配達先が送信代行者と一致 — 代行宛に届く配送の形
+/// で、差出人・代行の役割を区別する実装と素通しする
+/// 実装で届け先の読みがずれる。
+#[must_use]
+pub fn has_delivered_to_same_as_sender(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(d), Some(s)) = (
+        first_addr_of(&logical, "delivered-to"),
+        first_addr_of(&logical, "sender"),
+    ) else {
+        return false;
+    };
+    !d.is_empty() && d.eq_ignore_ascii_case(&s)
+}
+
 /// `Delivered-To:` と `To:` が異なるアドレスか判定する
 /// (D2079)。
 ///
@@ -64506,6 +64667,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 実配達先が差出人と同一では発火() {
+        assert!(has_delivered_to_same_as_from(
+            b"From: a@x\r\nTo: b@y\r\nDelivered-To: a@x\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_same_as_from(
+            b"From: a@x\r\nTo: b@y\r\nDelivered-To: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 実配達先が返信口と同一では発火() {
+        assert!(has_delivered_to_same_as_reply_to(
+            b"From: a@x\r\nTo: b@y\r\nReply-To: r@z\r\nDelivered-To: r@z\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_same_as_reply_to(
+            b"From: a@x\r\nReply-To: r@z\r\nDelivered-To: v@w\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書配達先が副宛先と同一では発火() {
+        assert!(has_envelope_to_same_as_cc(
+            b"From: a@x\r\nCc: c@z\r\nX-Envelope-To: c@z\r\n\r\nx"
+        ));
+        assert!(!has_envelope_to_same_as_cc(
+            b"From: a@x\r\nCc: c@z\r\nEnvelope-To: v@w\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 実配達先が代行と同一では発火() {
+        assert!(has_delivered_to_same_as_sender(
+            b"From: a@x\r\nSender: s@x\r\nCc: c@z\r\nDelivered-To: s@x\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_same_as_sender(
+            b"From: a@x\r\nSender: s@x\r\nDelivered-To: v@w\r\n\r\nx"
+        ));
     }
 
     #[test]
