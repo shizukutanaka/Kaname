@@ -1544,3 +1544,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2128 | Return-Path ≠ Apparently-From 系 (返送先と sendmail 差出人記録の食い違い) | 差出人ずれ |
 | D2129 | X-Envelope-From 系 ≠ Apparently-From 系 (二つの差出人記録の食い違い) | 差出人ずれ |
 | D2130 | X-Original-From ≠ X-Envelope-From 系 (元差出人記録と封書記録の食い違い) | 差出人ずれ |
+| D2131 | Envelope-To/X-Envelope-To の重複出現 (封書受取人記録の多重化) | 届け先ずれ |
+| D2132 | Apparently-To/X-Apparently-To の重複出現 (見せ宛記録の多重化) | 届け先ずれ |
+| D2133 | X-Envelope-From 系の重複出現 (封書差出人記録の多重化) | 差出人ずれ |
+| D2134 | Apparently-From/Sender 系の重複出現 (表差出人記録の多重化) | 差出人ずれ |

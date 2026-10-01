@@ -1964,6 +1964,14 @@ pub struct Envelope {
     pub env_from_differs_apparently_from: bool,
     /// `X-Original-From:` とエンベロープ差出人記録の不一致アドレス (D2130 — 差出人ずれ)。
     pub x_orig_from_differs_env_from: bool,
+    /// `Envelope-To:`/`X-Envelope-To:` の重複出現 (D2131 — 受取人ずれ)。
+    pub multi_env_to: bool,
+    /// `Apparently-To:`/`X-Apparently-To:` の重複出現 (D2132 — 受取人ずれ)。
+    pub multi_apparently_to: bool,
+    /// エンベロープ差出人記録欄の重複出現 (D2133 — 差出人ずれ)。
+    pub multi_env_from: bool,
+    /// `Apparently-From:`/`Apparently-Sender:` 系の重複出現 (D2134 — 差出人ずれ)。
+    pub multi_apparently_from: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5051,6 +5059,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let return_path_differs_apparently_from = has_return_path_differs_apparently_from(bytes);
     let env_from_differs_apparently_from = has_env_from_differs_apparently_from(bytes);
     let x_orig_from_differs_env_from = has_x_orig_from_differs_env_from(bytes);
+    let multi_env_to = has_multi_env_to(bytes);
+    let multi_apparently_to = has_multi_apparently_to(bytes);
+    let multi_env_from = has_multi_env_from(bytes);
+    let multi_apparently_from = has_multi_apparently_from(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5938,6 +5950,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         return_path_differs_apparently_from,
         env_from_differs_apparently_from,
         x_orig_from_differs_env_from,
+        multi_env_to,
+        multi_apparently_to,
+        multi_env_from,
+        multi_apparently_from,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42465,6 +42481,116 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` が2回以上現れるか判定する
+/// (D2131)。
+///
+/// 封書受取人記録は配送時に1度だけ付く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/一覧化する」で受取人の読みが分かれる
+/// (単発の `Return-Path:`/`Delivered-To:` 重複は `dup_delivery_headers`
+/// が担当 — こちらは派生封書欄側)。
+#[must_use]
+pub fn has_multi_env_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("envelope-to:") || l.starts_with("x-envelope-to:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// `Apparently-To:`/`X-Apparently-To:` が2回以上現れるか
+/// 判定する (D2132)。
+///
+/// sendmail の見せかけ宛先記録は宛先欄の無い宛先ごとに
+/// 1行 — 複数現れると「先頭を採る/末尾を採る/一覧化する」で
+/// 受取人の読みが分かれる。
+#[must_use]
+pub fn has_multi_apparently_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("apparently-to:") || l.starts_with("x-apparently-to:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// エンベロープ差出人記録欄 (`X-Envelope-From:`/
+/// `X-Envelope-Sender:`/`X-MailFrom:`/`X-Mail-From:`/
+/// `X-Original-Sender:`/`X-Orig-Sender:`) が合計2回以上
+/// 現れるか判定する (D2133)。
+///
+/// 封書差出人記録は配送時に1度だけ付く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/一覧化する」で差出人の読みが
+/// 分かれる。
+#[must_use]
+pub fn has_multi_env_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("x-envelope-from:")
+            || l.starts_with("x-envelope-sender:")
+            || l.starts_with("x-mailfrom:")
+            || l.starts_with("x-mail-from:")
+            || l.starts_with("x-original-sender:")
+            || l.starts_with("x-orig-sender:")
+        {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// `Apparently-From:`/`X-Apparently-From:`/
+/// `Apparently-Sender:`/`X-Apparently-Sender:` が合計2回以上
+/// 現れるか判定する (D2134)。
+///
+/// sendmail の差出人記録は1度だけ付く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/一覧化する」で差出人の読みが
+/// 分かれる。
+#[must_use]
+pub fn has_multi_apparently_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("apparently-from:")
+            || l.starts_with("x-apparently-from:")
+            || l.starts_with("apparently-sender:")
+            || l.starts_with("x-apparently-sender:")
+        {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
 /// `Return-Path:` とエンベロープ差出人記録欄
 /// (`X-Envelope-From:`/`X-Envelope-Sender:`/`X-MailFrom:`/
 /// `X-Mail-From:`/`X-Original-Sender:`/`X-Orig-Sender:`)
@@ -66461,6 +66587,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 封書宛先記録が重複すれば発火() {
+        assert!(has_multi_env_to(
+            b"From: a@x\r\nEnvelope-To: a@x\r\nX-Envelope-To: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_env_to(
+            b"From: a@x\r\nEnvelope-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 見せ宛記録が重複すれば発火() {
+        assert!(has_multi_apparently_to(
+            b"From: a@x\r\nApparently-To: a@x\r\nX-Apparently-To: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_apparently_to(
+            b"From: a@x\r\nApparently-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人記録が重複すれば発火() {
+        assert!(has_multi_env_from(
+            b"From: a@x\r\nX-Envelope-From: a@x\r\nX-MailFrom: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_env_from(
+            b"From: a@x\r\nX-Envelope-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表差出人記録が重複すれば発火() {
+        assert!(has_multi_apparently_from(
+            b"From: a@x\r\nApparently-From: a@x\r\nApparently-Sender: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_apparently_from(
+            b"From: a@x\r\nApparently-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

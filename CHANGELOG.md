@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2131: `Envelope-To:`/`X-Envelope-To:` の重複出現 (封書受取人記録の多重化で先頭/末尾/一覧読みが分かれる形) を検出 — `Envelope` に `multi_env_to` を追加。
+### Security — D2132: `Apparently-To:`/`X-Apparently-To:` の重複出現 (見せかけ宛先記録の多重化) を検出 — `Envelope` に `multi_apparently_to` を追加。
+### Security — D2133: `X-Envelope-From:` 等エンベロープ差出人記録欄の重複出現 (封書差出人記録の多重化) を検出 — `Envelope` に `multi_env_from` を追加。
+### Security — D2134: `Apparently-From:`/`Apparently-Sender:` 系の重複出現 (sendmail 差出人記録の多重化) を検出 — `Envelope` に `multi_apparently_from` を追加。
 ### Security — D2127: `Return-Path:` と `X-Envelope-From:` 等のエンベロープ差出人記録の不一致アドレス (二つの配送記録の食い違い) を検出 — `Envelope` に `return_path_differs_env_from` を追加。
 ### Security — D2128: `Return-Path:` と `Apparently-From:`/`Apparently-Sender:` 系の不一致アドレス (返送先と sendmail 差出人記録の食い違い) を検出 — `Envelope` に `return_path_differs_apparently_from` を追加。
 ### Security — D2129: `X-Envelope-From:` 等のエンベロープ差出人記録と `Apparently-From:` 系の不一致アドレス (二つの差出人記録の食い違い) を検出 — `Envelope` に `env_from_differs_apparently_from` を追加。
