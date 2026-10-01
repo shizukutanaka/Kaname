@@ -1660,3 +1660,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2244 | Apparently-From 系のドット違反値 (表差出人記録の dot-atom 違反) | 差出人履歴ずれ |
 | D2245 | X-Original-To のドット違反値 (元宛先記録の dot-atom 違反) | 元受取人ずれ |
 | D2246 | X-Original-From のドット違反値 (元差出人記録の dot-atom 違反) | 元差出人ずれ |
+| D2247 | X-Original-Cc のドット違反値 (元副宛記録の dot-atom 違反) | 副宛履歴ずれ |
+| D2248 | X-Original-Reply-To のドット違反値 (元返信口記録の dot-atom 違反) | 返信先履歴ずれ |
+| D2249 | Disposition-Notification-To のドット違反値 (開封通知先記録の dot-atom 違反) | 通知先ずれ |
+| D2250 | Return-Receipt-To のドット違反値 (受領通知先記録の dot-atom 違反) | 通知先ずれ |

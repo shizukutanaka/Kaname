@@ -2196,6 +2196,14 @@ pub struct Envelope {
     pub x_orig_to_dotmal: bool,
     /// `X-Original-From:` の値がドット配置違反 (D2246 — 元差出人ずれ)。
     pub x_orig_from_dotmal: bool,
+    /// `X-Original-Cc:` の値がドット配置違反 (D2247 — 副宛履歴ずれ)。
+    pub x_orig_cc_dotmal: bool,
+    /// `X-Original-Reply-To:` の値がドット配置違反 (D2248 — 返信先履歴ずれ)。
+    pub x_orig_reply_to_dotmal: bool,
+    /// `Disposition-Notification-To:` の値がドット配置違反 (D2249 — 通知先ずれ)。
+    pub disposition_to_dotmal: bool,
+    /// `Return-Receipt-To:` の値がドット配置違反 (D2250 — 通知先ずれ)。
+    pub return_receipt_dotmal: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5399,6 +5407,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_dotmal = has_apparently_from_dotmal(bytes);
     let x_orig_to_dotmal = has_x_orig_to_dotmal(bytes);
     let x_orig_from_dotmal = has_x_orig_from_dotmal(bytes);
+    let x_orig_cc_dotmal = has_x_orig_cc_dotmal(bytes);
+    let x_orig_reply_to_dotmal = has_x_orig_reply_to_dotmal(bytes);
+    let disposition_to_dotmal = has_disposition_to_dotmal(bytes);
+    let return_receipt_dotmal = has_return_receipt_dotmal(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6402,6 +6414,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_dotmal,
         x_orig_to_dotmal,
         x_orig_from_dotmal,
+        x_orig_cc_dotmal,
+        x_orig_reply_to_dotmal,
+        disposition_to_dotmal,
+        return_receipt_dotmal,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42929,6 +42945,197 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Original-Cc:` の値がドット配置違反の宛名形か判定する
+/// (D2247)。
+///
+/// 書き換え前の副宛先を記す欄なのに `c..d@y`/`.c@y`/`c@.y` のよ
+/// うな addr-spec の dot-atom 規則違反 — 違反を許容して読む実
+/// 装と拒否する実装で副宛履歴がずれる (空白入り値は D2231)。
+#[must_use]
+pub fn has_x_orig_cc_dotmal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-cc"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+            && (v.contains("..")
+                || v.starts_with('.')
+                || v.ends_with('.')
+                || v.contains(".@")
+                || v.contains("@."))
+    })
+}
+
+/// `X-Original-Reply-To:` の値がドット配置違反の宛名形か判定す
+/// る (D2248)。
+///
+/// 書き換え前の返信口を記す欄なのに dot-atom 規則違反 — 許容す
+/// る実装と拒否する実装で返信先履歴がずれる (空白入り値は
+/// D2232)。
+#[must_use]
+pub fn has_x_orig_reply_to_dotmal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-reply-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+            && (v.contains("..")
+                || v.starts_with('.')
+                || v.ends_with('.')
+                || v.contains(".@")
+                || v.contains("@."))
+    })
+}
+
+/// `Disposition-Notification-To:` の値がドット配置違反の宛名形か
+/// 判定する (D2249)。
+///
+/// 開封通知の返送先を記す欄なのに dot-atom 規則違反 — 許容する
+/// 実装と拒否する実装で通知先がずれる (空白入り値は D2233)。
+#[must_use]
+pub fn has_disposition_to_dotmal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "disposition-notification-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+            && (v.contains("..")
+                || v.starts_with('.')
+                || v.ends_with('.')
+                || v.contains(".@")
+                || v.contains("@."))
+    })
+}
+
+/// `Return-Receipt-To:` の値がドット配置違反の宛名形か判定する
+/// (D2250)。
+///
+/// 旧式受領通知の返送先を記す欄なのに dot-atom 規則違反 — 許容
+/// する実装と拒否する実装で通知先がずれる (空白入り値は
+/// D2234)。
+#[must_use]
+pub fn has_return_receipt_dotmal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "return-receipt-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+            && (v.contains("..")
+                || v.starts_with('.')
+                || v.ends_with('.')
+                || v.contains(".@")
+                || v.contains("@."))
+    })
+}
+
 /// `Apparently-To:`/`X-Apparently-To:` の値がドット配置違反の宛名
 /// 形か判定する (D2243)。
 ///
@@ -71333,6 +71540,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元副宛がドット違反なら発火() {
+        assert!(has_x_orig_cc_dotmal(
+            b"From: a@x\r\nX-Original-Cc: c..d@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_dotmal(
+            b"From: a@x\r\nX-Original-Cc: c.d@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口がドット違反なら発火() {
+        assert!(has_x_orig_reply_to_dotmal(
+            b"From: a@x\r\nX-Original-Reply-To: .r@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_dotmal(
+            b"From: a@x\r\nX-Original-Reply-To: r@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 開封先がドット違反なら発火() {
+        assert!(has_disposition_to_dotmal(
+            b"From: a@x\r\nDisposition-Notification-To: a.@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_dotmal(
+            b"From: a@x\r\nDisposition-Notification-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領先がドット違反なら発火() {
+        assert!(has_return_receipt_dotmal(
+            b"From: a@x\r\nReturn-Receipt-To: a@.x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_dotmal(
+            b"From: a@x\r\nReturn-Receipt-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
