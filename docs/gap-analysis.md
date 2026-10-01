@@ -1528,3 +1528,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2112 | X-Forwarded-* 残渣欄 (転送元情報の露出) | 転送履歴ずれ |
 | D2113 | Apparently-To == To (受取欄不在時のみ記される記録の矛盾) | 届け先ずれ |
 | D2114 | X-Original-To == To (書き換えたはずの記録の矛盾) | 届け先ずれ |
+| D2115 | X-Original-From == From (書き換えたはずの記録の矛盾) | 差出人ずれ |
+| D2116 | X-Original-Subject == Subject (書き換えたはずの記録の矛盾) | 件名ずれ |
+| D2117 | X-Original-Message-ID == Message-ID (書き換えたはずの記録の矛盾) | 識別子ずれ |
+| D2118 | X-Original-Date == Date (書き換えたはずの記録の矛盾) | 日時ずれ |
