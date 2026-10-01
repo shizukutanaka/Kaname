@@ -1616,3 +1616,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2200 | X-Original-Reply-To の複数値 (元返信口記録のカンマ連結値) | 返信先ずれ |
 | D2201 | Disposition-Notification-To の複数値 (開封通知先記録のカンマ連結値) | 通知先ずれ |
 | D2202 | Return-Receipt-To の複数値 (受領通知先記録のカンマ連結値) | 通知先ずれ |
+| D2203 | X-Confirm-Reading-To の複数値 (閲覧確認先記録のカンマ連結値) | 通知先ずれ |
+| D2204 | Resent-Reply-To の複数値 (再送返信口記録のカンマ連結値) | 返信先ずれ |
+| D2205 | Apparently-Resent-* 系の複数値 (再送残渣記録のカンマ連結値) | 再送記録ずれ |
+| D2206 | X-Original-Rcpt-To 系の複数値 (元受取人記録のカンマ連結値) | 届け先履歴ずれ |

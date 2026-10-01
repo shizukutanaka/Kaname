@@ -2108,6 +2108,14 @@ pub struct Envelope {
     pub disposition_to_addr_list: bool,
     /// `Return-Receipt-To:` の値がカンマ連結の複数値 (D2202 — 通知先ずれ)。
     pub return_receipt_addr_list: bool,
+    /// `X-Confirm-Reading-To:` の値がカンマ連結の複数値 (D2203 — 通知先ずれ)。
+    pub confirm_reading_addr_list: bool,
+    /// `Resent-Reply-To:` の値がカンマ連結の複数値 (D2204 — 返信先ずれ)。
+    pub resent_reply_to_addr_list: bool,
+    /// `Apparently-Resent-*:` 系の値がカンマ連結の複数値 (D2205 — 再送記録ずれ)。
+    pub apparently_resent_addr_list: bool,
+    /// `X-Original-Rcpt-To:` 系の値がカンマ連結の複数値 (D2206 — 届け先履歴ずれ)。
+    pub x_orig_rcpt_to_addr_list: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5267,6 +5275,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_addr_list = has_x_orig_reply_to_addr_list(bytes);
     let disposition_to_addr_list = has_disposition_to_addr_list(bytes);
     let return_receipt_addr_list = has_return_receipt_addr_list(bytes);
+    let confirm_reading_addr_list = has_confirm_reading_addr_list(bytes);
+    let resent_reply_to_addr_list = has_resent_reply_to_addr_list(bytes);
+    let apparently_resent_addr_list = has_apparently_resent_addr_list(bytes);
+    let x_orig_rcpt_to_addr_list = has_x_orig_rcpt_to_addr_list(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6226,6 +6238,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_addr_list,
         disposition_to_addr_list,
         return_receipt_addr_list,
+        confirm_reading_addr_list,
+        resent_reply_to_addr_list,
+        apparently_resent_addr_list,
+        x_orig_rcpt_to_addr_list,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42753,6 +42769,165 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Confirm-Reading-To:` の値がカンマ連結の複数値か判定する
+/// (D2203)。
+///
+/// 旧式閲覧確認の要求先を記す欄なのにカンマ連結の列の形 —
+/// 列として割る実装と一塊として読む実装で通知先がずれる
+/// (非宛名値は D2185)。
+#[must_use]
+pub fn has_confirm_reading_addr_list(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-confirm-reading-to"
+            && v.contains('@')
+            && v.contains(',')
+    })
+}
+
+/// `Resent-Reply-To:` の値がカンマ連結の複数値か判定する
+/// (D2204)。
+///
+/// 旧式再送返信口を記す欄なのにカンマ連結の列の形 —
+/// 列として割る実装と一塊として読む実装で返信先がずれる
+/// (非宛名値は D2186)。
+#[must_use]
+pub fn has_resent_reply_to_addr_list(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "resent-reply-to" && v.contains('@') && v.contains(',')
+    })
+}
+
+/// `Apparently-Resent-*:` 系の値がカンマ連結の複数値か判定する
+/// (D2205)。
+///
+/// sendmail 再送モードの残渣欄なのにカンマ連結の列の形 —
+/// 列として割る実装と一塊として読む実装で再送記録がずれる
+/// (非宛名値は D2190)。
+#[must_use]
+pub fn has_apparently_resent_addr_list(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ) && v.contains('@')
+            && v.contains(',')
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系の値がカンマ連結の複数値か判定する
+/// (D2206)。
+///
+/// 元の受取人を記す欄なのにカンマ連結の列の形 — 列として
+/// 割る実装と一塊として読む実装で届け先の履歴がずれる
+/// (非宛名値は D2189)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_addr_list(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "x-original-rcpt-to" | "x-orig-rcpt-to" | "x-rcpt-to" | "x-envelope-rcpt-to"
+        ) && v.contains('@')
+            && v.contains(',')
+    })
+}
+
 /// `X-Original-Cc:` の値がカンマ連結の複数値か判定する (D2199)。
 ///
 /// 書き換え前の副宛先を記す欄なのにカンマ連結の列の形 —
@@ -69217,6 +69392,49 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 閲覧先が列なら発火() {
+        assert!(has_confirm_reading_addr_list(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@x, e@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_addr_list(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_addr_list(
+            b"From: a@x\r\nX-Confirm-Reading-To: none\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口が列なら発火() {
+        assert!(has_resent_reply_to_addr_list(
+            b"From: a@x\r\nResent-From: a@x\r\nResent-Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nResent-Reply-To: r@y, s@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_addr_list(
+            b"From: a@x\r\nResent-From: a@x\r\nResent-Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nResent-Reply-To: r@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣が列なら発火() {
+        assert!(has_apparently_resent_addr_list(
+            b"From: a@x\r\nApparently-Resent-To: b@y, c@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_addr_list(
+            b"From: a@x\r\nApparently-Resent-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人が列なら発火() {
+        assert!(has_x_orig_rcpt_to_addr_list(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@y, c@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_addr_list(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
