@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2171: `Authentication-Results:` 系の空値 (認証結果欄の空欄) を検出 — `Envelope` に `auth_results_empty` を追加。
+### Security — D2172: `DKIM-Signature:` の空値 (署名欄の空欄) を検出 — `Envelope` に `dkim_sig_empty` を追加。
+### Security — D2173: `Received-SPF:` の空値 (SPF判定欄の空欄) を検出 — `Envelope` に `received_spf_empty` を追加。
+### Security — D2174: 優先度欄 (`X-Priority:`/`X-MSMail-Priority:`/`Priority:`/`Importance:`) の空値を検出 — `Envelope` に `priority_headers_empty` を追加。
 ### Security — D2167: `X-Original-To-Headers:` の空値 (元宛先欄記録の空欄) を検出 — `Envelope` に `x_orig_to_headers_empty` を追加。
 ### Security — D2168: `X-Original-Rcpt-To:` 系の空値 (元受取人記録の空欄) を検出 — `Envelope` に `x_orig_rcpt_to_empty` を追加。
 ### Security — D2169: `X-Original-Authentication-Results:` の空値 (元認証結果記録の空欄) を検出 — `Envelope` に `x_orig_ar_empty` を追加。

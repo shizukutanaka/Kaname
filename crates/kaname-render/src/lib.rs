@@ -2044,6 +2044,14 @@ pub struct Envelope {
     pub x_orig_ar_empty: bool,
     /// `X-OriginalArrivalTime:` 系の空値 (D2170 — 日時履歴ずれ)。
     pub x_orig_arrival_empty: bool,
+    /// `Authentication-Results:` 系の空値 (D2171 — 認証評価ずれ)。
+    pub auth_results_empty: bool,
+    /// `DKIM-Signature:` の空値 (D2172 — 署名評価ずれ)。
+    pub dkim_sig_empty: bool,
+    /// `Received-SPF:` の空値 (D2173 — 認証評価ずれ)。
+    pub received_spf_empty: bool,
+    /// 優先度欄の空値 (D2174 — 緊急度表示ずれ)。
+    pub priority_headers_empty: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5171,6 +5179,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_rcpt_to_empty = has_x_orig_rcpt_to_empty(bytes);
     let x_orig_ar_empty = has_x_orig_ar_empty(bytes);
     let x_orig_arrival_empty = has_x_orig_arrival_empty(bytes);
+    let auth_results_empty = has_auth_results_empty(bytes);
+    let dkim_sig_empty = has_dkim_sig_empty(bytes);
+    let received_spf_empty = has_received_spf_empty(bytes);
+    let priority_headers_empty = has_priority_headers_empty(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6098,6 +6110,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_rcpt_to_empty,
         x_orig_ar_empty,
         x_orig_arrival_empty,
+        auth_results_empty,
+        dkim_sig_empty,
+        received_spf_empty,
+        priority_headers_empty,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42625,6 +42641,150 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Authentication-Results:` 系の値が空か判定する (D2171)。
+///
+/// 認証結果を記す欄なのに値を持たない形 — 空欄を破棄する
+/// 実装と「認証記録あり・結果不明」と読む実装で認証評価が
+/// ずれる (ARC 系は `arc_bimi_marks`、内容評価は別系統)。
+#[must_use]
+pub fn has_auth_results_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(
+            l[..c].trim(),
+            "authentication-results" | "x-authentication-results"
+        ) && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `DKIM-Signature:` の値が空か判定する (D2172)。
+///
+/// 署名本体を入れる欄なのに値を持たない形 — 空欄を破棄
+/// する実装と「署名あり・空の署名」と読む実装で署名評価
+/// がずれる (DomainKeys 系の廃欄は `obsolete_signature_headers`
+/// が担当)。
+#[must_use]
+pub fn has_dkim_sig_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim() == "dkim-signature" && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `Received-SPF:` の値が空か判定する (D2173)。
+///
+/// SPF 判定結果を記す欄なのに値を持たない形 — 空欄を破棄
+/// する実装と「判定記録あり・結果不明」と読む実装で
+/// 認証評価がずれる (`X-Received-SPF` 等の受信記録自称は
+/// `auth_result_marks` が担当)。
+#[must_use]
+pub fn has_received_spf_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim() == "received-spf" && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// 優先度欄 (`X-Priority:`/`X-MSMail-Priority:`/`Priority:`/
+/// `Importance:`) の値が空か判定する (D2174)。
+///
+/// 優先度を記す欄なのに値を持たない形 — 空欄を破棄する
+/// 実装と既定優先度を当てる実装で緊急度表示がずれる。
+#[must_use]
+pub fn has_priority_headers_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(
+            l[..c].trim(),
+            "x-priority" | "x-msmail-priority" | "priority" | "importance"
+        ) && l[c + 1..].trim().is_empty()
+    })
+}
+
 /// `X-Original-To-Headers:` の値が空か判定する (D2167)。
 ///
 /// 宛先欄ごと書き換えられた場合に元の宛先欄全体を記録
@@ -67893,6 +68053,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 認証結果欄が空なら発火() {
+        assert!(has_auth_results_empty(
+            b"From: a@x\r\nAuthentication-Results:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_auth_results_empty(
+            b"From: a@x\r\nAuthentication-Results: spf=pass\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 署名欄が空なら発火() {
+        assert!(has_dkim_sig_empty(
+            b"From: a@x\r\nDKIM-Signature:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_dkim_sig_empty(
+            b"From: a@x\r\nDKIM-Signature: v=1; a=rsa-sha256; b=xyz\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn spf判定欄が空なら発火() {
+        assert!(has_received_spf_empty(
+            b"From: a@x\r\nReceived-SPF:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_received_spf_empty(
+            b"From: a@x\r\nReceived-SPF: pass\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 優先度欄が空なら発火() {
+        assert!(has_priority_headers_empty(
+            b"From: a@x\r\nX-Priority:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_priority_headers_empty(
+            b"From: a@x\r\nImportance: high\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

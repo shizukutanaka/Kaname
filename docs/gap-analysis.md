@@ -1584,3 +1584,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2168 | X-Original-Rcpt-To 系の空値 (元受取人記録の空欄) | 届け先履歴ずれ |
 | D2169 | X-Original-Authentication-Results の空値 (元認証結果記録の空欄) | 認証履歴ずれ |
 | D2170 | X-OriginalArrivalTime 系の空値 (元到着時刻記録の空欄) | 日時履歴ずれ |
+| D2171 | Authentication-Results 系の空値 (認証結果欄の空欄) | 認証評価ずれ |
+| D2172 | DKIM-Signature の空値 (署名欄の空欄) | 署名評価ずれ |
+| D2173 | Received-SPF の空値 (SPF判定欄の空欄) | 認証評価ずれ |
+| D2174 | 優先度欄 (X-Priority/X-MSMail-Priority/Priority/Importance) の空値 | 緊急度表示ずれ |

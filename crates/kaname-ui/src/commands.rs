@@ -7181,6 +7181,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_arrival_empty {
         render_risks.push("元到着時刻記録が空です—空欄の扱いで日時の履歴がずれます".to_string());
     }
+    if env.auth_results_empty {
+        render_risks.push("認証結果欄が空です—空欄の扱いで認証評価がずれます".to_string());
+    }
+    if env.dkim_sig_empty {
+        render_risks.push("署名欄が空です—空欄の扱いで署名評価がずれます".to_string());
+    }
+    if env.received_spf_empty {
+        render_risks.push("SPF判定欄が空です—空欄の扱いで認証評価がずれます".to_string());
+    }
+    if env.priority_headers_empty {
+        render_risks.push("優先度欄が空です—空欄の扱いで緊急度表示がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
