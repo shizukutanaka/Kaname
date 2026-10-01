@@ -2020,6 +2020,14 @@ pub struct Envelope {
     pub x_orig_msgid_empty: bool,
     /// `X-Original-Subject:` の空値 (D2158 — 件名履歴ずれ)。
     pub x_orig_subject_empty: bool,
+    /// `X-Original-Cc:` の空値 (D2159 — 届け先履歴ずれ)。
+    pub x_orig_cc_empty: bool,
+    /// `X-Original-Reply-To:` の空値 (D2160 — 返信先履歴ずれ)。
+    pub x_orig_reply_to_empty: bool,
+    /// `X-Original-Date:` の空値 (D2161 — 日時履歴ずれ)。
+    pub x_orig_date_empty: bool,
+    /// `X-Original-References:` の空値 (D2162 — 糸参照履歴ずれ)。
+    pub x_orig_refs_empty: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5135,6 +5143,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_from_empty = has_x_orig_from_empty(bytes);
     let x_orig_msgid_empty = has_x_orig_msgid_empty(bytes);
     let x_orig_subject_empty = has_x_orig_subject_empty(bytes);
+    let x_orig_cc_empty = has_x_orig_cc_empty(bytes);
+    let x_orig_reply_to_empty = has_x_orig_reply_to_empty(bytes);
+    let x_orig_date_empty = has_x_orig_date_empty(bytes);
+    let x_orig_refs_empty = has_x_orig_refs_empty(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6050,6 +6062,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_from_empty,
         x_orig_msgid_empty,
         x_orig_subject_empty,
+        x_orig_cc_empty,
+        x_orig_reply_to_empty,
+        x_orig_date_empty,
+        x_orig_refs_empty,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42577,6 +42593,144 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Original-Cc:` の値が空か判定する (D2159)。
+///
+/// 書き換え前の副宛先を記録する欄なのに値を持たない形 —
+/// 空欄を破棄する実装と空の記録として扱う実装で届け先の
+/// 履歴がずれる。
+#[must_use]
+pub fn has_x_orig_cc_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim() == "x-original-cc" && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `X-Original-Reply-To:` の値が空か判定する (D2160)。
+///
+/// 書き換え前の返信口を記録する欄なのに値を持たない形 —
+/// 空欄を破棄する実装と空の記録として扱う実装で返信先の
+/// 履歴がずれる。
+#[must_use]
+pub fn has_x_orig_reply_to_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim() == "x-original-reply-to"
+            && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `X-Original-Date:` の値が空か判定する (D2161)。
+///
+/// 書き換え前の日時を記録する欄なのに値を持たない形 —
+/// 空欄を破棄する実装と空の記録として扱う実装で日時の
+/// 履歴がずれる。
+#[must_use]
+pub fn has_x_orig_date_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim() == "x-original-date" && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `X-Original-References:` の値が空か判定する (D2162)。
+///
+/// 書き換え前の糸参照を記録する欄なのに値を持たない形 —
+/// 空欄を破棄する実装と空の記録として扱う実装で糸参照の
+/// 履歴がずれる。
+#[must_use]
+pub fn has_x_orig_refs_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim() == "x-original-references"
+            && l[c + 1..].trim().is_empty()
+    })
+}
+
 /// `X-Original-To:` の値が空か判定する (D2155)。
 ///
 /// 書き換え前の受取人を記録する欄なのに値を持たない形 —
@@ -67399,6 +67553,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元副宛先記録が空なら発火() {
+        assert!(has_x_orig_cc_empty(
+            b"From: a@x\r\nX-Original-Cc:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_empty(
+            b"From: a@x\r\nX-Original-Cc: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口記録が空なら発火() {
+        assert!(has_x_orig_reply_to_empty(
+            b"From: a@x\r\nX-Original-Reply-To:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_empty(
+            b"From: a@x\r\nX-Original-Reply-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元日時記録が空なら発火() {
+        assert!(has_x_orig_date_empty(
+            b"From: a@x\r\nX-Original-Date:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_date_empty(
+            b"From: a@x\r\nX-Original-Date: Sat, 11 Jul 2026 10:00:00 +0000\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元糸参照記録が空なら発火() {
+        assert!(has_x_orig_refs_empty(
+            b"From: a@x\r\nX-Original-References:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_refs_empty(
+            b"From: a@x\r\nX-Original-References: <a@x>\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

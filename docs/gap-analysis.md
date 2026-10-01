@@ -1572,3 +1572,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2156 | X-Original-From の空値 (元差出人記録の空欄) | 差出人履歴ずれ |
 | D2157 | X-Original-Message-ID の空値 (元識別子記録の空欄) | 識別子履歴ずれ |
 | D2158 | X-Original-Subject の空値 (元件名記録の空欄) | 件名履歴ずれ |
+| D2159 | X-Original-Cc の空値 (元副宛先記録の空欄) | 届け先履歴ずれ |
+| D2160 | X-Original-Reply-To の空値 (元返信口記録の空欄) | 返信先履歴ずれ |
+| D2161 | X-Original-Date の空値 (元日時記録の空欄) | 日時履歴ずれ |
+| D2162 | X-Original-References の空値 (元糸参照記録の空欄) | 糸参照履歴ずれ |

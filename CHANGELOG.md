@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2159: `X-Original-Cc:` の空値 (元副宛先記録の空欄) を検出 — `Envelope` に `x_orig_cc_empty` を追加。
+### Security — D2160: `X-Original-Reply-To:` の空値 (元返信口記録の空欄) を検出 — `Envelope` に `x_orig_reply_to_empty` を追加。
+### Security — D2161: `X-Original-Date:` の空値 (元日時記録の空欄) を検出 — `Envelope` に `x_orig_date_empty` を追加。
+### Security — D2162: `X-Original-References:` の空値 (元糸参照記録の空欄) を検出 — `Envelope` に `x_orig_refs_empty` を追加。
 ### Security — D2155: `X-Original-To:` の空値 (元受取人記録の空欄) を検出 — `Envelope` に `x_orig_to_empty` を追加。
 ### Security — D2156: `X-Original-From:` の空値 (元差出人記録の空欄) を検出 — `Envelope` に `x_orig_from_empty` を追加。
 ### Security — D2157: `X-Original-Message-ID:` の空値 (元識別子記録の空欄) を検出 — `Envelope` に `x_orig_msgid_empty` を追加。
