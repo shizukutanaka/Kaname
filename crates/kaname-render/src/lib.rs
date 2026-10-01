@@ -2028,6 +2028,14 @@ pub struct Envelope {
     pub x_orig_date_empty: bool,
     /// `X-Original-References:` の空値 (D2162 — 糸参照履歴ずれ)。
     pub x_orig_refs_empty: bool,
+    /// `X-Original-Bcc:` の空値 (D2163 — 届け先履歴ずれ)。
+    pub x_orig_bcc_empty: bool,
+    /// `Fcc:`/`X-Fcc:` の空値 (D2164 — 控え行き先ずれ)。
+    pub fcc_empty: bool,
+    /// `X-Forwarded-*` 群の空値 (D2165 — 転送履歴ずれ)。
+    pub x_forwarded_empty: bool,
+    /// `Apparently-Resent-*` 群の空値 (D2166 — 再送履歴ずれ)。
+    pub apparently_resent_empty: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5147,6 +5155,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_empty = has_x_orig_reply_to_empty(bytes);
     let x_orig_date_empty = has_x_orig_date_empty(bytes);
     let x_orig_refs_empty = has_x_orig_refs_empty(bytes);
+    let x_orig_bcc_empty = has_x_orig_bcc_empty(bytes);
+    let fcc_empty = has_fcc_empty(bytes);
+    let x_forwarded_empty = has_x_forwarded_empty(bytes);
+    let apparently_resent_empty = has_apparently_resent_empty(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6066,6 +6078,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_empty,
         x_orig_date_empty,
         x_orig_refs_empty,
+        x_orig_bcc_empty,
+        fcc_empty,
+        x_forwarded_empty,
+        apparently_resent_empty,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42593,6 +42609,159 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Original-Bcc:` の値が空か判定する (D2163)。
+///
+/// 見せないはずの隠し宛先を記録する欄なのに値を持たない
+/// 形 — 空欄を破棄する実装と空の記録として扱う実装で
+/// 届け先の履歴がずれる。
+#[must_use]
+pub fn has_x_orig_bcc_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim() == "x-original-bcc" && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `Fcc:`/`X-Fcc:` の値が空か判定する (D2164)。
+///
+/// 送信側の格納フォルダを記す控え欄なのに値を持たない
+/// 形 — 空欄を破棄する実装と空の記録として扱う実装で
+/// 控えの行き先がずれる。
+#[must_use]
+pub fn has_fcc_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(l[..c].trim(), "fcc" | "x-fcc") && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `X-Forwarded-*` 群の値が空か判定する (D2165)。
+///
+/// 前段転送者が残す転送元情報の記録欄なのに値を持たない
+/// 形 — 空欄を破棄する実装と空の記録として扱う実装で
+/// 転送履歴がずれる。
+#[must_use]
+pub fn has_x_forwarded_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(
+            l[..c].trim(),
+            "x-forwarded-for"
+                | "x-forwarded-message-id"
+                | "x-forwarded-from"
+                | "x-forwarded-date"
+                | "x-forwarded-to"
+                | "x-forwarded-sender"
+                | "x-forwarded-subject"
+        ) && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `Apparently-Resent-*` 群の値が空か判定する (D2166)。
+///
+/// sendmail 再送モードの残渣欄なのに値を持たない形 —
+/// 空欄を破棄する実装と空の記録として扱う実装で再送
+/// 履歴がずれる。
+#[must_use]
+pub fn has_apparently_resent_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(
+            l[..c].trim(),
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ) && l[c + 1..].trim().is_empty()
+    })
+}
+
 /// `X-Original-Cc:` の値が空か判定する (D2159)。
 ///
 /// 書き換え前の副宛先を記録する欄なのに値を持たない形 —
@@ -67553,6 +67722,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元隠し宛記録が空なら発火() {
+        assert!(has_x_orig_bcc_empty(
+            b"From: a@x\r\nX-Original-Bcc:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_bcc_empty(
+            b"From: a@x\r\nX-Original-Bcc: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 控え欄が空なら発火() {
+        assert!(has_fcc_empty(
+            b"From: a@x\r\nFcc:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_fcc_empty(
+            b"From: a@x\r\nX-Fcc: Sent\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 転送元記録が空なら発火() {
+        assert!(has_x_forwarded_empty(
+            b"From: a@x\r\nX-Forwarded-From:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_forwarded_empty(
+            b"From: a@x\r\nX-Forwarded-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣記録が空なら発火() {
+        assert!(has_apparently_resent_empty(
+            b"From: a@x\r\nApparently-Resent-To:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_empty(
+            b"From: a@x\r\nX-Apparently-Resent-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
