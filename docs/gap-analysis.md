@@ -1668,3 +1668,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2252 | Resent-Reply-To のドット違反値 (再送返信口記録の dot-atom 違反) | 返信先ずれ |
 | D2253 | Apparently-Resent-* のドット違反値 (再送残渣記録の dot-atom 違反) | 再送履歴ずれ |
 | D2254 | X-Original-Rcpt-To のドット違反値 (元受取人記録の dot-atom 違反) | 受取人履歴ずれ |
+| D2255 | Envelope-To の複数@値 (封書宛先記録の addr-spec 違反) | 封書宛先ずれ |
+| D2256 | Delivered-To の複数@値 (配達記録の addr-spec 違反) | 配達履歴ずれ |
+| D2257 | X-Envelope-From の複数@値 (封書差出人記録の addr-spec 違反) | 差出人履歴ずれ |
+| D2258 | Errors-To の複数@値 (返送先記録の addr-spec 違反) | 返送先ずれ |

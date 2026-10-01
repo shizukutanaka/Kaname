@@ -7433,6 +7433,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_rcpt_to_dotmal {
         render_risks.push("元受取人記録がドット配置違反です—違反の扱いで受取人履歴がずれます".to_string());
     }
+    if env.env_to_atdup {
+        render_risks.push("封書宛先記録に@が複数です—@の切り分けで封書宛先がずれます".to_string());
+    }
+    if env.delivered_to_atdup {
+        render_risks.push("配達記録に@が複数です—@の切り分けで配達履歴がずれます".to_string());
+    }
+    if env.env_from_atdup {
+        render_risks.push("封書差出人記録に@が複数です—@の切り分けで差出人履歴がずれます".to_string());
+    }
+    if env.errors_to_atdup {
+        render_risks.push("返送先記録に@が複数です—@の切り分けで返送先がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
