@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2207: `Envelope-To:` 系の括弧・引用囲い値 (生宛名記録の囲い形) を検出 — `Envelope` に `env_to_bracketed` を追加。
+### Security — D2208: `Delivered-To:` の括弧・引用囲い値 (配達記録の囲い形) を検出 — `Envelope` に `delivered_to_bracketed` を追加。
+### Security — D2209: `X-Envelope-From:` 系の括弧・引用囲い値 (封書差出人記録の囲い形) を検出 — `Envelope` に `env_from_bracketed` を追加。
+### Security — D2210: `Errors-To:` の括弧・引用囲い値 (返送先記録の囲い形) を検出 — `Envelope` に `errors_to_bracketed` を追加。
 ### Security — D2203: `X-Confirm-Reading-To:` の複数値 (閲覧確認先記録のカンマ連結値) を検出 — `Envelope` に `confirm_reading_addr_list` を追加。
 ### Security — D2204: `Resent-Reply-To:` の複数値 (再送返信口記録のカンマ連結値) を検出 — `Envelope` に `resent_reply_to_addr_list` を追加。
 ### Security — D2205: `Apparently-Resent-*:` 系の複数値 (再送残渣記録のカンマ連結値) を検出 — `Envelope` に `apparently_resent_addr_list` を追加。

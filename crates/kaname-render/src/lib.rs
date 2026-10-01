@@ -2116,6 +2116,14 @@ pub struct Envelope {
     pub apparently_resent_addr_list: bool,
     /// `X-Original-Rcpt-To:` 系の値がカンマ連結の複数値 (D2206 — 届け先履歴ずれ)。
     pub x_orig_rcpt_to_addr_list: bool,
+    /// `Envelope-To:` 系の値が括弧・引用囲い (D2207 — 届け先ずれ)。
+    pub env_to_bracketed: bool,
+    /// `Delivered-To:` の値が括弧・引用囲い (D2208 — 届け先履歴ずれ)。
+    pub delivered_to_bracketed: bool,
+    /// `X-Envelope-From:` 系の値が括弧・引用囲い (D2209 — 差出人ずれ)。
+    pub env_from_bracketed: bool,
+    /// `Errors-To:` の値が括弧・引用囲い (D2210 — 返送先評価ずれ)。
+    pub errors_to_bracketed: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5279,6 +5287,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let resent_reply_to_addr_list = has_resent_reply_to_addr_list(bytes);
     let apparently_resent_addr_list = has_apparently_resent_addr_list(bytes);
     let x_orig_rcpt_to_addr_list = has_x_orig_rcpt_to_addr_list(bytes);
+    let env_to_bracketed = has_env_to_bracketed(bytes);
+    let delivered_to_bracketed = has_delivered_to_bracketed(bytes);
+    let env_from_bracketed = has_env_from_bracketed(bytes);
+    let errors_to_bracketed = has_errors_to_bracketed(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6242,6 +6254,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_reply_to_addr_list,
         apparently_resent_addr_list,
         x_orig_rcpt_to_addr_list,
+        env_to_bracketed,
+        delivered_to_bracketed,
+        env_from_bracketed,
+        errors_to_bracketed,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42769,6 +42785,180 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` の値が括弧・引用で囲まれた形か
+/// 判定する (D2207)。
+///
+/// 生の宛名を記す欄なのに `<a@x>`/`"a@x"`/`(c)a@x` のような囲いの
+/// 形 — 括弧を剥がす実装と字面どおり読む実装で届け先がずれる
+/// (非宛名値は D2175、複数値は D2191)。
+#[must_use]
+pub fn has_env_to_bracketed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(l[..c].trim(), "envelope-to" | "x-envelope-to")
+            && v.contains('@')
+            && !v.contains(',')
+            && (v.contains('<')
+                || v.contains('>')
+                || v.contains('"')
+                || v.contains('('))
+    })
+}
+
+/// `Delivered-To:` の値が括弧・引用で囲まれた形か判定する
+/// (D2208)。
+///
+/// 最終配達先を記す欄なのに括弧や引用の囲いの形 — 剥がす実装
+/// と字面どおり読む実装で届け先の履歴がずれる (非宛名値は
+/// D2187、複数値は D2192)。
+#[must_use]
+pub fn has_delivered_to_bracketed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "delivered-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && (v.contains('<')
+                || v.contains('>')
+                || v.contains('"')
+                || v.contains('('))
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:` 系の値が括弧・引用で囲まれた
+/// 形か判定する (D2209)。
+///
+/// 封書差出人を記す欄なのに括弧や引用の囲いの形 — 剥がす実装
+/// と字面どおり読む実装で差出人がずれる (非宛名値は D2177、
+/// 複数値は D2193)。
+#[must_use]
+pub fn has_env_from_bracketed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "x-envelope-from"
+                | "x-envelope-sender"
+                | "x-mailfrom"
+                | "x-mail-from"
+                | "x-original-sender"
+                | "x-orig-sender"
+        ) && v.contains('@')
+            && !v.contains(',')
+            && (v.contains('<')
+                || v.contains('>')
+                || v.contains('"')
+                || v.contains('('))
+    })
+}
+
+/// `Errors-To:` の値が括弧・引用で囲まれた形か判定する (D2210)。
+///
+/// 返送先を記す欄なのに括弧や引用の囲いの形 — 剥がす実装と
+/// 字面どおり読む実装で返送先の評価がずれる (非宛名値は
+/// D2188、複数値は D2194)。
+#[must_use]
+pub fn has_errors_to_bracketed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "errors-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && (v.contains('<')
+                || v.contains('>')
+                || v.contains('"')
+                || v.contains('('))
+    })
+}
+
 /// `X-Confirm-Reading-To:` の値がカンマ連結の複数値か判定する
 /// (D2203)。
 ///
@@ -69392,6 +69582,55 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 封書宛先が括弧なら発火() {
+        assert!(has_env_to_bracketed(
+            b"From: a@x\r\nEnvelope-To: <b@y>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_bracketed(
+            b"From: a@x\r\nEnvelope-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_bracketed(
+            b"From: a@x\r\nEnvelope-To: b@y, c@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_bracketed(
+            b"From: a@x\r\nEnvelope-To: <foo>\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 配達記録が括弧なら発火() {
+        assert!(has_delivered_to_bracketed(
+            b"From: a@x\r\nDelivered-To: <b@y>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(has_delivered_to_bracketed(
+            b"From: a@x\r\nDelivered-To: \"b@y\"\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_bracketed(
+            b"From: a@x\r\nDelivered-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人が括弧なら発火() {
+        assert!(has_env_from_bracketed(
+            b"From: a@x\r\nX-Envelope-From: <a@x>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_bracketed(
+            b"From: a@x\r\nX-Envelope-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先が括弧なら発火() {
+        assert!(has_errors_to_bracketed(
+            b"From: a@x\r\nErrors-To: <a@x>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_bracketed(
+            b"From: a@x\r\nErrors-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
