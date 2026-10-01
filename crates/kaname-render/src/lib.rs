@@ -2156,6 +2156,14 @@ pub struct Envelope {
     pub env_from_spaced: bool,
     /// `Errors-To:` の値が空白入り宛名形 (D2226 — 返送先ずれ)。
     pub errors_to_spaced: bool,
+    /// `Apparently-To:` 系の値が空白入り宛名形 (D2227 — 受取人履歴ずれ)。
+    pub apparently_to_spaced: bool,
+    /// `Apparently-From:` 系の値が空白入り宛名形 (D2228 — 差出人履歴ずれ)。
+    pub apparently_from_spaced: bool,
+    /// `X-Original-To:` の値が空白入り宛名形 (D2229 — 元受取人ずれ)。
+    pub x_orig_to_spaced: bool,
+    /// `X-Original-From:` の値が空白入り宛名形 (D2230 — 元差出人ずれ)。
+    pub x_orig_from_spaced: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5339,6 +5347,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_spaced = has_delivered_to_spaced(bytes);
     let env_from_spaced = has_env_from_spaced(bytes);
     let errors_to_spaced = has_errors_to_spaced(bytes);
+    let apparently_to_spaced = has_apparently_to_spaced(bytes);
+    let apparently_from_spaced = has_apparently_from_spaced(bytes);
+    let x_orig_to_spaced = has_x_orig_to_spaced(bytes);
+    let x_orig_from_spaced = has_x_orig_from_spaced(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6322,6 +6334,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_spaced,
         env_from_spaced,
         errors_to_spaced,
+        apparently_to_spaced,
+        apparently_from_spaced,
+        x_orig_to_spaced,
+        x_orig_from_spaced,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42849,6 +42865,178 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Apparently-To:`/`X-Apparently-To:` の値が空白入りの宛名形か
+/// 判定する (D2227)。
+///
+/// sendmail が残す「見せかけの宛先」記録欄なのに `b @y` のような
+/// `@` の前後に空白を挟む形 — 空白で割って先を読む実装と結合し
+/// て読む実装で受取人履歴がずれる (括弧囲み値は D2211)。
+#[must_use]
+pub fn has_apparently_to_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(l[..c].trim(), "apparently-to" | "x-apparently-to")
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系の値が空白入りの宛名形
+/// か判定する (D2228)。
+///
+/// sendmail が残す「見せかけの差出人」記録欄なのに `@` の前後に
+/// 空白を挟む形 — 分割して読む実装と結合して読む実装で差出人履
+/// 歴がずれる (括弧囲み値は D2212)。
+#[must_use]
+pub fn has_apparently_from_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "apparently-from" | "x-apparently-from" | "apparently-sender" | "x-apparently-sender"
+        ) && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
+/// `X-Original-To:` の値が空白入りの宛名形か判定する (D2229)。
+///
+/// 書き換え前の宛先を記す欄なのに `@` の前後に空白を挟む形 —
+/// 分割して読む実装と結合して読む実装で元受取人がずれる (括弧
+/// 囲み値は D2213)。
+#[must_use]
+pub fn has_x_orig_to_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
+/// `X-Original-From:` の値が空白入りの宛名形か判定する (D2230)。
+///
+/// 書き換え前の差出人を記す欄なのに `@` の前後に空白を挟む形 —
+/// 分割して読む実装と結合して読む実装で元差出人がずれる (括弧
+/// 囲み値は D2214)。
+#[must_use]
+pub fn has_x_orig_from_spaced(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-from"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() > 1
+    })
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` の値が空白入りの宛名形か判定する
 /// (D2223)。
 ///
@@ -70341,6 +70529,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 見せ宛が空白入りなら発火() {
+        assert!(has_apparently_to_spaced(
+            b"From: a@x\r\nApparently-To: b @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_spaced(
+            b"From: a@x\r\nApparently-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表札が空白入りなら発火() {
+        assert!(has_apparently_from_spaced(
+            b"From: a@x\r\nApparently-From: a @x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_spaced(
+            b"From: a@x\r\nApparently-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛が空白入りなら発火() {
+        assert!(has_x_orig_to_spaced(
+            b"From: a@x\r\nX-Original-To: b @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_spaced(
+            b"From: a@x\r\nX-Original-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人が空白入りなら発火() {
+        assert!(has_x_orig_from_spaced(
+            b"From: a@x\r\nX-Original-From: a @x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_spaced(
+            b"From: a@x\r\nX-Original-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
