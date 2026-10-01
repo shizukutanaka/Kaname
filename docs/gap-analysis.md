@@ -1568,3 +1568,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2152 | Return-Receipt-To の空値 (受領通知要求先の空欄) | 通知行き先ずれ |
 | D2153 | X-Confirm-Reading-To の空値 (閲覧確認要求先の空欄) | 通知行き先ずれ |
 | D2154 | Resent-Reply-To の空値 (旧式再送返信口の空欄) | 返信先ずれ |
+| D2155 | X-Original-To の空値 (元受取人記録の空欄) | 届け先履歴ずれ |
+| D2156 | X-Original-From の空値 (元差出人記録の空欄) | 差出人履歴ずれ |
+| D2157 | X-Original-Message-ID の空値 (元識別子記録の空欄) | 識別子履歴ずれ |
+| D2158 | X-Original-Subject の空値 (元件名記録の空欄) | 件名履歴ずれ |
