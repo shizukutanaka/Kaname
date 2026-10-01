@@ -1,6 +1,10 @@
 ## [Unreleased]
 
 ### Fixed — Devin Review (#678): `received_*` 節異字検出群 (138 検出器) がヘッダ区画ではなくメッセージ全体を走査しており、本文中の `Received:` 風行で誤発火していた問題を修正。全検出器を `header_end` (最初の空行) 区画へ統一。
+### Security — D2039: `References:` 末尾識別子と `In-Reply-To:` の食い違いを検出 — `Envelope` に `refs_irt_conflict` を追加 (糸参照系 D1449/`malformed_thread_refs` の補完)。
+### Security — D2040: 糸参照欄の自己参照 (`References:`/`In-Reply-To:` が自身の `Message-ID` を指す) を検出 — `Envelope` に `refs_self_reference` を追加 (欄内反復の D2038 の補完)。
+### Security — D2041: `Resent-Message-ID:` と `Message-ID:` の同一識別子を検出 — `Envelope` に `resent_msgid_same` を追加 (D1476 `incomplete_resent`・D1428 `resent_bcc` の補完)。
+### Security — D2042: 旧式欄 `Resent-Reply-To:` の残存を検出 — `Envelope` に `resent_reply_to` を追加 (Resent 系 D1476/D1428 の補完)。
 ### Security — D2038: `Message-ID:` 系欄 (refs 以外) の同一 `<id>` 反復を検出 — `Envelope` に `msgid_dup_pair` を追加 (`msgid_ref_dup`/`multi_inreply` と役割分担)。
 ### Security — D2037: `Message-ID:` 系欄の値が完全に空を検出 — `Envelope` に `msgid_empty_value` を追加 (裸値は `msgid_no_angle`/`bare_msgid_ref`)。
 ### Security — D2036: `Message-ID:` 系欄の `<a> w <b>` 対間の語を検出 — `Envelope` に `msgid_word_between_angles` を追加 (In-Reply-To は `multi_inreply`、末尾残滓は `junk_after_angle`)。

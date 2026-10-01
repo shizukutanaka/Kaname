@@ -1452,3 +1452,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2036 | `Message-ID:` 系欄の `<a> w <b>` 対間の語 | 語読み飛ばし vs 欄破棄で識別子ずれ (IRT は `multi_inreply`) |
 | D2037 | `Message-ID:` 系欄の値が完全に空 | 欄破棄 vs 空識別子受理で識別子照合ずれ |
 | D2038 | `Message-ID:` 系欄 (refs 以外) の同一 `<id>` 反復 | 一意仮定 vs 一覧読みで識別子ずれ (refs は `msgid_ref_dup`) |
+| D2039 | References 末尾id ≠ In-Reply-To id | 糸参照ずれ |
+| D2040 | References/In-Reply-To が自身の Message-ID を指す | 糸参照ずれ |
+| D2041 | Resent-Message-ID == Message-ID | 識別子ずれ |
+| D2042 | Resent-Reply-To 欄の残存 | 返信先ずれ |

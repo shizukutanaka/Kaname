@@ -1782,6 +1782,14 @@ pub struct Envelope {
     pub msgid_empty_value: bool,
     /// `Message-ID:` 系欄 (refs 以外) の同一 `<id>` 反復 (D2038 — 識別子ずれ)。
     pub msgid_dup_pair: bool,
+    /// `References:` 末尾識別子と `In-Reply-To:` の食い違い (D2039 — 糸参照ずれ)。
+    pub refs_irt_conflict: bool,
+    /// 糸参照欄に自身の `Message-ID` 識別子が含まれる (D2040 — 糸参照ずれ)。
+    pub refs_self_reference: bool,
+    /// `Resent-Message-ID:` が `Message-ID:` と同一 (D2041 — 識別子ずれ)。
+    pub resent_msgid_same: bool,
+    /// `Resent-Reply-To:` 欄が残る (D2042 — 返信先ずれ)。
+    pub resent_reply_to: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4778,6 +4786,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_word_between_angles = has_msgid_word_between_angles(bytes);
     let msgid_empty_value = has_msgid_empty_value(bytes);
     let msgid_dup_pair = has_msgid_dup_pair(bytes);
+    let refs_irt_conflict = has_refs_irt_conflict(bytes);
+    let refs_self_reference = has_refs_self_reference(bytes);
+    let resent_msgid_same = has_resent_msgid_same(bytes);
+    let resent_reply_to = has_resent_reply_to(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5574,6 +5586,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         msgid_word_between_angles,
         msgid_empty_value,
         msgid_dup_pair,
+        refs_irt_conflict,
+        refs_self_reference,
+        resent_msgid_same,
+        resent_reply_to,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -15302,9 +15318,10 @@ pub fn has_archive_claim(raw: &[u8]) -> bool {
 pub fn has_nested_msgid(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if l.starts_with(' ') || l.starts_with('\t') {
             if !first {
                 logical.push(' ');
@@ -18226,8 +18243,9 @@ pub fn has_named_zone(raw: &[u8]) -> bool {
     ];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -18272,8 +18290,9 @@ pub fn has_named_zone(raw: &[u8]) -> bool {
 pub fn has_two_digit_year(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -18789,8 +18808,9 @@ pub fn has_nonip_domain_literal(raw: &[u8]) -> bool {
 pub fn has_zoneless_date(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -19136,8 +19156,9 @@ pub fn has_bad_month_name(raw: &[u8]) -> bool {
     ];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -19346,8 +19367,9 @@ pub fn has_digit_tld_addr(raw: &[u8]) -> bool {
 pub fn has_bad_clock(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -19443,8 +19465,9 @@ pub fn has_bad_day(raw: &[u8]) -> bool {
     ];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -19528,8 +19551,9 @@ pub fn has_leading_dot_domain(raw: &[u8]) -> bool {
 pub fn has_msgid_leading_dot(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -19621,8 +19645,9 @@ pub fn has_bad_ip_literal(raw: &[u8]) -> bool {
 pub fn has_bad_tz(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -19668,8 +19693,9 @@ pub fn has_bad_tz(raw: &[u8]) -> bool {
 pub fn has_numeric_month(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -19717,8 +19743,9 @@ pub fn has_numeric_month(raw: &[u8]) -> bool {
 pub fn has_msgid_dotdot_local(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -19799,8 +19826,9 @@ pub fn has_weekday_mismatch(raw: &[u8]) -> bool {
     ];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -19856,8 +19884,9 @@ pub fn has_non_digit_year(raw: &[u8]) -> bool {
     ];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -19901,8 +19930,9 @@ pub fn has_non_digit_year(raw: &[u8]) -> bool {
 pub fn has_junk_after_zone(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -19950,8 +19980,9 @@ pub fn has_junk_after_zone(raw: &[u8]) -> bool {
 pub fn has_bare_list_id(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -20087,8 +20118,9 @@ pub fn has_fullwidth_dot_addr(raw: &[u8]) -> bool {
 pub fn has_msgid_edge_dot_local(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -20137,8 +20169,9 @@ pub fn has_month_first_date(raw: &[u8]) -> bool {
     ];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -20185,8 +20218,9 @@ pub fn has_month_first_date(raw: &[u8]) -> bool {
 pub fn has_quoted_msgid(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -20351,8 +20385,9 @@ pub fn has_bad_weekday(raw: &[u8]) -> bool {
     ];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -20395,8 +20430,9 @@ pub fn has_bad_weekday(raw: &[u8]) -> bool {
 pub fn has_fullwidth_space_addr(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -20763,8 +20799,9 @@ pub fn has_nocomma_weekday(raw: &[u8]) -> bool {
     const WD: &[&str] = &["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -21642,9 +21679,10 @@ pub fn has_quoted_semicolon(raw: &[u8]) -> bool {
 pub fn has_timeless_date(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -42061,6 +42099,189 @@ pub fn has_msgid_dup_pair(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// `References:` 末尾の識別子と `In-Reply-To:` の識別子が
+/// 食い違うか判定する (D2039)。
+///
+/// 返信点を `In-Reply-To:` から取る実装と `References:` 末尾から
+/// 取る実装で糸参照がずれる。両欄併記での不一致は経路改変・
+/// 手作り転送の兆候 (参照欄の重複は D1449、値の形異常は
+/// `malformed_thread_refs` が担当)。
+#[must_use]
+pub fn has_refs_irt_conflict(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut refs_last: Option<&str> = None;
+    let mut irt_first: Option<&str> = None;
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        let v = &l[colon + 1..];
+        if name == "references" {
+            let mut i = 0usize;
+            while let Some(lt) = v[i..].find('<') {
+                let a = i + lt + 1;
+                let Some(g) = v[a..].find('>') else { break };
+                refs_last = Some(&v[a..a + g]);
+                i = a + g + 1;
+            }
+        } else if name == "in-reply-to" && irt_first.is_none() {
+            if let Some(lt) = v.find('<') {
+                if let Some(g) = v[lt + 1..].find('>') {
+                    irt_first = Some(&v[lt + 1..lt + 1 + g]);
+                }
+            }
+        }
+    }
+    matches!((refs_last, irt_first), (Some(r), Some(i)) if r != i)
+}
+
+/// 糸参照欄 (`References:`/`In-Reply-To:`) に自身の
+/// `Message-ID:` 識別子が含まれるか判定する (D2040)。
+///
+/// 自己参照の巡回は巡回を断つ実装とそのまま辿る実装で
+/// 糸参照がずれ、深さ無制限の糸解決を止めない実装では
+/// ループの起点にもなる (欄内の同一識別子反復は D2038、
+/// 識別子の形異常は各 msgid 系検出が担当)。
+#[must_use]
+pub fn has_refs_self_reference(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut own: Option<&str> = None;
+    let mut ref_ids: Vec<&str> = Vec::new();
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        let v = &l[colon + 1..];
+        if name == "message-id" {
+            if own.is_none() {
+                if let Some(lt) = v.find('<') {
+                    if let Some(g) = v[lt + 1..].find('>') {
+                        own = Some(&v[lt + 1..lt + 1 + g]);
+                    }
+                }
+            }
+        } else if name == "references" || name == "in-reply-to" {
+            let mut i = 0usize;
+            while let Some(lt) = v[i..].find('<') {
+                let a = i + lt + 1;
+                let Some(g) = v[a..].find('>') else { break };
+                ref_ids.push(&v[a..a + g]);
+                i = a + g + 1;
+            }
+        }
+    }
+    match own {
+        Some(o) => ref_ids.iter().any(|r| *r == o),
+        None => false,
+    }
+}
+
+/// `Resent-Message-ID:` の識別子が `Message-ID:` と同一か
+/// 判定する (D2041)。
+///
+/// 識別子で索引付ける実装は再送と元信を同一視して片方を
+/// 落とし、欄ごと読む実装は別信として残す — 再送履歴の
+/// 辿り方がずれる (`Resent-*` ブロックの必須欄欠落は
+/// D1476、`Resent-Bcc:` 残存は D1428 が担当)。
+#[must_use]
+pub fn has_resent_msgid_same(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut mid: Option<&str> = None;
+    let mut rmid: Option<&str> = None;
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        let v = &l[colon + 1..];
+        if name != "message-id" && name != "resent-message-id" {
+            continue;
+        }
+        if let Some(lt) = v.find('<') {
+            if let Some(g) = v[lt + 1..].find('>') {
+                let id = &v[lt + 1..lt + 1 + g];
+                if name == "message-id" {
+                    if mid.is_none() {
+                        mid = Some(id);
+                    }
+                } else if rmid.is_none() {
+                    rmid = Some(id);
+                }
+            }
+        }
+    }
+    matches!((mid, rmid), (Some(a), Some(b)) if a == b)
+}
+
+/// `Resent-Reply-To:` 欄が残るか判定する (D2042)。
+///
+/// RFC 5322 §3.6.6 の旧式欄 — 受理して返信先に使う実装と
+/// 無視する実装で返信の届け先がずれる (`Resent-Date:`/
+/// `Resent-Message-ID:` 等の現行欄は対象外、ブロックの
+/// 必須欄欠落は D1476、順序異常は `resent_out_of_order` が担当)。
+#[must_use]
+pub fn has_resent_reply_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    text[..header_end]
+        .lines()
+        .any(|l| l.to_ascii_lowercase().starts_with("resent-reply-to:"))
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -62671,6 +62892,50 @@ mod tests {
     }
 
     #[test]
+    fn 糸参照の食い違いでは発火() {
+        assert!(has_refs_irt_conflict(
+            b"References: <a@x> <b@y>\r\nIn-Reply-To: <c@z>\r\n\r\nx"
+        ));
+        assert!(!has_refs_irt_conflict(
+            b"References: <a@x> <b@y>\r\nIn-Reply-To: <b@y>\r\n\r\nx"
+        ));
+        assert!(!has_refs_irt_conflict(
+            b"References: <a@x>\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 自己参照する糸では発火() {
+        assert!(has_refs_self_reference(
+            b"Message-ID: <a@x>\r\nReferences: <b@y> <a@x>\r\n\r\nx"
+        ));
+        assert!(!has_refs_self_reference(
+            b"Message-ID: <a@x>\r\nReferences: <b@y> <c@z>\r\n\r\nx"
+        ));
+        assert!(!has_refs_self_reference(
+            b"Message-ID: <a@x>\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送識別子の重複では発火() {
+        assert!(has_resent_msgid_same(
+            b"Message-ID: <a@x>\r\nResent-Message-ID: <a@x>\r\n\r\nx"
+        ));
+        assert!(!has_resent_msgid_same(
+            b"Message-ID: <a@x>\r\nResent-Message-ID: <b@y>\r\n\r\nx"
+        ));
+        assert!(!has_resent_msgid_same(b"Resent-Message-ID: <a@x>\r\n\r\nx"));
+    }
+
+    #[test]
+    fn 旧式の再送返信先では発火() {
+        assert!(has_resent_reply_to(b"Resent-Reply-To: a@x\r\n\r\nx"));
+        assert!(!has_resent_reply_to(b"Reply-To: a@x\r\n\r\nx"));
+        assert!(!has_resent_reply_to(b"X: 1\r\n\r\nResent-Reply-To: a@x"));
+    }
+
+    #[test]
     fn received_detectives_本文のreceived風行では発火しない() {
         // Devin Review #678: 節字検出が本文中の `Received:` 風行にも
         // 発火していた — ヘッダ区画限定で回帰確認。
@@ -62681,6 +62946,12 @@ mod tests {
         assert!(!has_received_by_gt(raw));
         assert!(!has_received_via_lt(raw));
         assert!(!has_received_multi_by(raw));
+        // 同系バグを修復した他ヘッダ欄検出も本文では発火しない
+        let raw2 = b"Message-ID: <a@b>\r\n\r\nDate: Mon, 1 Foo 2020\r\nMessage-ID: <<x>>\r\nDate: Mon 32\r\nList-ID: list";
+        assert!(!has_bad_month_name(raw2));
+        assert!(!has_nested_msgid(raw2));
+        assert!(!has_bad_day(raw2));
+        assert!(!has_bare_list_id(raw2));
         // ヘッダ内では従来どおり発火する
         let hdr = b"Received: from a#b\r\n\r\nx";
         assert!(has_received_from_hash(hdr));
