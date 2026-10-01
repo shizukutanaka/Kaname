@@ -2188,6 +2188,14 @@ pub struct Envelope {
     pub env_from_dotmal: bool,
     /// `Errors-To:` の値がドット配置違反 (D2242 — 返送先ずれ)。
     pub errors_to_dotmal: bool,
+    /// `Apparently-To:` 系の値がドット配置違反 (D2243 — 受取人履歴ずれ)。
+    pub apparently_to_dotmal: bool,
+    /// `Apparently-From:` 系の値がドット配置違反 (D2244 — 差出人履歴ずれ)。
+    pub apparently_from_dotmal: bool,
+    /// `X-Original-To:` の値がドット配置違反 (D2245 — 元受取人ずれ)。
+    pub x_orig_to_dotmal: bool,
+    /// `X-Original-From:` の値がドット配置違反 (D2246 — 元差出人ずれ)。
+    pub x_orig_from_dotmal: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5387,6 +5395,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_dotmal = has_delivered_to_dotmal(bytes);
     let env_from_dotmal = has_env_from_dotmal(bytes);
     let errors_to_dotmal = has_errors_to_dotmal(bytes);
+    let apparently_to_dotmal = has_apparently_to_dotmal(bytes);
+    let apparently_from_dotmal = has_apparently_from_dotmal(bytes);
+    let x_orig_to_dotmal = has_x_orig_to_dotmal(bytes);
+    let x_orig_from_dotmal = has_x_orig_from_dotmal(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6386,6 +6398,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_dotmal,
         env_from_dotmal,
         errors_to_dotmal,
+        apparently_to_dotmal,
+        apparently_from_dotmal,
+        x_orig_to_dotmal,
+        x_orig_from_dotmal,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42913,6 +42929,200 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Apparently-To:`/`X-Apparently-To:` の値がドット配置違反の宛名
+/// 形か判定する (D2243)。
+///
+/// sendmail が残す「見せかけの宛先」記録欄なのに `a..b@x`/`.a@x`
+/// /`a@.x` のような addr-spec の dot-atom 規則違反 — 違反を許容
+/// して読む実装と拒否する実装で受取人履歴がずれる (空白入り値
+/// は D2227)。
+#[must_use]
+pub fn has_apparently_to_dotmal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(l[..c].trim(), "apparently-to" | "x-apparently-to")
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+            && (v.contains("..")
+                || v.starts_with('.')
+                || v.ends_with('.')
+                || v.contains(".@")
+                || v.contains("@."))
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系の値がドット配置違反
+/// の宛名形か判定する (D2244)。
+///
+/// sendmail が残す「見せかけの差出人」記録欄なのに dot-atom 規則
+/// 違反 — 許容する実装と拒否する実装で差出人履歴がずれる (空白
+/// 入り値は D2228)。
+#[must_use]
+pub fn has_apparently_from_dotmal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "apparently-from" | "x-apparently-from" | "apparently-sender" | "x-apparently-sender"
+        ) && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+            && (v.contains("..")
+                || v.starts_with('.')
+                || v.ends_with('.')
+                || v.contains(".@")
+                || v.contains("@."))
+    })
+}
+
+/// `X-Original-To:` の値がドット配置違反の宛名形か判定する
+/// (D2245)。
+///
+/// 書き換え前の宛先を記す欄なのに dot-atom 規則違反 — 許容する
+/// 実装と拒否する実装で元受取人がずれる (空白入り値は D2229)。
+#[must_use]
+pub fn has_x_orig_to_dotmal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+            && (v.contains("..")
+                || v.starts_with('.')
+                || v.ends_with('.')
+                || v.contains(".@")
+                || v.contains("@."))
+    })
+}
+
+/// `X-Original-From:` の値がドット配置違反の宛名形か判定する
+/// (D2246)。
+///
+/// 書き換え前の差出人を記す欄なのに dot-atom 規則違反 — 許容す
+/// る実装と拒否する実装で元差出人がずれる (空白入り値は
+/// D2230)。
+#[must_use]
+pub fn has_x_orig_from_dotmal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-from"
+            && v.contains('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+            && (v.contains("..")
+                || v.starts_with('.')
+                || v.ends_with('.')
+                || v.contains(".@")
+                || v.contains("@."))
+    })
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` の値がドット配置違反の宛名形
 /// か判定する (D2239)。
 ///
@@ -71123,6 +71333,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 見せ宛がドット違反なら発火() {
+        assert!(has_apparently_to_dotmal(
+            b"From: a@x\r\nApparently-To: b..c@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_dotmal(
+            b"From: a@x\r\nApparently-To: b.c@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表札がドット違反なら発火() {
+        assert!(has_apparently_from_dotmal(
+            b"From: a@x\r\nApparently-From: a.@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_dotmal(
+            b"From: a@x\r\nApparently-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛がドット違反なら発火() {
+        assert!(has_x_orig_to_dotmal(
+            b"From: a@x\r\nX-Original-To: .b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_dotmal(
+            b"From: a@x\r\nX-Original-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人がドット違反なら発火() {
+        assert!(has_x_orig_from_dotmal(
+            b"From: a@x\r\nX-Original-From: a@x.\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_dotmal(
+            b"From: a@x\r\nX-Original-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

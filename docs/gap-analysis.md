@@ -1656,3 +1656,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2240 | Delivered-To のドット違反値 (配達記録の dot-atom 違反) | 配達履歴ずれ |
 | D2241 | X-Envelope-From 系のドット違反値 (封書差出人記録の dot-atom 違反) | 差出人履歴ずれ |
 | D2242 | Errors-To のドット違反値 (返送先記録の dot-atom 違反) | 返送先ずれ |
+| D2243 | Apparently-To 系のドット違反値 (見せ宛記録の dot-atom 違反) | 受取人履歴ずれ |
+| D2244 | Apparently-From 系のドット違反値 (表差出人記録の dot-atom 違反) | 差出人履歴ずれ |
+| D2245 | X-Original-To のドット違反値 (元宛先記録の dot-atom 違反) | 元受取人ずれ |
+| D2246 | X-Original-From のドット違反値 (元差出人記録の dot-atom 違反) | 元差出人ずれ |

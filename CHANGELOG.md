@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2243: `Apparently-To:`/`X-Apparently-To:` のドット配置違反値 (見せ宛記録の dot-atom 違反) を検出 — `Envelope` に `apparently_to_dotmal` を追加。
+### Security — D2244: `Apparently-From:`/`Apparently-Sender:` 系のドット配置違反値 (表差出人記録の dot-atom 違反) を検出 — `Envelope` に `apparently_from_dotmal` を追加。
+### Security — D2245: `X-Original-To:` のドット配置違反値 (元宛先記録の dot-atom 違反) を検出 — `Envelope` に `x_orig_to_dotmal` を追加。
+### Security — D2246: `X-Original-From:` のドット配置違反値 (元差出人記録の dot-atom 違反) を検出 — `Envelope` に `x_orig_from_dotmal` を追加。
 ### Security — D2239: `Envelope-To:`/`X-Envelope-To:` のドット配置違反値 (`a..b@x`/`a@.x` 形) を検出 — `Envelope` に `env_to_dotmal` を追加。
 ### Security — D2240: `Delivered-To:` のドット配置違反値 (配達記録の dot-atom 違反) を検出 — `Envelope` に `delivered_to_dotmal` を追加。
 ### Security — D2241: `X-Envelope-From:`/`X-MailFrom:` 系のドット配置違反値 (封書差出人記録の dot-atom 違反) を検出 — `Envelope` に `env_from_dotmal` を追加。
