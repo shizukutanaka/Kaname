@@ -1448,3 +1448,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2032 | `Message-ID:` 系欄の `<…>` 内側の `}` | 厳密弾き vs 緩い受理で識別子ずれ |
 | D2033 | `Message-ID:` 系欄の `<…>` 内側の `;` | 厳密弾き vs 緩い受理で識別子ずれ |
 | D2034 | `Message-ID:` 系欄の `<…>` 内側の非隣接 `<` | 厳密弾き vs 緩い受理で識別子ずれ (`<<` は `nested_msgid`) |
+| D2035 | `Message-ID:` 系欄 (refs 以外) の `<a><b>` 連結 | 境目読み vs 一語読みで識別子ずれ (refs は `refs_adjacent_angles`) |
+| D2036 | `Message-ID:` 系欄の `<a> w <b>` 対間の語 | 語読み飛ばし vs 欄破棄で識別子ずれ (IRT は `multi_inreply`) |
+| D2037 | `Message-ID:` 系欄の値が完全に空 | 欄破棄 vs 空識別子受理で識別子照合ずれ |
+| D2038 | `Message-ID:` 系欄 (refs 以外) の同一 `<id>` 反復 | 一意仮定 vs 一覧読みで識別子ずれ (refs は `msgid_ref_dup`) |

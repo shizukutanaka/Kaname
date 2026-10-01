@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D2038: `Message-ID:` 系欄 (refs 以外) の同一 `<id>` 反復を検出 — `Envelope` に `msgid_dup_pair` を追加 (`msgid_ref_dup`/`multi_inreply` と役割分担)。
+### Security — D2037: `Message-ID:` 系欄の値が完全に空を検出 — `Envelope` に `msgid_empty_value` を追加 (裸値は `msgid_no_angle`/`bare_msgid_ref`)。
+### Security — D2036: `Message-ID:` 系欄の `<a> w <b>` 対間の語を検出 — `Envelope` に `msgid_word_between_angles` を追加 (In-Reply-To は `multi_inreply`、末尾残滓は `junk_after_angle`)。
+### Security — D2035: `Message-ID:` 系欄 (refs 以外) の `<a><b>` 連結を検出 — `Envelope` に `msgid_adjacent_angles` を追加 (References は `refs_adjacent_angles`、In-Reply-To は `multi_inreply`)。
 ### Security — D2034: `Message-ID:` 系欄の `<…>` 内側の非隣接 `<` を検出 — `Envelope` に `msgid_inner_lt` を追加 (`<<` 直結は `nested_msgid`)。
 ### Security — D2033: `Message-ID:` 系欄の `<…>` 内側の `;` を検出 — `Envelope` に `msgid_inner_semi` を追加 (内側の `|`/`\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`)。
 ### Security — D2032: `Message-ID:` 系欄の `<…>` 内側の `}` を検出 — `Envelope` に `msgid_inner_rbrace` を追加 (同上)。

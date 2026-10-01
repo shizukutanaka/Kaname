@@ -1774,6 +1774,14 @@ pub struct Envelope {
     pub msgid_inner_semi: bool,
     /// `Message-ID:` 系欄の `<…>` 内側の非隣接 `<` (D2034 — 識別子ずれ)。
     pub msgid_inner_lt: bool,
+    /// `Message-ID:` 系欄 (refs 以外) の `<a><b>` 連結 (D2035 — 識別子ずれ)。
+    pub msgid_adjacent_angles: bool,
+    /// `Message-ID:` 系欄の `<a> w <b>` 対間の語 (D2036 — 識別子ずれ)。
+    pub msgid_word_between_angles: bool,
+    /// `Message-ID:` 系欄の値が空 (D2037 — 識別子ずれ)。
+    pub msgid_empty_value: bool,
+    /// `Message-ID:` 系欄 (refs 以外) の同一 `<id>` 反復 (D2038 — 識別子ずれ)。
+    pub msgid_dup_pair: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4766,6 +4774,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_inner_rbrace = has_msgid_inner_rbrace(bytes);
     let msgid_inner_semi = has_msgid_inner_semi(bytes);
     let msgid_inner_lt = has_msgid_inner_lt(bytes);
+    let msgid_adjacent_angles = has_msgid_adjacent_angles(bytes);
+    let msgid_word_between_angles = has_msgid_word_between_angles(bytes);
+    let msgid_empty_value = has_msgid_empty_value(bytes);
+    let msgid_dup_pair = has_msgid_dup_pair(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5558,6 +5570,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         msgid_inner_rbrace,
         msgid_inner_semi,
         msgid_inner_lt,
+        msgid_adjacent_angles,
+        msgid_word_between_angles,
+        msgid_empty_value,
+        msgid_dup_pair,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -41708,6 +41724,207 @@ pub fn has_msgid_inner_lt(raw: &[u8]) -> bool {
     false
 }
 
+/// `Message-ID: <a@x><b@y>` 系 — 区切りなしの識別子連結。
+/// 境目で割る実装と一語として読む実装で識別子がずれる
+/// (References 側は `refs_adjacent_angles`、In-Reply-To 側は
+/// `multi_inreply`、同一値の反復は `msgid_dup_pair`)。
+#[must_use]
+pub fn has_msgid_adjacent_angles(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let is_id = matches!(
+            lower[..colon].trim_end(),
+            "message-id"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        if v.contains("><") {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Message-ID: <a@x> w <b@y>` 系 — 識別子対の間の語。
+/// 間の語を読み飛ばす実装と欄ごと捨てる実装で識別子がずれる
+/// (In-Reply-To は `multi_inreply`、末尾の残滓は `junk_after_angle`)。
+#[must_use]
+pub fn has_msgid_word_between_angles(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let is_id = matches!(
+            lower[..colon].trim_end(),
+            "message-id"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('>') {
+            let after = &rest[a + 1..];
+            if let Some(b) = after.find('<') {
+                if after[..b].trim().chars().any(|c| !c.is_whitespace()) {
+                    return true;
+                }
+            }
+            rest = &rest[a + 1..];
+        }
+    }
+    false
+}
+
+/// `Message-ID:` 系欄の値が完全に空。
+/// 欄を捨てる実装と空識別子として受理する実装で識別子照合がずれる
+/// (値無しで `<` を欠く裸値は `msgid_no_angle` / `bare_msgid_ref`)。
+#[must_use]
+pub fn has_msgid_empty_value(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let is_id = matches!(
+            lower[..colon].trim_end(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        if v.trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Message-ID: <a@x> <a@x>` 系 — 同一 `<id>` の反復。
+/// 一意を仮定する実装と一覧として読む実装で識別子がずれる
+/// (References 側の重複は `msgid_ref_dup`、In-Reply-To は `multi_inreply`)。
+#[must_use]
+pub fn has_msgid_dup_pair(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let is_id = matches!(
+            lower[..colon].trim_end(),
+            "message-id"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut seen: Vec<&str> = Vec::new();
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = rest[a + 1..a + z].trim();
+            if !inner.is_empty() {
+                if seen.contains(&inner) {
+                    return true;
+                }
+                seen.push(inner);
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -62243,6 +62460,76 @@ mod tests {
         ));
         assert!(!has_msgid_inner_lt(b"Message-ID: a<b@c\r\n\r\nx"));
         assert!(!has_msgid_inner_lt(b""));
+    }
+
+    #[test]
+    fn msgid_adjacent_angles_連結識別子を検出する() {
+        // D2035 — `Message-ID: <a@x><b@y>`
+        assert!(has_msgid_adjacent_angles(
+            b"Message-ID: <a@x><b@y>\r\n\r\nx"
+        ));
+        assert!(has_msgid_adjacent_angles(
+            b"List-Id: <a@x><b@y>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_adjacent_angles(
+            b"References: <a@x><b@y>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_adjacent_angles(
+            b"Message-ID: <a@x> <b@y>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_adjacent_angles(b""));
+    }
+
+    #[test]
+    fn msgid_word_between_angles_対間の語を検出する() {
+        // D2036 — `Message-ID: <a@x> w <b@y>`
+        assert!(has_msgid_word_between_angles(
+            b"Message-ID: <a@x> w <b@y>\r\n\r\nx"
+        ));
+        assert!(has_msgid_word_between_angles(
+            b"References: <a@x> junk <b@y>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_word_between_angles(
+            b"In-Reply-To: <a@x> w <b@y>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_word_between_angles(
+            b"Message-ID: <a@x> <b@y>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_word_between_angles(b""));
+    }
+
+    #[test]
+    fn msgid_empty_value_空値を検出する() {
+        // D2037 — `Message-ID:` のみ
+        assert!(has_msgid_empty_value(b"Message-ID:\r\nFrom: a@b\r\n\r\nx"));
+        assert!(has_msgid_empty_value(
+            b"References: \r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_msgid_empty_value(
+            b"Message-ID: <a@x>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_empty_value(
+            b"Message-ID:\r\n <a@x>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_empty_value(b""));
+    }
+
+    #[test]
+    fn msgid_dup_pair_同一識別子の反復を検出する() {
+        // D2038 — `Message-ID: <a@x> <a@x>`
+        assert!(has_msgid_dup_pair(
+            b"Message-ID: <a@x> <a@x>\r\n\r\nx"
+        ));
+        assert!(has_msgid_dup_pair(
+            b"Content-ID: <a@x> <a@x>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_dup_pair(
+            b"Message-ID: <a@x> <b@y>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_dup_pair(
+            b"References: <a@x> <a@x>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_dup_pair(b""));
     }
 
     #[test]
