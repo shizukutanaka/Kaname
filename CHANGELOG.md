@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2139: `X-Original-Cc:` の重複出現 (元副宛先書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_cc` を追加。
+### Security — D2140: `X-Original-Reply-To:` の重複出現 (元返信口書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_reply_to` を追加。
+### Security — D2141: `X-Original-Date:` の重複出現 (元日時書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_date` を追加。
+### Security — D2142: `X-Original-References:` の重複出現 (元糸参照書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_refs` を追加。
 ### Security — D2135: `X-Original-To:` の重複出現 (元宛先書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_to` を追加。
 ### Security — D2136: `X-Original-From:` の重複出現 (元差出人書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_from` を追加。
 ### Security — D2137: `X-Original-Message-ID:` の重複出現 (元識別子書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_msgid` を追加。

@@ -7085,6 +7085,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.multi_x_orig_subject {
         render_risks.push("元の件名記録が複数あります—記録の読み分けで件名履歴がずれます".to_string());
     }
+    if env.multi_x_orig_cc {
+        render_risks.push("元の副宛先記録が複数あります—記録の読み分けで副宛先履歴がずれます".to_string());
+    }
+    if env.multi_x_orig_reply_to {
+        render_risks.push("元の返信口記録が複数あります—記録の読み分けで返信先履歴がずれます".to_string());
+    }
+    if env.multi_x_orig_date {
+        render_risks.push("元の日時記録が複数あります—記録の読み分けで日時履歴がずれます".to_string());
+    }
+    if env.multi_x_orig_refs {
+        render_risks.push("元の糸参照記録が複数あります—記録の読み分けで参照履歴がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

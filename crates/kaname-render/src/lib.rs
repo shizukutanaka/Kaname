@@ -1980,6 +1980,14 @@ pub struct Envelope {
     pub multi_x_orig_msgid: bool,
     /// `X-Original-Subject:` の重複出現 (D2138 — 件名履歴ずれ)。
     pub multi_x_orig_subject: bool,
+    /// `X-Original-Cc:` の重複出現 (D2139 — 副宛先履歴ずれ)。
+    pub multi_x_orig_cc: bool,
+    /// `X-Original-Reply-To:` の重複出現 (D2140 — 返信先履歴ずれ)。
+    pub multi_x_orig_reply_to: bool,
+    /// `X-Original-Date:` の重複出現 (D2141 — 日時履歴ずれ)。
+    pub multi_x_orig_date: bool,
+    /// `X-Original-References:` の重複出現 (D2142 — 参照履歴ずれ)。
+    pub multi_x_orig_refs: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5075,6 +5083,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let multi_x_orig_from = has_multi_x_orig_from(bytes);
     let multi_x_orig_msgid = has_multi_x_orig_msgid(bytes);
     let multi_x_orig_subject = has_multi_x_orig_subject(bytes);
+    let multi_x_orig_cc = has_multi_x_orig_cc(bytes);
+    let multi_x_orig_reply_to = has_multi_x_orig_reply_to(bytes);
+    let multi_x_orig_date = has_multi_x_orig_date(bytes);
+    let multi_x_orig_refs = has_multi_x_orig_refs(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5970,6 +5982,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         multi_x_orig_from,
         multi_x_orig_msgid,
         multi_x_orig_subject,
+        multi_x_orig_cc,
+        multi_x_orig_reply_to,
+        multi_x_orig_date,
+        multi_x_orig_refs,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42497,6 +42513,99 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Original-Cc:` が2回以上現れるか判定する (D2139)。
+///
+/// 「元の副宛先」書き換え記録は1度だけ付く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/一覧化する」で副宛先履歴の読みが
+/// 分かれる。
+#[must_use]
+pub fn has_multi_x_orig_cc(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("x-original-cc:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// `X-Original-Reply-To:` が2回以上現れるか判定する (D2140)。
+///
+/// 「元の返信口」書き換え記録は1度だけ付く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/一覧化する」で返信先履歴の読みが
+/// 分かれる。
+#[must_use]
+pub fn has_multi_x_orig_reply_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("x-original-reply-to:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// `X-Original-Date:` が2回以上現れるか判定する (D2141)。
+///
+/// 「元の日時」書き換え記録は1度だけ付く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/一覧化する」で日時履歴の読みが
+/// 分かれる。
+#[must_use]
+pub fn has_multi_x_orig_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("x-original-date:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// `X-Original-References:` が2回以上現れるか判定する
+/// (D2142)。
+///
+/// 「元の糸参照」書き換え記録は1度だけ付く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/一覧化する」で参照履歴の読みが
+/// 分かれる。
+#[must_use]
+pub fn has_multi_x_orig_refs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("x-original-references:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
 /// `X-Original-To:` が2回以上現れるか判定する (D2135)。
 ///
 /// 「元の宛先」書き換え記録は書き換えのたびに1行残る欄 — 単一の
@@ -66696,6 +66805,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元副宛記録が重複すれば発火() {
+        assert!(has_multi_x_orig_cc(
+            b"From: a@x\r\nX-Original-Cc: a@x\r\nX-Original-Cc: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_x_orig_cc(
+            b"From: a@x\r\nX-Original-Cc: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口記録が重複すれば発火() {
+        assert!(has_multi_x_orig_reply_to(
+            b"From: a@x\r\nX-Original-Reply-To: a@x\r\nX-Original-Reply-To: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_x_orig_reply_to(
+            b"From: a@x\r\nX-Original-Reply-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元日時記録が重複すれば発火() {
+        assert!(has_multi_x_orig_date(
+            b"From: a@x\r\nX-Original-Date: a\r\nX-Original-Date: b\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_x_orig_date(
+            b"From: a@x\r\nX-Original-Date: a\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元糸参照記録が重複すれば発火() {
+        assert!(has_multi_x_orig_refs(
+            b"From: a@x\r\nX-Original-References: <a@x>\r\nX-Original-References: <b@x>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_x_orig_refs(
+            b"From: a@x\r\nX-Original-References: <a@x>\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
