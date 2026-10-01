@@ -1790,6 +1790,14 @@ pub struct Envelope {
     pub resent_msgid_same: bool,
     /// `Resent-Reply-To:` 欄が残る (D2042 — 返信先ずれ)。
     pub resent_reply_to: bool,
+    /// msgid 系欄 (refs 以外) の識別子前の隔離コメント (D2043 — 識別子ずれ)。
+    pub msgid_comment_lead: bool,
+    /// `Subject:` の地域返信・転送接頭語 (D2044 — 糸認識ずれ)。
+    pub subject_locale_prefix: bool,
+    /// `Resent-*` ブロックの受取欄欠落 (D2045 — 配送先ずれ)。
+    pub resent_no_recipient: bool,
+    /// 非規格の `Resent-*` 欄名 (D2046 — 再送ずれ)。
+    pub resent_unknown_field: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4790,6 +4798,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let refs_self_reference = has_refs_self_reference(bytes);
     let resent_msgid_same = has_resent_msgid_same(bytes);
     let resent_reply_to = has_resent_reply_to(bytes);
+    let msgid_comment_lead = has_msgid_comment_lead(bytes);
+    let subject_locale_prefix = has_subject_locale_prefix(bytes);
+    let resent_no_recipient = has_resent_no_recipient(bytes);
+    let resent_unknown_field = has_resent_unknown_field(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5590,6 +5602,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         refs_self_reference,
         resent_msgid_same,
         resent_reply_to,
+        msgid_comment_lead,
+        subject_locale_prefix,
+        resent_no_recipient,
+        resent_unknown_field,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42101,6 +42117,177 @@ pub fn has_msgid_dup_pair(raw: &[u8]) -> bool {
     false
 }
 
+/// `Message-ID:` 系欄 (refs 以外) の値が空白隔てのコメントで
+/// 始まるか判定する (D2043)。
+///
+/// コメントを剥がして識別子だけ拾う実装と欄ごと捨てる実装で
+/// 識別子の照合がずれる。値頭直結の `)<` / `>(` は `msgid_paren`、
+/// refs 側の先頭コメントは `refs_comment_lead` が担当。
+#[must_use]
+pub fn has_msgid_comment_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let is_id = matches!(
+            lower[..colon].trim_end(),
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if !v.starts_with('(') {
+            continue;
+        }
+        let Some(rp) = v.find(')') else { continue };
+        let rest = v[rp + 1..].trim_start();
+        // `(x) <id>` — `)` と `<` の間に空白がある形のみ (`)<` 直結は
+        // `msgid_paren` の担当で二重発火しない)。
+        if rest.starts_with('<') && v[rp + 1..].chars().next().is_some_and(char::is_whitespace) {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Subject:` の値が地域ごとの返信・転送接頭語で始まるか
+/// 判定する (D2044)。
+///
+/// `Re:`/`Fwd:` は広く認識されるが、`AW:`(独)・`SV:`(北欧)・
+/// `VS:`/`Va:`/`RIF:`/`TR:`(南欧・伊・土)・`BLS:`(尼)・`PD:`・
+/// `YNT:`(土)・`AT:` 等は実装によって糸認識がずれ、同一話題が
+/// 別糸に分かれる (`Re:` 異形は `encoded_re_subject` が担当)。
+#[must_use]
+pub fn has_subject_locale_prefix(raw: &[u8]) -> bool {
+    const PFX: &[&str] = &[
+        "aw:", "sv:", "vs:", "va:", "rif:", "tr:", "bls:", "bl:", "pd:", "ynt:", "at:", "wg:",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("subject:") else { continue };
+        let t = v.trim_start();
+        if PFX.iter().any(|p| t.starts_with(p)) {
+            return true;
+        }
+        if t.starts_with("答复：") || t.starts_with("轉寄：") {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Resent-*` ブロックに受取欄 (`Resent-To:`/`Resent-Cc:`/
+/// `Resent-Bcc:`) が一つも無いか判定する (D2045)。
+///
+/// RFC 5322 §3.6.6 — 再送ブロックは誰に再送したかを記す
+/// 受取欄を伴う前提。無い形は転送履歴の体裁だけ作る工作の
+/// 兆候 (必須欄 `from+date` 欠落は D1476 `incomplete_resent`、
+/// `Resent-Bcc:` 単体の残存は D1428 が担当)。
+#[must_use]
+pub fn has_resent_no_recipient(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    let mut from = false;
+    let mut date = false;
+    let mut to = false;
+    let mut cc = false;
+    let mut bcc = false;
+    for l in lower.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("resent-from:") || l.starts_with("resent-sender:") {
+            from = true;
+        } else if l.starts_with("resent-date:") {
+            date = true;
+        } else if l.starts_with("resent-to:") {
+            to = true;
+        } else if l.starts_with("resent-cc:") {
+            cc = true;
+        } else if l.starts_with("resent-bcc:") {
+            bcc = true;
+        }
+    }
+    from && date && !to && !cc && !bcc
+}
+
+/// 非規格の `Resent-*` 欄名があるか判定する (D2046)。
+///
+/// RFC 5322 §3.6.6 の欄名は resent-date/from/sender/to/cc/bcc/
+/// message-id/reply-to のみ — 未知の `Resent-X:` は受理する
+/// 実装と無視する実装で再送履歴の解釈がずれる (旧式の
+/// `Resent-Reply-To:` 残存は D2042 が担当)。
+#[must_use]
+pub fn has_resent_unknown_field(raw: &[u8]) -> bool {
+    const KNOWN: &[&str] = &[
+        "resent-date",
+        "resent-from",
+        "resent-sender",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-message-id",
+        "resent-reply-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    for l in lower.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if !l.starts_with("resent-") {
+            continue;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        if !KNOWN.contains(&l[..colon].trim_end()) {
+            return true;
+        }
+    }
+    false
+}
+
 /// `References:` 末尾の識別子と `In-Reply-To:` の識別子が
 /// 食い違うか判定する (D2039)。
 ///
@@ -62889,6 +63076,43 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 識別子前の隔離コメントでは発火() {
+        assert!(has_msgid_comment_lead(b"Message-ID: (note) <a@x>\r\n\r\nx"));
+        assert!(!has_msgid_comment_lead(b"Message-ID: (note)<a@x>\r\n\r\nx"));
+        assert!(!has_msgid_comment_lead(b"Message-ID: <a@x>\r\n\r\nx"));
+        assert!(!has_msgid_comment_lead(b"References: (note) <a@x>\r\n\r\nx"));
+    }
+
+    #[test]
+    fn 地域接頭語の件名では発火() {
+        assert!(has_subject_locale_prefix(b"Subject: AW: hello\r\n\r\nx"));
+        assert!(has_subject_locale_prefix(b"Subject: Sv: hej\r\n\r\nx"));
+        assert!(!has_subject_locale_prefix(b"Subject: Re: hello\r\n\r\nx"));
+        assert!(!has_subject_locale_prefix(b"Subject: at a glance\r\n\r\nx"));
+    }
+
+    #[test]
+    fn 受取欄の無い再送では発火() {
+        assert!(has_resent_no_recipient(
+            b"Resent-From: a@x\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\n\r\nx"
+        ));
+        assert!(!has_resent_no_recipient(
+            b"Resent-From: a@x\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-To: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_no_recipient(
+            b"Resent-To: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 非規格の再送欄では発火() {
+        assert!(has_resent_unknown_field(b"Resent-Comments: x\r\n\r\nx"));
+        assert!(has_resent_unknown_field(b"Resent-X-Trace: x\r\n\r\nx"));
+        assert!(!has_resent_unknown_field(b"Resent-Reply-To: a@x\r\n\r\nx"));
+        assert!(!has_resent_unknown_field(b"Resent-Message-ID: <a@x>\r\n\r\nx"));
     }
 
     #[test]

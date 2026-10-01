@@ -6800,6 +6800,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.resent_reply_to {
         render_risks.push("Resent-Reply-To 欄が残っています—旧式欄の受理と無視で返信先がずれます".to_string());
     }
+    if env.msgid_comment_lead {
+        render_risks.push("Message-ID 系欄の識別子の前にコメントがあります—コメント剥がしと欄破棄で識別子がずれます".to_string());
+    }
+    if env.subject_locale_prefix {
+        render_risks.push("件名が地域の返信・転送接頭語で始まります—接頭語認識の差で糸帰属がずれます".to_string());
+    }
+    if env.resent_no_recipient {
+        render_risks.push("Resent-* 欄に受取欄がありません—体裁作りと正当転送で再送解釈がずれます".to_string());
+    }
+    if env.resent_unknown_field {
+        render_risks.push("非規格の Resent-* 欄があります—受理と無視で再送履歴がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

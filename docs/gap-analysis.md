@@ -1456,3 +1456,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2040 | References/In-Reply-To が自身の Message-ID を指す | 糸参照ずれ |
 | D2041 | Resent-Message-ID == Message-ID | 識別子ずれ |
 | D2042 | Resent-Reply-To 欄の残存 | 返信先ずれ |
+| D2043 | msgid 系欄 (refs 以外) の識別子前の隔離コメント | 識別子ずれ |
+| D2044 | Subject の地域接頭語 (AW/SV/RIF/YNT 等) | 糸認識ずれ |
+| D2045 | Resent-* ブロックに受取欄なし | 配送先ずれ |
+| D2046 | 非規格 Resent-* 欄名 | 再送ずれ |

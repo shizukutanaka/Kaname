@@ -1,6 +1,10 @@
 ## [Unreleased]
 
 ### Fixed — Devin Review (#678): `received_*` 節異字検出群 (138 検出器) がヘッダ区画ではなくメッセージ全体を走査しており、本文中の `Received:` 風行で誤発火していた問題を修正。全検出器を `header_end` (最初の空行) 区画へ統一。
+### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
+### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
+### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2046: 非規格 `Resent-*` 欄名を検出 — `Envelope` に `resent_unknown_field` を追加 (D2042 `resent_reply_to` の補完)。
 ### Security — D2039: `References:` 末尾識別子と `In-Reply-To:` の食い違いを検出 — `Envelope` に `refs_irt_conflict` を追加 (糸参照系 D1449/`malformed_thread_refs` の補完)。
 ### Security — D2040: 糸参照欄の自己参照 (`References:`/`In-Reply-To:` が自身の `Message-ID` を指す) を検出 — `Envelope` に `refs_self_reference` を追加 (欄内反復の D2038 の補完)。
 ### Security — D2041: `Resent-Message-ID:` と `Message-ID:` の同一識別子を検出 — `Envelope` に `resent_msgid_same` を追加 (D1476 `incomplete_resent`・D1428 `resent_bcc` の補完)。
