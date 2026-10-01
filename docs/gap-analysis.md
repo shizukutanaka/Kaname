@@ -1512,3 +1512,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2096 | Return-Receipt-To ≠ From (受領通知の別口返送) | 通知先ずれ |
 | D2097 | X-Confirm-Reading-To ≠ From (閲覧確認の別口返送) | 通知先ずれ |
 | D2098 | Disposition-Notification-To ≠ Reply-To (通知欄と返信口の分岐) | 通知先ずれ |
+| D2099 | Apparently-To ≠ To (実受取人記録と宛先欄の分離) | 届け先ずれ |
+| D2100 | Apparently-To ≠ Delivered-To (配送記録どうしの食い違い) | 届け先ずれ |
+| D2101 | X-Original-To ≠ Delivered-To (展開記録と配達記録の食い違い) | 届け先ずれ |
+| D2102 | Resent-Reply-To ≠ Reply-To (旧式再送返信欄の食い違い) | 返信先ずれ |

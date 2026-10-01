@@ -6965,6 +6965,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.dnt_differs_reply_to {
         render_risks.push("開封通知の返送先が返信口と異なります—通知欄と返信口の優先読みで届け先がずれます".to_string());
     }
+    if env.apparently_to_differs_to {
+        render_risks.push("表宛先記録が宛先欄と異なります—実受取記録の読みで届け先がずれます".to_string());
+    }
+    if env.apparently_to_differs_delivered_to {
+        render_risks.push("表宛先記録が実配達先と異なります—配送記録どうしの食い違いで届け先がずれます".to_string());
+    }
+    if env.x_orig_to_differs_delivered_to {
+        render_risks.push("元宛先記録が実配達先と異なります—配送記録どうしの食い違いで届け先がずれます".to_string());
+    }
+    if env.resent_reply_to_differs_reply_to {
+        render_risks.push("旧式再送返信欄が返信口と異なります—新旧返信欄の優先読みで返信先がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

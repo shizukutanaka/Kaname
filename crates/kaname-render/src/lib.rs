@@ -1900,6 +1900,14 @@ pub struct Envelope {
     pub xrt_differs_from: bool,
     /// `Disposition-Notification-To:` と `Reply-To:` の不一致アドレス (D2098 — 通知先ずれ)。
     pub dnt_differs_reply_to: bool,
+    /// `Apparently-To:` と `To:` の不一致アドレス (D2099 — 届け先ずれ)。
+    pub apparently_to_differs_to: bool,
+    /// `Apparently-To:` と `Delivered-To:` の不一致アドレス (D2100 — 届け先ずれ)。
+    pub apparently_to_differs_delivered_to: bool,
+    /// `X-Original-To:` と `Delivered-To:` の不一致アドレス (D2101 — 届け先ずれ)。
+    pub x_orig_to_differs_delivered_to: bool,
+    /// `Resent-Reply-To:` と `Reply-To:` の不一致アドレス (D2102 — 返信先ずれ)。
+    pub resent_reply_to_differs_reply_to: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4955,6 +4963,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let rrt_differs_from = has_rrt_differs_from(bytes);
     let xrt_differs_from = has_xrt_differs_from(bytes);
     let dnt_differs_reply_to = has_dnt_differs_reply_to(bytes);
+    let apparently_to_differs_to = has_apparently_to_differs_to(bytes);
+    let apparently_to_differs_delivered_to = has_apparently_to_differs_delivered_to(bytes);
+    let x_orig_to_differs_delivered_to = has_x_orig_to_differs_delivered_to(bytes);
+    let resent_reply_to_differs_reply_to = has_resent_reply_to_differs_reply_to(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5810,6 +5822,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         rrt_differs_from,
         xrt_differs_from,
         dnt_differs_reply_to,
+        apparently_to_differs_to,
+        apparently_to_differs_delivered_to,
+        x_orig_to_differs_delivered_to,
+        resent_reply_to_differs_reply_to,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42333,6 +42349,151 @@ fn field_value_of(logical: &str, name: &str) -> Option<String> {
     None
 }
 
+/// `Apparently-To:` と `To:` が異なるアドレスか判定する
+/// (D2099)。
+///
+/// 「宛先欄に無かった受取人」の記録欄が、宛先欄と別の
+/// アドレスを記録 — 記録値を届け先として読む実装と現値
+/// だけ読む実装で届け先の解釈がずれる。
+#[must_use]
+pub fn has_apparently_to_differs_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(a), Some(t)) = (
+        first_addr_of(&logical, "apparently-to")
+            .or_else(|| first_addr_of(&logical, "x-apparently-to")),
+        first_addr_of(&logical, "to"),
+    ) else {
+        return false;
+    };
+    !a.is_empty() && !t.is_empty() && !a.eq_ignore_ascii_case(&t)
+}
+
+/// `Apparently-To:` と `Delivered-To:` が異なるアドレスか
+/// 判定する (D2100)。
+///
+/// sendmail の実受取人記録と MTA の実配達先記録が食い違う
+/// — 二つの実配達痕跡を突き合わせる実装と片方だけ読む
+/// 実装で実受取人の解釈がずれる。
+#[must_use]
+pub fn has_apparently_to_differs_delivered_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(a), Some(d)) = (
+        first_addr_of(&logical, "apparently-to")
+            .or_else(|| first_addr_of(&logical, "x-apparently-to")),
+        first_addr_of(&logical, "delivered-to"),
+    ) else {
+        return false;
+    };
+    !a.is_empty() && !d.is_empty() && !a.eq_ignore_ascii_case(&d)
+}
+
+/// `X-Original-To:` と `Delivered-To:` が異なるアドレスか
+/// 判定する (D2101)。
+///
+/// エイリアス展開前の元受取人記録と最終の実配達先記録が
+/// 食い違う — 記録どうしを突き合わせる実装と現値だけ
+/// 読む実装で実受取人の解釈がずれる。
+#[must_use]
+pub fn has_x_orig_to_differs_delivered_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(d)) = (
+        first_addr_of(&logical, "x-original-to"),
+        first_addr_of(&logical, "delivered-to"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !d.is_empty() && !x.eq_ignore_ascii_case(&d)
+}
+
+/// `Resent-Reply-To:` と `Reply-To:` が異なるアドレスか判定
+/// する (D2102)。
+///
+/// 旧式の再送返信欄と現の返信口が食い違う — 旧欄を優先
+/// する実装と無視する実装で返信先の解釈がずれる。
+#[must_use]
+pub fn has_resent_reply_to_differs_reply_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(r)) = (
+        first_addr_of(&logical, "resent-reply-to"),
+        first_addr_of(&logical, "reply-to"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !r.is_empty() && !x.eq_ignore_ascii_case(&r)
+}
+
 /// `Disposition-Notification-To:` と `From:` が異なる
 /// アドレスか判定する (D2095)。
 ///
@@ -65160,6 +65321,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 表宛先と宛先欄が食い違えば発火() {
+        assert!(has_apparently_to_differs_to(
+            b"From: a@x\r\nApparently-To: at@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_differs_to(
+            b"From: a@x\r\nApparently-To: a@x\r\nTo: a@x\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表宛先と実配達先が食い違えば発火() {
+        assert!(has_apparently_to_differs_delivered_to(
+            b"From: a@x\r\nApparently-To: at@y\r\nDelivered-To: d@w\r\nCc: c@z\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_differs_delivered_to(
+            b"From: a@x\r\nApparently-To: at@y\r\nDelivered-To: at@y\r\nCc: c@z\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛先と実配達先が食い違えば発火() {
+        assert!(has_x_orig_to_differs_delivered_to(
+            b"From: a@x\r\nX-Original-To: x@z\r\nDelivered-To: d@w\r\nCc: c@z\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_differs_delivered_to(
+            b"From: a@x\r\nX-Original-To: x@z\r\nDelivered-To: x@z\r\nCc: c@z\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 旧式再送返信欄が返信口と食い違えば発火() {
+        assert!(has_resent_reply_to_differs_reply_to(
+            b"From: a@x\r\nTo: b@y\r\nReply-To: r@z\r\nResent-From: rf@x\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-Reply-To: old@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_differs_reply_to(
+            b"From: a@x\r\nTo: b@y\r\nReply-To: r@z\r\nResent-From: rf@x\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-Reply-To: r@z\r\n\r\nx"
+        ));
     }
 
     #[test]

@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2099: `Apparently-To:` と `To:` の不一致アドレス (実受取人記録と宛先欄の分離) を検出 — `Envelope` に `apparently_to_differs_to` を追加。
+### Security — D2100: `Apparently-To:` と `Delivered-To:` の不一致アドレス (sendmail 記録と MTA 配達記録の食い違い) を検出 — `Envelope` に `apparently_to_differs_delivered_to` を追加。
+### Security — D2101: `X-Original-To:` と `Delivered-To:` の不一致アドレス (エイリアス展開記録と最終配達記録の食い違い) を検出 — `Envelope` に `x_orig_to_differs_delivered_to` を追加。
+### Security — D2102: `Resent-Reply-To:` と `Reply-To:` の不一致アドレス (旧式再送返信欄と現返信口の食い違い) を検出 — `Envelope` に `resent_reply_to_differs_reply_to` を追加。
 ### Security — D2095: `Disposition-Notification-To:` と `From:` の不一致アドレス (開封通知が別の受取口へ向かう追跡ループ) を検出 — `Envelope` に `dnt_differs_from` を追加。
 ### Security — D2096: `Return-Receipt-To:` と `From:` の不一致アドレス (旧式受領通知が別の受取口へ向かう追跡ループ) を検出 — `Envelope` に `rrt_differs_from` を追加。
 ### Security — D2097: `X-Confirm-Reading-To:` と `From:` の不一致アドレス (旧式閲覧確認が別の受取口へ向かう追跡ループ) を検出 — `Envelope` に `xrt_differs_from` を追加。
