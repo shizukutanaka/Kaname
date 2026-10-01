@@ -1492,3 +1492,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2076 | Sender == To (宛先と同一の代行) | 届け先ずれ |
 | D2077 | Sender == Cc (副宛と同一の代行) | 届け先ずれ |
 | D2078 | From == Cc (副宛と同一の差出人) | 届け先ずれ |
+| D2079 | Delivered-To != To (宛名の化粧) | 届け先ずれ |
+| D2080 | Envelope-To/X-Envelope-To != To | 届け先ずれ |
+| D2081 | Delivered-To == Cc (実配達先が副宛) | 届け先ずれ |
+| D2082 | Return-Path != From (返送先と差出人の分離) | 差出人ずれ |

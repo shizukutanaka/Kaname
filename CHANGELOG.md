@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2079: `Delivered-To:` と `To:` の相違アドレス (宛名の化粧) を検出 — `Envelope` に `delivered_to_differs_to` を追加。
+### Security — D2080: `Envelope-To:`/`X-Envelope-To:` と `To:` の相違アドレスを検出 — `Envelope` に `envelope_to_differs_to` を追加 (`delivered_to_differs_to` の派生欄版)。
+### Security — D2081: `Delivered-To:` と `Cc:` の同一アドレス (実配達先が副宛) を検出 — `Envelope` に `delivered_to_same_as_cc` を追加。
+### Security — D2082: `Return-Path:` と `From:` の相違アドレス (返送先と表示差出人の分離) を検出 — `Envelope` に `return_path_differs_from` を追加。
 ### Security — D2075: `Reply-To:` と `Cc:` の同一アドレス (副宛への返信) を検出 — `Envelope` に `reply_to_same_as_cc` を追加。
 ### Security — D2076: `Sender:` と `To:` の同一アドレス (宛先と同一の代行) を検出 — `Envelope` に `sender_same_as_to` を追加。
 ### Security — D2077: `Sender:` と `Cc:` の同一アドレス (副宛と同一の代行) を検出 — `Envelope` に `sender_same_as_cc` を追加。
