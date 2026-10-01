@@ -1784,8 +1784,6 @@ pub struct Envelope {
     pub msgid_dup_pair: bool,
     /// `References:` 末尾識別子と `In-Reply-To:` の食い違い (D2039 — 糸参照ずれ)。
     pub refs_irt_conflict: bool,
-    /// 糸参照欄に自身の `Message-ID` 識別子が含まれる (D2040 — 糸参照ずれ)。
-    pub refs_self_reference: bool,
     /// `Resent-Message-ID:` が `Message-ID:` と同一 (D2041 — 識別子ずれ)。
     pub resent_msgid_same: bool,
     /// `Resent-Reply-To:` 欄が残る (D2042 — 返信先ずれ)。
@@ -1798,6 +1796,14 @@ pub struct Envelope {
     pub resent_no_recipient: bool,
     /// 非規格の `Resent-*` 欄名 (D2046 — 再送ずれ)。
     pub resent_unknown_field: bool,
+    /// `Resent-*` ブロックの `Resent-Message-ID:` 欠落 (D2047 — 再送ずれ)。
+    pub resent_no_msgid: bool,
+    /// msgid 系欄 (refs 以外) の大小文字違いの同一識別子反復 (D2048 — 識別子ずれ)。
+    pub msgid_case_variant_pair: bool,
+    /// 外側メッセージの `Content-ID:` (D2049 — 識別子ずれ)。
+    pub content_id_top: bool,
+    /// 宛先系欄の宛先数過剰 (D2050 — 配送先ずれ)。
+    pub to_many_addrs: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4795,13 +4801,16 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_empty_value = has_msgid_empty_value(bytes);
     let msgid_dup_pair = has_msgid_dup_pair(bytes);
     let refs_irt_conflict = has_refs_irt_conflict(bytes);
-    let refs_self_reference = has_refs_self_reference(bytes);
     let resent_msgid_same = has_resent_msgid_same(bytes);
     let resent_reply_to = has_resent_reply_to(bytes);
     let msgid_comment_lead = has_msgid_comment_lead(bytes);
     let subject_locale_prefix = has_subject_locale_prefix(bytes);
     let resent_no_recipient = has_resent_no_recipient(bytes);
     let resent_unknown_field = has_resent_unknown_field(bytes);
+    let resent_no_msgid = has_resent_no_msgid(bytes);
+    let msgid_case_variant_pair = has_msgid_case_variant_pair(bytes);
+    let content_id_top = has_content_id_top(bytes);
+    let to_many_addrs = has_to_many_addrs(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5599,13 +5608,16 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         msgid_empty_value,
         msgid_dup_pair,
         refs_irt_conflict,
-        refs_self_reference,
         resent_msgid_same,
         resent_reply_to,
         msgid_comment_lead,
         subject_locale_prefix,
         resent_no_recipient,
         resent_unknown_field,
+        resent_no_msgid,
+        msgid_case_variant_pair,
+        content_id_top,
+        to_many_addrs,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42117,6 +42129,164 @@ pub fn has_msgid_dup_pair(raw: &[u8]) -> bool {
     false
 }
 
+/// `Resent-*` ブロックに `Resent-Message-ID:` が無いか判定する
+/// (D2047)。
+///
+/// `Resent-From`+`Resent-Date` (または `Resent-Sender`) を持つ
+/// ブロックが識別子を欠くと、再送信を識別子で索引付ける実装は
+/// 元信と分離できず、欄だけ読む実装と再送履歴の辿り方がずれる
+/// (必須欄 `from+date` 欠落は D1476、受取欄欠落は D2045 が担当)。
+#[must_use]
+pub fn has_resent_no_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    let mut from = false;
+    let mut date = false;
+    let mut mid = false;
+    for l in lower.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("resent-from:") || l.starts_with("resent-sender:") {
+            from = true;
+        } else if l.starts_with("resent-date:") {
+            date = true;
+        } else if l.starts_with("resent-message-id:") {
+            mid = true;
+        }
+    }
+    from && date && !mid
+}
+
+/// msgid 系欄 (refs 以外) に大小文字違いで同一の識別子が
+/// 反復されるか判定する (D2048)。
+///
+/// 識別子のローカル部は大小文字を区別する規格だが、照合前に
+/// 畳む実装は `<a@x>` と `<A@x>` を同一視して片方を落とす —
+/// 厳密な別扱いと重複扱いで糸参照・索引付けがずれる
+/// (完全一致の反復は `msgid_dup_pair`、refs 側は
+/// `msgid_ref_dup` が担当)。
+#[must_use]
+pub fn has_msgid_case_variant_pair(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let is_id = matches!(
+            lower[..colon].trim_end(),
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut seen: Vec<&str> = Vec::new();
+        let mut i = 0usize;
+        while let Some(lt) = v[i..].find('<') {
+            let a = i + lt + 1;
+            let Some(g) = v[a..].find('>') else { break };
+            let id = &v[a..a + g];
+            if seen.iter().any(|s| s.eq_ignore_ascii_case(id) && **s != *id) {
+                return true;
+            }
+            seen.push(id);
+            i = a + g + 1;
+        }
+    }
+    false
+}
+
+/// 外側メッセージのヘッダに `Content-ID:` があるか判定する
+/// (D2049)。
+///
+/// `Content-ID:` は MIME 部品の識別子で、外側欄にあると
+/// `cid:` 解決系では部品名づけ空間に載せる実装と、外側欄を
+/// 無視する実装で埋め込み参照の解釈がずれる (部品側の
+/// Content-ID 異常は D1532・重複は D1369・参照先欠落は
+/// D1467 が担当)。
+#[must_use]
+pub fn has_content_id_top(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    text[..header_end].lines().any(|l| {
+        !l.starts_with(' ') && !l.starts_with('\t') && l.to_ascii_lowercase().starts_with("content-id:")
+    })
+}
+
+/// 宛先系欄 (`To:`/`Cc:`/`Bcc:`/`Resent-To:`/`Resent-Cc:`/
+/// `Resent-Bcc:`) の宛先総数が過剰か判定する (D2050)。
+///
+/// 宛先を切り詰めて読む実装と全件読む実装で届け先の見え方が
+/// ずれ、先頭数十件だけ見せる実装では後段の宛先が不可視になる
+/// (欄内空要素は `empty_addr_segment`、宛先欄の全欠落は
+/// `no_recipient_headers` が担当)。閾値は 50 件。
+#[must_use]
+pub fn has_to_many_addrs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut count = 0usize;
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let is_rcpt = matches!(
+            lower[..colon].trim_end(),
+            "to" | "cc" | "bcc" | "resent-to" | "resent-cc" | "resent-bcc"
+        );
+        if !is_rcpt {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(',') {
+            let t = seg.trim();
+            if !t.is_empty() && (t.contains('@') || t.contains('<')) {
+                count += 1;
+                if count >= 50 {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// `Message-ID:` 系欄 (refs 以外) の値が空白隔てのコメントで
 /// 始まるか判定する (D2043)。
 ///
@@ -42342,64 +42512,6 @@ pub fn has_refs_irt_conflict(raw: &[u8]) -> bool {
     matches!((refs_last, irt_first), (Some(r), Some(i)) if r != i)
 }
 
-/// 糸参照欄 (`References:`/`In-Reply-To:`) に自身の
-/// `Message-ID:` 識別子が含まれるか判定する (D2040)。
-///
-/// 自己参照の巡回は巡回を断つ実装とそのまま辿る実装で
-/// 糸参照がずれ、深さ無制限の糸解決を止めない実装では
-/// ループの起点にもなる (欄内の同一識別子反復は D2038、
-/// 識別子の形異常は各 msgid 系検出が担当)。
-#[must_use]
-pub fn has_refs_self_reference(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
-    let header_end = text.find("\n\n").unwrap_or(text.len());
-    let mut logical = String::with_capacity(header_end + 1);
-    let mut first = true;
-    for l in text[..header_end].lines() {
-        if l.starts_with(' ') || l.starts_with('\t') {
-            if !first {
-                logical.push(' ');
-                logical.push_str(l.trim_start());
-            }
-        } else {
-            if !first {
-                logical.push('\n');
-            }
-            first = false;
-            logical.push_str(l);
-        }
-    }
-    let mut own: Option<&str> = None;
-    let mut ref_ids: Vec<&str> = Vec::new();
-    for l in logical.lines() {
-        let lower = l.to_ascii_lowercase();
-        let Some(colon) = lower.find(':') else { continue };
-        let name = lower[..colon].trim_end();
-        let v = &l[colon + 1..];
-        if name == "message-id" {
-            if own.is_none() {
-                if let Some(lt) = v.find('<') {
-                    if let Some(g) = v[lt + 1..].find('>') {
-                        own = Some(&v[lt + 1..lt + 1 + g]);
-                    }
-                }
-            }
-        } else if name == "references" || name == "in-reply-to" {
-            let mut i = 0usize;
-            while let Some(lt) = v[i..].find('<') {
-                let a = i + lt + 1;
-                let Some(g) = v[a..].find('>') else { break };
-                ref_ids.push(&v[a..a + g]);
-                i = a + g + 1;
-            }
-        }
-    }
-    match own {
-        Some(o) => ref_ids.iter().any(|r| *r == o),
-        None => false,
-    }
-}
 
 /// `Resent-Message-ID:` の識別子が `Message-ID:` と同一か
 /// 判定する (D2041)。
@@ -63079,6 +63191,49 @@ mod tests {
     }
 
     #[test]
+    fn 識別子なき再送では発火() {
+        assert!(has_resent_no_msgid(
+            b"Resent-From: a@x\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-To: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_no_msgid(
+            b"Resent-From: a@x\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-Message-ID: <r@x>\r\n\r\nx"
+        ));
+        assert!(!has_resent_no_msgid(b"Resent-To: b@y\r\n\r\nx"));
+    }
+
+    #[test]
+    fn 大小文字違いの反復識別子では発火() {
+        assert!(has_msgid_case_variant_pair(
+            b"References: <a@x>\r\nMessage-ID: <a@x> <A@x>\r\n\r\nx"
+        ));
+        assert!(!has_msgid_case_variant_pair(b"Message-ID: <a@x> <b@x>\r\n\r\nx"));
+        assert!(!has_msgid_case_variant_pair(b"Message-ID: <a@x>\r\n\r\nx"));
+    }
+
+    #[test]
+    fn 外側の部品識別子では発火() {
+        assert!(has_content_id_top(b"Content-ID: <c@x>\r\nMessage-ID: <a@x>\r\n\r\nx"));
+        assert!(!has_content_id_top(b"Message-ID: <a@x>\r\n\r\nx"));
+        assert!(!has_content_id_top(
+            b"Content-Type: multipart/mixed; boundary=B\r\n\r\n--B\r\nContent-ID: <c@x>\r\n\r\nx\r\n--B--"
+        ));
+    }
+
+    #[test]
+    fn 宛先過剰では発火() {
+        let mut many = String::from("To: ");
+        for i in 0..60 {
+            if i > 0 {
+                many.push_str(", ");
+            }
+            many.push_str(&format!("u{i}@x.example"));
+        }
+        many.push_str("\r\n\r\nx");
+        assert!(has_to_many_addrs(many.as_bytes()));
+        assert!(!has_to_many_addrs(b"To: a@x, b@y, c@z\r\n\r\nx"));
+    }
+
+    #[test]
     fn 識別子前の隔離コメントでは発火() {
         assert!(has_msgid_comment_lead(b"Message-ID: (note) <a@x>\r\n\r\nx"));
         assert!(!has_msgid_comment_lead(b"Message-ID: (note)<a@x>\r\n\r\nx"));
@@ -63128,18 +63283,7 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn 自己参照する糸では発火() {
-        assert!(has_refs_self_reference(
-            b"Message-ID: <a@x>\r\nReferences: <b@y> <a@x>\r\n\r\nx"
-        ));
-        assert!(!has_refs_self_reference(
-            b"Message-ID: <a@x>\r\nReferences: <b@y> <c@z>\r\n\r\nx"
-        ));
-        assert!(!has_refs_self_reference(
-            b"Message-ID: <a@x>\r\n\r\nx"
-        ));
-    }
+
 
     #[test]
     fn 再送識別子の重複では発火() {

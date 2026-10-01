@@ -4,9 +4,13 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2047: `Resent-*` ブロックの `Resent-Message-ID:` 欠落を検出 — `Envelope` に `resent_no_msgid` を追加 (必須欄欠落の D1476・受取欄欠落の D2045 の補完)。
+### Security — D2048: msgid 系欄の大小文字違いの同一識別子反復を検出 — `Envelope` に `msgid_case_variant_pair` を追加 (完全一致反復の D2038・refs 側の D1697 の補完)。
+### Security — D2049: 外側メッセージ欄の `Content-ID:` を検出 — `Envelope` に `content_id_top` を追加 (部品側異常の D1532・重複の D1369・参照先欠落の D1467 の補完)。
+### Security — D2050: 宛先系欄の宛先数過剰 (50 件超) を検出 — `Envelope` に `to_many_addrs` を追加 (空要素の D1366・宛先欠落の D1417 の補完)。
 ### Security — D2046: 非規格 `Resent-*` 欄名を検出 — `Envelope` に `resent_unknown_field` を追加 (D2042 `resent_reply_to` の補完)。
 ### Security — D2039: `References:` 末尾識別子と `In-Reply-To:` の食い違いを検出 — `Envelope` に `refs_irt_conflict` を追加 (糸参照系 D1449/`malformed_thread_refs` の補完)。
-### Security — D2040: 糸参照欄の自己参照 (`References:`/`In-Reply-To:` が自身の `Message-ID` を指す) を検出 — `Envelope` に `refs_self_reference` を追加 (欄内反復の D2038 の補完)。
+### Withdrawn — D2040: `refs_self_reference` は既存 D1379 `self_reply_ref` と同一仕様のため撤回 (重複検出器を除去)。
 ### Security — D2041: `Resent-Message-ID:` と `Message-ID:` の同一識別子を検出 — `Envelope` に `resent_msgid_same` を追加 (D1476 `incomplete_resent`・D1428 `resent_bcc` の補完)。
 ### Security — D2042: 旧式欄 `Resent-Reply-To:` の残存を検出 — `Envelope` に `resent_reply_to` を追加 (Resent 系 D1476/D1428 の補完)。
 ### Security — D2038: `Message-ID:` 系欄 (refs 以外) の同一 `<id>` 反復を検出 — `Envelope` に `msgid_dup_pair` を追加 (`msgid_ref_dup`/`multi_inreply` と役割分担)。

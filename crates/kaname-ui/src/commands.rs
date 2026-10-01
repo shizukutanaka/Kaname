@@ -6791,9 +6791,6 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.refs_irt_conflict {
         render_risks.push("糸参照欄の末尾識別子と In-Reply-To が食い違っています—返信点の読み分けで糸参照がずれます".to_string());
     }
-    if env.refs_self_reference {
-        render_risks.push("糸参照欄に自身の識別子が含まれています—巡回切りと巡回許容で糸参照がずれます".to_string());
-    }
     if env.resent_msgid_same {
         render_risks.push("Resent-Message-ID が Message-ID と同一です—同一視と区別読みで識別子がずれます".to_string());
     }
@@ -6811,6 +6808,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     if env.resent_unknown_field {
         render_risks.push("非規格の Resent-* 欄があります—受理と無視で再送履歴がずれます".to_string());
+    }
+    if env.resent_no_msgid {
+        render_risks.push("再送欄に識別子がありません—索引付け実装と再送履歴の辿り方がずれます".to_string());
+    }
+    if env.msgid_case_variant_pair {
+        render_risks.push("大小文字違いの同一識別子が反復されています—別扱いと重複扱いで糸参照がずれます".to_string());
+    }
+    if env.content_id_top {
+        render_risks.push("外側欄に部品識別子があります—cid 解釈系と無視系で埋め込み参照がずれます".to_string());
+    }
+    if env.to_many_addrs {
+        render_risks.push("宛先欄の宛先数が過剰です—切り詰めて読む実装と届け先の見え方がずれます".to_string());
     }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

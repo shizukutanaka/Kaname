@@ -1453,10 +1453,14 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2037 | `Message-ID:` 系欄の値が完全に空 | 欄破棄 vs 空識別子受理で識別子照合ずれ |
 | D2038 | `Message-ID:` 系欄 (refs 以外) の同一 `<id>` 反復 | 一意仮定 vs 一覧読みで識別子ずれ (refs は `msgid_ref_dup`) |
 | D2039 | References 末尾id ≠ In-Reply-To id | 糸参照ずれ |
-| D2040 | References/In-Reply-To が自身の Message-ID を指す | 糸参照ずれ |
+| D2040 | ~~References/In-Reply-To が自身の Message-ID を指す~~ (撤回 — D1379 `self_reply_ref` と同一) | — |
 | D2041 | Resent-Message-ID == Message-ID | 識別子ずれ |
 | D2042 | Resent-Reply-To 欄の残存 | 返信先ずれ |
 | D2043 | msgid 系欄 (refs 以外) の識別子前の隔離コメント | 識別子ずれ |
 | D2044 | Subject の地域接頭語 (AW/SV/RIF/YNT 等) | 糸認識ずれ |
 | D2045 | Resent-* ブロックに受取欄なし | 配送先ずれ |
 | D2046 | 非規格 Resent-* 欄名 | 再送ずれ |
+| D2047 | Resent-From+Date あるのに Resent-Message-ID が無い | 再送ずれ |
+| D2048 | msgid 系欄の大小文字違いの同一識別子反復 | 識別子ずれ |
+| D2049 | 外側メッセージ欄の Content-ID | 識別子ずれ |
+| D2050 | 宛先系欄の宛先数が 50 件超 | 配送先ずれ |
