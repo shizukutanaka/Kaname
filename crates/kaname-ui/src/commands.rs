@@ -6990,7 +6990,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("閲覧確認の返送先が返信口と異なります—通知欄と返信口の優先読みで届け先がずれます".to_string());
     }
     if env.apparently_resent_marks {
-        render_risks.push("見せかけ再送の残渣欄が残っています—残渣の読みで再送履歴がずれます".to_string());
+        render_risks.push("見せかけ再送の残渣欄が残っています—再送履歴の読みをずらす残渣を送信側が書く兆候です".to_string());
     }
     if env.x_orig_bcc_mark {
         render_risks.push("元の隠し宛先の記録欄が残っています—残渣の読みで届け先がずれます".to_string());
@@ -7005,7 +7005,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("差出控えの格納欄が残っています—残渣の読みで差出人がずれます".to_string());
     }
     if env.forwarded_marks {
-        render_risks.push("転送元の残渣欄が残っています—残渣の読みで転送履歴がずれます".to_string());
+        render_risks.push("転送元の残渣欄が残っています—転送履歴の読みをずらす残渣を送信側が書く兆候です".to_string());
     }
     if env.apparently_to_same_as_to {
         render_risks.push("見せかけ宛先が宛先欄と一致します—記録と宛先欄の読みで届け先がずれます".to_string());
