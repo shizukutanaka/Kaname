@@ -1820,6 +1820,14 @@ pub struct Envelope {
     pub resent_sender_same_as_sender: bool,
     /// `Resent-Date:` と `Date:` の同一値 (D2058 — 再送ずれ)。
     pub resent_date_same_as_date: bool,
+    /// `Resent-Cc:` と `Cc:` の同一アドレス (D2059 — 再送ずれ)。
+    pub resent_cc_same_as_cc: bool,
+    /// `Resent-To:` と `Cc:` の同一アドレス (D2060 — 再送ずれ)。
+    pub resent_to_same_as_cc: bool,
+    /// `Resent-From:` と `Sender:` の同一アドレス (D2061 — 再送ずれ)。
+    pub resent_from_same_as_sender: bool,
+    /// `Resent-Sender:` と `From:` の同一アドレス (D2062 — 再送ずれ)。
+    pub resent_sender_same_as_from: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4835,6 +4843,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let resent_to_same_as_from = has_resent_to_same_as_from(bytes);
     let resent_sender_same_as_sender = has_resent_sender_same_as_sender(bytes);
     let resent_date_same_as_date = has_resent_date_same_as_date(bytes);
+    let resent_cc_same_as_cc = has_resent_cc_same_as_cc(bytes);
+    let resent_to_same_as_cc = has_resent_to_same_as_cc(bytes);
+    let resent_from_same_as_sender = has_resent_from_same_as_sender(bytes);
+    let resent_sender_same_as_from = has_resent_sender_same_as_from(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5650,6 +5662,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_to_same_as_from,
         resent_sender_same_as_sender,
         resent_date_same_as_date,
+        resent_cc_same_as_cc,
+        resent_to_same_as_cc,
+        resent_from_same_as_sender,
+        resent_sender_same_as_from,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42161,6 +42177,152 @@ pub fn has_msgid_dup_pair(raw: &[u8]) -> bool {
     false
 }
 
+/// `Resent-Cc:` と `Cc:` が同一アドレスか判定する (D2059)。
+///
+/// 再送ブロックが元信の Cc 宛先をそのまま複写する形は
+/// 体裁だけ整えた偽転送の兆候 — 再送系欄を独立に読む
+/// 実装と元信との照合を試みる実装で届け先履歴がずれる。
+#[must_use]
+pub fn has_resent_cc_same_as_cc(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(c), Some(r)) = (
+        first_addr_of(&logical, "cc"),
+        first_addr_of(&logical, "resent-cc"),
+    ) else {
+        return false;
+    };
+    !c.is_empty() && c.eq_ignore_ascii_case(&r)
+}
+
+/// `Resent-To:` と `Cc:` が同一アドレスか判定する (D2060)。
+///
+/// 元信の副宛先が再送ブロックで主宛先へ格上げされる形 —
+/// 宛先の役割を保持して読む実装と素通しする実装で
+/// 届け先履歴の読みがずれる (`Resent-To == To` は
+/// `resent_to_same_as_to`、`Resent-To == From` は
+/// `resent_to_same_as_from` が担当)。
+#[must_use]
+pub fn has_resent_to_same_as_cc(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(c), Some(r)) = (
+        first_addr_of(&logical, "cc"),
+        first_addr_of(&logical, "resent-to"),
+    ) else {
+        return false;
+    };
+    !c.is_empty() && c.eq_ignore_ascii_case(&r)
+}
+
+/// `Resent-From:` と `Sender:` が同一アドレスか判定する
+/// (D2061)。
+///
+/// 元信の送信代行者が再送ブロックでは「再送信者」の名札を
+/// 被る形 — 役割の違いを保つ実装と同一視する実装で
+/// 再送履歴の読みがずれる (`Resent-From == From` は
+/// `resent_from_same_as_from` が担当)。
+#[must_use]
+pub fn has_resent_from_same_as_sender(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(s), Some(r)) = (
+        first_addr_of(&logical, "sender"),
+        first_addr_of(&logical, "resent-from"),
+    ) else {
+        return false;
+    };
+    !s.is_empty() && s.eq_ignore_ascii_case(&r)
+}
+
+/// `Resent-Sender:` と `From:` が同一アドレスか判定する
+/// (D2062)。
+///
+/// 元信の差出人が再送ブロックでは「代行送信者」の名札を
+/// 被る形 — 役割の違いを保つ実装と同一視する実装で
+/// 再送履歴の読みがずれる (`Resent-Sender == Sender` は
+/// `resent_sender_same_as_sender` が担当)。
+#[must_use]
+pub fn has_resent_sender_same_as_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(f), Some(r)) = (
+        first_addr_of(&logical, "from"),
+        first_addr_of(&logical, "resent-sender"),
+    ) else {
+        return false;
+    };
+    !f.is_empty() && f.eq_ignore_ascii_case(&r)
+}
+
 /// `Resent-To:` と `To:` が同一アドレスか判定する (D2055)。
 ///
 /// 再送は別の宛先へ届ける欄 — 宛先が元信と同じ再送は
@@ -63524,6 +63686,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 再送副宛が副宛先と同一では発火() {
+        assert!(has_resent_cc_same_as_cc(
+            b"From: a@x\r\nCc: b@y\r\nResent-From: s@z\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-Cc: b@y\r\nResent-To: c@z\r\nResent-Message-ID: <r@x>\r\n\r\nx"
+        ));
+        assert!(!has_resent_cc_same_as_cc(
+            b"From: a@x\r\nCc: b@y\r\nResent-Cc: c@z\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送先が副宛先と同一では発火() {
+        assert!(has_resent_to_same_as_cc(
+            b"From: a@x\r\nTo: c@z\r\nCc: b@y\r\nResent-From: s@z\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-To: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_to_same_as_cc(
+            b"From: a@x\r\nCc: b@y\r\nResent-To: c@z\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送者が代行者と同一では発火() {
+        assert!(has_resent_from_same_as_sender(
+            b"From: a@x\r\nSender: s@z\r\nResent-From: s@z\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-To: b@y\r\nResent-Message-ID: <r@x>\r\n\r\nx"
+        ));
+        assert!(!has_resent_from_same_as_sender(
+            b"From: a@x\r\nSender: s@z\r\nResent-From: r@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送代行者が差出人と同一では発火() {
+        assert!(has_resent_sender_same_as_from(
+            b"From: a@x\r\nResent-From: r@y\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-To: b@y\r\nResent-Sender: a@x\r\nResent-Message-ID: <m@x>\r\n\r\nx"
+        ));
+        assert!(!has_resent_sender_same_as_from(
+            b"From: a@x\r\nResent-Sender: t@w\r\n\r\nx"
+        ));
     }
 
     #[test]

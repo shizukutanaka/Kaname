@@ -1472,3 +1472,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2056 | Resent-To == From (差出人への再送) | 再送ずれ |
 | D2057 | Resent-Sender == Sender | 再送ずれ |
 | D2058 | Resent-Date == Date | 再送ずれ |
+| D2059 | Resent-Cc == Cc | 再送ずれ |
+| D2060 | Resent-To == Cc (副宛先の格上げ) | 再送ずれ |
+| D2061 | Resent-From == Sender | 再送ずれ |
+| D2062 | Resent-Sender == From | 再送ずれ |

@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2059: `Resent-Cc:` と `Cc:` の同一アドレスを検出 — `Envelope` に `resent_cc_same_as_cc` を追加 (再送同一値系の補完)。
+### Security — D2060: `Resent-To:` と `Cc:` の同一アドレス (副宛先の格上げ) を検出 — `Envelope` に `resent_to_same_as_cc` を追加。
+### Security — D2061: `Resent-From:` と `Sender:` の同一アドレスを検出 — `Envelope` に `resent_from_same_as_sender` を追加。
+### Security — D2062: `Resent-Sender:` と `From:` の同一アドレスを検出 — `Envelope` に `resent_sender_same_as_from` を追加。
 ### Security — D2055: `Resent-To:` と `To:` の同一アドレスを検出 — `Envelope` に `resent_to_same_as_to` を追加 (`resent_from_same_as_from` の補完)。
 ### Security — D2056: `Resent-To:` と `From:` の同一アドレス (差出人への再送) を検出 — `Envelope` に `resent_to_same_as_from` を追加。
 ### Security — D2057: `Resent-Sender:` と `Sender:` の同一アドレスを検出 — `Envelope` に `resent_sender_same_as_sender` を追加。
