@@ -1852,6 +1852,14 @@ pub struct Envelope {
     pub from_same_as_to: bool,
     /// `Reply-To:` と `Sender:` の同一アドレス (D2074 — 返信先ずれ)。
     pub reply_to_same_as_sender: bool,
+    /// `Reply-To:` と `Cc:` の同一アドレス (D2075 — 返信先ずれ)。
+    pub reply_to_same_as_cc: bool,
+    /// `Sender:` と `To:` の同一アドレス (D2076 — 届け先ずれ)。
+    pub sender_same_as_to: bool,
+    /// `Sender:` と `Cc:` の同一アドレス (D2077 — 届け先ずれ)。
+    pub sender_same_as_cc: bool,
+    /// `From:` と `Cc:` の同一アドレス (D2078 — 届け先ずれ)。
+    pub from_same_as_cc: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4883,6 +4891,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let reply_to_same_as_to = has_reply_to_same_as_to(bytes);
     let from_same_as_to = has_from_same_as_to(bytes);
     let reply_to_same_as_sender = has_reply_to_same_as_sender(bytes);
+    let reply_to_same_as_cc = has_reply_to_same_as_cc(bytes);
+    let sender_same_as_to = has_sender_same_as_to(bytes);
+    let sender_same_as_cc = has_sender_same_as_cc(bytes);
+    let from_same_as_cc = has_from_same_as_cc(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5714,6 +5726,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         reply_to_same_as_to,
         from_same_as_to,
         reply_to_same_as_sender,
+        reply_to_same_as_cc,
+        sender_same_as_to,
+        sender_same_as_cc,
+        from_same_as_cc,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42225,6 +42241,153 @@ pub fn has_msgid_dup_pair(raw: &[u8]) -> bool {
     false
 }
 
+/// `Reply-To:` と `Cc:` が同一アドレスか判定する
+/// (D2075)。
+///
+/// 返信上書き欄が副宛先を指す — 返信すると副宛の
+/// 受取人へ向かう配置で、`Reply-To` を優先する実装と
+/// `From` 基準で返信する実装で返信先がずれる
+/// (`Reply-To` ↔ `To` は `reply_to_same_as_to` が
+/// 担当)。
+#[must_use]
+pub fn has_reply_to_same_as_cc(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(r), Some(c)) = (
+        first_addr_of(&logical, "reply-to"),
+        first_addr_of(&logical, "cc"),
+    ) else {
+        return false;
+    };
+    !r.is_empty() && r.eq_ignore_ascii_case(&c)
+}
+
+/// `Sender:` と `To:` が同一アドレスか判定する
+/// (D2076)。
+///
+/// 送信代行者が宛先と同一 — 自分宛に送り付ける代行の
+/// 配置で、差出人・代行の役割を区別する実装と素通し
+/// する実装で届け先・差出人の表示がずれる。
+#[must_use]
+pub fn has_sender_same_as_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(s), Some(t)) = (
+        first_addr_of(&logical, "sender"),
+        first_addr_of(&logical, "to"),
+    ) else {
+        return false;
+    };
+    !s.is_empty() && s.eq_ignore_ascii_case(&t)
+}
+
+/// `Sender:` と `Cc:` が同一アドレスか判定する
+/// (D2077)。
+///
+/// 送信代行者が副宛先と同一 — 代行を副宛に含める
+/// 配置で、役割を区別する実装と素通しする実装で
+/// 届け先・差出人の表示がずれる。
+#[must_use]
+pub fn has_sender_same_as_cc(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(s), Some(c)) = (
+        first_addr_of(&logical, "sender"),
+        first_addr_of(&logical, "cc"),
+    ) else {
+        return false;
+    };
+    !s.is_empty() && s.eq_ignore_ascii_case(&c)
+}
+
+/// `From:` と `Cc:` が同一アドレスか判定する
+/// (D2078)。
+///
+/// 差出人が副宛先と同一 — 自分を副宛に含めて送る
+/// 配置で、差出人・受取役割を区別する実装と素通し
+/// する実装で届け先一覧がずれる (`From` ↔ `To` は
+/// `from_same_as_to` が担当)。
+#[must_use]
+pub fn has_from_same_as_cc(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(f), Some(c)) = (
+        first_addr_of(&logical, "from"),
+        first_addr_of(&logical, "cc"),
+    ) else {
+        return false;
+    };
+    !f.is_empty() && f.eq_ignore_ascii_case(&c)
+}
+
 /// `To:` と `Cc:` が同一アドレスか判定する
 /// (D2071)。
 ///
@@ -64178,6 +64341,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 返信口が副宛先と同一では発火() {
+        assert!(has_reply_to_same_as_cc(
+            b"From: a@x\r\nTo: b@y\r\nCc: c@z\r\nReply-To: c@z\r\n\r\nx"
+        ));
+        assert!(!has_reply_to_same_as_cc(
+            b"From: a@x\r\nCc: c@z\r\nReply-To: r@z\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 代行が宛先と同一では発火() {
+        assert!(has_sender_same_as_to(
+            b"From: a@x\r\nSender: s@x\r\nTo: s@x\r\n\r\nx"
+        ));
+        assert!(!has_sender_same_as_to(
+            b"From: a@x\r\nSender: s@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 代行が副宛先と同一では発火() {
+        assert!(has_sender_same_as_cc(
+            b"From: a@x\r\nSender: s@x\r\nTo: b@y\r\nCc: s@x\r\n\r\nx"
+        ));
+        assert!(!has_sender_same_as_cc(
+            b"From: a@x\r\nSender: s@x\r\nCc: c@z\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 差出人が副宛先と同一では発火() {
+        assert!(has_from_same_as_cc(
+            b"From: a@x\r\nTo: b@y\r\nCc: a@x\r\n\r\nx"
+        ));
+        assert!(!has_from_same_as_cc(
+            b"From: a@x\r\nCc: c@z\r\n\r\nx"
+        ));
     }
 
     #[test]
