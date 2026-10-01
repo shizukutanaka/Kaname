@@ -1484,3 +1484,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2068 | Resent-Cc == From (差出人宛の副宛再送) | 再送ずれ |
 | D2069 | Resent-To == Resent-Sender (代行宛の再送) | 再送ずれ |
 | D2070 | Resent-Cc == Resent-Sender | 再送ずれ |
+| D2071 | To == Cc (受取役割の重複) | 届け先ずれ |
+| D2072 | Reply-To == To (受取人への返信ループ) | 返信先ずれ |
+| D2073 | From == To (自己送信) | 差出人ずれ |
+| D2074 | Reply-To == Sender (代行への返信) | 返信先ずれ |

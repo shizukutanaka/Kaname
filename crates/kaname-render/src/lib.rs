@@ -1844,6 +1844,14 @@ pub struct Envelope {
     pub resent_to_same_as_resent_sender: bool,
     /// `Resent-Cc:` と `Resent-Sender:` の同一アドレス (D2070 — 再送ずれ)。
     pub resent_cc_same_as_resent_sender: bool,
+    /// `To:` と `Cc:` の同一アドレス (D2071 — 届け先ずれ)。
+    pub to_same_as_cc: bool,
+    /// `Reply-To:` と `To:` の同一アドレス (D2072 — 返信先ずれ)。
+    pub reply_to_same_as_to: bool,
+    /// `From:` と `To:` の同一アドレス (D2073 — 差出人ずれ)。
+    pub from_same_as_to: bool,
+    /// `Reply-To:` と `Sender:` の同一アドレス (D2074 — 返信先ずれ)。
+    pub reply_to_same_as_sender: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4871,6 +4879,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let resent_cc_same_as_from = has_resent_cc_same_as_from(bytes);
     let resent_to_same_as_resent_sender = has_resent_to_same_as_resent_sender(bytes);
     let resent_cc_same_as_resent_sender = has_resent_cc_same_as_resent_sender(bytes);
+    let to_same_as_cc = has_to_same_as_cc(bytes);
+    let reply_to_same_as_to = has_reply_to_same_as_to(bytes);
+    let from_same_as_to = has_from_same_as_to(bytes);
+    let reply_to_same_as_sender = has_reply_to_same_as_sender(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5698,6 +5710,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_cc_same_as_from,
         resent_to_same_as_resent_sender,
         resent_cc_same_as_resent_sender,
+        to_same_as_cc,
+        reply_to_same_as_to,
+        from_same_as_to,
+        reply_to_same_as_sender,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42209,6 +42225,156 @@ pub fn has_msgid_dup_pair(raw: &[u8]) -> bool {
     false
 }
 
+/// `To:` と `Cc:` が同一アドレスか判定する
+/// (D2071)。
+///
+/// 主宛先と副宛先が同一名札 — 受取役割の重複で、役割を
+/// 畳む実装と一覧をそのまま表示する実装で届け先一覧が
+/// ずれる (同一欄内の重複は `same_addr_dup`、再送系の
+/// 照合は `resent_cc_same_as_to` が担当)。
+#[must_use]
+pub fn has_to_same_as_cc(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(t), Some(c)) = (
+        first_addr_of(&logical, "to"),
+        first_addr_of(&logical, "cc"),
+    ) else {
+        return false;
+    };
+    !t.is_empty() && t.eq_ignore_ascii_case(&c)
+}
+
+/// `Reply-To:` と `To:` が同一アドレスか判定する
+/// (D2072)。
+///
+/// 返信上書き欄が受取人自身を指す — 返信すると宛先
+/// 側へ向かう配置で、上書きを適用する実装と `Reply-To`
+/// を `From` 補完と読む実装で返信先がずれる
+/// (`Reply-To` ↔ `From` は `reply_to_same_as_from` が
+/// 担当)。
+#[must_use]
+pub fn has_reply_to_same_as_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(r), Some(t)) = (
+        first_addr_of(&logical, "reply-to"),
+        first_addr_of(&logical, "to"),
+    ) else {
+        return false;
+    };
+    !r.is_empty() && r.eq_ignore_ascii_case(&t)
+}
+
+/// `From:` と `To:` が同一アドレスか判定する
+/// (D2073)。
+///
+/// 差出人宛ての自分宛メール — 自分への送信は草稿・
+/// 控え目的では正規だが、着信メールでは返信ループを
+/// 煽る配置にも使われ、自己送信を畳む実装と素通し
+/// する実装で差出人表示がずれる。
+#[must_use]
+pub fn has_from_same_as_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(f), Some(t)) = (
+        first_addr_of(&logical, "from"),
+        first_addr_of(&logical, "to"),
+    ) else {
+        return false;
+    };
+    !f.is_empty() && f.eq_ignore_ascii_case(&t)
+}
+
+/// `Reply-To:` と `Sender:` が同一アドレスか判定する
+/// (D2074)。
+///
+/// 返信上書き欄が送信代行者を指す — 差出人ではなく
+/// 代行へ返信が向かう配置で、`Reply-To` を優先する
+/// 実装と `From` 基準で返信する実装で返信先がずれる
+/// (`Reply-To` ↔ `From` は `reply_to_same_as_from` が
+/// 担当)。
+#[must_use]
+pub fn has_reply_to_same_as_sender(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(r), Some(s)) = (
+        first_addr_of(&logical, "reply-to"),
+        first_addr_of(&logical, "sender"),
+    ) else {
+        return false;
+    };
+    !r.is_empty() && r.eq_ignore_ascii_case(&s)
+}
+
 /// `Resent-Cc:` と `To:` が同一アドレスか判定する
 /// (D2067)。
 ///
@@ -64012,6 +64178,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 宛先が副宛先と同一では発火() {
+        assert!(has_to_same_as_cc(
+            b"From: a@x\r\nTo: b@y\r\nCc: b@y\r\n\r\nx"
+        ));
+        assert!(!has_to_same_as_cc(
+            b"From: a@x\r\nTo: b@y\r\nCc: c@z\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返信口が宛先と同一では発火() {
+        assert!(has_reply_to_same_as_to(
+            b"From: a@x\r\nTo: b@y\r\nReply-To: b@y\r\n\r\nx"
+        ));
+        assert!(!has_reply_to_same_as_to(
+            b"From: a@x\r\nTo: b@y\r\nReply-To: r@z\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 差出人が宛先と同一では発火() {
+        assert!(has_from_same_as_to(
+            b"From: a@x\r\nTo: a@x\r\n\r\nx"
+        ));
+        assert!(!has_from_same_as_to(
+            b"From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返信口が代行と同一では発火() {
+        assert!(has_reply_to_same_as_sender(
+            b"From: a@x\r\nSender: s@x\r\nTo: b@y\r\nReply-To: s@x\r\n\r\nx"
+        ));
+        assert!(!has_reply_to_same_as_sender(
+            b"From: a@x\r\nSender: s@x\r\nTo: b@y\r\nReply-To: r@z\r\n\r\nx"
+        ));
     }
 
     #[test]
