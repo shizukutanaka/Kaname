@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2091: `X-Original-To:` と `To:` の不一致アドレス (エイリアス展開前の元受取人記録と表示宛先の分離) を検出 — `Envelope` に `x_orig_to_differs` を追加。
+### Security — D2092: `X-Original-Cc:` と `Cc:` の不一致アドレス (元の副宛先記録と表示副宛先の分離) を検出 — `Envelope` に `x_orig_cc_differs` を追加。
+### Security — D2093: `X-Original-Sender:` と `Sender:` の不一致アドレス (元の代行記録と表示代行者の分離) を検出 — `Envelope` に `x_orig_sender_differs` を追加。
+### Security — D2094: `X-Original-References:` と `References:` の不一致値 (元の糸参照記録と現参照一覧の分離) を検出 — `Envelope` に `x_orig_refs_differs` を追加。
 ### Security — D2087: `X-Original-From:` と `From:` の不一致アドレス (元の差出人記録と表示差出人の分離) を検出 — `Envelope` に `x_orig_from_differs` を追加。
 ### Security — D2088: `X-Original-Subject:` と `Subject:` の不一致値 (元の件名記録と表示件名の分離) を検出 — `Envelope` に `x_orig_subject_differs` を追加。
 ### Security — D2089: `X-Original-Message-ID:` と `Message-ID:` の不一致識別子 (元の識別子記録と現識別子の分離) を検出 — `Envelope` に `x_orig_msgid_differs` を追加。

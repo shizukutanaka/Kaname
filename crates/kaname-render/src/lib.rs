@@ -1884,6 +1884,14 @@ pub struct Envelope {
     pub x_orig_msgid_differs: bool,
     /// `X-Original-Date:` と `Date:` の不一致値 (D2090 — 履歴ずれ)。
     pub x_orig_date_differs: bool,
+    /// `X-Original-To:` と `To:` の不一致アドレス (D2091 — 届け先ずれ)。
+    pub x_orig_to_differs: bool,
+    /// `X-Original-Cc:` と `Cc:` の不一致アドレス (D2092 — 届け先ずれ)。
+    pub x_orig_cc_differs: bool,
+    /// `X-Original-Sender:` と `Sender:` の不一致アドレス (D2093 — 代行者ずれ)。
+    pub x_orig_sender_differs: bool,
+    /// `X-Original-References:` と `References:` の不一致値 (D2094 — 糸参照ずれ)。
+    pub x_orig_refs_differs: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4931,6 +4939,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_subject_differs = has_x_orig_subject_differs(bytes);
     let x_orig_msgid_differs = has_x_orig_msgid_differs(bytes);
     let x_orig_date_differs = has_x_orig_date_differs(bytes);
+    let x_orig_to_differs = has_x_orig_to_differs(bytes);
+    let x_orig_cc_differs = has_x_orig_cc_differs(bytes);
+    let x_orig_sender_differs = has_x_orig_sender_differs(bytes);
+    let x_orig_refs_differs = has_x_orig_refs_differs(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5778,6 +5790,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_subject_differs,
         x_orig_msgid_differs,
         x_orig_date_differs,
+        x_orig_to_differs,
+        x_orig_cc_differs,
+        x_orig_sender_differs,
+        x_orig_refs_differs,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42301,6 +42317,150 @@ fn field_value_of(logical: &str, name: &str) -> Option<String> {
     None
 }
 
+/// `X-Original-To:` と `To:` が異なるアドレスか判定する
+/// (D2091)。
+///
+/// エイリアス展開前の元の受取人記録が表示宛先と異なる —
+/// 記録値を辿る実装と現値だけ読む実装で届け先の解釈が
+/// ずれる。
+#[must_use]
+pub fn has_x_orig_to_differs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(t)) = (
+        first_addr_of(&logical, "x-original-to"),
+        first_addr_of(&logical, "to"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !t.is_empty() && !x.eq_ignore_ascii_case(&t)
+}
+
+/// `X-Original-Cc:` と `Cc:` が異なるアドレスか判定する
+/// (D2092)。
+///
+/// 「元の副宛先」の記録が表示副宛先と異なる — 改変前の
+/// 受取人記録を残す欄で、記録値を併記する実装と現値だけ
+/// 読む実装で届け先の解釈がずれる。
+#[must_use]
+pub fn has_x_orig_cc_differs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(c)) = (
+        first_addr_of(&logical, "x-original-cc"),
+        first_addr_of(&logical, "cc"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !c.is_empty() && !x.eq_ignore_ascii_case(&c)
+}
+
+/// `X-Original-Sender:` と `Sender:` が異なるアドレスか判定
+/// する (D2093)。
+///
+/// 「元の送信代行」の記録が表示代行者と異なる — 改変前の
+/// 代行者記録を残す欄で、記録値を併記する実装と現値だけ
+/// 読む実装で代行者の解釈がずれる。
+#[must_use]
+pub fn has_x_orig_sender_differs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(s)) = (
+        first_addr_of(&logical, "x-original-sender"),
+        first_addr_of(&logical, "sender"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !s.is_empty() && !x.eq_ignore_ascii_case(&s)
+}
+
+/// `X-Original-References:` と `References:` が異なる値か
+/// 判定する (D2094)。
+///
+/// 「元の糸参照」の記録が現の参照一覧と異なる — 糸の
+/// 書き換え履歴を残す欄で、記録値で糸を辿る実装と現値で
+/// 辿る実装で糸帰属がずれる。
+#[must_use]
+pub fn has_x_orig_refs_differs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(r)) = (
+        field_value_of(&logical, "x-original-references"),
+        field_value_of(&logical, "references"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !r.is_empty() && !x.eq_ignore_ascii_case(&r)
+}
+
 /// `X-Original-From:` と `From:` が異なるアドレスか判定する
 /// (D2087)。
 ///
@@ -64839,6 +64999,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元の宛先が現宛先と異なれば発火() {
+        assert!(has_x_orig_to_differs(
+            b"To: alias@x\r\nX-Original-To: orig@y\r\nFrom: a@x\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_differs(
+            b"To: a@x\r\nX-Original-To: a@x\r\nFrom: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の副宛先が現副宛先と異なれば発火() {
+        assert!(has_x_orig_cc_differs(
+            b"Cc: c@z\r\nX-Original-Cc: old@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_differs(
+            b"Cc: c@z\r\nX-Original-Cc: c@z\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の代行が現代行と異なれば発火() {
+        assert!(has_x_orig_sender_differs(
+            b"From: a@x\r\nSender: s@x\r\nX-Original-Sender: old@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_sender_differs(
+            b"From: a@x\r\nSender: s@x\r\nX-Original-Sender: s@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の糸参照が現糸参照と異なれば発火() {
+        assert!(has_x_orig_refs_differs(
+            b"References: <a@x>\r\nX-Original-References: <b@y>\r\nTo: c@z\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_refs_differs(
+            b"References: <a@x>\r\nX-Original-References: <a@x>\r\nTo: c@z\r\n\r\nx"
+        ));
     }
 
     #[test]

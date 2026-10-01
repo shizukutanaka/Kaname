@@ -1504,3 +1504,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2088 | X-Original-Subject ≠ Subject (元の件名記録との分離) | 件名ずれ |
 | D2089 | X-Original-Message-ID ≠ Message-ID (元の識別子記録との分離) | 糸参照ずれ |
 | D2090 | X-Original-Date ≠ Date (元の日時記録との分離) | 履歴ずれ |
+| D2091 | X-Original-To ≠ To (元の受取人記録との分離) | 届け先ずれ |
+| D2092 | X-Original-Cc ≠ Cc (元の副宛先記録との分離) | 届け先ずれ |
+| D2093 | X-Original-Sender ≠ Sender (元の代行記録との分離) | 代行者ずれ |
+| D2094 | X-Original-References ≠ References (元の糸参照記録との分離) | 糸参照ずれ |
