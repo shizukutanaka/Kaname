@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2199: `X-Original-Cc:` の複数値 (元副宛記録のカンマ連結値) を検出 — `Envelope` に `x_orig_cc_addr_list` を追加。
+### Security — D2200: `X-Original-Reply-To:` の複数値 (元返信口記録のカンマ連結値) を検出 — `Envelope` に `x_orig_reply_to_addr_list` を追加。
+### Security — D2201: `Disposition-Notification-To:` の複数値 (開封通知先記録のカンマ連結値) を検出 — `Envelope` に `disposition_to_addr_list` を追加。
+### Security — D2202: `Return-Receipt-To:` の複数値 (受領通知先記録のカンマ連結値) を検出 — `Envelope` に `return_receipt_addr_list` を追加。
 ### Security — D2195: `Apparently-To:` 系の複数値 (見せ宛記録のカンマ連結値) を検出 — `Envelope` に `apparently_to_addr_list` を追加。
 ### Security — D2196: `Apparently-From:`/`Apparently-Sender:` 系の複数値 (表差出人記録のカンマ連結値) を検出 — `Envelope` に `apparently_from_addr_list` を追加。
 ### Security — D2197: `X-Original-To:` の複数値 (元宛先記録のカンマ連結値) を検出 — `Envelope` に `x_orig_to_addr_list` を追加。
