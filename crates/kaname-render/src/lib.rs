@@ -1916,6 +1916,14 @@ pub struct Envelope {
     pub rrt_differs_reply_to: bool,
     /// `X-Confirm-Reading-To:` と `Reply-To:` の不一致アドレス (D2106 — 通知先ずれ)。
     pub xrt_differs_reply_to: bool,
+    /// `Apparently-Resent-*` 残渣欄の存在 (D2107 — 再送履歴ずれ)。
+    pub apparently_resent_marks: bool,
+    /// `X-Original-Bcc:` の存在 (D2108 — 届け先ずれ)。
+    pub x_orig_bcc_mark: bool,
+    /// `X-Original-Cc:` の存在 (D2109 — 届け先ずれ)。
+    pub x_orig_cc_mark: bool,
+    /// `X-Original-Reply-To:` の存在 (D2110 — 返信先ずれ)。
+    pub x_orig_reply_to_mark: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4979,6 +4987,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_differs_from = has_apparently_from_differs_from(bytes);
     let rrt_differs_reply_to = has_rrt_differs_reply_to(bytes);
     let xrt_differs_reply_to = has_xrt_differs_reply_to(bytes);
+    let apparently_resent_marks = has_apparently_resent_marks(bytes);
+    let x_orig_bcc_mark = has_x_orig_bcc_mark(bytes);
+    let x_orig_cc_mark = has_x_orig_cc_mark(bytes);
+    let x_orig_reply_to_mark = has_x_orig_reply_to_mark(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5842,6 +5854,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_differs_from,
         rrt_differs_reply_to,
         xrt_differs_reply_to,
+        apparently_resent_marks,
+        x_orig_bcc_mark,
+        x_orig_cc_mark,
+        x_orig_reply_to_mark,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42369,6 +42385,100 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Apparently-Resent-To:`/`Apparently-Resent-From:`/
+/// `Apparently-Resent-Sender:` の有無を判定する (D2107)。
+///
+/// sendmail が再送モードで記す「見た目上の再送受取人」の
+/// 残渣欄 — 下書き・エクスポート痕跡の群 (`Apparently-To`
+/// は D1388 が担当) の再送版で、残渣を見る実装と無視
+/// する実装で再送履歴の読みがずれる。
+#[must_use]
+pub fn has_apparently_resent_marks(raw: &[u8]) -> bool {
+    const APRES: &[&str] = &[
+        "apparently-resent-to",
+        "apparently-resent-from",
+        "apparently-resent-sender",
+        "x-apparently-resent-to",
+        "x-apparently-resent-from",
+        "x-apparently-resent-sender",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            return false;
+        }
+        l.find(':')
+            .map(|c| APRES.contains(&l[..c].trim()))
+            .unwrap_or(false)
+    })
+}
+
+/// `X-Original-Bcc:` の有無を判定する (D2108)。
+///
+/// 改変前の隠し宛先を記録する欄 — 見せないはずの Bcc が
+/// 記録欄として露出する死角で、残渣を読む実装と無視する
+/// 実装で届け先の読みがずれる。
+#[must_use]
+pub fn has_x_orig_bcc_mark(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            return false;
+        }
+        l.find(':')
+            .map(|c| l[..c].trim() == "x-original-bcc")
+            .unwrap_or(false)
+    })
+}
+
+/// `X-Original-Cc:` の有無を判定する (D2109)。
+///
+/// 改変前の副宛先を記録する欄 — 値比較の D2092 は `Cc:`
+/// との食い違いを見るが、残っていること自体が記録欄の
+/// 露出 (`X-Original-*` の既存群が未含の欄)。
+#[must_use]
+pub fn has_x_orig_cc_mark(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            return false;
+        }
+        l.find(':')
+            .map(|c| l[..c].trim() == "x-original-cc")
+            .unwrap_or(false)
+    })
+}
+
+/// `X-Original-Reply-To:` の有無を判定する (D2110)。
+///
+/// 改変前の返信口を記録する欄 — 残っていること自体が
+/// 記録欄の露出で、残渣を読む実装と無視する実装で
+/// 返信先の読みがずれる (`X-Original-*` の既存群が未含)。
+#[must_use]
+pub fn has_x_orig_reply_to_mark(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            return false;
+        }
+        l.find(':')
+            .map(|c| l[..c].trim() == "x-original-reply-to")
+            .unwrap_or(false)
+    })
+}
+
 /// `X-Envelope-From:`/`X-Envelope-Sender:`/`X-MailFrom:`/
 /// `X-Mail-From:`/`X-Original-Sender:`/`X-Orig-Sender:` と
 /// `From:` が異なるアドレスか判定する (D2103)。
@@ -65505,6 +65615,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 見せかけの再送残渣があれば発火() {
+        assert!(has_apparently_resent_marks(
+            b"From: a@x\r\nApparently-Resent-To: r@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_marks(
+            b"From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の隠し宛先記録があれば発火() {
+        assert!(has_x_orig_bcc_mark(
+            b"From: a@x\r\nX-Original-Bcc: hidden@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_bcc_mark(
+            b"From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の副宛先記録があれば発火() {
+        assert!(has_x_orig_cc_mark(
+            b"From: a@x\r\nX-Original-Cc: c@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_mark(
+            b"From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の返信口記録があれば発火() {
+        assert!(has_x_orig_reply_to_mark(
+            b"From: a@x\r\nX-Original-Reply-To: r@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_mark(
+            b"From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

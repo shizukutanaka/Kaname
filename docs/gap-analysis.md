@@ -1520,3 +1520,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2104 | Apparently-From/Apparently-Sender 系 ≠ From (sendmail 差出人記録の分離) | 差出人ずれ |
 | D2105 | Return-Receipt-To ≠ Reply-To (受領通知と返信口の分岐) | 通知先ずれ |
 | D2106 | X-Confirm-Reading-To ≠ Reply-To (閲覧確認と返信口の分岐) | 通知先ずれ |
+| D2107 | Apparently-Resent-* 残渣欄 (sendmail 再送モード記録) | 再送履歴ずれ |
+| D2108 | X-Original-Bcc 記録欄 (隠し宛先の露出) | 届け先ずれ |
+| D2109 | X-Original-Cc 記録欄 (元の副宛先の露出) | 届け先ずれ |
+| D2110 | X-Original-Reply-To 記録欄 (元の返信口の露出) | 返信先ずれ |
