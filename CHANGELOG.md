@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2267: `X-Confirm-Reading-To:` の複数 `@` 値 (閲覧確認先記録の addr-spec 違反) を検出 — `Envelope` に `confirm_reading_atdup` を追加。
+### Security — D2268: `Resent-Reply-To:` の複数 `@` 値 (再送返信口記録の addr-spec 違反) を検出 — `Envelope` に `resent_reply_to_atdup` を追加。
+### Security — D2269: `Apparently-Resent-*` 系の複数 `@` 値 (再送残渣記録の addr-spec 違反) を検出 — `Envelope` に `apparently_resent_atdup` を追加。
+### Security — D2270: `X-Original-Rcpt-To:` 系の複数 `@` 値 (元受取人記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_rcpt_to_atdup` を追加。
 ### Security — D2263: `X-Original-Cc:` の複数 `@` 値 (元副宛記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_cc_atdup` を追加。
 ### Security — D2264: `X-Original-Reply-To:` の複数 `@` 値 (元返信口記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_reply_to_atdup` を追加。
 ### Security — D2265: `Disposition-Notification-To:` の複数 `@` 値 (開封通知先記録の addr-spec 違反) を検出 — `Envelope` に `disposition_to_atdup` を追加。

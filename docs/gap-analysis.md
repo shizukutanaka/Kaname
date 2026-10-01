@@ -1680,3 +1680,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2264 | X-Original-Reply-To の複数@値 (元返信口記録の addr-spec 違反) | 返信先履歴ずれ |
 | D2265 | Disposition-Notification-To の複数@値 (開封通知先記録の addr-spec 違反) | 通知先ずれ |
 | D2266 | Return-Receipt-To の複数@値 (受領通知先記録の addr-spec 違反) | 通知先ずれ |
+| D2267 | X-Confirm-Reading-To の複数@値 (閲覧確認先記録の addr-spec 違反) | 確認先ずれ |
+| D2268 | Resent-Reply-To の複数@値 (再送返信口記録の addr-spec 違反) | 返信先ずれ |
+| D2269 | Apparently-Resent-* の複数@値 (再送残渣記録の addr-spec 違反) | 再送履歴ずれ |
+| D2270 | X-Original-Rcpt-To の複数@値 (元受取人記録の addr-spec 違反) | 受取人履歴ずれ |
