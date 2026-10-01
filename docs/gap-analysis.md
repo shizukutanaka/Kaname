@@ -1588,3 +1588,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2172 | DKIM-Signature の空値 (署名欄の空欄) | 署名評価ずれ |
 | D2173 | Received-SPF の空値 (SPF判定欄の空欄) | 認証評価ずれ |
 | D2174 | 優先度欄 (X-Priority/X-MSMail-Priority/Priority/Importance) の空値 | 緊急度表示ずれ |
+| D2175 | Envelope-To 系の宛名でない値 (封書宛先記録の非宛名値) | 届け先ずれ |
+| D2176 | Apparently-To 系の宛名でない値 (見せ宛記録の非宛名値) | 届け先ずれ |
+| D2177 | 封書差出人記録欄の宛名でない値 | 差出人ずれ |
+| D2178 | Apparently-From/Sender 系の宛名でない値 (表差出人記録の非宛名値) | 差出人ずれ |

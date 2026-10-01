@@ -2052,6 +2052,14 @@ pub struct Envelope {
     pub received_spf_empty: bool,
     /// 優先度欄の空値 (D2174 — 緊急度表示ずれ)。
     pub priority_headers_empty: bool,
+    /// `Envelope-To:` 系の値が宛名形でない (D2175 — 届け先ずれ)。
+    pub env_to_non_addr: bool,
+    /// `Apparently-To:` 系の値が宛名形でない (D2176 — 届け先ずれ)。
+    pub apparently_to_non_addr: bool,
+    /// 封書差出人記録欄の値が宛名形でない (D2177 — 差出人ずれ)。
+    pub env_from_non_addr: bool,
+    /// `Apparently-From:` 系の値が宛名形でない (D2178 — 差出人ずれ)。
+    pub apparently_from_non_addr: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5183,6 +5191,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let dkim_sig_empty = has_dkim_sig_empty(bytes);
     let received_spf_empty = has_received_spf_empty(bytes);
     let priority_headers_empty = has_priority_headers_empty(bytes);
+    let env_to_non_addr = has_env_to_non_addr(bytes);
+    let apparently_to_non_addr = has_apparently_to_non_addr(bytes);
+    let env_from_non_addr = has_env_from_non_addr(bytes);
+    let apparently_from_non_addr = has_apparently_from_non_addr(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6114,6 +6126,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_sig_empty,
         received_spf_empty,
         priority_headers_empty,
+        env_to_non_addr,
+        apparently_to_non_addr,
+        env_from_non_addr,
+        apparently_from_non_addr,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42641,6 +42657,170 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` の値が宛名形でないか判定する
+/// (D2175)。
+///
+/// 受取人を記す欄なのに `@` を持たない値 (語・ドメインのみ)
+/// の形 — 宛名として読む実装と記録語として読む実装で届け先
+/// がずれる (空値は D2147)。
+#[must_use]
+pub fn has_env_to_non_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(l[..c].trim(), "envelope-to" | "x-envelope-to")
+            && !v.is_empty()
+            && !v.contains('@')
+    })
+}
+
+/// `Apparently-To:`/`X-Apparently-To:` の値が宛名形でないか判定
+/// する (D2176)。
+///
+/// sendmail の実受取人を記す欄なのに `@` を持たない値の形 —
+/// 宛名として読む実装と記録語として読む実装で届け先がずれる
+/// (空値は D2148)。
+#[must_use]
+pub fn has_apparently_to_non_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(l[..c].trim(), "apparently-to" | "x-apparently-to")
+            && !v.is_empty()
+            && !v.contains('@')
+    })
+}
+
+/// 封書差出人記録欄 (`X-Envelope-From:`/`X-MailFrom:` 等) の値が
+/// 宛名形でないか判定する (D2177)。
+///
+/// エンベロープ差出人を記す欄なのに `@` を持たない値の形 —
+/// 宛名として読む実装と記録語として読む実装で差出人がずれる
+/// (空値は D2149)。
+#[must_use]
+pub fn has_env_from_non_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "x-envelope-from"
+                | "x-envelope-sender"
+                | "x-mailfrom"
+                | "x-mail-from"
+                | "x-original-sender"
+                | "x-orig-sender"
+        ) && !v.is_empty()
+            && !v.contains('@')
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系の値が宛名形でないか
+/// 判定する (D2178)。
+///
+/// sendmail の差出人記録欄なのに `@` を持たない値の形 — 宛名と
+/// して読む実装と記録語として読む実装で差出人がずれる (空値は
+/// D2150)。
+#[must_use]
+pub fn has_apparently_from_non_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "apparently-from"
+                | "x-apparently-from"
+                | "apparently-sender"
+                | "x-apparently-sender"
+        ) && !v.is_empty()
+            && !v.contains('@')
+    })
+}
+
 /// `Authentication-Results:` 系の値が空か判定する (D2171)。
 ///
 /// 認証結果を記す欄なのに値を持たない形 — 空欄を破棄する
@@ -68053,6 +68233,49 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 封書宛先が宛名形でなければ発火() {
+        assert!(has_env_to_non_addr(
+            b"From: a@x\r\nEnvelope-To: backup-folder\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_non_addr(
+            b"From: a@x\r\nEnvelope-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_non_addr(
+            b"From: a@x\r\nEnvelope-To:\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 見せ宛が宛名形でなければ発火() {
+        assert!(has_apparently_to_non_addr(
+            b"From: a@x\r\nApparently-To: undisclosed\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_non_addr(
+            b"From: a@x\r\nApparently-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人が宛名形でなければ発火() {
+        assert!(has_env_from_non_addr(
+            b"From: a@x\r\nX-Envelope-From: MAILER-DAEMON\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_non_addr(
+            b"From: a@x\r\nX-Envelope-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表札差出人が宛名形でなければ発火() {
+        assert!(has_apparently_from_non_addr(
+            b"From: a@x\r\nApparently-From: root\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_non_addr(
+            b"From: a@x\r\nApparently-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

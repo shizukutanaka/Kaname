@@ -7193,6 +7193,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.priority_headers_empty {
         render_risks.push("優先度欄が空です—空欄の扱いで緊急度表示がずれます".to_string());
     }
+    if env.env_to_non_addr {
+        render_risks.push("封書宛先記録が宛名形ではありません—値の読み分けで届け先がずれます".to_string());
+    }
+    if env.apparently_to_non_addr {
+        render_risks.push("見せかけ宛先記録が宛名形ではありません—値の読み分けで届け先がずれます".to_string());
+    }
+    if env.env_from_non_addr {
+        render_risks.push("封書差出人記録が宛名形ではありません—値の読み分けで差出人がずれます".to_string());
+    }
+    if env.apparently_from_non_addr {
+        render_risks.push("表差出人記録が宛名形ではありません—値の読み分けで差出人がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
