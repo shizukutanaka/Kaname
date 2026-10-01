@@ -1988,6 +1988,14 @@ pub struct Envelope {
     pub multi_x_orig_date: bool,
     /// `X-Original-References:` の重複出現 (D2142 — 参照履歴ずれ)。
     pub multi_x_orig_refs: bool,
+    /// `Disposition-Notification-To:` の重複出現 (D2143 — 通知行き先ずれ)。
+    pub multi_disposition_to: bool,
+    /// `Return-Receipt-To:` の重複出現 (D2144 — 通知行き先ずれ)。
+    pub multi_return_receipt_to: bool,
+    /// `X-Confirm-Reading-To:` の重複出現 (D2145 — 通知行き先ずれ)。
+    pub multi_confirm_reading: bool,
+    /// `Resent-Reply-To:` の重複出現 (D2146 — 返信先ずれ)。
+    pub multi_resent_reply_to: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5087,6 +5095,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let multi_x_orig_reply_to = has_multi_x_orig_reply_to(bytes);
     let multi_x_orig_date = has_multi_x_orig_date(bytes);
     let multi_x_orig_refs = has_multi_x_orig_refs(bytes);
+    let multi_disposition_to = has_multi_disposition_to(bytes);
+    let multi_return_receipt_to = has_multi_return_receipt_to(bytes);
+    let multi_confirm_reading = has_multi_confirm_reading(bytes);
+    let multi_resent_reply_to = has_multi_resent_reply_to(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5986,6 +5998,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         multi_x_orig_reply_to,
         multi_x_orig_date,
         multi_x_orig_refs,
+        multi_disposition_to,
+        multi_return_receipt_to,
+        multi_confirm_reading,
+        multi_resent_reply_to,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42513,6 +42529,101 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Disposition-Notification-To:` が2回以上現れるか
+/// 判定する (D2143)。
+///
+/// 開封通知の要求先は1度だけ書く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/全部へ送る」で通知の行き先が
+/// 分かれる。
+#[must_use]
+pub fn has_multi_disposition_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("disposition-notification-to:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// `Return-Receipt-To:` が2回以上現れるか判定する
+/// (D2144)。
+///
+/// 旧式受領通知の要求先は1度だけ書く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/全部へ送る」で通知の行き先が
+/// 分かれる。
+#[must_use]
+pub fn has_multi_return_receipt_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("return-receipt-to:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// `X-Confirm-Reading-To:` が2回以上現れるか判定する
+/// (D2145)。
+///
+/// 旧式閲覧確認の要求先は1度だけ書く欄 — 複数現れると
+/// 「先頭を採る/末尾を採る/全部へ送る」で通知の行き先が
+/// 分かれる。
+#[must_use]
+pub fn has_multi_confirm_reading(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("x-confirm-reading-to:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
+/// `Resent-Reply-To:` が2回以上現れるか判定する (D2146)。
+///
+/// 旧式の再送返信口は再送ブロックに1度だけ書く欄 —
+/// 複数現れると「先頭を採る/末尾を採る/一覧化する」で
+/// 返信先の読みが分かれる。
+#[must_use]
+pub fn has_multi_resent_reply_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut n = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("resent-reply-to:") {
+            n += 1;
+        }
+    }
+    n > 1
+}
+
 /// `X-Original-Cc:` が2回以上現れるか判定する (D2139)。
 ///
 /// 「元の副宛先」書き換え記録は1度だけ付く欄 — 複数現れると
@@ -66805,6 +66916,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 開封通知先が重複すれば発火() {
+        assert!(has_multi_disposition_to(
+            b"From: a@x\r\nDisposition-Notification-To: a@x\r\nDisposition-Notification-To: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_disposition_to(
+            b"From: a@x\r\nDisposition-Notification-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領通知先が重複すれば発火() {
+        assert!(has_multi_return_receipt_to(
+            b"From: a@x\r\nReturn-Receipt-To: a@x\r\nReturn-Receipt-To: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_return_receipt_to(
+            b"From: a@x\r\nReturn-Receipt-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 閲覧確認先が重複すれば発火() {
+        assert!(has_multi_confirm_reading(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@x\r\nX-Confirm-Reading-To: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_confirm_reading(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口が重複すれば発火() {
+        assert!(has_multi_resent_reply_to(
+            b"From: a@x\r\nResent-Reply-To: a@x\r\nResent-Reply-To: b@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_multi_resent_reply_to(
+            b"From: a@x\r\nResent-Reply-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

@@ -7097,6 +7097,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.multi_x_orig_refs {
         render_risks.push("元の糸参照記録が複数あります—記録の読み分けで参照履歴がずれます".to_string());
     }
+    if env.multi_disposition_to {
+        render_risks.push("開封通知の要求先が複数あります—記録の読み分けで通知の行き先がずれます".to_string());
+    }
+    if env.multi_return_receipt_to {
+        render_risks.push("受領通知の要求先が複数あります—記録の読み分けで通知の行き先がずれます".to_string());
+    }
+    if env.multi_confirm_reading {
+        render_risks.push("閲覧確認の要求先が複数あります—記録の読み分けで通知の行き先がずれます".to_string());
+    }
+    if env.multi_resent_reply_to {
+        render_risks.push("再送返信口が複数あります—記録の読み分けで返信先がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

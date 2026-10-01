@@ -1556,3 +1556,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2140 | X-Original-Reply-To の重複出現 (元返信口記録の多重化) | 返信先履歴ずれ |
 | D2141 | X-Original-Date の重複出現 (元日時記録の多重化) | 日時履歴ずれ |
 | D2142 | X-Original-References の重複出現 (元糸参照記録の多重化) | 参照履歴ずれ |
+| D2143 | Disposition-Notification-To の重複出現 (開封通知要求先の多重化) | 通知行き先ずれ |
+| D2144 | Return-Receipt-To の重複出現 (受領通知要求先の多重化) | 通知行き先ずれ |
+| D2145 | X-Confirm-Reading-To の重複出現 (閲覧確認要求先の多重化) | 通知行き先ずれ |
+| D2146 | Resent-Reply-To の重複出現 (旧式再送返信口の多重化) | 返信先ずれ |
