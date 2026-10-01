@@ -2228,6 +2228,14 @@ pub struct Envelope {
     pub x_orig_to_atdup: bool,
     /// `X-Original-From:` の値が複数 `@` を含む (D2262 — 元差出人ずれ)。
     pub x_orig_from_atdup: bool,
+    /// `X-Original-Cc:` の値が複数 `@` を含む (D2263 — 副宛履歴ずれ)。
+    pub x_orig_cc_atdup: bool,
+    /// `X-Original-Reply-To:` の値が複数 `@` を含む (D2264 — 返信先履歴ずれ)。
+    pub x_orig_reply_to_atdup: bool,
+    /// `Disposition-Notification-To:` の値が複数 `@` を含む (D2265 — 通知先ずれ)。
+    pub disposition_to_atdup: bool,
+    /// `Return-Receipt-To:` の値が複数 `@` を含む (D2266 — 通知先ずれ)。
+    pub return_receipt_atdup: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5447,6 +5455,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_atdup = has_apparently_from_atdup(bytes);
     let x_orig_to_atdup = has_x_orig_to_atdup(bytes);
     let x_orig_from_atdup = has_x_orig_from_atdup(bytes);
+    let x_orig_cc_atdup = has_x_orig_cc_atdup(bytes);
+    let x_orig_reply_to_atdup = has_x_orig_reply_to_atdup(bytes);
+    let disposition_to_atdup = has_disposition_to_atdup(bytes);
+    let return_receipt_atdup = has_return_receipt_atdup(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6466,6 +6478,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_atdup,
         x_orig_to_atdup,
         x_orig_from_atdup,
+        x_orig_cc_atdup,
+        x_orig_reply_to_atdup,
+        disposition_to_atdup,
+        return_receipt_atdup,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42993,6 +43009,176 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Original-Cc:` の値が `@` を2つ以上含む宛名形か判定する
+/// (D2263)。
+///
+/// 書き換え前の副宛先を記す欄なのに `a@x@c` のように addr-spec が
+/// 許さない複数 `@` — 最初の `@` で区切る実装・最後の `@` で区切
+/// る実装・拒否する実装で副宛履歴がずれる (ドット違反は D2247)。
+#[must_use]
+pub fn has_x_orig_cc_atdup(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-cc"
+            && v.matches('@').count() >= 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Reply-To:` の値が `@` を2つ以上含む宛名形か判定す
+/// る (D2264)。
+///
+/// 書き換え前の返信口を記す欄なのに複数 `@` — `@` の切り分け位置
+/// の扱いが実装間で異なり返信先履歴がずれる (ドット違反は
+/// D2248)。
+#[must_use]
+pub fn has_x_orig_reply_to_atdup(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-reply-to"
+            && v.matches('@').count() >= 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Disposition-Notification-To:` の値が `@` を2つ以上含む宛名形か
+/// 判定する (D2265)。
+///
+/// 開封通知の返送先を記す欄なのに複数 `@` — `@` の切り分け位置の
+/// 扱いが実装間で異なり通知先がずれる (ドット違反は D2249)。
+#[must_use]
+pub fn has_disposition_to_atdup(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "disposition-notification-to"
+            && v.matches('@').count() >= 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Return-Receipt-To:` の値が `@` を2つ以上含む宛名形か判定する
+/// (D2266)。
+///
+/// 旧式受領通知の返送先を記す欄なのに複数 `@` — `@` の切り分け位
+/// 置の扱いが実装間で異なり通知先がずれる (ドット違反は D2250)。
+#[must_use]
+pub fn has_return_receipt_atdup(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "return-receipt-to"
+            && v.matches('@').count() >= 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `Apparently-To:`/`X-Apparently-To:` の値が `@` を2つ以上含む宛
 /// 名形か判定する (D2259)。
 ///
@@ -72143,6 +72329,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元副宛が二重アットなら発火() {
+        assert!(has_x_orig_cc_atdup(
+            b"From: a@x\r\nX-Original-Cc: c@y@d\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_atdup(
+            b"From: a@x\r\nX-Original-Cc: c@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口が二重アットなら発火() {
+        assert!(has_x_orig_reply_to_atdup(
+            b"From: a@x\r\nX-Original-Reply-To: r@y@d\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_atdup(
+            b"From: a@x\r\nX-Original-Reply-To: r@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 開封先が二重アットなら発火() {
+        assert!(has_disposition_to_atdup(
+            b"From: a@x\r\nDisposition-Notification-To: a@x@d\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_atdup(
+            b"From: a@x\r\nDisposition-Notification-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領先が二重アットなら発火() {
+        assert!(has_return_receipt_atdup(
+            b"From: a@x\r\nReturn-Receipt-To: a@x@d\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_atdup(
+            b"From: a@x\r\nReturn-Receipt-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
