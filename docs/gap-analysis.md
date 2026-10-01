@@ -1664,3 +1664,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2248 | X-Original-Reply-To のドット違反値 (元返信口記録の dot-atom 違反) | 返信先履歴ずれ |
 | D2249 | Disposition-Notification-To のドット違反値 (開封通知先記録の dot-atom 違反) | 通知先ずれ |
 | D2250 | Return-Receipt-To のドット違反値 (受領通知先記録の dot-atom 違反) | 通知先ずれ |
+| D2251 | X-Confirm-Reading-To のドット違反値 (閲覧確認先記録の dot-atom 違反) | 確認先ずれ |
+| D2252 | Resent-Reply-To のドット違反値 (再送返信口記録の dot-atom 違反) | 返信先ずれ |
+| D2253 | Apparently-Resent-* のドット違反値 (再送残渣記録の dot-atom 違反) | 再送履歴ずれ |
+| D2254 | X-Original-Rcpt-To のドット違反値 (元受取人記録の dot-atom 違反) | 受取人履歴ずれ |
