@@ -1540,3 +1540,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2124 | X-Original-To ≠ Envelope-To (展開記録と封書記録の食い違い) | 届け先ずれ |
 | D2125 | Envelope-To ≠ Delivered-To (封書記録と配達記録の食い違い) | 届け先ずれ |
 | D2126 | Envelope-To ≠ Apparently-To (封書記録と見せ宛記録の食い違い) | 届け先ずれ |
+| D2127 | Return-Path ≠ X-Envelope-From 系 (返送先と封書差出人記録の食い違い) | 差出人ずれ |
+| D2128 | Return-Path ≠ Apparently-From 系 (返送先と sendmail 差出人記録の食い違い) | 差出人ずれ |
+| D2129 | X-Envelope-From 系 ≠ Apparently-From 系 (二つの差出人記録の食い違い) | 差出人ずれ |
+| D2130 | X-Original-From ≠ X-Envelope-From 系 (元差出人記録と封書記録の食い違い) | 差出人ずれ |

@@ -1956,6 +1956,14 @@ pub struct Envelope {
     pub envelope_to_differs_delivered_to: bool,
     /// `Envelope-To:` と `Apparently-To:` の不一致アドレス (D2126 — 届け先ずれ)。
     pub envelope_to_differs_apparently_to: bool,
+    /// `Return-Path:` とエンベロープ差出人記録の不一致アドレス (D2127 — 差出人ずれ)。
+    pub return_path_differs_env_from: bool,
+    /// `Return-Path:` と `Apparently-From:` 系の不一致アドレス (D2128 — 差出人ずれ)。
+    pub return_path_differs_apparently_from: bool,
+    /// エンベロープ差出人記録と `Apparently-From:` 系の不一致アドレス (D2129 — 差出人ずれ)。
+    pub env_from_differs_apparently_from: bool,
+    /// `X-Original-From:` とエンベロープ差出人記録の不一致アドレス (D2130 — 差出人ずれ)。
+    pub x_orig_from_differs_env_from: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5039,6 +5047,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_to_differs_envelope_to = has_x_orig_to_differs_envelope_to(bytes);
     let envelope_to_differs_delivered_to = has_envelope_to_differs_delivered_to(bytes);
     let envelope_to_differs_apparently_to = has_envelope_to_differs_apparently_to(bytes);
+    let return_path_differs_env_from = has_return_path_differs_env_from(bytes);
+    let return_path_differs_apparently_from = has_return_path_differs_apparently_from(bytes);
+    let env_from_differs_apparently_from = has_env_from_differs_apparently_from(bytes);
+    let x_orig_from_differs_env_from = has_x_orig_from_differs_env_from(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5922,6 +5934,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_to_differs_envelope_to,
         envelope_to_differs_delivered_to,
         envelope_to_differs_apparently_to,
+        return_path_differs_env_from,
+        return_path_differs_apparently_from,
+        env_from_differs_apparently_from,
+        x_orig_from_differs_env_from,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42449,6 +42465,199 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Return-Path:` とエンベロープ差出人記録欄
+/// (`X-Envelope-From:`/`X-Envelope-Sender:`/`X-MailFrom:`/
+/// `X-Mail-From:`/`X-Original-Sender:`/`X-Orig-Sender:`)
+/// が異なるアドレスか判定する (D2127)。
+///
+/// エンベロープ返送先とエンベロープ差出人記録が
+/// 食い違う形 — 二つの配送記録を読む実装で差出人の
+/// 読みがずれる (`Return-Path` ↔ `From` は
+/// `return_path_differs_from` が担当)。
+#[must_use]
+pub fn has_return_path_differs_env_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(r), Some(e)) = (
+        first_addr_of(&logical, "return-path"),
+        first_addr_of_any(
+            &logical,
+            &[
+                "x-envelope-from",
+                "x-envelope-sender",
+                "x-mailfrom",
+                "x-mail-from",
+                "x-original-sender",
+                "x-orig-sender",
+            ],
+        ),
+    ) else {
+        return false;
+    };
+    !r.is_empty() && !e.is_empty() && !r.eq_ignore_ascii_case(&e)
+}
+
+/// `Return-Path:` と `Apparently-From:`/`X-Apparently-From:`/
+/// `Apparently-Sender:`/`X-Apparently-Sender:` が異なる
+/// アドレスか判定する (D2128)。
+///
+/// エンベロープ返送先と sendmail の差出人記録が食い違う
+/// 形 — 記録どうしを読む実装で差出人の読みがずれる。
+#[must_use]
+pub fn has_return_path_differs_apparently_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(r), Some(a)) = (
+        first_addr_of(&logical, "return-path"),
+        first_addr_of_any(
+            &logical,
+            &[
+                "apparently-from",
+                "x-apparently-from",
+                "apparently-sender",
+                "x-apparently-sender",
+            ],
+        ),
+    ) else {
+        return false;
+    };
+    !r.is_empty() && !a.is_empty() && !r.eq_ignore_ascii_case(&a)
+}
+
+/// エンベロープ差出人記録欄 (`X-Envelope-From:` 等) と
+/// `Apparently-From:`/`Apparently-Sender:` 系が異なる
+/// アドレスか判定する (D2129)。
+///
+/// 二つのエンベロープ差出人記録が食い違う形 — 記録
+/// どうしを読む実装で差出人の読みがずれる。
+#[must_use]
+pub fn has_env_from_differs_apparently_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(e), Some(a)) = (
+        first_addr_of_any(
+            &logical,
+            &[
+                "x-envelope-from",
+                "x-envelope-sender",
+                "x-mailfrom",
+                "x-mail-from",
+                "x-original-sender",
+                "x-orig-sender",
+            ],
+        ),
+        first_addr_of_any(
+            &logical,
+            &[
+                "apparently-from",
+                "x-apparently-from",
+                "apparently-sender",
+                "x-apparently-sender",
+            ],
+        ),
+    ) else {
+        return false;
+    };
+    !e.is_empty() && !a.is_empty() && !e.eq_ignore_ascii_case(&a)
+}
+
+/// `X-Original-From:` とエンベロープ差出人記録欄
+/// (`X-Envelope-From:` 等) が異なるアドレスか判定する
+/// (D2130)。
+///
+/// 「元の差出人」記録とエンベロープ差出人記録が食い違う
+/// 形 — 記録どうしを読む実装で差出人の読みがずれる。
+#[must_use]
+pub fn has_x_orig_from_differs_env_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(e)) = (
+        first_addr_of(&logical, "x-original-from"),
+        first_addr_of_any(
+            &logical,
+            &[
+                "x-envelope-from",
+                "x-envelope-sender",
+                "x-mailfrom",
+                "x-mail-from",
+                "x-original-sender",
+                "x-orig-sender",
+            ],
+        ),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !e.is_empty() && !x.eq_ignore_ascii_case(&e)
+}
+
 /// `X-Original-To:` と `Apparently-To:`/`X-Apparently-To:`
 /// が異なるアドレスか判定する (D2123)。
 ///
@@ -66252,6 +66461,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 返送先が封書差出人記録と食い違えば発火() {
+        assert!(has_return_path_differs_env_from(
+            b"From: a@x\r\nReturn-Path: r@z\r\nX-Envelope-From: e@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_path_differs_env_from(
+            b"From: a@x\r\nReturn-Path: r@z\r\nX-Envelope-From: r@z\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先が表差出人記録と食い違えば発火() {
+        assert!(has_return_path_differs_apparently_from(
+            b"From: a@x\r\nReturn-Path: r@z\r\nApparently-From: a@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_path_differs_apparently_from(
+            b"From: a@x\r\nReturn-Path: r@z\r\nApparently-From: r@z\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人記録が表差出人記録と食い違えば発火() {
+        assert!(has_env_from_differs_apparently_from(
+            b"From: a@x\r\nX-Envelope-From: e@z\r\nApparently-From: a@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_differs_apparently_from(
+            b"From: a@x\r\nX-Envelope-From: e@z\r\nApparently-From: e@z\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の差出人記録が封書差出人記録と食い違えば発火() {
+        assert!(has_x_orig_from_differs_env_from(
+            b"From: a@x\r\nX-Original-From: x@z\r\nX-Envelope-From: e@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_differs_env_from(
+            b"From: a@x\r\nX-Original-From: x@z\r\nX-Envelope-From: x@z\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

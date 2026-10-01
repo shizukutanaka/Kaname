@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2127: `Return-Path:` と `X-Envelope-From:` 等のエンベロープ差出人記録の不一致アドレス (二つの配送記録の食い違い) を検出 — `Envelope` に `return_path_differs_env_from` を追加。
+### Security — D2128: `Return-Path:` と `Apparently-From:`/`Apparently-Sender:` 系の不一致アドレス (返送先と sendmail 差出人記録の食い違い) を検出 — `Envelope` に `return_path_differs_apparently_from` を追加。
+### Security — D2129: `X-Envelope-From:` 等のエンベロープ差出人記録と `Apparently-From:` 系の不一致アドレス (二つの差出人記録の食い違い) を検出 — `Envelope` に `env_from_differs_apparently_from` を追加。
+### Security — D2130: `X-Original-From:` と `X-Envelope-From:` 等のエンベロープ差出人記録の不一致アドレス (元差出人記録と封書記録の食い違い) を検出 — `Envelope` に `x_orig_from_differs_env_from` を追加。
 ### Security — D2123: `X-Original-To:` と `Apparently-To:` の不一致アドレス (二つの「元の受取人」記録の食い違い) を検出 — `Envelope` に `x_orig_to_differs_apparently_to` を追加。
 ### Security — D2124: `X-Original-To:` と `Envelope-To:` の不一致アドレス (エイリアス展開記録とエンベロープ記録の食い違い) を検出 — `Envelope` に `x_orig_to_differs_envelope_to` を追加。
 ### Security — D2125: `Envelope-To:` と `Delivered-To:` の不一致アドレス (エンベロープ記録と最終配達記録の食い違い) を検出 — `Envelope` に `envelope_to_differs_delivered_to` を追加。
