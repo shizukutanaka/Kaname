@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2219: `X-Confirm-Reading-To:` の括弧・引用囲い値 (閲覧確認先記録の囲い形) を検出 — `Envelope` に `confirm_reading_bracketed` を追加。
+### Security — D2220: `Resent-Reply-To:` の括弧・引用囲い値 (再送返信口記録の囲い形) を検出 — `Envelope` に `resent_reply_to_bracketed` を追加。
+### Security — D2221: `Apparently-Resent-*:` 系の括弧・引用囲い値 (再送残渣記録の囲い形) を検出 — `Envelope` に `apparently_resent_bracketed` を追加。
+### Security — D2222: `X-Original-Rcpt-To:` 系の括弧・引用囲い値 (元受取人記録の囲い形) を検出 — `Envelope` に `x_orig_rcpt_to_bracketed` を追加。
 ### Security — D2215: `X-Original-Cc:` の括弧・引用囲い値 (元副宛記録の囲い形) を検出 — `Envelope` に `x_orig_cc_bracketed` を追加。
 ### Security — D2216: `X-Original-Reply-To:` の括弧・引用囲い値 (元返信口記録の囲い形) を検出 — `Envelope` に `x_orig_reply_to_bracketed` を追加。
 ### Security — D2217: `Disposition-Notification-To:` の括弧・引用囲い値 (開封通知先記録の囲い形) を検出 — `Envelope` に `disposition_to_bracketed` を追加。

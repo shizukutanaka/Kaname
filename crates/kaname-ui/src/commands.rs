@@ -7325,6 +7325,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.return_receipt_bracketed {
         render_risks.push("受領通知先記録が括弧囲み値です—括弧の扱いで通知先がずれます".to_string());
     }
+    if env.confirm_reading_bracketed {
+        render_risks.push("閲覧確認先記録が括弧囲み値です—括弧の扱いで通知先がずれます".to_string());
+    }
+    if env.resent_reply_to_bracketed {
+        render_risks.push("再送返信口記録が括弧囲み値です—括弧の扱いで返信先がずれます".to_string());
+    }
+    if env.apparently_resent_bracketed {
+        render_risks.push("再送残渣記録が括弧囲み値です—括弧の扱いで再送記録がずれます".to_string());
+    }
+    if env.x_orig_rcpt_to_bracketed {
+        render_risks.push("元受取人記録が括弧囲み値です—括弧の扱いで届け先の履歴がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

@@ -1632,3 +1632,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2216 | X-Original-Reply-To の囲い値 (元返信口記録の括弧・引用形) | 返信先ずれ |
 | D2217 | Disposition-Notification-To の囲い値 (開封通知先記録の括弧・引用形) | 通知先ずれ |
 | D2218 | Return-Receipt-To の囲い値 (受領通知先記録の括弧・引用形) | 通知先ずれ |
+| D2219 | X-Confirm-Reading-To の囲い値 (閲覧確認先記録の括弧・引用形) | 通知先ずれ |
+| D2220 | Resent-Reply-To の囲い値 (再送返信口記録の括弧・引用形) | 返信先ずれ |
+| D2221 | Apparently-Resent-* 系の囲い値 (再送残渣記録の括弧・引用形) | 再送記録ずれ |
+| D2222 | X-Original-Rcpt-To 系の囲い値 (元受取人記録の括弧・引用形) | 届け先履歴ずれ |

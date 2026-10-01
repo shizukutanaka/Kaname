@@ -2140,6 +2140,14 @@ pub struct Envelope {
     pub disposition_to_bracketed: bool,
     /// `Return-Receipt-To:` の値が括弧・引用囲い (D2218 — 通知先ずれ)。
     pub return_receipt_bracketed: bool,
+    /// `X-Confirm-Reading-To:` の値が括弧・引用囲い (D2219 — 通知先ずれ)。
+    pub confirm_reading_bracketed: bool,
+    /// `Resent-Reply-To:` の値が括弧・引用囲い (D2220 — 返信先ずれ)。
+    pub resent_reply_to_bracketed: bool,
+    /// `Apparently-Resent-*:` 系の値が括弧・引用囲い (D2221 — 再送記録ずれ)。
+    pub apparently_resent_bracketed: bool,
+    /// `X-Original-Rcpt-To:` 系の値が括弧・引用囲い (D2222 — 届け先履歴ずれ)。
+    pub x_orig_rcpt_to_bracketed: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5315,6 +5323,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_bracketed = has_x_orig_reply_to_bracketed(bytes);
     let disposition_to_bracketed = has_disposition_to_bracketed(bytes);
     let return_receipt_bracketed = has_return_receipt_bracketed(bytes);
+    let confirm_reading_bracketed = has_confirm_reading_bracketed(bytes);
+    let resent_reply_to_bracketed = has_resent_reply_to_bracketed(bytes);
+    let apparently_resent_bracketed = has_apparently_resent_bracketed(bytes);
+    let x_orig_rcpt_to_bracketed = has_x_orig_rcpt_to_bracketed(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6290,6 +6302,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_bracketed,
         disposition_to_bracketed,
         return_receipt_bracketed,
+        confirm_reading_bracketed,
+        resent_reply_to_bracketed,
+        apparently_resent_bracketed,
+        x_orig_rcpt_to_bracketed,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42817,6 +42833,183 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Confirm-Reading-To:` の値が括弧・引用で囲まれた形か判定する
+/// (D2219)。
+///
+/// 旧式閲覧確認の要求先を記す欄なのに `<a@x>`/`"a@x"`/`(c)a@x`
+/// のような囲いの形 — 括弧を剥がす実装と字面どおり読む実装で
+/// 通知先がずれる (非宛名値は D2185、複数値は D2203)。
+#[must_use]
+pub fn has_confirm_reading_bracketed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-confirm-reading-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && (v.contains('<')
+                || v.contains('>')
+                || v.contains('"')
+                || v.contains('('))
+    })
+}
+
+/// `Resent-Reply-To:` の値が括弧・引用で囲まれた形か判定する
+/// (D2220)。
+///
+/// 旧式再送返信口を記す欄なのに括弧や引用の囲いの形 —
+/// 剥がす実装と字面どおり読む実装で返信先がずれる (非宛名値
+/// は D2186、複数値は D2204)。
+#[must_use]
+pub fn has_resent_reply_to_bracketed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "resent-reply-to"
+            && v.contains('@')
+            && !v.contains(',')
+            && (v.contains('<')
+                || v.contains('>')
+                || v.contains('"')
+                || v.contains('('))
+    })
+}
+
+/// `Apparently-Resent-*:` 系の値が括弧・引用で囲まれた形か判定
+/// する (D2221)。
+///
+/// sendmail 再送モードの残渣欄なのに括弧や引用の囲いの形 —
+/// 剥がす実装と字面どおり読む実装で再送記録がずれる (非宛名
+/// 値は D2190、複数値は D2205)。
+#[must_use]
+pub fn has_apparently_resent_bracketed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ) && v.contains('@')
+            && !v.contains(',')
+            && (v.contains('<')
+                || v.contains('>')
+                || v.contains('"')
+                || v.contains('('))
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系の値が括弧・引用で囲まれた形か判定
+/// する (D2222)。
+///
+/// 元の受取人を記す欄なのに括弧や引用の囲いの形 — 剥がす実装
+/// と字面どおり読む実装で届け先の履歴がずれる (非宛名値は
+/// D2189、複数値は D2206)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_bracketed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "x-original-rcpt-to" | "x-orig-rcpt-to" | "x-rcpt-to" | "x-envelope-rcpt-to"
+        ) && v.contains('@')
+            && !v.contains(',')
+            && (v.contains('<')
+                || v.contains('>')
+                || v.contains('"')
+                || v.contains('('))
+    })
+}
+
 /// `X-Original-Cc:` の値が括弧・引用で囲まれた形か判定する
 /// (D2215)。
 ///
@@ -69955,6 +70148,49 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 閲覧先が括弧なら発火() {
+        assert!(has_confirm_reading_bracketed(
+            b"From: a@x\r\nX-Confirm-Reading-To: <a@x>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_bracketed(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_bracketed(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@x, e@z\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口が括弧なら発火() {
+        assert!(has_resent_reply_to_bracketed(
+            b"From: a@x\r\nResent-From: a@x\r\nResent-Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nResent-Reply-To: <r@y>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_bracketed(
+            b"From: a@x\r\nResent-From: a@x\r\nResent-Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nResent-Reply-To: r@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣が括弧なら発火() {
+        assert!(has_apparently_resent_bracketed(
+            b"From: a@x\r\nApparently-Resent-To: <b@y>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_bracketed(
+            b"From: a@x\r\nApparently-Resent-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人が括弧なら発火() {
+        assert!(has_x_orig_rcpt_to_bracketed(
+            b"From: a@x\r\nX-Original-Rcpt-To: <b@y>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_bracketed(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
