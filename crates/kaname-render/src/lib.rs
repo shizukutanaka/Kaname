@@ -1804,6 +1804,14 @@ pub struct Envelope {
     pub content_id_top: bool,
     /// 宛先系欄の宛先数過剰 (D2050 — 配送先ずれ)。
     pub to_many_addrs: bool,
+    /// `Sender:` と `From:` の同一アドレス (D2051 — 差出人ずれ)。
+    pub from_sender_dup: bool,
+    /// `Reply-To:` と `From:` の同一アドレス (D2052 — 返信先ずれ)。
+    pub reply_to_same_as_from: bool,
+    /// `In-Reply-To:` あるのに `References:` 無し (D2053 — 糸参照ずれ)。
+    pub irt_no_refs: bool,
+    /// `Resent-From:` と `From:` の同一アドレス (D2054 — 再送ずれ)。
+    pub resent_from_same_as_from: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4811,6 +4819,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_case_variant_pair = has_msgid_case_variant_pair(bytes);
     let content_id_top = has_content_id_top(bytes);
     let to_many_addrs = has_to_many_addrs(bytes);
+    let from_sender_dup = has_from_sender_dup(bytes);
+    let reply_to_same_as_from = has_reply_to_same_as_from(bytes);
+    let irt_no_refs = has_irt_no_refs(bytes);
+    let resent_from_same_as_from = has_resent_from_same_as_from(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5618,6 +5630,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         msgid_case_variant_pair,
         content_id_top,
         to_many_addrs,
+        from_sender_dup,
+        reply_to_same_as_from,
+        irt_no_refs,
+        resent_from_same_as_from,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42129,6 +42145,161 @@ pub fn has_msgid_dup_pair(raw: &[u8]) -> bool {
     false
 }
 
+/// 指定ヘッダの最初の角括弧アドレス (または裸値の先頭語) を
+/// 取り出すヘルパ — 欄間同一性検査用。
+fn first_addr_of<'a>(logical: &'a str, name: &str) -> Option<String> {
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != name {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if let Some(a) = v.find('<') {
+            if let Some(z) = v[a + 1..].find('>') {
+                return Some(v[a + 1..a + 1 + z].trim().to_string());
+            }
+        }
+        if !v.is_empty() {
+            return Some(v.split_whitespace().next().unwrap_or("").trim_matches(|c| c == '(' || c == ')').to_string());
+        }
+    }
+    None
+}
+
+/// `Sender:` と単一 `From:` が同一アドレスか判定する (D2051)。
+///
+/// 規格上 `Sender:` は `From:` と異なる送信者のときだけ出す
+/// 欄で、同一値は冗長 — そのまま表示する実装と冗長欄を
+/// 落とす実装で差出人表示がずれる (Sender 単独残存は
+/// `sender_no_from` が担当)。
+#[must_use]
+pub fn has_from_sender_dup(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(f), Some(s)) = (
+        first_addr_of(&logical, "from"),
+        first_addr_of(&logical, "sender"),
+    ) else {
+        return false;
+    };
+    !f.is_empty() && f.eq_ignore_ascii_case(&s)
+}
+
+/// `Reply-To:` と `From:` が同一アドレスか判定する (D2052)。
+///
+/// `Reply-To` は返信先の上書き欄 — 差出人と同一値は名目的には
+/// 無意味だが、上書き解釈をする実装と冗長欄を無視する実装で
+/// 返信の解釈がずれる (Reply-To 複数値は `multi_reply_to` が担当)。
+#[must_use]
+pub fn has_reply_to_same_as_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(f), Some(r)) = (
+        first_addr_of(&logical, "from"),
+        first_addr_of(&logical, "reply-to"),
+    ) else {
+        return false;
+    };
+    !f.is_empty() && f.eq_ignore_ascii_case(&r)
+}
+
+/// `In-Reply-To:` があるのに `References:` が無いか判定する
+/// (D2053)。
+///
+/// 返信欄の片側のみ残る形 — `References:` のみで糸を辿る
+/// 実装は親への紐を失い、`In-Reply-To:` も辿る実装と糸帰属が
+/// ずれる (糸参照欄の値異常は `refs_*`/`multi_inreply` が担当)。
+#[must_use]
+pub fn has_irt_no_refs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    let mut irt = false;
+    let mut refs = false;
+    for l in lower.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("in-reply-to:") {
+            irt = true;
+        } else if l.starts_with("references:") {
+            refs = true;
+        }
+    }
+    irt && !refs
+}
+
+/// `Resent-From:` と `From:` が同一アドレスか判定する (D2054)。
+///
+/// 再送信者は本来差出人と別人の欄 — 同一値の再送ブロックは
+/// 体裁だけ整えた偽転送の兆候で、再送系と通常欄の扱いが
+/// ずれる (再送系の名札一致は `resent_msgid_same` が担当)。
+#[must_use]
+pub fn has_resent_from_same_as_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(f), Some(r)) = (
+        first_addr_of(&logical, "from"),
+        first_addr_of(&logical, "resent-from"),
+    ) else {
+        return false;
+    };
+    !f.is_empty() && f.eq_ignore_ascii_case(&r)
+}
+
 /// `Resent-*` ブロックに `Resent-Message-ID:` が無いか判定する
 /// (D2047)。
 ///
@@ -63188,6 +63359,36 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 差出と送付が同一名では発火() {
+        assert!(has_from_sender_dup(b"From: a@x\r\nSender: a@x\r\n\r\nx"));
+        assert!(!has_from_sender_dup(b"From: a@x\r\nSender: b@y\r\n\r\nx"));
+        assert!(!has_from_sender_dup(b"From: a@x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn 返信先が差出人と同一では発火() {
+        assert!(has_reply_to_same_as_from(b"From: a@x\r\nReply-To: a@x\r\n\r\nx"));
+        assert!(!has_reply_to_same_as_from(b"From: a@x\r\nReply-To: b@y\r\n\r\nx"));
+    }
+
+    #[test]
+    fn 半分の糸では発火() {
+        assert!(has_irt_no_refs(b"In-Reply-To: <a@x>\r\n\r\nx"));
+        assert!(!has_irt_no_refs(b"In-Reply-To: <a@x>\r\nReferences: <a@x>\r\n\r\nx"));
+        assert!(!has_irt_no_refs(b"References: <a@x>\r\n\r\nx"));
+    }
+
+    #[test]
+    fn 再送者が差出人と同一では発火() {
+        assert!(has_resent_from_same_as_from(
+            b"From: a@x\r\nResent-From: a@x\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-To: b@y\r\nResent-Message-ID: <r@x>\r\n\r\nx"
+        ));
+        assert!(!has_resent_from_same_as_from(
+            b"From: a@x\r\nResent-From: b@y\r\nResent-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nResent-To: c@z\r\n\r\nx"
+        ));
     }
 
     #[test]

@@ -6821,6 +6821,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.to_many_addrs {
         render_risks.push("宛先欄の宛先数が過剰です—切り詰めて読む実装と届け先の見え方がずれます".to_string());
     }
+    if env.from_sender_dup {
+        render_risks.push("送信者欄が差出人と同一です—冗長欄の表示有無で差出人表示がずれます".to_string());
+    }
+    if env.reply_to_same_as_from {
+        render_risks.push("返信先が差出人と同一です—上書き解釈と冗長無視で返信解釈がずれます".to_string());
+    }
+    if env.irt_no_refs {
+        render_risks.push("返信欄が片側しかありません—参照欄だけ辿る実装と糸帰属がずれます".to_string());
+    }
+    if env.resent_from_same_as_from {
+        render_risks.push("再送信者が差出人と同一です—再送系と通常欄の扱いがずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
