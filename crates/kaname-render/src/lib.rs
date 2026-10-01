@@ -26269,8 +26269,9 @@ pub fn has_received_from_empty(raw: &[u8]) -> bool {
     const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -26437,8 +26438,9 @@ pub fn has_msgid_dotless_domain(raw: &[u8]) -> bool {
 pub fn has_received_multi_by(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -26507,8 +26509,9 @@ pub fn has_cd_empty_type(raw: &[u8]) -> bool {
 pub fn has_received_from_quoted(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -26551,8 +26554,9 @@ pub fn has_received_from_quoted(raw: &[u8]) -> bool {
 pub fn has_received_from_at(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -26594,8 +26598,9 @@ pub fn has_received_from_at(raw: &[u8]) -> bool {
 pub fn has_received_multi_with(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -26630,8 +26635,9 @@ pub fn has_received_multi_with(raw: &[u8]) -> bool {
 pub fn has_received_multi_for(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -26743,8 +26749,9 @@ pub fn has_padded_cte(raw: &[u8]) -> bool {
 pub fn has_received_multi_id(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -26899,8 +26906,9 @@ pub fn has_alnumless_boundary(raw: &[u8]) -> bool {
 pub fn has_received_multi_via(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -26937,8 +26945,9 @@ pub fn has_received_by_empty(raw: &[u8]) -> bool {
     const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -27068,8 +27077,9 @@ pub fn has_received_with_empty(raw: &[u8]) -> bool {
     const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -27110,8 +27120,9 @@ pub fn has_received_id_empty(raw: &[u8]) -> bool {
     const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -27191,8 +27202,9 @@ pub fn has_received_for_empty(raw: &[u8]) -> bool {
     const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -27234,8 +27246,9 @@ pub fn has_received_via_empty(raw: &[u8]) -> bool {
     const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -29629,8 +29642,9 @@ pub fn has_msgid_ws_inner(raw: &[u8]) -> bool {
 pub fn has_received_by_at(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -29794,9 +29808,10 @@ pub fn has_cd_star_type(raw: &[u8]) -> bool {
 pub fn has_received_for_two_at(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -29974,9 +29989,10 @@ pub fn has_cte_eq(raw: &[u8]) -> bool {
 pub fn has_received_from_bang(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -30156,9 +30172,10 @@ pub fn has_ct_bslash_type(raw: &[u8]) -> bool {
 pub fn has_received_id_bang(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -30338,9 +30355,10 @@ pub fn has_cte_bslash(raw: &[u8]) -> bool {
 pub fn has_received_via_at(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -30530,9 +30548,10 @@ pub fn has_ct_gt_type(raw: &[u8]) -> bool {
 pub fn has_received_by_pct(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -30719,9 +30738,10 @@ pub fn has_ct_lt_type(raw: &[u8]) -> bool {
 pub fn has_received_from_pct(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -30851,9 +30871,10 @@ pub fn has_msgid_at_lead(raw: &[u8]) -> bool {
 pub fn has_received_id_pct(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -31077,9 +31098,10 @@ pub fn has_msgid_bang_lead(raw: &[u8]) -> bool {
 pub fn has_received_for_pct(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -31341,9 +31363,10 @@ pub fn has_ct_at_type(raw: &[u8]) -> bool {
 pub fn has_received_via_pct(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -31566,9 +31589,10 @@ pub fn has_ct_qmark_type(raw: &[u8]) -> bool {
 pub fn has_received_by_bang(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -31789,9 +31813,10 @@ pub fn has_ct_comma_type(raw: &[u8]) -> bool {
 pub fn has_received_via_bang(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -32013,9 +32038,10 @@ pub fn has_ct_lbracket_type(raw: &[u8]) -> bool {
 pub fn has_received_for_bang(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -32237,9 +32263,10 @@ pub fn has_ct_rbracket_type(raw: &[u8]) -> bool {
 pub fn has_received_with_pct(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -32328,9 +32355,10 @@ pub fn has_msgid_pipe_lead(raw: &[u8]) -> bool {
 pub fn has_received_id_at(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -32609,9 +32637,10 @@ pub fn has_cte_at(raw: &[u8]) -> bool {
 pub fn has_received_with_bang(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -32792,9 +32821,10 @@ pub fn has_cte_pct(raw: &[u8]) -> bool {
 pub fn has_received_with_at(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -32974,9 +33004,10 @@ pub fn has_cte_bang(raw: &[u8]) -> bool {
 pub fn has_received_via_eq(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -33157,9 +33188,10 @@ pub fn has_cte_qmark(raw: &[u8]) -> bool {
 pub fn has_received_by_eq(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -33350,9 +33382,10 @@ pub fn has_cte_slash(raw: &[u8]) -> bool {
 pub fn has_received_id_eq(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -33534,9 +33567,10 @@ pub fn has_cte_lbrack(raw: &[u8]) -> bool {
 pub fn has_received_for_eq(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -33718,9 +33752,10 @@ pub fn has_cte_rbrack(raw: &[u8]) -> bool {
 pub fn has_received_with_eq(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -33902,9 +33937,10 @@ pub fn has_cte_lbrace(raw: &[u8]) -> bool {
 pub fn has_received_from_eq(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -34084,9 +34120,10 @@ pub fn has_cte_rbrace(raw: &[u8]) -> bool {
 pub fn has_received_by_lt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -34266,9 +34303,10 @@ pub fn has_cte_pipe(raw: &[u8]) -> bool {
 pub fn has_received_via_lt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -34449,9 +34487,10 @@ pub fn has_cte_caret(raw: &[u8]) -> bool {
 pub fn has_received_id_lt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -34632,9 +34671,10 @@ pub fn has_cte_tilde(raw: &[u8]) -> bool {
 pub fn has_received_from_lt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -34815,9 +34855,10 @@ pub fn has_cte_star(raw: &[u8]) -> bool {
 pub fn has_received_with_lt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -34997,9 +35038,10 @@ pub fn has_cte_hash(raw: &[u8]) -> bool {
 pub fn has_received_for_lt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35181,9 +35223,10 @@ pub fn has_cte_dollar(raw: &[u8]) -> bool {
 pub fn has_received_from_gt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35227,9 +35270,10 @@ pub fn has_received_from_gt(raw: &[u8]) -> bool {
 pub fn has_received_by_gt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35366,9 +35410,10 @@ pub fn has_cte_apos(raw: &[u8]) -> bool {
 pub fn has_received_via_gt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35412,9 +35457,10 @@ pub fn has_received_via_gt(raw: &[u8]) -> bool {
 pub fn has_received_for_gt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35550,9 +35596,10 @@ pub fn has_cte_quote(raw: &[u8]) -> bool {
 pub fn has_received_id_gt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35596,9 +35643,10 @@ pub fn has_received_id_gt(raw: &[u8]) -> bool {
 pub fn has_received_with_gt(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35686,9 +35734,10 @@ pub fn has_param_lt_name(raw: &[u8]) -> bool {
 pub fn has_received_from_qmark(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35732,9 +35781,10 @@ pub fn has_received_from_qmark(raw: &[u8]) -> bool {
 pub fn has_received_by_hash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35778,9 +35828,10 @@ pub fn has_received_by_hash(raw: &[u8]) -> bool {
 pub fn has_received_id_quote(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35824,9 +35875,10 @@ pub fn has_received_id_quote(raw: &[u8]) -> bool {
 pub fn has_received_for_qmark(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35870,9 +35922,10 @@ pub fn has_received_for_qmark(raw: &[u8]) -> bool {
 pub fn has_received_via_hash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35916,9 +35969,10 @@ pub fn has_received_via_hash(raw: &[u8]) -> bool {
 pub fn has_received_with_colon(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -35962,9 +36016,10 @@ pub fn has_received_with_colon(raw: &[u8]) -> bool {
 pub fn has_received_from_comma(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36008,9 +36063,10 @@ pub fn has_received_from_comma(raw: &[u8]) -> bool {
 pub fn has_received_for_slash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36054,9 +36110,10 @@ pub fn has_received_for_slash(raw: &[u8]) -> bool {
 pub fn has_received_by_bslash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36100,9 +36157,10 @@ pub fn has_received_by_bslash(raw: &[u8]) -> bool {
 pub fn has_received_via_apos(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36146,9 +36204,10 @@ pub fn has_received_via_apos(raw: &[u8]) -> bool {
 pub fn has_received_id_hash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36192,9 +36251,10 @@ pub fn has_received_id_hash(raw: &[u8]) -> bool {
 pub fn has_received_for_tilde(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36238,9 +36298,10 @@ pub fn has_received_for_tilde(raw: &[u8]) -> bool {
 pub fn has_received_by_pipe(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36284,9 +36345,10 @@ pub fn has_received_by_pipe(raw: &[u8]) -> bool {
 pub fn has_received_via_tilde(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36330,9 +36392,10 @@ pub fn has_received_via_tilde(raw: &[u8]) -> bool {
 pub fn has_received_id_pipe(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36376,9 +36439,10 @@ pub fn has_received_id_pipe(raw: &[u8]) -> bool {
 pub fn has_received_from_dollar(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36422,9 +36486,10 @@ pub fn has_received_from_dollar(raw: &[u8]) -> bool {
 pub fn has_received_by_amp(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36468,9 +36533,10 @@ pub fn has_received_by_amp(raw: &[u8]) -> bool {
 pub fn has_received_via_dollar(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36514,9 +36580,10 @@ pub fn has_received_via_dollar(raw: &[u8]) -> bool {
 pub fn has_received_for_caret(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36560,9 +36627,10 @@ pub fn has_received_for_caret(raw: &[u8]) -> bool {
 pub fn has_received_from_tilde(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36606,9 +36674,10 @@ pub fn has_received_from_tilde(raw: &[u8]) -> bool {
 pub fn has_received_by_dollar(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36652,9 +36721,10 @@ pub fn has_received_by_dollar(raw: &[u8]) -> bool {
 pub fn has_received_with_amp(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36698,9 +36768,10 @@ pub fn has_received_with_amp(raw: &[u8]) -> bool {
 pub fn has_received_id_caret(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36744,9 +36815,10 @@ pub fn has_received_id_caret(raw: &[u8]) -> bool {
 pub fn has_received_from_pipe(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36790,9 +36862,10 @@ pub fn has_received_from_pipe(raw: &[u8]) -> bool {
 pub fn has_received_by_qmark(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36836,9 +36909,10 @@ pub fn has_received_by_qmark(raw: &[u8]) -> bool {
 pub fn has_received_via_amp(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36882,9 +36956,10 @@ pub fn has_received_via_amp(raw: &[u8]) -> bool {
 pub fn has_received_for_dollar(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36928,9 +37003,10 @@ pub fn has_received_for_dollar(raw: &[u8]) -> bool {
 pub fn has_received_with_qmark(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -36974,9 +37050,10 @@ pub fn has_received_with_qmark(raw: &[u8]) -> bool {
 pub fn has_received_id_tilde(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37020,9 +37097,10 @@ pub fn has_received_id_tilde(raw: &[u8]) -> bool {
 pub fn has_received_for_amp(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37066,9 +37144,10 @@ pub fn has_received_for_amp(raw: &[u8]) -> bool {
 pub fn has_received_from_apos(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37112,9 +37191,10 @@ pub fn has_received_from_apos(raw: &[u8]) -> bool {
 pub fn has_received_for_hash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37158,9 +37238,10 @@ pub fn has_received_for_hash(raw: &[u8]) -> bool {
 pub fn has_received_with_comma(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37204,9 +37285,10 @@ pub fn has_received_with_comma(raw: &[u8]) -> bool {
 pub fn has_received_id_dollar(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37250,9 +37332,10 @@ pub fn has_received_id_dollar(raw: &[u8]) -> bool {
 pub fn has_received_by_comma(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37296,9 +37379,10 @@ pub fn has_received_by_comma(raw: &[u8]) -> bool {
 pub fn has_received_by_colon(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37343,9 +37427,10 @@ pub fn has_received_by_colon(raw: &[u8]) -> bool {
 pub fn has_received_for_quote(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37389,9 +37474,10 @@ pub fn has_received_for_quote(raw: &[u8]) -> bool {
 pub fn has_received_via_qmark(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37436,9 +37522,10 @@ pub fn has_received_via_qmark(raw: &[u8]) -> bool {
 pub fn has_received_with_quote(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37482,9 +37569,10 @@ pub fn has_received_with_quote(raw: &[u8]) -> bool {
 pub fn has_received_id_apos(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37528,9 +37616,10 @@ pub fn has_received_id_apos(raw: &[u8]) -> bool {
 pub fn has_received_via_colon(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37574,9 +37663,10 @@ pub fn has_received_via_colon(raw: &[u8]) -> bool {
 pub fn has_received_with_tilde(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37620,9 +37710,10 @@ pub fn has_received_with_tilde(raw: &[u8]) -> bool {
 pub fn has_received_for_apos(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37666,9 +37757,10 @@ pub fn has_received_for_apos(raw: &[u8]) -> bool {
 pub fn has_received_id_qmark(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37712,9 +37804,10 @@ pub fn has_received_id_qmark(raw: &[u8]) -> bool {
 pub fn has_received_via_comma(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37758,9 +37851,10 @@ pub fn has_received_via_comma(raw: &[u8]) -> bool {
 pub fn has_received_with_pipe(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37804,9 +37898,10 @@ pub fn has_received_with_pipe(raw: &[u8]) -> bool {
 pub fn has_received_for_colon(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37850,9 +37945,10 @@ pub fn has_received_for_colon(raw: &[u8]) -> bool {
 pub fn has_received_id_comma(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37897,9 +37993,10 @@ pub fn has_received_id_comma(raw: &[u8]) -> bool {
 pub fn has_received_via_quote(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37943,9 +38040,10 @@ pub fn has_received_via_quote(raw: &[u8]) -> bool {
 pub fn has_received_with_dollar(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -37989,9 +38087,10 @@ pub fn has_received_with_dollar(raw: &[u8]) -> bool {
 pub fn has_received_for_comma(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38035,9 +38134,10 @@ pub fn has_received_for_comma(raw: &[u8]) -> bool {
 pub fn has_received_id_colon(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38081,9 +38181,10 @@ pub fn has_received_id_colon(raw: &[u8]) -> bool {
 pub fn has_received_via_caret(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38127,9 +38228,10 @@ pub fn has_received_via_caret(raw: &[u8]) -> bool {
 pub fn has_received_with_caret(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38173,9 +38275,10 @@ pub fn has_received_with_caret(raw: &[u8]) -> bool {
 pub fn has_received_for_pipe(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38217,9 +38320,10 @@ pub fn has_received_for_pipe(raw: &[u8]) -> bool {
 pub fn has_received_id_amp(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38261,9 +38365,10 @@ pub fn has_received_id_amp(raw: &[u8]) -> bool {
 pub fn has_received_via_pipe(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38305,9 +38410,10 @@ pub fn has_received_via_pipe(raw: &[u8]) -> bool {
 pub fn has_received_with_hash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38349,9 +38455,10 @@ pub fn has_received_with_hash(raw: &[u8]) -> bool {
 pub fn has_received_by_tilde(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38393,9 +38500,10 @@ pub fn has_received_by_tilde(raw: &[u8]) -> bool {
 pub fn has_received_from_hash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38437,9 +38545,10 @@ pub fn has_received_from_hash(raw: &[u8]) -> bool {
 pub fn has_received_via_slash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38481,9 +38590,10 @@ pub fn has_received_via_slash(raw: &[u8]) -> bool {
 pub fn has_received_with_apos(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38525,9 +38635,10 @@ pub fn has_received_with_apos(raw: &[u8]) -> bool {
 pub fn has_received_by_apos(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38569,9 +38680,10 @@ pub fn has_received_by_apos(raw: &[u8]) -> bool {
 pub fn has_received_from_quote(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38613,9 +38725,10 @@ pub fn has_received_from_quote(raw: &[u8]) -> bool {
 pub fn has_received_via_bslash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38657,9 +38770,10 @@ pub fn has_received_via_bslash(raw: &[u8]) -> bool {
 pub fn has_received_from_amp(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38701,9 +38815,10 @@ pub fn has_received_from_amp(raw: &[u8]) -> bool {
 pub fn has_received_by_quote(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38745,9 +38860,10 @@ pub fn has_received_by_quote(raw: &[u8]) -> bool {
 pub fn has_received_from_caret(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38789,9 +38905,10 @@ pub fn has_received_from_caret(raw: &[u8]) -> bool {
 pub fn has_received_with_star(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38833,9 +38950,10 @@ pub fn has_received_with_star(raw: &[u8]) -> bool {
 pub fn has_received_by_star(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38877,9 +38995,10 @@ pub fn has_received_by_star(raw: &[u8]) -> bool {
 pub fn has_received_via_lbracket(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38921,9 +39040,10 @@ pub fn has_received_via_lbracket(raw: &[u8]) -> bool {
 pub fn has_received_from_colon(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -38965,9 +39085,10 @@ pub fn has_received_from_colon(raw: &[u8]) -> bool {
 pub fn has_received_with_plus(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39009,9 +39130,10 @@ pub fn has_received_with_plus(raw: &[u8]) -> bool {
 pub fn has_received_by_plus(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39053,9 +39175,10 @@ pub fn has_received_by_plus(raw: &[u8]) -> bool {
 pub fn has_received_via_rbracket(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39097,9 +39220,10 @@ pub fn has_received_via_rbracket(raw: &[u8]) -> bool {
 pub fn has_received_from_slash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39141,9 +39265,10 @@ pub fn has_received_from_slash(raw: &[u8]) -> bool {
 pub fn has_received_with_lbrace(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39185,9 +39310,10 @@ pub fn has_received_with_lbrace(raw: &[u8]) -> bool {
 pub fn has_received_by_lbracket(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39229,9 +39355,10 @@ pub fn has_received_by_lbracket(raw: &[u8]) -> bool {
 pub fn has_received_via_star(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39273,9 +39400,10 @@ pub fn has_received_via_star(raw: &[u8]) -> bool {
 pub fn has_received_from_bslash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39317,9 +39445,10 @@ pub fn has_received_from_bslash(raw: &[u8]) -> bool {
 pub fn has_received_with_rbrace(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39361,9 +39490,10 @@ pub fn has_received_with_rbrace(raw: &[u8]) -> bool {
 pub fn has_received_by_rbracket(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39405,9 +39535,10 @@ pub fn has_received_by_rbracket(raw: &[u8]) -> bool {
 pub fn has_received_via_plus(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39449,9 +39580,10 @@ pub fn has_received_via_plus(raw: &[u8]) -> bool {
 pub fn has_received_via_lbrace(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39493,9 +39625,10 @@ pub fn has_received_via_lbrace(raw: &[u8]) -> bool {
 pub fn has_received_via_rbrace(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39537,9 +39670,10 @@ pub fn has_received_via_rbrace(raw: &[u8]) -> bool {
 pub fn has_received_with_lbracket(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39581,9 +39715,10 @@ pub fn has_received_with_lbracket(raw: &[u8]) -> bool {
 pub fn has_received_with_rbracket(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39625,9 +39760,10 @@ pub fn has_received_with_rbracket(raw: &[u8]) -> bool {
 pub fn has_received_with_bslash(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39669,9 +39805,10 @@ pub fn has_received_with_bslash(raw: &[u8]) -> bool {
 pub fn has_received_by_lbrace(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -39713,9 +39850,10 @@ pub fn has_received_by_lbrace(raw: &[u8]) -> bool {
 pub fn has_received_by_rbrace(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
-    for l in text.lines() {
+    for l in text[..header_end].lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
             logical.push(' ');
             logical.push_str(l.trim_start());
@@ -62530,6 +62668,22 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn received_detectives_本文のreceived風行では発火しない() {
+        // Devin Review #678: 節字検出が本文中の `Received:` 風行にも
+        // 発火していた — ヘッダ区画限定で回帰確認。
+        let raw = b"Message-ID: <a@b>\r\n\r\nReceived: from a#b by x id a&b for a|b via a\r\nReceived: by a>b";
+        assert!(!has_received_from_hash(raw));
+        assert!(!has_received_id_amp(raw));
+        assert!(!has_received_for_pipe(raw));
+        assert!(!has_received_by_gt(raw));
+        assert!(!has_received_via_lt(raw));
+        assert!(!has_received_multi_by(raw));
+        // ヘッダ内では従来どおり発火する
+        let hdr = b"Received: from a#b\r\n\r\nx";
+        assert!(has_received_from_hash(hdr));
     }
 
     #[test]

@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+### Fixed — Devin Review (#678): `received_*` 節異字検出群 (138 検出器) がヘッダ区画ではなくメッセージ全体を走査しており、本文中の `Received:` 風行で誤発火していた問題を修正。全検出器を `header_end` (最初の空行) 区画へ統一。
 ### Security — D2038: `Message-ID:` 系欄 (refs 以外) の同一 `<id>` 反復を検出 — `Envelope` に `msgid_dup_pair` を追加 (`msgid_ref_dup`/`multi_inreply` と役割分担)。
 ### Security — D2037: `Message-ID:` 系欄の値が完全に空を検出 — `Envelope` に `msgid_empty_value` を追加 (裸値は `msgid_no_angle`/`bare_msgid_ref`)。
 ### Security — D2036: `Message-ID:` 系欄の `<a> w <b>` 対間の語を検出 — `Envelope` に `msgid_word_between_angles` を追加 (In-Reply-To は `multi_inreply`、末尾残滓は `junk_after_angle`)。
