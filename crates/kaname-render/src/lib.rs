@@ -1996,6 +1996,14 @@ pub struct Envelope {
     pub multi_confirm_reading: bool,
     /// `Resent-Reply-To:` の重複出現 (D2146 — 返信先ずれ)。
     pub multi_resent_reply_to: bool,
+    /// `Envelope-To:`/`X-Envelope-To:` の空値 (D2147 — 届け先ずれ)。
+    pub env_to_empty: bool,
+    /// `Apparently-To:`/`X-Apparently-To:` の空値 (D2148 — 届け先ずれ)。
+    pub apparently_to_empty: bool,
+    /// エンベロープ差出人記録欄の空値 (D2149 — 差出人ずれ)。
+    pub env_from_empty: bool,
+    /// `Apparently-From:`/`Apparently-Sender:` 系の空値 (D2150 — 差出人ずれ)。
+    pub apparently_from_empty: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5099,6 +5107,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let multi_return_receipt_to = has_multi_return_receipt_to(bytes);
     let multi_confirm_reading = has_multi_confirm_reading(bytes);
     let multi_resent_reply_to = has_multi_resent_reply_to(bytes);
+    let env_to_empty = has_env_to_empty(bytes);
+    let apparently_to_empty = has_apparently_to_empty(bytes);
+    let env_from_empty = has_env_from_empty(bytes);
+    let apparently_from_empty = has_apparently_from_empty(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6002,6 +6014,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         multi_return_receipt_to,
         multi_confirm_reading,
         multi_resent_reply_to,
+        env_to_empty,
+        apparently_to_empty,
+        env_from_empty,
+        apparently_from_empty,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42529,6 +42545,165 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` の値が空か判定する
+/// (D2147)。
+///
+/// 封書受取人記録を残す欄なのに値を持たない形 — 空欄を
+/// 破棄する実装と空の受取人として記録する実装で届け先の
+/// 読みがずれる。
+#[must_use]
+pub fn has_env_to_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(l[..c].trim(), "envelope-to" | "x-envelope-to")
+            && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `Apparently-To:`/`X-Apparently-To:` の値が空か判定する
+/// (D2148)。
+///
+/// sendmail の見せかけ宛先記録を残す欄なのに値を持たない
+/// 形 — 空欄を破棄する実装と空の受取人として記録する実装で
+/// 届け先の読みがずれる。
+#[must_use]
+pub fn has_apparently_to_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(l[..c].trim(), "apparently-to" | "x-apparently-to")
+            && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// エンベロープ差出人記録欄 (`X-Envelope-From:`/
+/// `X-Envelope-Sender:`/`X-MailFrom:`/`X-Mail-From:`/
+/// `X-Original-Sender:`/`X-Orig-Sender:`) の値が空か判定する
+/// (D2149)。
+///
+/// 封書差出人記録を残す欄なのに値を持たない形 — 空欄を
+/// 破棄する実装と空の差出人として記録する実装で差出人の
+/// 読みがずれる。
+#[must_use]
+pub fn has_env_from_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(
+            l[..c].trim(),
+            "x-envelope-from"
+                | "x-envelope-sender"
+                | "x-mailfrom"
+                | "x-mail-from"
+                | "x-original-sender"
+                | "x-orig-sender"
+        ) && l[c + 1..].trim().is_empty()
+    })
+}
+
+/// `Apparently-From:`/`X-Apparently-From:`/
+/// `Apparently-Sender:`/`X-Apparently-Sender:` の値が空か
+/// 判定する (D2150)。
+///
+/// sendmail の差出人記録を残す欄なのに値を持たない形 —
+/// 空欄を破棄する実装と空の差出人として記録する実装で
+/// 差出人の読みがずれる。
+#[must_use]
+pub fn has_apparently_from_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        matches!(
+            l[..c].trim(),
+            "apparently-from"
+                | "x-apparently-from"
+                | "apparently-sender"
+                | "x-apparently-sender"
+        ) && l[c + 1..].trim().is_empty()
+    })
+}
+
 /// `Disposition-Notification-To:` が2回以上現れるか
 /// 判定する (D2143)。
 ///
@@ -66916,6 +67091,49 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 封書宛先記録が空なら発火() {
+        assert!(has_env_to_empty(
+            b"From: a@x\r\nEnvelope-To:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_empty(
+            b"From: a@x\r\nEnvelope-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_empty(
+            b"From: a@x\r\nEnvelope-To:\r\n a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 見せ宛記録が空なら発火() {
+        assert!(has_apparently_to_empty(
+            b"From: a@x\r\nApparently-To: \r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_empty(
+            b"From: a@x\r\nApparently-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人記録が空なら発火() {
+        assert!(has_env_from_empty(
+            b"From: a@x\r\nX-Envelope-From:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_empty(
+            b"From: a@x\r\nX-Envelope-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表差出人記録が空なら発火() {
+        assert!(has_apparently_from_empty(
+            b"From: a@x\r\nApparently-Sender:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_empty(
+            b"From: a@x\r\nApparently-Sender: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

@@ -1560,3 +1560,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2144 | Return-Receipt-To の重複出現 (受領通知要求先の多重化) | 通知行き先ずれ |
 | D2145 | X-Confirm-Reading-To の重複出現 (閲覧確認要求先の多重化) | 通知行き先ずれ |
 | D2146 | Resent-Reply-To の重複出現 (旧式再送返信口の多重化) | 返信先ずれ |
+| D2147 | Envelope-To/X-Envelope-To の空値 (封書受取人記録の空欄) | 届け先ずれ |
+| D2148 | Apparently-To/X-Apparently-To の空値 (見せ宛記録の空欄) | 届け先ずれ |
+| D2149 | X-Envelope-From 系の空値 (封書差出人記録の空欄) | 差出人ずれ |
+| D2150 | Apparently-From/Sender 系の空値 (表差出人記録の空欄) | 差出人ずれ |
