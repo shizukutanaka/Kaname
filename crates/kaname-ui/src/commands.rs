@@ -7025,6 +7025,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_date_same_as_date {
         render_risks.push("元の日時記録が日時欄と一致します—記録と日時欄の読みで日時がずれます".to_string());
     }
+    if env.x_orig_sender_same_as_sender {
+        render_risks.push("元の代行記録が代行欄と一致します—記録と代行欄の読みで差出人がずれます".to_string());
+    }
+    if env.x_orig_cc_same_as_cc {
+        render_risks.push("元の副宛記録が副宛先欄と一致します—記録と副宛欄の読みで届け先がずれます".to_string());
+    }
+    if env.x_orig_reply_to_same_as_reply_to {
+        render_risks.push("元の返信口記録が返信口と一致します—記録と返信口の読みで返信先がずれます".to_string());
+    }
+    if env.x_orig_refs_same_as_refs {
+        render_risks.push("元の糸参照記録が参照欄と一致します—記録と参照欄の読みで糸参照がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

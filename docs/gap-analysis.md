@@ -1532,3 +1532,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2116 | X-Original-Subject == Subject (書き換えたはずの記録の矛盾) | 件名ずれ |
 | D2117 | X-Original-Message-ID == Message-ID (書き換えたはずの記録の矛盾) | 識別子ずれ |
 | D2118 | X-Original-Date == Date (書き換えたはずの記録の矛盾) | 日時ずれ |
+| D2119 | X-Original-Sender == Sender (書き換えたはずの記録の矛盾) | 差出人ずれ |
+| D2120 | X-Original-Cc == Cc (書き換えたはずの記録の矛盾) | 届け先ずれ |
+| D2121 | X-Original-Reply-To == Reply-To (書き換えたはずの記録の矛盾) | 返信先ずれ |
+| D2122 | X-Original-References == References (書き換えたはずの記録の矛盾) | 糸参照ずれ |

@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2119: `X-Original-Sender:` と `Sender:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_sender_same_as_sender` を追加。
+### Security — D2120: `X-Original-Cc:` と `Cc:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_cc_same_as_cc` を追加。
+### Security — D2121: `X-Original-Reply-To:` と `Reply-To:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_reply_to_same_as_reply_to` を追加。
+### Security — D2122: `X-Original-References:` と `References:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_refs_same_as_refs` を追加。
 ### Security — D2115: `X-Original-From:` と `From:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_from_same_as_from` を追加。
 ### Security — D2116: `X-Original-Subject:` と `Subject:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_subject_same_as_subject` を追加。
 ### Security — D2117: `X-Original-Message-ID:` と `Message-ID:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_msgid_same_as_msgid` を追加。

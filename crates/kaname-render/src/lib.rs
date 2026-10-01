@@ -1940,6 +1940,14 @@ pub struct Envelope {
     pub x_orig_msgid_same_as_msgid: bool,
     /// `X-Original-Date:` と `Date:` の一致 (D2118 — 日時ずれ)。
     pub x_orig_date_same_as_date: bool,
+    /// `X-Original-Sender:` と `Sender:` の一致アドレス (D2119 — 差出人ずれ)。
+    pub x_orig_sender_same_as_sender: bool,
+    /// `X-Original-Cc:` と `Cc:` の一致アドレス (D2120 — 届け先ずれ)。
+    pub x_orig_cc_same_as_cc: bool,
+    /// `X-Original-Reply-To:` と `Reply-To:` の一致アドレス (D2121 — 返信先ずれ)。
+    pub x_orig_reply_to_same_as_reply_to: bool,
+    /// `X-Original-References:` と `References:` の一致 (D2122 — 糸参照ずれ)。
+    pub x_orig_refs_same_as_refs: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5015,6 +5023,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_subject_same_as_subject = has_x_orig_subject_same_as_subject(bytes);
     let x_orig_msgid_same_as_msgid = has_x_orig_msgid_same_as_msgid(bytes);
     let x_orig_date_same_as_date = has_x_orig_date_same_as_date(bytes);
+    let x_orig_sender_same_as_sender = has_x_orig_sender_same_as_sender(bytes);
+    let x_orig_cc_same_as_cc = has_x_orig_cc_same_as_cc(bytes);
+    let x_orig_reply_to_same_as_reply_to = has_x_orig_reply_to_same_as_reply_to(bytes);
+    let x_orig_refs_same_as_refs = has_x_orig_refs_same_as_refs(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5890,6 +5902,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_subject_same_as_subject,
         x_orig_msgid_same_as_msgid,
         x_orig_date_same_as_date,
+        x_orig_sender_same_as_sender,
+        x_orig_cc_same_as_cc,
+        x_orig_reply_to_same_as_reply_to,
+        x_orig_refs_same_as_refs,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42417,6 +42433,153 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Original-Sender:` と `Sender:` が一致するアドレスか
+/// 判定する (D2119)。
+///
+/// 「元の代行」を記録する欄が現代行者と同じ値を持つのは
+/// 「書き換えた」という記録自身が矛盾する形 — 記録を
+/// 信じる実装と代行欄を読む実装で代行の読みがずれる
+/// (食い違いは `x_orig_sender_differs` が担当)。
+#[must_use]
+pub fn has_x_orig_sender_same_as_sender(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(s)) = (
+        first_addr_of(&logical, "x-original-sender"),
+        first_addr_of(&logical, "sender"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && x.eq_ignore_ascii_case(&s)
+}
+
+/// `X-Original-Cc:` と `Cc:` が一致するアドレスか判定する
+/// (D2120)。
+///
+/// 「元の副宛先」を記録する欄が現副宛先と同じ値を持つの
+/// は「書き換えた」という記録自身が矛盾する形 — 記録を
+/// 信じる実装と副宛先欄を読む実装で届け先の読みがずれる
+/// (食い違いは `x_orig_cc_differs` が担当)。
+#[must_use]
+pub fn has_x_orig_cc_same_as_cc(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(c)) = (
+        first_addr_of(&logical, "x-original-cc"),
+        first_addr_of(&logical, "cc"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && x.eq_ignore_ascii_case(&c)
+}
+
+/// `X-Original-Reply-To:` と `Reply-To:` が一致するアドレス
+/// か判定する (D2121)。
+///
+/// 「元の返信口」を記録する欄が現返信口と同じ値を持つの
+/// は「書き換えた」という記録自身が矛盾する形 — 記録を
+/// 信じる実装と返信口を読む実装で返信先の読みがずれる。
+#[must_use]
+pub fn has_x_orig_reply_to_same_as_reply_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(r)) = (
+        first_addr_of(&logical, "x-original-reply-to"),
+        first_addr_of(&logical, "reply-to"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && x.eq_ignore_ascii_case(&r)
+}
+
+/// `X-Original-References:` と `References:` が一致するか
+/// 判定する (D2122)。
+///
+/// 「元の糸参照」を記録する欄が現参照一覧と同じ値を持つ
+/// のは「書き換えた」という記録自身が矛盾する形 — 記録
+/// を信じる実装と参照欄を読む実装で糸参照の読みがずれる
+/// (食い違いは `x_orig_refs_differs` が担当)。
+#[must_use]
+pub fn has_x_orig_refs_same_as_refs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(r)) = (
+        field_value_of(&logical, "x-original-references"),
+        field_value_of(&logical, "references"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && x.eq_ignore_ascii_case(&r)
+}
+
 /// `X-Original-From:` と `From:` が一致するアドレスか判定
 /// する (D2115)。
 ///
@@ -65923,6 +66086,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元の代行記録が代行と一致すれば発火() {
+        assert!(has_x_orig_sender_same_as_sender(
+            b"From: a@x\r\nSender: s@y\r\nX-Original-Sender: s@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_sender_same_as_sender(
+            b"From: a@x\r\nSender: s@y\r\nX-Original-Sender: o@z\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の副宛記録が副宛と一致すれば発火() {
+        assert!(has_x_orig_cc_same_as_cc(
+            b"From: a@x\r\nCc: c@y\r\nX-Original-Cc: c@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_same_as_cc(
+            b"From: a@x\r\nCc: c@y\r\nX-Original-Cc: o@z\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の返信口記録が返信口と一致すれば発火() {
+        assert!(has_x_orig_reply_to_same_as_reply_to(
+            b"From: a@x\r\nReply-To: r@z\r\nX-Original-Reply-To: r@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_same_as_reply_to(
+            b"From: a@x\r\nReply-To: r@z\r\nX-Original-Reply-To: o@q\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の糸参照記録が参照一覧と一致すれば発火() {
+        assert!(has_x_orig_refs_same_as_refs(
+            b"From: a@x\r\nReferences: <a@x>\r\nX-Original-References: <a@x>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_refs_same_as_refs(
+            b"From: a@x\r\nReferences: <a@x>\r\nX-Original-References: <b@x>\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
