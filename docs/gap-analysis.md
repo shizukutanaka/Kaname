@@ -1516,3 +1516,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2100 | Apparently-To ≠ Delivered-To (配送記録どうしの食い違い) | 届け先ずれ |
 | D2101 | X-Original-To ≠ Delivered-To (展開記録と配達記録の食い違い) | 届け先ずれ |
 | D2102 | Resent-Reply-To ≠ Reply-To (旧式再送返信欄の食い違い) | 返信先ずれ |
+| D2103 | X-Envelope-From/X-Original-Sender 系 ≠ From (エンベロープ差出人記録の分離) | 差出人ずれ |
+| D2104 | Apparently-From/Apparently-Sender 系 ≠ From (sendmail 差出人記録の分離) | 差出人ずれ |
+| D2105 | Return-Receipt-To ≠ Reply-To (受領通知と返信口の分岐) | 通知先ずれ |
+| D2106 | X-Confirm-Reading-To ≠ Reply-To (閲覧確認と返信口の分岐) | 通知先ずれ |
