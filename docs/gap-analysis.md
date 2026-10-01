@@ -1508,3 +1508,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2092 | X-Original-Cc ≠ Cc (元の副宛先記録との分離) | 届け先ずれ |
 | D2093 | X-Original-Sender ≠ Sender (元の代行記録との分離) | 代行者ずれ |
 | D2094 | X-Original-References ≠ References (元の糸参照記録との分離) | 糸参照ずれ |
+| D2095 | Disposition-Notification-To ≠ From (開封通知の別口返送) | 通知先ずれ |
+| D2096 | Return-Receipt-To ≠ From (受領通知の別口返送) | 通知先ずれ |
+| D2097 | X-Confirm-Reading-To ≠ From (閲覧確認の別口返送) | 通知先ずれ |
+| D2098 | Disposition-Notification-To ≠ Reply-To (通知欄と返信口の分岐) | 通知先ずれ |
