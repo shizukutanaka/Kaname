@@ -7229,6 +7229,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.resent_reply_to_non_addr {
         render_risks.push("再送返信口が宛名形ではありません—値の読み分けで返信先がずれます".to_string());
     }
+    if env.delivered_to_non_addr {
+        render_risks.push("配達記録が宛名形ではありません—値の読み分けで届け先の履歴がずれます".to_string());
+    }
+    if env.errors_to_non_addr {
+        render_risks.push("返送先記録が宛名形ではありません—値の読み分けで返送先の評価がずれます".to_string());
+    }
+    if env.x_orig_rcpt_to_non_addr {
+        render_risks.push("元受取人記録が宛名形ではありません—値の読み分けで届け先の履歴がずれます".to_string());
+    }
+    if env.apparently_resent_non_addr {
+        render_risks.push("再送残渣記録が宛名形ではありません—値の読み分けで残渣の評価がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

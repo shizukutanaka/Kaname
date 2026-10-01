@@ -2076,6 +2076,14 @@ pub struct Envelope {
     pub confirm_reading_non_addr: bool,
     /// `Resent-Reply-To:` の値が宛名形でない (D2186 — 返信先ずれ)。
     pub resent_reply_to_non_addr: bool,
+    /// `Delivered-To:` の値が宛名形でない (D2187 — 届け先履歴ずれ)。
+    pub delivered_to_non_addr: bool,
+    /// `Errors-To:` の値が宛名形でない (D2188 — 返送先評価ずれ)。
+    pub errors_to_non_addr: bool,
+    /// `X-Original-Rcpt-To:` 系の値が宛名形でない (D2189 — 届け先履歴ずれ)。
+    pub x_orig_rcpt_to_non_addr: bool,
+    /// `Apparently-Resent-*:` 系の値が宛名形でない (D2190 — 残渣評価ずれ)。
+    pub apparently_resent_non_addr: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5219,6 +5227,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let return_receipt_to_non_addr = has_return_receipt_to_non_addr(bytes);
     let confirm_reading_non_addr = has_confirm_reading_non_addr(bytes);
     let resent_reply_to_non_addr = has_resent_reply_to_non_addr(bytes);
+    let delivered_to_non_addr = has_delivered_to_non_addr(bytes);
+    let errors_to_non_addr = has_errors_to_non_addr(bytes);
+    let x_orig_rcpt_to_non_addr = has_x_orig_rcpt_to_non_addr(bytes);
+    let apparently_resent_non_addr = has_apparently_resent_non_addr(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6162,6 +6174,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         return_receipt_to_non_addr,
         confirm_reading_non_addr,
         resent_reply_to_non_addr,
+        delivered_to_non_addr,
+        errors_to_non_addr,
+        x_orig_rcpt_to_non_addr,
+        apparently_resent_non_addr,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42689,6 +42705,162 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Delivered-To:` の値が宛名形でないか判定する (D2187)。
+///
+/// MTA の最終配達先を記す欄なのに `@` を持たない値の形 —
+/// 宛名として読む実装と記録語として読む実装で届け先の履歴
+/// がずれる (空値は D1397 系、重複は D1390)。
+#[must_use]
+pub fn has_delivered_to_non_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "delivered-to" && !v.is_empty() && !v.contains('@')
+    })
+}
+
+/// `Errors-To:` の値が宛名形でないか判定する (D2188)。
+///
+/// エラー返送先を記す欄なのに `@` を持たない値の形 — 宛名と
+/// して読む実装と記録語として読む実装で返送先の評価がずれ
+/// る (存在自体の警告は D1397 系)。
+#[must_use]
+pub fn has_errors_to_non_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "errors-to" && !v.is_empty() && !v.contains('@')
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系の値が宛名形でないか判定する (D2189)。
+///
+/// 書き換え前の受取人を記す欄なのに `@` を持たない値の形 —
+/// 宛名として読む実装と記録語として読む実装で届け先の履歴
+/// がずれる (空値は D2168)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_non_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "x-original-rcpt-to"
+                | "x-orig-rcpt-to"
+                | "x-rcpt-to"
+                | "x-envelope-rcpt-to"
+        ) && !v.is_empty()
+            && !v.contains('@')
+    })
+}
+
+/// `Apparently-Resent-*:` 系の値が宛名形でないか判定する (D2190)。
+///
+/// sendmail の再送残渣を記す欄なのに `@` を持たない値の形 —
+/// 宛名として読む実装と記録語として読む実装で残渣の評価が
+/// ずれる (空値は D2166)。
+#[must_use]
+pub fn has_apparently_resent_non_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        matches!(
+            l[..c].trim(),
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ) && !v.is_empty()
+            && !v.contains('@')
+    })
+}
+
 /// `Disposition-Notification-To:` の値が宛名形でないか判定する
 /// (D2183)。
 ///
@@ -68548,6 +68720,49 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 配達記録が宛名形でなければ発火() {
+        assert!(has_delivered_to_non_addr(
+            b"From: a@x\r\nDelivered-To: local-account\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_non_addr(
+            b"From: a@x\r\nDelivered-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_non_addr(
+            b"From: a@x\r\nDelivered-To:\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送記録が宛名形でなければ発火() {
+        assert!(has_errors_to_non_addr(
+            b"From: a@x\r\nErrors-To: bounce-handler\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_non_addr(
+            b"From: a@x\r\nErrors-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人記録が宛名形でなければ発火() {
+        assert!(has_x_orig_rcpt_to_non_addr(
+            b"From: a@x\r\nX-Original-Rcpt-To: list-alias\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_non_addr(
+            b"From: a@x\r\nX-Original-Rcpt-To: r@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣が宛名形でなければ発火() {
+        assert!(has_apparently_resent_non_addr(
+            b"From: a@x\r\nApparently-Resent-To: resend-target\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_non_addr(
+            b"From: a@x\r\nApparently-Resent-To: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
