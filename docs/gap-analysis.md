@@ -1500,3 +1500,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2084 | Delivered-To == Reply-To (実配と返信口の畳み) | 届け先ずれ |
 | D2085 | Envelope-To/X-Envelope-To == Cc | 届け先ずれ |
 | D2086 | Delivered-To == Sender (代行宛の配送) | 届け先ずれ |
+| D2087 | X-Original-From ≠ From (元の差出人記録との分離) | 差出人ずれ |
+| D2088 | X-Original-Subject ≠ Subject (元の件名記録との分離) | 件名ずれ |
+| D2089 | X-Original-Message-ID ≠ Message-ID (元の識別子記録との分離) | 糸参照ずれ |
+| D2090 | X-Original-Date ≠ Date (元の日時記録との分離) | 履歴ずれ |

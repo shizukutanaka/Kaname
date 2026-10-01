@@ -1876,6 +1876,14 @@ pub struct Envelope {
     pub envelope_to_same_as_cc: bool,
     /// `Delivered-To:` と `Sender:` の同一アドレス (D2086 — 届け先ずれ)。
     pub delivered_to_same_as_sender: bool,
+    /// `X-Original-From:` と `From:` の不一致アドレス (D2087 — 差出人ずれ)。
+    pub x_orig_from_differs: bool,
+    /// `X-Original-Subject:` と `Subject:` の不一致値 (D2088 — 件名ずれ)。
+    pub x_orig_subject_differs: bool,
+    /// `X-Original-Message-ID:` と `Message-ID:` の不一致識別子 (D2089 — 糸参照ずれ)。
+    pub x_orig_msgid_differs: bool,
+    /// `X-Original-Date:` と `Date:` の不一致値 (D2090 — 履歴ずれ)。
+    pub x_orig_date_differs: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4919,6 +4927,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_same_as_reply_to = has_delivered_to_same_as_reply_to(bytes);
     let envelope_to_same_as_cc = has_envelope_to_same_as_cc(bytes);
     let delivered_to_same_as_sender = has_delivered_to_same_as_sender(bytes);
+    let x_orig_from_differs = has_x_orig_from_differs(bytes);
+    let x_orig_subject_differs = has_x_orig_subject_differs(bytes);
+    let x_orig_msgid_differs = has_x_orig_msgid_differs(bytes);
+    let x_orig_date_differs = has_x_orig_date_differs(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5762,6 +5774,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_same_as_reply_to,
         envelope_to_same_as_cc,
         delivered_to_same_as_sender,
+        x_orig_from_differs,
+        x_orig_subject_differs,
+        x_orig_msgid_differs,
+        x_orig_date_differs,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42273,6 +42289,162 @@ pub fn has_msgid_dup_pair(raw: &[u8]) -> bool {
     false
 }
 
+fn field_value_of(logical: &str, name: &str) -> Option<String> {
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != name {
+            continue;
+        }
+        return Some(l[colon + 1..].trim().to_string());
+    }
+    None
+}
+
+/// `X-Original-From:` と `From:` が異なるアドレスか判定する
+/// (D2087)。
+///
+/// 「元の差出人」の記録が表示差出人と異なる — 書き換え
+/// 履歴を残す欄で、記録値を表示する実装と現値だけ読む
+/// 実装で差出人の読みがずれる。
+#[must_use]
+pub fn has_x_orig_from_differs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(f)) = (
+        first_addr_of(&logical, "x-original-from"),
+        first_addr_of(&logical, "from"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !f.is_empty() && !x.eq_ignore_ascii_case(&f)
+}
+
+/// `X-Original-Subject:` と `Subject:` が異なる値か判定する
+/// (D2088)。
+///
+/// 「元の件名」の記録が表示件名と異なる — 件名書き換え
+/// を残す欄で、記録値を併記する実装と現値だけ読む実装で
+/// 件名の読みがずれる。
+#[must_use]
+pub fn has_x_orig_subject_differs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(s)) = (
+        field_value_of(&logical, "x-original-subject"),
+        field_value_of(&logical, "subject"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !s.is_empty() && !x.eq_ignore_ascii_case(&s)
+}
+
+/// `X-Original-Message-ID:` と `Message-ID:` が異なる識別子
+/// か判定する (D2089)。
+///
+/// 「元の識別子」の記録が現の識別子と異なる — 書き換え
+/// 履歴を残す欄で、記録値で糸を辿る実装と現値で辿る実装で
+/// 糸参照がずれる。
+#[must_use]
+pub fn has_x_orig_msgid_differs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(m)) = (
+        first_addr_of(&logical, "x-original-message-id"),
+        first_addr_of(&logical, "message-id"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !m.is_empty() && !x.eq_ignore_ascii_case(&m)
+}
+
+/// `X-Original-Date:` と `Date:` が異なる値か判定する
+/// (D2090)。
+///
+/// 「元の日時」の記録が表示日時と異なる — 日時書き換え
+/// を残す欄で、記録値を使う実装と現値だけ読む実装で
+/// 履歴の並びがずれる。
+#[must_use]
+pub fn has_x_orig_date_differs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(d)) = (
+        field_value_of(&logical, "x-original-date"),
+        field_value_of(&logical, "date"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !d.is_empty() && !x.eq_ignore_ascii_case(&d)
+}
+
 /// `Delivered-To:` と `From:` が同一アドレスか判定する
 /// (D2083)。
 ///
@@ -64667,6 +64839,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元の差出人が現差出人と異なれば発火() {
+        assert!(has_x_orig_from_differs(
+            b"From: a@x\r\nX-Original-From: old@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_differs(
+            b"From: a@x\r\nX-Original-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の件名が現件名と異なれば発火() {
+        assert!(has_x_orig_subject_differs(
+            b"Subject: updated\r\nX-Original-Subject: original\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_subject_differs(
+            b"Subject: same\r\nX-Original-Subject: same\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の識別子が現識別子と異なれば発火() {
+        assert!(has_x_orig_msgid_differs(
+            b"From: a@x\r\nMessage-ID: <m@x>\r\nX-Original-Message-ID: <old@y>\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_msgid_differs(
+            b"From: a@x\r\nMessage-ID: <m@x>\r\nX-Original-Message-ID: <m@x>\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の日時が現日時と異なれば発火() {
+        assert!(has_x_orig_date_differs(
+            b"Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nX-Original-Date: Sun, 31 Jan 2021 10:00:00 +0900\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_date_differs(
+            b"Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nX-Original-Date: Mon, 1 Feb 2021 10:00:00 +0900\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

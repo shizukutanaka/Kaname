@@ -6929,6 +6929,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.delivered_to_same_as_sender {
         render_risks.push("実配達先が代行と同一です—代行宛の配送で届け先がずれます".to_string());
     }
+    if env.x_orig_from_differs {
+        render_risks.push("元の差出人記録が表示差出人と異なります—書き換え履歴の読みで差出人がずれます".to_string());
+    }
+    if env.x_orig_subject_differs {
+        render_risks.push("元の件名記録が表示件名と異なります—書き換え履歴の読みで件名がずれます".to_string());
+    }
+    if env.x_orig_msgid_differs {
+        render_risks.push("元の識別子記録が現識別子と異なります—書き換え履歴の読みで糸参照がずれます".to_string());
+    }
+    if env.x_orig_date_differs {
+        render_risks.push("元の日時記録が表示日時と異なります—書き換え履歴の読みで履歴がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

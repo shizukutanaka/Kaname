@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2087: `X-Original-From:` と `From:` の不一致アドレス (元の差出人記録と表示差出人の分離) を検出 — `Envelope` に `x_orig_from_differs` を追加。
+### Security — D2088: `X-Original-Subject:` と `Subject:` の不一致値 (元の件名記録と表示件名の分離) を検出 — `Envelope` に `x_orig_subject_differs` を追加。
+### Security — D2089: `X-Original-Message-ID:` と `Message-ID:` の不一致識別子 (元の識別子記録と現識別子の分離) を検出 — `Envelope` に `x_orig_msgid_differs` を追加。
+### Security — D2090: `X-Original-Date:` と `Date:` の不一致値 (元の日時記録と表示日時の分離) を検出 — `Envelope` に `x_orig_date_differs` を追加。
 ### Security — D2083: `Delivered-To:` と `From:` の同一アドレス (自分へ戻る配送) を検出 — `Envelope` に `delivered_to_same_as_from` を追加。
 ### Security — D2084: `Delivered-To:` と `Reply-To:` の同一アドレス (宛名・返信口・実配の畳み) を検出 — `Envelope` に `delivered_to_same_as_reply_to` を追加。
 ### Security — D2085: `Envelope-To:`/`X-Envelope-To:` と `Cc:` の同一アドレスを検出 — `Envelope` に `envelope_to_same_as_cc` を追加 (`delivered_to_same_as_cc` の派生欄版)。
