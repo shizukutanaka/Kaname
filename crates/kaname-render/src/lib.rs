@@ -1924,6 +1924,14 @@ pub struct Envelope {
     pub x_orig_cc_mark: bool,
     /// `X-Original-Reply-To:` の存在 (D2110 — 返信先ずれ)。
     pub x_orig_reply_to_mark: bool,
+    /// `Fcc:`/`X-Fcc:` の存在 (D2111 — 差出人ずれ)。
+    pub fcc_mark: bool,
+    /// `X-Forwarded-*` 群の存在 (D2112 — 転送履歴ずれ)。
+    pub forwarded_marks: bool,
+    /// `Apparently-To:`/`X-Apparently-To:` と `To:` の一致アドレス (D2113 — 届け先ずれ)。
+    pub apparently_to_same_as_to: bool,
+    /// `X-Original-To:` と `To:` の一致アドレス (D2114 — 届け先ずれ)。
+    pub x_orig_to_same_as_to: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -4991,6 +4999,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_bcc_mark = has_x_orig_bcc_mark(bytes);
     let x_orig_cc_mark = has_x_orig_cc_mark(bytes);
     let x_orig_reply_to_mark = has_x_orig_reply_to_mark(bytes);
+    let fcc_mark = has_fcc_mark(bytes);
+    let forwarded_marks = has_forwarded_marks(bytes);
+    let apparently_to_same_as_to = has_apparently_to_same_as_to(bytes);
+    let x_orig_to_same_as_to = has_x_orig_to_same_as_to(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5858,6 +5870,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_bcc_mark,
         x_orig_cc_mark,
         x_orig_reply_to_mark,
+        fcc_mark,
+        forwarded_marks,
+        apparently_to_same_as_to,
+        x_orig_to_same_as_to,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42385,6 +42401,134 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Fcc:`/`X-Fcc:` の有無を判定する (D2111)。
+///
+/// 送信側が差出控えを格納するフォルダを記す欄 (nmh・
+/// mailx 系の File-Carbon-Copy) — 差出人側の保管情報が
+/// 残渣として残る死角で、読む実装と無視する実装で
+/// 差出人の読みがずれる。
+#[must_use]
+pub fn has_fcc_mark(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            return false;
+        }
+        l.find(':')
+            .map(|c| l[..c].trim() == "fcc" || l[..c].trim() == "x-fcc")
+            .unwrap_or(false)
+    })
+}
+
+/// `X-Forwarded-*:` 群の有無を判定する (D2112)。
+///
+/// 転送を行った前段が残す転送元情報の残渣欄 — 読む実装
+/// と無視する実装で転送履歴の読みがずれる
+/// (`x-forwarded-encrypted` は `webmail_internal_marks`
+/// が担当)。
+#[must_use]
+pub fn has_forwarded_marks(raw: &[u8]) -> bool {
+    const FWD: &[&str] = &[
+        "x-forwarded-for",
+        "x-forwarded-message-id",
+        "x-forwarded-from",
+        "x-forwarded-date",
+        "x-forwarded-to",
+        "x-forwarded-sender",
+        "x-forwarded-subject",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            return false;
+        }
+        l.find(':')
+            .map(|c| FWD.contains(&l[..c].trim()))
+            .unwrap_or(false)
+    })
+}
+
+/// `Apparently-To:`/`X-Apparently-To:` と `To:` が一致する
+/// アドレスか判定する (D2113)。
+///
+/// sendmail は受取欄が無い場合にのみこの欄を記す —
+/// `To:` と同じ値で残るのは記録が嘘をつく形で、記録を
+/// 信じる実装と宛先欄を読む実装で届け先の読みがずれる
+/// (食い違いは `apparently_to_differs_to` が担当)。
+#[must_use]
+pub fn has_apparently_to_same_as_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(a), Some(t)) = (
+        first_addr_of(&logical, "apparently-to")
+            .or_else(|| first_addr_of(&logical, "x-apparently-to")),
+        first_addr_of(&logical, "to"),
+    ) else {
+        return false;
+    };
+    !a.is_empty() && a.eq_ignore_ascii_case(&t)
+}
+
+/// `X-Original-To:` と `To:` が一致するアドレスか判定
+/// する (D2114)。
+///
+/// 「元の宛先」を記録する欄が現宛先と同じ値を持つのは
+/// 「書き換えた」という記録自身が矛盾する形 — 記録を
+/// 信じる実装と宛先欄を読む実装で届け先の読みがずれる
+/// (食い違いは `x_orig_to_differs` が担当)。
+#[must_use]
+pub fn has_x_orig_to_same_as_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(t)) = (
+        first_addr_of(&logical, "x-original-to"),
+        first_addr_of(&logical, "to"),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && x.eq_ignore_ascii_case(&t)
+}
+
 /// `Apparently-Resent-To:`/`Apparently-Resent-From:`/
 /// `Apparently-Resent-Sender:` の有無を判定する (D2107)。
 ///
@@ -65615,6 +65759,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 控え格納欄があれば発火() {
+        assert!(has_fcc_mark(
+            b"From: a@x\r\nFcc: +sent\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_fcc_mark(
+            b"From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 転送元の残渣欄があれば発火() {
+        assert!(has_forwarded_marks(
+            b"From: a@x\r\nX-Forwarded-For: f@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_forwarded_marks(
+            b"From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 見せかけ宛先が宛先欄と一致すれば発火() {
+        assert!(has_apparently_to_same_as_to(
+            b"From: a@x\r\nApparently-To: at@y\r\nTo: at@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_same_as_to(
+            b"From: a@x\r\nApparently-To: at@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の宛先記録が宛先欄と一致すれば発火() {
+        assert!(has_x_orig_to_same_as_to(
+            b"From: a@x\r\nX-Original-To: xt@y\r\nTo: xt@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_same_as_to(
+            b"From: a@x\r\nX-Original-To: xt@y\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

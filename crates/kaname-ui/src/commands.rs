@@ -7001,6 +7001,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_reply_to_mark {
         render_risks.push("元の返信口の記録欄が残っています—残渣の読みで返信先がずれます".to_string());
     }
+    if env.fcc_mark {
+        render_risks.push("差出控えの格納欄が残っています—残渣の読みで差出人がずれます".to_string());
+    }
+    if env.forwarded_marks {
+        render_risks.push("転送元の残渣欄が残っています—残渣の読みで転送履歴がずれます".to_string());
+    }
+    if env.apparently_to_same_as_to {
+        render_risks.push("見せかけ宛先が宛先欄と一致します—記録と宛先欄の読みで届け先がずれます".to_string());
+    }
+    if env.x_orig_to_same_as_to {
+        render_risks.push("元の宛先記録が宛先欄と一致します—記録と宛先欄の読みで届け先がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

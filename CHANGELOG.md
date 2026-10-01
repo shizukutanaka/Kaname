@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2111: `Fcc:`/`X-Fcc:` (差出控えの格納欄の残渣) を検出 — `Envelope` に `fcc_mark` を追加。
+### Security — D2112: `X-Forwarded-*` 群 (転送元情報の残渣欄) を検出 — `Envelope` に `forwarded_marks` を追加。
+### Security — D2113: `Apparently-To:`/`X-Apparently-To:` と `To:` の一致 (受取欄不在時のみ記されるべき記録の矛盾) を検出 — `Envelope` に `apparently_to_same_as_to` を追加。
+### Security — D2114: `X-Original-To:` と `To:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_to_same_as_to` を追加。
 ### Security — D2107: `Apparently-Resent-To:`/`Apparently-Resent-From:`/`Apparently-Resent-Sender:` (sendmail 再送モードの残渣欄) を検出 — `Envelope` に `apparently_resent_marks` を追加。
 ### Security — D2108: `X-Original-Bcc:` (改変前の隠し宛先の記録欄露出) を検出 — `Envelope` に `x_orig_bcc_mark` を追加。
 ### Security — D2109: `X-Original-Cc:` (改変前の副宛先の記録欄露出) を検出 — `Envelope` に `x_orig_cc_mark` を追加。
