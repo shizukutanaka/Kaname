@@ -1948,6 +1948,14 @@ pub struct Envelope {
     pub x_orig_reply_to_same_as_reply_to: bool,
     /// `X-Original-References:` と `References:` の一致 (D2122 — 糸参照ずれ)。
     pub x_orig_refs_same_as_refs: bool,
+    /// `X-Original-To:` と `Apparently-To:` の不一致アドレス (D2123 — 届け先ずれ)。
+    pub x_orig_to_differs_apparently_to: bool,
+    /// `X-Original-To:` と `Envelope-To:` の不一致アドレス (D2124 — 届け先ずれ)。
+    pub x_orig_to_differs_envelope_to: bool,
+    /// `Envelope-To:` と `Delivered-To:` の不一致アドレス (D2125 — 届け先ずれ)。
+    pub envelope_to_differs_delivered_to: bool,
+    /// `Envelope-To:` と `Apparently-To:` の不一致アドレス (D2126 — 届け先ずれ)。
+    pub envelope_to_differs_apparently_to: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5027,6 +5035,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_cc_same_as_cc = has_x_orig_cc_same_as_cc(bytes);
     let x_orig_reply_to_same_as_reply_to = has_x_orig_reply_to_same_as_reply_to(bytes);
     let x_orig_refs_same_as_refs = has_x_orig_refs_same_as_refs(bytes);
+    let x_orig_to_differs_apparently_to = has_x_orig_to_differs_apparently_to(bytes);
+    let x_orig_to_differs_envelope_to = has_x_orig_to_differs_envelope_to(bytes);
+    let envelope_to_differs_delivered_to = has_envelope_to_differs_delivered_to(bytes);
+    let envelope_to_differs_apparently_to = has_envelope_to_differs_apparently_to(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -5906,6 +5918,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_cc_same_as_cc,
         x_orig_reply_to_same_as_reply_to,
         x_orig_refs_same_as_refs,
+        x_orig_to_differs_apparently_to,
+        x_orig_to_differs_envelope_to,
+        envelope_to_differs_delivered_to,
+        envelope_to_differs_apparently_to,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -42433,6 +42449,156 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Original-To:` と `Apparently-To:`/`X-Apparently-To:`
+/// が異なるアドレスか判定する (D2123)。
+///
+/// 二つの「元の受取人」記録欄が食い違う形 — postfix
+/// 系と sendmail 系の記録を読む実装で届け先の読みが
+/// ずれる (`To:` との食い違いは `x_orig_to_differs` が
+/// 担当)。
+#[must_use]
+pub fn has_x_orig_to_differs_apparently_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(a)) = (
+        first_addr_of(&logical, "x-original-to"),
+        first_addr_of(&logical, "apparently-to")
+            .or_else(|| first_addr_of(&logical, "x-apparently-to")),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !a.is_empty() && !x.eq_ignore_ascii_case(&a)
+}
+
+/// `X-Original-To:` と `Envelope-To:`/`X-Envelope-To:` が
+/// 異なるアドレスか判定する (D2124)。
+///
+/// エイリアス展開前の記録とエンベロープ受取人記録の
+/// 食い違い — 記録どうしを読む実装で届け先の読みが
+/// ずれる。
+#[must_use]
+pub fn has_x_orig_to_differs_envelope_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(x), Some(e)) = (
+        first_addr_of(&logical, "x-original-to"),
+        first_addr_of(&logical, "envelope-to")
+            .or_else(|| first_addr_of(&logical, "x-envelope-to")),
+    ) else {
+        return false;
+    };
+    !x.is_empty() && !e.is_empty() && !x.eq_ignore_ascii_case(&e)
+}
+
+/// `Envelope-To:`/`X-Envelope-To:` と `Delivered-To:` が
+/// 異なるアドレスか判定する (D2125)。
+///
+/// エンベロープ受取人記録と MTA の最終配達記録の食い違い
+/// — 封書記録を読む実装と配達記録を読む実装で届け先の
+/// 読みがずれる。
+#[must_use]
+pub fn has_envelope_to_differs_delivered_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(e), Some(d)) = (
+        first_addr_of(&logical, "envelope-to")
+            .or_else(|| first_addr_of(&logical, "x-envelope-to")),
+        first_addr_of(&logical, "delivered-to"),
+    ) else {
+        return false;
+    };
+    !e.is_empty() && !d.is_empty() && !e.eq_ignore_ascii_case(&d)
+}
+
+/// `Envelope-To:`/`X-Envelope-To:` と `Apparently-To:`/
+/// `X-Apparently-To:` が異なるアドレスか判定する (D2126)。
+///
+/// エンベロープ受取人記録と sendmail の見せかけ受取人
+/// 記録の食い違い — 記録どうしを読む実装で届け先の
+/// 読みがずれる。
+#[must_use]
+pub fn has_envelope_to_differs_apparently_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let (Some(e), Some(a)) = (
+        first_addr_of(&logical, "envelope-to")
+            .or_else(|| first_addr_of(&logical, "x-envelope-to")),
+        first_addr_of(&logical, "apparently-to")
+            .or_else(|| first_addr_of(&logical, "x-apparently-to")),
+    ) else {
+        return false;
+    };
+    !e.is_empty() && !a.is_empty() && !e.eq_ignore_ascii_case(&a)
+}
+
 /// `X-Original-Sender:` と `Sender:` が一致するアドレスか
 /// 判定する (D2119)。
 ///
@@ -66086,6 +66252,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元の宛先記録が見せ宛記録と食い違えば発火() {
+        assert!(has_x_orig_to_differs_apparently_to(
+            b"From: a@x\r\nX-Original-To: x@z\r\nApparently-To: a@z\r\nCc: c@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_differs_apparently_to(
+            b"From: a@x\r\nX-Original-To: x@z\r\nApparently-To: x@z\r\nCc: c@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元の宛先記録が封書記録と食い違えば発火() {
+        assert!(has_x_orig_to_differs_envelope_to(
+            b"From: a@x\r\nX-Original-To: x@z\r\nEnvelope-To: e@z\r\nCc: c@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_differs_envelope_to(
+            b"From: a@x\r\nX-Original-To: x@z\r\nEnvelope-To: x@z\r\nCc: c@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書記録が配達記録と食い違えば発火() {
+        assert!(has_envelope_to_differs_delivered_to(
+            b"From: a@x\r\nEnvelope-To: e@z\r\nDelivered-To: d@z\r\nCc: c@y\r\n\r\nx"
+        ));
+        assert!(!has_envelope_to_differs_delivered_to(
+            b"From: a@x\r\nEnvelope-To: e@z\r\nDelivered-To: e@z\r\nCc: c@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書記録が見せ宛記録と食い違えば発火() {
+        assert!(has_envelope_to_differs_apparently_to(
+            b"From: a@x\r\nEnvelope-To: e@z\r\nApparently-To: a@z\r\nCc: c@y\r\n\r\nx"
+        ));
+        assert!(!has_envelope_to_differs_apparently_to(
+            b"From: a@x\r\nEnvelope-To: e@z\r\nApparently-To: e@z\r\nCc: c@y\r\n\r\nx"
+        ));
     }
 
     #[test]

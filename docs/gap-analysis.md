@@ -1536,3 +1536,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2120 | X-Original-Cc == Cc (書き換えたはずの記録の矛盾) | 届け先ずれ |
 | D2121 | X-Original-Reply-To == Reply-To (書き換えたはずの記録の矛盾) | 返信先ずれ |
 | D2122 | X-Original-References == References (書き換えたはずの記録の矛盾) | 糸参照ずれ |
+| D2123 | X-Original-To ≠ Apparently-To (元受取人記録どうしの食い違い) | 届け先ずれ |
+| D2124 | X-Original-To ≠ Envelope-To (展開記録と封書記録の食い違い) | 届け先ずれ |
+| D2125 | Envelope-To ≠ Delivered-To (封書記録と配達記録の食い違い) | 届け先ずれ |
+| D2126 | Envelope-To ≠ Apparently-To (封書記録と見せ宛記録の食い違い) | 届け先ずれ |
