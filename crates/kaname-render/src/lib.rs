@@ -2260,6 +2260,14 @@ pub struct Envelope {
     pub x_orig_to_atside: bool,
     /// `X-Original-From:` の値が片側欠落の宛名 (D2278 — 元差出人ずれ)。
     pub x_orig_from_atside: bool,
+    /// `X-Original-Cc:` の値が片側欠落の宛名 (D2279 — 元副宛先ずれ)。
+    pub x_orig_cc_atside: bool,
+    /// `X-Original-Reply-To:` の値が片側欠落の宛名 (D2280 — 元返信口ずれ)。
+    pub x_orig_reply_to_atside: bool,
+    /// `Disposition-Notification-To:` の値が片側欠落の宛名 (D2281 — 通知先ずれ)。
+    pub disposition_to_atside: bool,
+    /// `Return-Receipt-To:` の値が片側欠落の宛名 (D2282 — 受領通知先ずれ)。
+    pub return_receipt_atside: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5495,6 +5503,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_atside = has_apparently_from_atside(bytes);
     let x_orig_to_atside = has_x_orig_to_atside(bytes);
     let x_orig_from_atside = has_x_orig_from_atside(bytes);
+    let x_orig_cc_atside = has_x_orig_cc_atside(bytes);
+    let x_orig_reply_to_atside = has_x_orig_reply_to_atside(bytes);
+    let disposition_to_atside = has_disposition_to_atside(bytes);
+    let return_receipt_atside = has_return_receipt_atside(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6530,6 +6542,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_atside,
         x_orig_to_atside,
         x_orig_from_atside,
+        x_orig_cc_atside,
+        x_orig_reply_to_atside,
+        disposition_to_atside,
+        return_receipt_atside,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -43057,6 +43073,181 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Original-Cc:` の値が片側欠落の宛名形か判定する (D2279)。
+///
+/// 元副宛先を記す欄なのに `@x` や `a@` のようにローカル部・ドメ
+/// イン部のどちらかが空 — 補完する実装・空のまま保持する実装・
+/// 拒否する実装で元副宛先がずれる (@重複は D2263)。
+#[must_use]
+pub fn has_x_orig_cc_atside(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-cc"
+            && v.matches('@').count() == 1
+            && (v.starts_with('@') || v.ends_with('@'))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Reply-To:` の値が片側欠落の宛名形か判定する
+/// (D2280)。
+///
+/// 元返信口を記す欄なのにローカル部・ドメイン部のどちらかが空
+/// — 補完する実装・空のまま保持する実装・拒否する実装で元返信
+/// 口がずれる (@重複は D2264)。
+#[must_use]
+pub fn has_x_orig_reply_to_atside(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-reply-to"
+            && v.matches('@').count() == 1
+            && (v.starts_with('@') || v.ends_with('@'))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Disposition-Notification-To:` の値が片側欠落の宛名形か判定す
+/// る (D2281)。
+///
+/// 開封通知要求先を記す欄なのにローカル部・ドメイン部のどちら
+/// かが空 — 補完する実装・空のまま保持する実装・拒否する実装で
+/// 通知先がずれる (@重複は D2265)。
+#[must_use]
+pub fn has_disposition_to_atside(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "disposition-notification-to"
+            && v.matches('@').count() == 1
+            && (v.starts_with('@') || v.ends_with('@'))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Return-Receipt-To:` の値が片側欠落の宛名形か判定する
+/// (D2282)。
+///
+/// 受領通知要求先を記す欄なのにローカル部・ドメイン部のどちら
+/// かが空 — 補完する実装・空のまま保持する実装・拒否する実装で
+/// 受領通知先がずれる (@重複は D2266)。
+#[must_use]
+pub fn has_return_receipt_atside(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "return-receipt-to"
+            && v.matches('@').count() == 1
+            && (v.starts_with('@') || v.ends_with('@'))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `Apparently-To:`/`X-Apparently-To:` の値が片側欠落の宛名形か判
 /// 定する (D2275)。
 ///
@@ -72921,6 +73112,49 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 元副宛先が片側欠落なら発火() {
+        assert!(has_x_orig_cc_atside(
+            b"From: a@x\r\nX-Original-Cc: @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(has_x_orig_cc_atside(
+            b"From: a@x\r\nX-Original-Cc: b@\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_atside(
+            b"From: a@x\r\nX-Original-Cc: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口が片側欠落なら発火() {
+        assert!(has_x_orig_reply_to_atside(
+            b"From: a@x\r\nX-Original-Reply-To: @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_atside(
+            b"From: a@x\r\nX-Original-Reply-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 開封先が片側欠落なら発火() {
+        assert!(has_disposition_to_atside(
+            b"From: a@x\r\nDisposition-Notification-To: @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_atside(
+            b"From: a@x\r\nDisposition-Notification-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領先が片側欠落なら発火() {
+        assert!(has_return_receipt_atside(
+            b"From: a@x\r\nReturn-Receipt-To: b@\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_atside(
+            b"From: a@x\r\nReturn-Receipt-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

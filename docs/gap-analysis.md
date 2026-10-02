@@ -1692,3 +1692,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2276 | Apparently-From の片側欠落宛名 (表差出人記録の addr-spec 違反) | 表差出人ずれ |
 | D2277 | X-Original-To の片側欠落宛名 (元宛先記録の addr-spec 違反) | 元宛先ずれ |
 | D2278 | X-Original-From の片側欠落宛名 (元差出人記録の addr-spec 違反) | 元差出人ずれ |
+| D2279 | X-Original-Cc の片側欠落宛名 (元副宛記録の addr-spec 違反) | 元副宛先ずれ |
+| D2280 | X-Original-Reply-To の片側欠落宛名 (元返信口記録の addr-spec 違反) | 元返信口ずれ |
+| D2281 | Disposition-Notification-To の片側欠落宛名 (開封通知先記録の addr-spec 違反) | 通知先ずれ |
+| D2282 | Return-Receipt-To の片側欠落宛名 (受領通知先記録の addr-spec 違反) | 受領通知先ずれ |

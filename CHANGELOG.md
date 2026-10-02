@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2279: `X-Original-Cc:` の片側欠落宛名 (`@x`/`a@` — 元副宛記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_cc_atside` を追加。
+### Security — D2280: `X-Original-Reply-To:` の片側欠落宛名 (元返信口記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_reply_to_atside` を追加。
+### Security — D2281: `Disposition-Notification-To:` の片側欠落宛名 (開封通知先記録の addr-spec 違反) を検出 — `Envelope` に `disposition_to_atside` を追加。
+### Security — D2282: `Return-Receipt-To:` の片側欠落宛名 (受領通知先記録の addr-spec 違反) を検出 — `Envelope` に `return_receipt_atside` を追加。
 ### Security — D2275: `Apparently-To:` 系の片側欠落宛名 (`@x`/`a@` — 見せ宛記録の addr-spec 違反) を検出 — `Envelope` に `apparently_to_atside` を追加。
 ### Security — D2276: `Apparently-From:` 系の片側欠落宛名 (表差出人記録の addr-spec 違反) を検出 — `Envelope` に `apparently_from_atside` を追加。
 ### Security — D2277: `X-Original-To:` の片側欠落宛名 (元宛先記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_to_atside` を追加。
