@@ -2516,6 +2516,14 @@ pub struct Envelope {
     pub x_orig_to_rparen: bool,
     /// `X-Original-From:` の値が逆括弧宛名 (D2422 — 元差出人ずれ)。
     pub x_orig_from_rparen: bool,
+    /// `Apparently-To:`/`X-Apparently-To:` 系の値が逆角括弧宛名 (D2435 — 見せ宛ずれ)。
+    pub apparently_to_rbracket: bool,
+    /// `Apparently-From:`/`Apparently-Sender:` 系の値が逆角括弧宛名 (D2436 — 表差出人ずれ)。
+    pub apparently_from_rbracket: bool,
+    /// `X-Original-To:` の値が逆角括弧宛名 (D2437 — 元宛先ずれ)。
+    pub x_orig_to_rbracket: bool,
+    /// `X-Original-From:` の値が逆角括弧宛名 (D2438 — 元差出人ずれ)。
+    pub x_orig_from_rbracket: bool,
     /// `X-Original-Cc:` 系の値が逆斜線宛名 (D2391 — 元副宛ずれ)。
     pub x_orig_cc_bslash: bool,
     /// `X-Original-Reply-To:` の値が逆斜線宛名 (D2392 — 元返信口ずれ)。
@@ -5935,6 +5943,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_rparen = has_apparently_from_rparen(bytes);
     let x_orig_to_rparen = has_x_orig_to_rparen(bytes);
     let x_orig_from_rparen = has_x_orig_from_rparen(bytes);
+    let apparently_to_rbracket = has_apparently_to_rbracket(bytes);
+    let apparently_from_rbracket = has_apparently_from_rbracket(bytes);
+    let x_orig_to_rbracket = has_x_orig_to_rbracket(bytes);
+    let x_orig_from_rbracket = has_x_orig_from_rbracket(bytes);
     let x_orig_cc_bslash = has_x_orig_cc_bslash(bytes);
     let x_orig_reply_to_bslash = has_x_orig_reply_to_bslash(bytes);
     let disposition_to_bslash = has_disposition_to_bslash(bytes);
@@ -7126,6 +7138,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_rparen,
         x_orig_to_rparen,
         x_orig_from_rparen,
+        apparently_to_rbracket,
+        apparently_from_rbracket,
+        x_orig_to_rbracket,
+        x_orig_from_rbracket,
         x_orig_cc_bslash,
         x_orig_reply_to_bslash,
         disposition_to_bslash,
@@ -46516,6 +46532,247 @@ pub fn has_return_receipt_hyph(raw: &[u8]) -> bool {
     })
 }
 
+/// `Apparently-To:`/`X-Apparently-To:` 系の値が逆角括弧宛名
+/// 形か判定する (D2435)。
+///
+/// 見せ宛を記す欄なのに `a@x]` のように孤立 `]` を含む宛名
+/// — 角括弧閉じの扱いをずらす実装と構文違反として拒否する実装で見
+/// せ宛記録がずれる (引用符形は括弧系で既出)。
+#[must_use]
+pub fn has_apparently_to_rbracket(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-to" || n == "x-apparently-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(']')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系の値が逆括弧宛
+/// 名形か判定する (D2436)。
+///
+/// 表差出人を記す欄なのに `:` を含む宛名 — 接頭辞として剥
+/// がす実装と構文違反として拒否する実装で表札記録がずれる (アドレス欄
+/// 側は括弧系)。
+#[must_use]
+pub fn has_apparently_from_rbracket(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "apparently-from" | "x-apparently-from" | "apparently-sender" | "x-apparently-sender"
+        )
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(']')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-To:` の値が逆角括弧宛名形か判定する
+/// (D2437)。
+///
+/// 元宛先を記す欄なのに `:` を含む宛名 — 接頭辞として剥が
+/// す実装と構文違反として拒否する実装で元宛先記録がずれる (アドレス
+/// 欄側は括弧系)。
+#[must_use]
+pub fn has_x_orig_to_rbracket(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-to" && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(']')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-From:` の値が逆角括弧宛名形か判定する
+/// (D2438)。
+///
+/// 元差出人を記す欄なのに `:` を含む宛名 — 接頭辞として剥が
+/// す実装と構文違反として拒否する実装で元差出人記録がずれる (アドレス
+/// 欄側は括弧系)。
+#[must_use]
+pub fn has_x_orig_from_rbracket(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-from"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(']')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `Apparently-To:`/`X-Apparently-To:` 系の値が逆括弧宛名
 /// 形か判定する (D2419)。
 ///
@@ -82309,6 +82566,46 @@ mod tests {
         ));
         assert!(!has_return_receipt_bslash(
             b"From: a@x\r\nReturn-Receipt-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 見せ宛が逆角括弧宛名なら発火() {
+        assert!(has_apparently_to_rbracket(
+            b"From: a@x\r\nApparently-To: a@xample.com]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_rbracket(
+            b"From: a@x\r\nApparently-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表差出人が逆角括弧宛名なら発火() {
+        assert!(has_apparently_from_rbracket(
+            b"From: a@x\r\nApparently-From: a@xample.com]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_rbracket(
+            b"From: a@x\r\nApparently-From: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛先が逆角括弧宛名なら発火() {
+        assert!(has_x_orig_to_rbracket(
+            b"From: a@x\r\nX-Original-To: a@xample.com]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_rbracket(
+            b"From: a@x\r\nX-Original-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人が逆角括弧宛名なら発火() {
+        assert!(has_x_orig_from_rbracket(
+            b"From: a@x\r\nX-Original-From: a@xample.com]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_rbracket(
+            b"From: a@x\r\nX-Original-From: b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
