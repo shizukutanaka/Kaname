@@ -2692,6 +2692,14 @@ pub struct Envelope {
     pub env_from_qmark: bool,
     /// `Errors-To:` の値が疑問符宛名 (D2482 — 返送先ずれ)。
     pub errors_to_qmark: bool,
+    /// `Envelope-To:`/`X-Envelope-To:` 系の値がプラス宛名 (D2495 — 封書宛先ずれ)。
+    pub env_to_plus: bool,
+    /// `Delivered-To:` の値がプラス宛名 (D2496 — 配達履歴ずれ)。
+    pub delivered_to_plus: bool,
+    /// `X-Envelope-From:`/`X-MailFrom:` 等の値がプラス宛名 (D2497 — 封書差出人ずれ)。
+    pub env_from_plus: bool,
+    /// `Errors-To:` の値がプラス宛名 (D2498 — 返送先ずれ)。
+    pub errors_to_plus: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -6143,6 +6151,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_qmark = has_delivered_to_qmark(bytes);
     let env_from_qmark = has_env_from_qmark(bytes);
     let errors_to_qmark = has_errors_to_qmark(bytes);
+    let env_to_plus = has_env_to_plus(bytes);
+    let delivered_to_plus = has_delivered_to_plus(bytes);
+    let env_from_plus = has_env_from_plus(bytes);
+    let errors_to_plus = has_errors_to_plus(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -7394,6 +7406,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_qmark,
         env_from_qmark,
         errors_to_qmark,
+        env_to_plus,
+        delivered_to_plus,
+        env_from_plus,
+        errors_to_plus,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -50592,6 +50608,258 @@ pub fn has_x_orig_from_hyph(raw: &[u8]) -> bool {
     })
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` の値がプラス宛名形か判
+/// 定する (D2495)。
+///
+/// 封書宛先を記す欄なのに `a@x+` のようにドメイン側に孤立 `+` を含む宛名
+/// — プラスの扱いをずらす実装と構文違反として拒否する実装で封
+/// 書宛先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_to_plus(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "envelope-to" || n == "x-envelope-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('+'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Delivered-To:` の値がプラス宛名形か判定する
+/// (D2496)。
+///
+/// 最終配達を記す欄なのにドメイン側に孤立 `+` を含む宛名 — プラスの扱
+/// いをずらす実装と構文違反として拒否する実装で配達履歴がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_delivered_to_plus(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "delivered-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('+'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:` 等の値がプラス宛名形か
+/// 判定する (D2497)。
+///
+/// 封書差出人を記す欄なのにドメイン側に孤立 `+` を含む宛名 — プラスの扱いをずらす実装と構文違反として拒否する実装で差出人履歴がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_from_plus(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-envelope-from"
+                | "x-mailfrom"
+                | "x-mail-from"
+                | "envelope-from"
+                | "x-original-from-envelope"
+                | "x-sender-envelope"
+        ) && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('+'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Errors-To:` の値がプラス宛名形か判定する
+/// (D2498)。
+///
+/// 返送先を記す欄なのにドメイン側に孤立 `+` を含む宛名 — プラスの扱いを
+/// ずらす実装と構文違反として拒否する実装で返送先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_errors_to_plus(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "errors-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('+'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
 /// `Envelope-To:`/`X-Envelope-To:` の値が疑問符宛名形か判
 /// 定する (D2479)。
 ///
@@ -85876,6 +86144,46 @@ mod tests {
         ));
         assert!(!has_errors_to_pct(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書宛先がプラス宛名なら発火() {
+        assert!(has_env_to_plus(
+            b"From: a@x\r\nEnvelope-To: a@xample+.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_plus(
+            b"From: a@x\r\nEnvelope-To: a+b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 配達履歴がプラス宛名なら発火() {
+        assert!(has_delivered_to_plus(
+            b"From: a@x\r\nDelivered-To: a@xample+.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_plus(
+            b"From: a@x\r\nDelivered-To: a+b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人がプラス宛名なら発火() {
+        assert!(has_env_from_plus(
+            b"From: a@x\r\nX-Envelope-From: a@xample+.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_plus(
+            b"From: a@x\r\nX-Envelope-From: a+b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先がプラス宛名なら発火() {
+        assert!(has_errors_to_plus(
+            b"From: a@x\r\nErrors-To: a@xample+.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_plus(
+            b"From: a@x\r\nErrors-To: a+b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
