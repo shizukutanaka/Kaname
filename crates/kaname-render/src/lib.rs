@@ -2500,6 +2500,14 @@ pub struct Envelope {
     pub disposition_to_bslash: bool,
     /// `Return-Receipt-To:` の値が逆斜線宛名 (D2394 — 受領通知先ずれ)。
     pub return_receipt_bslash: bool,
+    /// `X-Original-Cc:` の値がコロン宛名 (D2407 — 元副宛ずれ)。
+    pub x_orig_cc_colon: bool,
+    /// `X-Original-Reply-To:` の値がコロン宛名 (D2408 — 元返信口ずれ)。
+    pub x_orig_reply_to_colon: bool,
+    /// `Disposition-Notification-To:` の値がコロン宛名 (D2409 — 開封通知先ずれ)。
+    pub disposition_to_colon: bool,
+    /// `Return-Receipt-To:` の値がコロン宛名 (D2410 — 受領通知先ずれ)。
+    pub return_receipt_colon: bool,
     /// `Envelope-To:`/`X-Envelope-To:` 系の値が逆斜線宛名 (D2395 — 封書宛先ずれ)。
     pub env_to_bslash: bool,
     /// `Delivered-To:` の値が逆斜線宛名 (D2396 — 配達履歴ずれ)。
@@ -5871,6 +5879,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_bslash = has_x_orig_reply_to_bslash(bytes);
     let disposition_to_bslash = has_disposition_to_bslash(bytes);
     let return_receipt_bslash = has_return_receipt_bslash(bytes);
+    let x_orig_cc_colon = has_x_orig_cc_colon(bytes);
+    let x_orig_reply_to_colon = has_x_orig_reply_to_colon(bytes);
+    let disposition_to_colon = has_disposition_to_colon(bytes);
+    let return_receipt_colon = has_return_receipt_colon(bytes);
     let env_to_bslash = has_env_to_bslash(bytes);
     let delivered_to_bslash = has_delivered_to_bslash(bytes);
     let env_from_bslash = has_env_from_bslash(bytes);
@@ -7034,6 +7046,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_bslash,
         disposition_to_bslash,
         return_receipt_bslash,
+        x_orig_cc_colon,
+        x_orig_reply_to_colon,
+        disposition_to_colon,
+        return_receipt_colon,
         env_to_bslash,
         delivered_to_bslash,
         env_from_bslash,
@@ -44979,6 +44995,235 @@ pub fn has_x_orig_rcpt_to_hyph(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Original-Cc:` の値がコロン宛名形か判定する
+/// (D2407)。
+///
+/// 元副宛を記す欄なのに `mailto:a@x` のように `:` を含む宛名
+/// — 接頭辞として剥がす実装と構文違反として拒否する実装で元
+/// 副宛記録がずれる (引用符形は括弧系で既出)。
+#[must_use]
+pub fn has_x_orig_cc_colon(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-cc"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(':')
+            && !v.contains('\\')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Reply-To:` の値がコロン宛名形か判定する
+/// (D2408)。
+///
+/// 元返信口を記す欄なのに `:` を含む宛名 — 接頭辞として剥が
+/// す実装と構文違反として拒否する実装で元返信先記録がずれる (アドレス欄
+/// 側は括弧系)。
+#[must_use]
+pub fn has_x_orig_reply_to_colon(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-reply-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(':')
+            && !v.contains('\\')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Disposition-Notification-To:` の値がコロン宛名形か判
+/// 定する (D2409)。
+///
+/// 開封通知先を記す欄なのに `:` を含む宛名 — 接頭辞として
+/// 剥がす実装と構文違反として拒否する実装で通知先がずれる (アドレス
+/// 欄側は括弧系)。
+#[must_use]
+pub fn has_disposition_to_colon(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "disposition-notification-to" && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(':')
+            && !v.contains('\\')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Return-Receipt-To:` の値がコロン宛名形か判定する
+/// (D2410)。
+///
+/// 受領通知先を記す欄なのに `:` を含む宛名 — 接頭辞として剥
+/// がす実装と構文違反として拒否する実装で受領通知先がずれる (アドレス欄側は
+/// 括弧系)。
+#[must_use]
+pub fn has_return_receipt_colon(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "return-receipt-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(':')
+            && !v.contains('\\')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `X-Original-Cc:` の値が逆斜線宛名形か判定する
 /// (D2391)。
 ///
@@ -80326,6 +80571,46 @@ mod tests {
         ));
         assert!(!has_errors_to_bslash(
             b"From: a@x\r\nErrors-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元副宛がコロン宛名なら発火() {
+        assert!(has_x_orig_cc_colon(
+            b"From: a@x\r\nX-Original-Cc: mailto:a@xample.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_colon(
+            b"From: a@x\r\nX-Original-Cc: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口がコロン宛名なら発火() {
+        assert!(has_x_orig_reply_to_colon(
+            b"From: a@x\r\nX-Original-Reply-To: mailto:a@xample.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_colon(
+            b"From: a@x\r\nX-Original-Reply-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 開封通知先がコロン宛名なら発火() {
+        assert!(has_disposition_to_colon(
+            b"From: a@x\r\nDisposition-Notification-To: mailto:a@xample.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_colon(
+            b"From: a@x\r\nDisposition-Notification-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領通知先がコロン宛名なら発火() {
+        assert!(has_return_receipt_colon(
+            b"From: a@x\r\nReturn-Receipt-To: mailto:a@xample.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_colon(
+            b"From: a@x\r\nReturn-Receipt-To: b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 

@@ -1820,3 +1820,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2404 | Apparently-From/Apparently-Sender 系のコロン宛名値 (表差出人記録の接頭辞異形) | 表差出人ずれ |
 | D2405 | X-Original-To のコロン宛名値 (元宛先記録の接頭辞異形) | 元宛先ずれ |
 | D2406 | X-Original-From のコロン宛名値 (元差出人記録の接頭辞異形) | 元差出人ずれ |
+| D2407 | X-Original-Cc のコロン宛名値 (元副宛記録の接頭辞異形) | 元副宛ずれ |
+| D2408 | X-Original-Reply-To のコロン宛名値 (元返信口記録の接頭辞異形) | 元返信先ずれ |
+| D2409 | Disposition-Notification-To のコロン宛名値 (開封通知先記録の接頭辞異形) | 通知先ずれ |
+| D2410 | Return-Receipt-To のコロン宛名値 (受領通知先記録の接頭辞異形) | 受領先ずれ |
