@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2379: `X-Confirm-Reading-To:` の端ハイフンラベル宛名値 (閲覧確認先記録の DNS ラベル違反) を検出 — `Envelope` に `confirm_reading_hyph` を追加。
+### Security — D2380: `Resent-Reply-To:` の端ハイフンラベル宛名値 (再送返信口記録の DNS ラベル違反) を検出 — `Envelope` に `resent_reply_to_hyph` を追加。
+### Security — D2381: `Apparently-Resent-*:` 系の端ハイフンラベル宛名値 (再送残渣記録の DNS ラベル違反) を検出 — `Envelope` に `apparently_resent_hyph` を追加。
+### Security — D2382: `X-Original-Rcpt-To:` 系の端ハイフンラベル宛名値 (元受取人記録の DNS ラベル違反) を検出 — `Envelope` に `x_orig_rcpt_to_hyph` を追加。
 ### Security — D2375: `X-Original-Cc:` の端ハイフンラベル宛名値 (元副宛記録の DNS ラベル違反) を検出 — `Envelope` に `x_orig_cc_hyph` を追加。
 ### Security — D2376: `X-Original-Reply-To:` の端ハイフンラベル宛名値 (元返信口記録の DNS ラベル違反) を検出 — `Envelope` に `x_orig_reply_to_hyph` を追加。
 ### Security — D2377: `Disposition-Notification-To:` の端ハイフンラベル宛名値 (開封通知先記録の DNS ラベル違反) を検出 — `Envelope` に `disposition_to_hyph` を追加。

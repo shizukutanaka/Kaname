@@ -2460,6 +2460,14 @@ pub struct Envelope {
     pub disposition_to_hyph: bool,
     /// `Return-Receipt-To:` の値が端ハイフンラベル宛名 (D2378 — 受領通知先ずれ)。
     pub return_receipt_hyph: bool,
+    /// `X-Confirm-Reading-To:` の値が端ハイフンラベル宛名 (D2379 — 閲覧確認先ずれ)。
+    pub confirm_reading_hyph: bool,
+    /// `Resent-Reply-To:` の値が端ハイフンラベル宛名 (D2380 — 再送返信口ずれ)。
+    pub resent_reply_to_hyph: bool,
+    /// `Apparently-Resent-*:` 系の値が端ハイフンラベル宛名 (D2381 — 再送残渣ずれ)。
+    pub apparently_resent_hyph: bool,
+    /// `X-Original-Rcpt-To:` 系の値が端ハイフンラベル宛名 (D2382 — 元受取人ずれ)。
+    pub x_orig_rcpt_to_hyph: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5795,6 +5803,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_hyph = has_x_orig_reply_to_hyph(bytes);
     let disposition_to_hyph = has_disposition_to_hyph(bytes);
     let return_receipt_hyph = has_return_receipt_hyph(bytes);
+    let confirm_reading_hyph = has_confirm_reading_hyph(bytes);
+    let resent_reply_to_hyph = has_resent_reply_to_hyph(bytes);
+    let apparently_resent_hyph = has_apparently_resent_hyph(bytes);
+    let x_orig_rcpt_to_hyph = has_x_orig_rcpt_to_hyph(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6930,6 +6942,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_hyph,
         disposition_to_hyph,
         return_receipt_hyph,
+        confirm_reading_hyph,
+        resent_reply_to_hyph,
+        apparently_resent_hyph,
+        x_orig_rcpt_to_hyph,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -44366,6 +44382,270 @@ pub fn has_return_receipt_pct(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Confirm-Reading-To:` の値が端ハイフンラベル宛名形か判
+/// 定する (D2379)。
+///
+/// 閲覧確認先を記す欄なのにラベル端が `-` のドメイン —
+/// DNS ラベル規則を厳守する実装と寛容に受理する実装で閲覧確認先がずれる (アドレス欄側は D1560)。
+#[must_use]
+pub fn has_confirm_reading_hyph(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        n == "x-confirm-reading-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && (d.starts_with('-')
+                || d.ends_with('-')
+                || d.contains(".-")
+                || d.contains("-."))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Resent-Reply-To:` の値が端ハイフンラベル宛名形か判定す
+/// る (D2380)。
+///
+/// 再送返信口を記す欄なのにラベル端が `-` のドメイン —
+/// DNS ラベル規則の厳格実装と寛容実装で再送返信先がずれる (アドレス欄
+/// 側は D1560)。
+#[must_use]
+pub fn has_resent_reply_to_hyph(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        l[..c].trim() == "resent-reply-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && (d.starts_with('-')
+                || d.ends_with('-')
+                || d.contains(".-")
+                || d.contains("-."))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-Resent-*:` 系の値が端ハイフンラベル宛名形か判
+/// 定する (D2381)。
+///
+/// 再送残渣を記す欄なのにラベル端が `-` のドメイン —
+/// DNS ラベル規則の厳格実装と寛容実装で再送記録がずれる (アドレス
+/// 欄側は D1560)。
+#[must_use]
+pub fn has_apparently_resent_hyph(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        matches!(
+            n,
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ) && v.matches('@').count() == 1
+            && v.is_ascii()
+            && (d.starts_with('-')
+                || d.ends_with('-')
+                || d.contains(".-")
+                || d.contains("-."))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系の値が端ハイフンラベル宛名形か判
+/// 定する (D2382)。
+///
+/// 元受取人を記す欄なのにラベル端が `-` のドメイン —
+/// DNS ラベル規則の厳格実装と寛容実装で元受取人がずれる (アドレス欄側は
+/// D1560)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_hyph(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        matches!(
+            n,
+            "x-original-rcpt-to" | "x-orig-rcpt-to" | "x-rcpt-to" | "x-envelope-rcpt-to"
+        )
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && (d.starts_with('-')
+                || d.ends_with('-')
+                || d.contains(".-")
+                || d.contains("-."))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `X-Original-Cc:` の値が端ハイフンラベル宛名形か判定する
 /// (D2375)。
 ///
@@ -78476,6 +78756,46 @@ mod tests {
         ));
         assert!(!has_errors_to_pct(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 閲覧確認先が端ハイフンラベルなら発火() {
+        assert!(has_confirm_reading_hyph(
+            b"From: a@x\r\nX-Confirm-Reading-To: b@-xample.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_hyph(
+            b"From: a@x\r\nX-Confirm-Reading-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口が端ハイフンラベルなら発火() {
+        assert!(has_resent_reply_to_hyph(
+            b"From: a@x\r\nResent-Reply-To: b@xample-.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_hyph(
+            b"From: a@x\r\nResent-Reply-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣が端ハイフンラベルなら発火() {
+        assert!(has_apparently_resent_hyph(
+            b"From: a@x\r\nApparently-Resent-To: b@-xample.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_hyph(
+            b"From: a@x\r\nApparently-Resent-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人が端ハイフンラベルなら発火() {
+        assert!(has_x_orig_rcpt_to_hyph(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@xample-.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_hyph(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
