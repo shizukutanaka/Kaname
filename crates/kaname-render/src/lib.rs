@@ -2364,6 +2364,14 @@ pub struct Envelope {
     pub disposition_to_bang: bool,
     /// `Return-Receipt-To:` の値がバン経路宛名 (D2330 — 受領通知先ずれ)。
     pub return_receipt_bang: bool,
+    /// `X-Confirm-Reading-To:` の値がバン経路宛名 (D2331 — 閲覧確認先ずれ)。
+    pub confirm_reading_bang: bool,
+    /// `Resent-Reply-To:` の値がバン経路宛名 (D2332 — 再送返信口ずれ)。
+    pub resent_reply_to_bang: bool,
+    /// `Apparently-Resent-*:` 系の値がバン経路宛名 (D2333 — 再送残渣ずれ)。
+    pub apparently_resent_bang: bool,
+    /// `X-Original-Rcpt-To:` 系の値がバン経路宛名 (D2334 — 元受取人ずれ)。
+    pub x_orig_rcpt_to_bang: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5651,6 +5659,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_bang = has_x_orig_reply_to_bang(bytes);
     let disposition_to_bang = has_disposition_to_bang(bytes);
     let return_receipt_bang = has_return_receipt_bang(bytes);
+    let confirm_reading_bang = has_confirm_reading_bang(bytes);
+    let resent_reply_to_bang = has_resent_reply_to_bang(bytes);
+    let apparently_resent_bang = has_apparently_resent_bang(bytes);
+    let x_orig_rcpt_to_bang = has_x_orig_rcpt_to_bang(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6738,6 +6750,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_bang,
         disposition_to_bang,
         return_receipt_bang,
+        confirm_reading_bang,
+        resent_reply_to_bang,
+        apparently_resent_bang,
+        x_orig_rcpt_to_bang,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -44174,6 +44190,197 @@ pub fn has_return_receipt_pct(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Confirm-Reading-To:` の値がバン経路の宛名形か判定する
+/// (D2331)。
+///
+/// 閲覧確認先を記す欄なのに `!` を含む — 経路指定として読む実
+/// 装とローカル部の一文字として読む実装で閲覧確認先がずれる
+/// (@重複は D2267、パーセントは D2315)。
+#[must_use]
+pub fn has_confirm_reading_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-confirm-reading-to"
+            && v.matches('@').count() == 1
+            && v.contains('!')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Resent-Reply-To:` の値がバン経路の宛名形か判定する
+/// (D2332)。
+///
+/// 再送返信口を記す欄なのに `!` を含む — 経路指定として読む実
+/// 装とローカル部の一文字として読む実装で再送返信先がずれる
+/// (@重複は D2268、パーセントは D2316)。
+#[must_use]
+pub fn has_resent_reply_to_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "resent-reply-to"
+            && v.matches('@').count() == 1
+            && v.contains('!')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-Resent-*:` 系の値がバン経路の宛名形か判定する
+/// (D2333)。
+///
+/// 再送残渣を記す欄なのに `!` を含む — 経路指定として読む実装
+/// とローカル部の一文字として読む実装で再送記録がずれる (@重
+/// 複は D2269、パーセントは D2317)。
+#[must_use]
+pub fn has_apparently_resent_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ) && v.matches('@').count() == 1
+            && v.contains('!')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系の値がバン経路の宛名形か判定する
+/// (D2334)。
+///
+/// 元受取人を記す欄なのに `!` を含む — 経路指定として読む実装
+/// とローカル部の一文字として読む実装で元受取人がずれる (@重
+/// 複は D2270、パーセントは D2318)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-original-rcpt-to" | "x-orig-rcpt-to" | "x-rcpt-to" | "x-envelope-rcpt-to"
+        ) && v.matches('@').count() == 1
+            && v.contains('!')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `X-Original-Cc:` の値がバン経路の宛名形か判定する (D2327)。
 ///
 /// 元副宛を記す欄なのに `!` を含む — 経路指定として読む実装と
@@ -75549,6 +75756,46 @@ mod tests {
         ));
         assert!(!has_errors_to_pct(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 閲覧確認先がバン経路なら発火() {
+        assert!(has_confirm_reading_bang(
+            b"From: a@x\r\nX-Confirm-Reading-To: b!y@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_bang(
+            b"From: a@x\r\nX-Confirm-Reading-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口がバン経路なら発火() {
+        assert!(has_resent_reply_to_bang(
+            b"From: a@x\r\nResent-Reply-To: b!y@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_bang(
+            b"From: a@x\r\nResent-Reply-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣がバン経路なら発火() {
+        assert!(has_apparently_resent_bang(
+            b"From: a@x\r\nApparently-Resent-To: b!y@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_bang(
+            b"From: a@x\r\nApparently-Resent-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人がバン経路なら発火() {
+        assert!(has_x_orig_rcpt_to_bang(
+            b"From: a@x\r\nX-Original-Rcpt-To: b!y@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_bang(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
