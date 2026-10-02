@@ -7913,6 +7913,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.return_receipt_rparen {
         render_risks.push("受領通知先記録の宛名に逆括弧です—括弧閉じの扱いで受領先がずれます".to_string());
     }
+    if env.confirm_reading_rparen {
+        render_risks.push("閲覧確認先記録の宛名に逆括弧です—括弧閉じの扱いで確認先がずれます".to_string());
+    }
+    if env.resent_reply_to_rparen {
+        render_risks.push("再送返信口記録の宛名に逆括弧です—括弧閉じの扱いで再送返信先がずれます".to_string());
+    }
+    if env.apparently_resent_rparen {
+        render_risks.push("再送残渣記録の宛名に逆括弧です—括弧閉じの扱いで再送履歴がずれます".to_string());
+    }
+    if env.x_orig_rcpt_to_rparen {
+        render_risks.push("元受取人記録の宛名に逆括弧です—括弧閉じの扱いで元返信先がずれます".to_string());
+    }
     if env.apparently_to_colon {
         render_risks.push("見せ宛記録の宛名にコロンです—接頭辞の扱いで見せ宛がずれます".to_string());
     }
