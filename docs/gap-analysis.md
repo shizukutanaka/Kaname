@@ -1816,3 +1816,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2400 | Delivered-To のコロン宛名値 (配達履歴記録の接頭辞異形) | 配達履歴ずれ |
 | D2401 | X-Envelope-From/X-MailFrom 等のコロン宛名値 (封書差出人記録の接頭辞異形) | 差出人履歴ずれ |
 | D2402 | Errors-To のコロン宛名値 (返送先記録の接頭辞異形) | 返送先ずれ |
+| D2403 | Apparently-To/X-Apparently-To 系のコロン宛名値 (見せ宛記録の接頭辞異形) | 見せ宛ずれ |
+| D2404 | Apparently-From/Apparently-Sender 系のコロン宛名値 (表差出人記録の接頭辞異形) | 表差出人ずれ |
+| D2405 | X-Original-To のコロン宛名値 (元宛先記録の接頭辞異形) | 元宛先ずれ |
+| D2406 | X-Original-From のコロン宛名値 (元差出人記録の接頭辞異形) | 元差出人ずれ |
