@@ -1768,3 +1768,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2352 | Delivered-To の非 ASCII 宛名値 (配達記録の EAI/国際化異形) | 配達履歴ずれ |
 | D2353 | X-Envelope-From/X-MailFrom 等の非 ASCII 宛名値 (封書差出人記録の EAI/国際化異形) | 差出人履歴ずれ |
 | D2354 | Errors-To の非 ASCII 宛名値 (返送先記録の EAI/国際化異形) | 返送先ずれ |
+| D2355 | Apparently-To/X-Apparently-To 系の非 ASCII 宛名値 (見せ宛記録の EAI/国際化異形) | 見せ宛ずれ |
+| D2356 | Apparently-From/Apparently-Sender 系の非 ASCII 宛名値 (表差出人記録の EAI/国際化異形) | 表差出人ずれ |
+| D2357 | X-Original-To の非 ASCII 宛名値 (元宛先記録の EAI/国際化異形) | 元宛先ずれ |
+| D2358 | X-Original-From の非 ASCII 宛名値 (元差出人記録の EAI/国際化異形) | 元差出人ずれ |
