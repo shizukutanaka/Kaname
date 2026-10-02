@@ -2300,6 +2300,14 @@ pub struct Envelope {
     pub disposition_to_semiv: bool,
     /// `Return-Receipt-To:` の値がセミコロン入り宛名 (D2298 — 受領通知先ずれ)。
     pub return_receipt_semiv: bool,
+    /// `X-Confirm-Reading-To:` の値がセミコロン入り宛名 (D2299 — 閲覧確認先ずれ)。
+    pub confirm_reading_semiv: bool,
+    /// `Resent-Reply-To:` の値がセミコロン入り宛名 (D2300 — 再送返信口ずれ)。
+    pub resent_reply_to_semiv: bool,
+    /// `Apparently-Resent-*:` 系の値がセミコロン入り宛名 (D2301 — 再送残渣ずれ)。
+    pub apparently_resent_semiv: bool,
+    /// `X-Original-Rcpt-To:` 系の値がセミコロン入り宛名 (D2302 — 元受取人ずれ)。
+    pub x_orig_rcpt_to_semiv: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5555,6 +5563,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_semiv = has_x_orig_reply_to_semiv(bytes);
     let disposition_to_semiv = has_disposition_to_semiv(bytes);
     let return_receipt_semiv = has_return_receipt_semiv(bytes);
+    let confirm_reading_semiv = has_confirm_reading_semiv(bytes);
+    let resent_reply_to_semiv = has_resent_reply_to_semiv(bytes);
+    let apparently_resent_semiv = has_apparently_resent_semiv(bytes);
+    let x_orig_rcpt_to_semiv = has_x_orig_rcpt_to_semiv(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6610,6 +6622,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_semiv,
         disposition_to_semiv,
         return_receipt_semiv,
+        confirm_reading_semiv,
+        resent_reply_to_semiv,
+        apparently_resent_semiv,
+        x_orig_rcpt_to_semiv,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -43493,6 +43509,193 @@ pub fn has_return_receipt_semiv(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Confirm-Reading-To:` の値がセミコロン入りの宛名形か判定す
+/// る (D2299)。
+///
+/// 閲覧確認先を記す欄なのにセミコロンを含む — 値を区切る実装・
+/// 末尾を削る実装・字面どおり保持する実装で閲覧確認先がずれる
+/// (片側欠落は D2283、@重複は D2267)。
+#[must_use]
+pub fn has_confirm_reading_semiv(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-confirm-reading-to"
+            && v.matches('@').count() == 1
+            && v.contains(';')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Resent-Reply-To:` の値がセミコロン入りの宛名形か判定する
+/// (D2300)。
+///
+/// 再送返信口を記す欄なのにセミコロンを含む — 値を区切る実装・
+/// 末尾を削る実装・字面どおり保持する実装で再送返信先がずれる
+/// (片側欠落は D2284、@重複は D2268)。
+#[must_use]
+pub fn has_resent_reply_to_semiv(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "resent-reply-to"
+            && v.matches('@').count() == 1
+            && v.contains(';')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-Resent-*:` 系の値がセミコロン入りの宛名形か判定す
+/// る (D2301)。
+///
+/// 再送残渣を記す欄なのにセミコロンを含む — 値を区切る実装・末
+/// 尾を削る実装・字面どおり保持する実装で再送残渣がずれる (片
+/// 側欠落は D2285、@重複は D2269)。
+#[must_use]
+pub fn has_apparently_resent_semiv(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ) && v.matches('@').count() == 1
+            && v.contains(';')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系の値がセミコロン入りの宛名形か判定す
+/// る (D2302)。
+///
+/// 元受取人を記す欄なのにセミコロンを含む — 値を区切る実装・末
+/// 尾を削る実装・字面どおり保持する実装で元受取人がずれる (片
+/// 側欠落は D2286、@重複は D2270)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_semiv(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-original-rcpt-to" | "x-orig-rcpt-to" | "x-rcpt-to" | "x-envelope-rcpt-to"
+        ) && v.matches('@').count() == 1
+            && v.contains(';')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` の値がセミコロン入りの宛名形
 /// か判定する (D2287)。
 ///
@@ -73902,6 +74105,46 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 閲覧確認先がセミコロン入りなら発火() {
+        assert!(has_confirm_reading_semiv(
+            b"From: a@x\r\nX-Confirm-Reading-To: b@y;\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_semiv(
+            b"From: a@x\r\nX-Confirm-Reading-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口がセミコロン入りなら発火() {
+        assert!(has_resent_reply_to_semiv(
+            b"From: a@x\r\nResent-Reply-To: b@y;\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_semiv(
+            b"From: a@x\r\nResent-Reply-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣がセミコロン入りなら発火() {
+        assert!(has_apparently_resent_semiv(
+            b"From: a@x\r\nApparently-Resent-To: b@y;\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_semiv(
+            b"From: a@x\r\nApparently-Resent-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人がセミコロン入りなら発火() {
+        assert!(has_x_orig_rcpt_to_semiv(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@y;\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_semiv(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
