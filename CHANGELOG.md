@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2323: `Apparently-To:` 系のバン経路宛名値 (見せ宛記録の経路異形) を検出 — `Envelope` に `apparently_to_bang` を追加。
+### Security — D2324: `Apparently-From:` 系のバン経路宛名値 (表差出人記録の経路異形) を検出 — `Envelope` に `apparently_from_bang` を追加。
+### Security — D2325: `X-Original-To:` のバン経路宛名値 (元宛先記録の経路異形) を検出 — `Envelope` に `x_orig_to_bang` を追加。
+### Security — D2326: `X-Original-From:` のバン経路宛名値 (元差出人記録の経路異形) を検出 — `Envelope` に `x_orig_from_bang` を追加。
 ### Security — D2319: `Envelope-To:` 系のバン経路宛名値 (`a!b@x` — 封書宛先記録の経路異形) を検出 — `Envelope` に `env_to_bang` を追加。
 ### Security — D2320: `Delivered-To:` のバン経路宛名値 (配達記録の経路異形) を検出 — `Envelope` に `delivered_to_bang` を追加。
 ### Security — D2321: `X-Envelope-From:` 系のバン経路宛名値 (封書差出人記録の経路異形) を検出 — `Envelope` に `env_from_bang` を追加。

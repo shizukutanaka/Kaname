@@ -2348,6 +2348,14 @@ pub struct Envelope {
     pub env_from_bang: bool,
     /// `Errors-To:` の値がバン経路宛名 (D2322 — 返送先ずれ)。
     pub errors_to_bang: bool,
+    /// `Apparently-To:` 系の値がバン経路宛名 (D2323 — 見せ宛ずれ)。
+    pub apparently_to_bang: bool,
+    /// `Apparently-From:` 系の値がバン経路宛名 (D2324 — 表札ずれ)。
+    pub apparently_from_bang: bool,
+    /// `X-Original-To:` の値がバン経路宛名 (D2325 — 元宛先ずれ)。
+    pub x_orig_to_bang: bool,
+    /// `X-Original-From:` の値がバン経路宛名 (D2326 — 元差出人ずれ)。
+    pub x_orig_from_bang: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5627,6 +5635,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_bang = has_delivered_to_bang(bytes);
     let env_from_bang = has_env_from_bang(bytes);
     let errors_to_bang = has_errors_to_bang(bytes);
+    let apparently_to_bang = has_apparently_to_bang(bytes);
+    let apparently_from_bang = has_apparently_from_bang(bytes);
+    let x_orig_to_bang = has_x_orig_to_bang(bytes);
+    let x_orig_from_bang = has_x_orig_from_bang(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6706,6 +6718,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_bang,
         env_from_bang,
         errors_to_bang,
+        apparently_to_bang,
+        apparently_from_bang,
+        x_orig_to_bang,
+        x_orig_from_bang,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -44142,6 +44158,189 @@ pub fn has_return_receipt_pct(raw: &[u8]) -> bool {
     })
 }
 
+/// `Apparently-To:`/`Apparently-Sender:` 系の値がバン経路の宛名
+/// 形か判定する (D2323)。
+///
+/// 見せ宛を記す欄なのに `!` を含む — 経路指定として読む実装と
+/// ローカル部の一文字として読む実装で見せ宛記録がずれる (@重
+/// 複は D2259、パーセントは D2307)。
+#[must_use]
+pub fn has_apparently_to_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-to" || n == "x-apparently-to")
+            && v.matches('@').count() == 1
+            && v.contains('!')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系の値がバン経路の宛
+/// 名形か判定する (D2324)。
+///
+/// 表差出人を記す欄なのに `!` を含む — 経路指定として読む実装
+/// とローカル部の一文字として読む実装で表札記録がずれる (@重
+/// 複は D2260、パーセントは D2308)。
+#[must_use]
+pub fn has_apparently_from_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "apparently-from" | "x-apparently-from" | "apparently-sender" | "x-apparently-sender"
+        ) && v.matches('@').count() == 1
+            && v.contains('!')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-To:` の値がバン経路の宛名形か判定する (D2325)。
+///
+/// 元宛先を記す欄なのに `!` を含む — 経路指定として読む実装と
+/// ローカル部の一文字として読む実装で元宛先記録がずれる (@重
+/// 複は D2261、パーセントは D2309)。
+#[must_use]
+pub fn has_x_orig_to_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-to"
+            && v.matches('@').count() == 1
+            && v.contains('!')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-From:` の値がバン経路の宛名形か判定する
+/// (D2326)。
+///
+/// 元差出人を記す欄なのに `!` を含む — 経路指定として読む実装
+/// とローカル部の一文字として読む実装で元差出人記録がずれる
+/// (@重複は D2262、パーセントは D2310)。
+#[must_use]
+pub fn has_x_orig_from_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-from"
+            && v.matches('@').count() == 1
+            && v.contains('!')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` の値がバン経路の宛名形か判
 /// 定する (D2319)。
 ///
@@ -75155,6 +75354,46 @@ mod tests {
         ));
         assert!(!has_errors_to_pct(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 見せ宛がバン経路なら発火() {
+        assert!(has_apparently_to_bang(
+            b"From: a@x\r\nApparently-To: b!y@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_bang(
+            b"From: a@x\r\nApparently-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表札がバン経路なら発火() {
+        assert!(has_apparently_from_bang(
+            b"From: a@x\r\nApparently-From: a!y@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_bang(
+            b"From: a@x\r\nApparently-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛先がバン経路なら発火() {
+        assert!(has_x_orig_to_bang(
+            b"From: a@x\r\nX-Original-To: b!y@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_bang(
+            b"From: a@x\r\nX-Original-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人がバン経路なら発火() {
+        assert!(has_x_orig_from_bang(
+            b"From: a@x\r\nX-Original-From: a!y@x\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_bang(
+            b"From: a@x\r\nX-Original-From: a@x\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
