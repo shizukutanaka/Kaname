@@ -2324,6 +2324,14 @@ pub struct Envelope {
     pub x_orig_to_pct: bool,
     /// `X-Original-From:` の値がパーセント経路宛名 (D2310 — 元差出人ずれ)。
     pub x_orig_from_pct: bool,
+    /// `X-Original-Cc:` の値がパーセント経路宛名 (D2311 — 元副宛先ずれ)。
+    pub x_orig_cc_pct: bool,
+    /// `X-Original-Reply-To:` の値がパーセント経路宛名 (D2312 — 元返信口ずれ)。
+    pub x_orig_reply_to_pct: bool,
+    /// `Disposition-Notification-To:` の値がパーセント経路宛名 (D2313 — 開封通知先ずれ)。
+    pub disposition_to_pct: bool,
+    /// `Return-Receipt-To:` の値がパーセント経路宛名 (D2314 — 受領通知先ずれ)。
+    pub return_receipt_pct: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5591,6 +5599,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_pct = has_apparently_from_pct(bytes);
     let x_orig_to_pct = has_x_orig_to_pct(bytes);
     let x_orig_from_pct = has_x_orig_from_pct(bytes);
+    let x_orig_cc_pct = has_x_orig_cc_pct(bytes);
+    let x_orig_reply_to_pct = has_x_orig_reply_to_pct(bytes);
+    let disposition_to_pct = has_disposition_to_pct(bytes);
+    let return_receipt_pct = has_return_receipt_pct(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6658,6 +6670,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_pct,
         x_orig_to_pct,
         x_orig_from_pct,
+        x_orig_cc_pct,
+        x_orig_reply_to_pct,
+        disposition_to_pct,
+        return_receipt_pct,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -43914,6 +43930,186 @@ pub fn has_x_orig_from_pct(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Original-Cc:` の値がパーセント経路の宛名形か判定する
+/// (D2311)。
+///
+/// 元副宛先を記す欄なのに `%` を含む — 経路指定として読む実装
+/// とローカル部の一文字として読む実装で元副宛先がずれる (@重
+/// 複は D2263、セミコロンは D2295)。
+#[must_use]
+pub fn has_x_orig_cc_pct(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-cc"
+            && v.matches('@').count() == 1
+            && v.contains('%')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Reply-To:` の値がパーセント経路の宛名形か判定す
+/// る (D2312)。
+///
+/// 元返信口を記す欄なのに `%` を含む — 経路指定として読む実装
+/// とローカル部の一文字として読む実装で元返信口がずれる (@重
+/// 複は D2264、セミコロンは D2296)。
+#[must_use]
+pub fn has_x_orig_reply_to_pct(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-reply-to"
+            && v.matches('@').count() == 1
+            && v.contains('%')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Disposition-Notification-To:` の値がパーセント経路の宛名形
+/// か判定する (D2313)。
+///
+/// 開封通知先を記す欄なのに `%` を含む — 経路指定として読む実
+/// 装とローカル部の一文字として読む実装で開封通知先がずれる
+/// (@重複は D2265、セミコロンは D2297)。
+#[must_use]
+pub fn has_disposition_to_pct(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "disposition-notification-to"
+            && v.matches('@').count() == 1
+            && v.contains('%')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Return-Receipt-To:` の値がパーセント経路の宛名形か判定する
+/// (D2314)。
+///
+/// 受領通知先を記す欄なのに `%` を含む — 経路指定として読む実
+/// 装とローカル部の一文字として読む実装で受領通知先がずれる
+/// (@重複は D2266、セミコロンは D2298)。
+#[must_use]
+pub fn has_return_receipt_pct(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "return-receipt-to"
+            && v.matches('@').count() == 1
+            && v.contains('%')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `X-Confirm-Reading-To:` の値がセミコロン入りの宛名形か判定す
 /// る (D2299)。
 ///
@@ -74549,6 +74745,46 @@ mod tests {
         ));
         assert!(!has_errors_to_pct(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元副宛先がパーセント経路なら発火() {
+        assert!(has_x_orig_cc_pct(
+            b"From: a@x\r\nX-Original-Cc: b%y@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_pct(
+            b"From: a@x\r\nX-Original-Cc: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口がパーセント経路なら発火() {
+        assert!(has_x_orig_reply_to_pct(
+            b"From: a@x\r\nX-Original-Reply-To: b%y@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_pct(
+            b"From: a@x\r\nX-Original-Reply-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 開封通知先がパーセント経路なら発火() {
+        assert!(has_disposition_to_pct(
+            b"From: a@x\r\nDisposition-Notification-To: b%y@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_pct(
+            b"From: a@x\r\nDisposition-Notification-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領通知先がパーセント経路なら発火() {
+        assert!(has_return_receipt_pct(
+            b"From: a@x\r\nReturn-Receipt-To: b%y@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_pct(
+            b"From: a@x\r\nReturn-Receipt-To: b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
