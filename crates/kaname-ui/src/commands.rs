@@ -7817,6 +7817,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_rcpt_to_hyph {
         render_risks.push("元受取人記録の宛名にラベル端ハイフンです—受理の扱いで元受取人がずれます".to_string());
     }
+    if env.confirm_reading_bslash {
+        render_risks.push("閲覧確認先記録の宛名に逆斜線です—脱字の解釈で閲覧確認先がずれます".to_string());
+    }
+    if env.resent_reply_to_bslash {
+        render_risks.push("再送返信口記録の宛名に逆斜線です—脱字の解釈で再送返信先がずれます".to_string());
+    }
+    if env.apparently_resent_bslash {
+        render_risks.push("再送残渣記録の宛名に逆斜線です—脱字の解釈で再送記録がずれます".to_string());
+    }
+    if env.x_orig_rcpt_to_bslash {
+        render_risks.push("元受取人記録の宛名に逆斜線です—脱字の解釈で元受取人がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

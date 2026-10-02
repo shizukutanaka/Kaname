@@ -2468,6 +2468,14 @@ pub struct Envelope {
     pub apparently_resent_hyph: bool,
     /// `X-Original-Rcpt-To:` 系の値が端ハイフンラベル宛名 (D2382 — 元受取人ずれ)。
     pub x_orig_rcpt_to_hyph: bool,
+    /// `X-Confirm-Reading-To:` の値が逆斜線宛名 (D2383 — 閲覧確認先ずれ)。
+    pub confirm_reading_bslash: bool,
+    /// `Resent-Reply-To:` の値が逆斜線宛名 (D2384 — 再送返信口ずれ)。
+    pub resent_reply_to_bslash: bool,
+    /// `Apparently-Resent-*:` 系の値が逆斜線宛名 (D2385 — 再送残渣ずれ)。
+    pub apparently_resent_bslash: bool,
+    /// `X-Original-Rcpt-To:` 系の値が逆斜線宛名 (D2386 — 元受取人ずれ)。
+    pub x_orig_rcpt_to_bslash: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5807,6 +5815,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let resent_reply_to_hyph = has_resent_reply_to_hyph(bytes);
     let apparently_resent_hyph = has_apparently_resent_hyph(bytes);
     let x_orig_rcpt_to_hyph = has_x_orig_rcpt_to_hyph(bytes);
+    let confirm_reading_bslash = has_confirm_reading_bslash(bytes);
+    let resent_reply_to_bslash = has_resent_reply_to_bslash(bytes);
+    let apparently_resent_bslash = has_apparently_resent_bslash(bytes);
+    let x_orig_rcpt_to_bslash = has_x_orig_rcpt_to_bslash(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6946,6 +6958,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_reply_to_hyph,
         apparently_resent_hyph,
         x_orig_rcpt_to_hyph,
+        confirm_reading_bslash,
+        resent_reply_to_bslash,
+        apparently_resent_bslash,
+        x_orig_rcpt_to_bslash,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -44382,6 +44398,243 @@ pub fn has_return_receipt_pct(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Confirm-Reading-To:` の値が逆斜線宛名形か判定する
+/// (D2383)。
+///
+/// 閲覧確認先を記す欄なのに `a\b@x` のように `\` を含む
+/// 宛名 — 脱字として解釈する実装と構文違反として拒否する
+/// 実装で閲覧確認先がずれる (引用符形は括弧系で既出)。
+#[must_use]
+pub fn has_confirm_reading_bslash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-confirm-reading-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains('\\')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Resent-Reply-To:` の値が逆斜線宛名形か判定する
+/// (D2384)。
+///
+/// 再送返信口を記す欄なのに `\` を含む宛名 — 脱字として
+/// 解釈する実装と構文違反として拒否する実装で再送返信先がずれる (アドレス欄
+/// 側は括弧系)。
+#[must_use]
+pub fn has_resent_reply_to_bslash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "resent-reply-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains('\\')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-Resent-*:` 系の値が逆斜線宛名形か判定する
+/// (D2385)。
+///
+/// 再送残渣を記す欄なのに `\` を含む宛名 — 脱字として解
+/// 釈する実装と構文違反として拒否する実装で再送記録がずれる (アドレス
+/// 欄側は括弧系)。
+#[must_use]
+pub fn has_apparently_resent_bslash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ) && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains('\\')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系の値が逆斜線宛名形か判定する
+/// (D2386)。
+///
+/// 元受取人を記す欄なのに `\` を含む宛名 — 脱字として解
+/// 釈する実装と構文違反として拒否する実装で元受取人がずれる (アドレス欄側は
+/// 括弧系)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_bslash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-original-rcpt-to" | "x-orig-rcpt-to" | "x-rcpt-to" | "x-envelope-rcpt-to"
+        )
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains('\\')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `X-Confirm-Reading-To:` の値が端ハイフンラベル宛名形か判
 /// 定する (D2379)。
 ///
@@ -78756,6 +79009,46 @@ mod tests {
         ));
         assert!(!has_errors_to_pct(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 閲覧確認先が逆斜線宛名なら発火() {
+        assert!(has_confirm_reading_bslash(
+            b"From: a@x\r\nX-Confirm-Reading-To: a\\b@xample.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_bslash(
+            b"From: a@x\r\nX-Confirm-Reading-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口が逆斜線宛名なら発火() {
+        assert!(has_resent_reply_to_bslash(
+            b"From: a@x\r\nResent-Reply-To: a\\b@xample.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_bslash(
+            b"From: a@x\r\nResent-Reply-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣が逆斜線宛名なら発火() {
+        assert!(has_apparently_resent_bslash(
+            b"From: a@x\r\nApparently-Resent-To: a\\b@xample.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_bslash(
+            b"From: a@x\r\nApparently-Resent-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人が逆斜線宛名なら発火() {
+        assert!(has_x_orig_rcpt_to_bslash(
+            b"From: a@x\r\nX-Original-Rcpt-To: a\\b@xample.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_bslash(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
