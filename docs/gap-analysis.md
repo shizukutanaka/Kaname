@@ -1780,3 +1780,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2364 | Resent-Reply-To の非 ASCII 宛名値 (再送返信口記録の EAI/国際化異形) | 再送返信口ずれ |
 | D2365 | Apparently-Resent-* 系の非 ASCII 宛名値 (再送残渣記録の EAI/国際化異形) | 再送残渣ずれ |
 | D2366 | X-Original-Rcpt-To 系の非 ASCII 宛名値 (元受取人記録の EAI/国際化異形) | 元受取人ずれ |
+| D2367 | Envelope-To/X-Envelope-To の端ハイフンラベル宛名値 (封書宛先記録の DNS ラベル違反) | 封書宛先ずれ |
+| D2368 | Delivered-To の端ハイフンラベル宛名値 (配達記録の DNS ラベル違反) | 配達履歴ずれ |
+| D2369 | X-Envelope-From/X-MailFrom 等の端ハイフンラベル宛名値 (封書差出人記録の DNS ラベル違反) | 差出人履歴ずれ |
+| D2370 | Errors-To の端ハイフンラベル宛名値 (返送先記録の DNS ラベル違反) | 返送先ずれ |
