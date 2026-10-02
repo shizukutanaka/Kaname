@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2411: `X-Confirm-Reading-To:` のコロン宛名値 (閲覧確認先記録の接頭辞異形) を検出 — `Envelope` に `confirm_reading_colon` を追加。
+### Security — D2412: `Resent-Reply-To:` のコロン宛名値 (再送返信口記録の接頭辞異形) を検出 — `Envelope` に `resent_reply_to_colon` を追加。
+### Security — D2413: `Apparently-Resent-*:` 系のコロン宛名値 (再送残渣記録の接頭辞異形) を検出 — `Envelope` に `apparently_resent_colon` を追加。
+### Security — D2414: `X-Original-Rcpt-To:` 系のコロン宛名値 (元受取人記録の接頭辞異形) を検出 — `Envelope` に `x_orig_rcpt_to_colon` を追加。
 ### Security — D2407: `X-Original-Cc:` のコロン宛名値 (元副宛記録の接頭辞異形) を検出 — `Envelope` に `x_orig_cc_colon` を追加。
 ### Security — D2408: `X-Original-Reply-To:` のコロン宛名値 (元返信口記録の接頭辞異形) を検出 — `Envelope` に `x_orig_reply_to_colon` を追加。
 ### Security — D2409: `Disposition-Notification-To:` のコロン宛名値 (開封通知先記録の接頭辞異形) を検出 — `Envelope` に `disposition_to_colon` を追加。
