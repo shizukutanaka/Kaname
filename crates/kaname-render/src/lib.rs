@@ -2380,6 +2380,14 @@ pub struct Envelope {
     pub env_from_domlit: bool,
     /// `Errors-To:` の値がドメインリテラル宛名 (D2338 — 返送先ずれ)。
     pub errors_to_domlit: bool,
+    /// `Apparently-To:` 系の値がドメインリテラル宛名 (D2339 — 見せ宛ずれ)。
+    pub apparently_to_domlit: bool,
+    /// `Apparently-From:` 系の値がドメインリテラル宛名 (D2340 — 表札ずれ)。
+    pub apparently_from_domlit: bool,
+    /// `X-Original-To:` の値がドメインリテラル宛名 (D2341 — 元宛先ずれ)。
+    pub x_orig_to_domlit: bool,
+    /// `X-Original-From:` の値がドメインリテラル宛名 (D2342 — 元差出人ずれ)。
+    pub x_orig_from_domlit: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5675,6 +5683,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_domlit = has_delivered_to_domlit(bytes);
     let env_from_domlit = has_env_from_domlit(bytes);
     let errors_to_domlit = has_errors_to_domlit(bytes);
+    let apparently_to_domlit = has_apparently_to_domlit(bytes);
+    let apparently_from_domlit = has_apparently_from_domlit(bytes);
+    let x_orig_to_domlit = has_x_orig_to_domlit(bytes);
+    let x_orig_from_domlit = has_x_orig_from_domlit(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6770,6 +6782,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_domlit,
         env_from_domlit,
         errors_to_domlit,
+        apparently_to_domlit,
+        apparently_from_domlit,
+        x_orig_to_domlit,
+        x_orig_from_domlit,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -44206,6 +44222,222 @@ pub fn has_return_receipt_pct(raw: &[u8]) -> bool {
     })
 }
 
+/// `Apparently-To:`/`X-Apparently-To:` 系の値がドメインリテラル宛
+/// 名形か判定する (D2339)。
+///
+/// 見せ宛を記す欄なのに `[` `]` 括りのドメインリテラル — 受理
+/// する実装と拒否する実装で見せ宛記録がずれる (アドレス欄側は D1407/D1546/D1620)。
+#[must_use]
+pub fn has_apparently_to_domlit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        (n == "apparently-to" || n == "x-apparently-to")
+            && v.matches('@').count() == 1
+            && d.starts_with('[')
+            && d.ends_with(']')
+            && d.len() > 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系の値がドメインリテ
+/// ラル宛名形か判定する (D2340)。
+///
+/// 表差出人を記す欄なのに `[` `]` 括りのドメインリテラル
+/// — 受理する実装と拒否する実装で表札記録がずれる (アドレス欄
+/// 側は D1407/D1546/D1620)。
+#[must_use]
+pub fn has_apparently_from_domlit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        matches!(
+            n,
+            "apparently-from" | "x-apparently-from" | "apparently-sender" | "x-apparently-sender"
+        )
+            && v.matches('@').count() == 1
+            && d.starts_with('[')
+            && d.ends_with(']')
+            && d.len() > 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-To:` の値がドメインリテラル宛名形か判定する
+/// (D2341)。
+///
+/// 元宛先を記す欄なのに `[` `]` 括りのドメインリテラル —
+/// 受理する実装と拒否する実装で元宛先記録がずれる (アドレス
+/// 欄側は D1407/D1546/D1620)。
+#[must_use]
+pub fn has_x_orig_to_domlit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        n == "x-original-to" && v.matches('@').count() == 1
+            && d.starts_with('[')
+            && d.ends_with(']')
+            && d.len() > 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-From:` の値がドメインリテラル宛名形か判定する
+/// (D2342)。
+///
+/// 元差出人を記す欄なのに `[` `]` 括りのドメインリテラ
+/// ル — 受理する実装と拒否する実装で元差出人記録がずれる (アドレス欄側は
+/// D1407/D1546/D1620)。
+#[must_use]
+pub fn has_x_orig_from_domlit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        l[..c].trim() == "x-original-from"
+            && v.matches('@').count() == 1
+            && d.starts_with('[')
+            && d.ends_with(']')
+            && d.len() > 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` の値がドメインリテラル宛名形
 /// か判定する (D2335)。
 ///
@@ -75993,6 +76225,46 @@ mod tests {
         ));
         assert!(!has_errors_to_pct(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 見せ宛がドメインリテラルなら発火() {
+        assert!(has_apparently_to_domlit(
+            b"From: a@x\r\nApparently-To: b@[1.2.3.4]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_domlit(
+            b"From: a@x\r\nApparently-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表札がドメインリテラルなら発火() {
+        assert!(has_apparently_from_domlit(
+            b"From: a@x\r\nApparently-From: a@[1.2.3.4]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_domlit(
+            b"From: a@x\r\nApparently-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛先がドメインリテラルなら発火() {
+        assert!(has_x_orig_to_domlit(
+            b"From: a@x\r\nX-Original-To: b@[1.2.3.4]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_domlit(
+            b"From: a@x\r\nX-Original-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人がドメインリテラルなら発火() {
+        assert!(has_x_orig_from_domlit(
+            b"From: a@x\r\nX-Original-From: a@[1.2.3.4]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_domlit(
+            b"From: a@x\r\nX-Original-From: a@x\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
