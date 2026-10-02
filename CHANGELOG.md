@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2315: `X-Confirm-Reading-To:` のパーセント経路宛名値 (閲覧確認先記録の経路異形) を検出 — `Envelope` に `confirm_reading_pct` を追加。
+### Security — D2316: `Resent-Reply-To:` のパーセント経路宛名値 (再送返信口記録の経路異形) を検出 — `Envelope` に `resent_reply_to_pct` を追加。
+### Security — D2317: `Apparently-Resent-*:` 系のパーセント経路宛名値 (再送残渣記録の経路異形) を検出 — `Envelope` に `apparently_resent_pct` を追加。
+### Security — D2318: `X-Original-Rcpt-To:` 系のパーセント経路宛名値 (元受取人記録の経路異形) を検出 — `Envelope` に `x_orig_rcpt_to_pct` を追加。
 ### Security — D2311: `X-Original-Cc:` のパーセント経路宛名値 (元副宛記録の経路異形) を検出 — `Envelope` に `x_orig_cc_pct` を追加。
 ### Security — D2312: `X-Original-Reply-To:` のパーセント経路宛名値 (元返信口記録の経路異形) を検出 — `Envelope` に `x_orig_reply_to_pct` を追加。
 ### Security — D2313: `Disposition-Notification-To:` のパーセント経路宛名値 (開封通知先記録の経路異形) を検出 — `Envelope` に `disposition_to_pct` を追加。
