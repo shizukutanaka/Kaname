@@ -2276,6 +2276,14 @@ pub struct Envelope {
     pub apparently_resent_atside: bool,
     /// `X-Original-Rcpt-To:` 系の値が片側欠落の宛名 (D2286 — 受取人履歴ずれ)。
     pub x_orig_rcpt_to_atside: bool,
+    /// `Envelope-To:` 系の値がセミコロン入り宛名 (D2287 — 封書宛先ずれ)。
+    pub env_to_semiv: bool,
+    /// `Delivered-To:` の値がセミコロン入り宛名 (D2288 — 配達履歴ずれ)。
+    pub delivered_to_semiv: bool,
+    /// `X-Envelope-From:` 系の値がセミコロン入り宛名 (D2289 — 差出人履歴ずれ)。
+    pub env_from_semiv: bool,
+    /// `Errors-To:` の値がセミコロン入り宛名 (D2290 — 返送先ずれ)。
+    pub errors_to_semiv: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5519,6 +5527,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let resent_reply_to_atside = has_resent_reply_to_atside(bytes);
     let apparently_resent_atside = has_apparently_resent_atside(bytes);
     let x_orig_rcpt_to_atside = has_x_orig_rcpt_to_atside(bytes);
+    let env_to_semiv = has_env_to_semiv(bytes);
+    let delivered_to_semiv = has_delivered_to_semiv(bytes);
+    let env_from_semiv = has_env_from_semiv(bytes);
+    let errors_to_semiv = has_errors_to_semiv(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6562,6 +6574,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_reply_to_atside,
         apparently_resent_atside,
         x_orig_rcpt_to_atside,
+        env_to_semiv,
+        delivered_to_semiv,
+        env_from_semiv,
+        errors_to_semiv,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -43089,6 +43105,190 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` の値がセミコロン入りの宛名形
+/// か判定する (D2287)。
+///
+/// 封書宛先を記す欄なのに `a@x;` や `a@x;b@y` のようにセミコロ
+/// ンを含む — セミコロンで値を区切る実装・末尾を削る実装・字面
+/// どおり保持する実装で封書宛先がずれる (片側欠落は D2271)。
+#[must_use]
+pub fn has_env_to_semiv(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "envelope-to" || n == "x-envelope-to")
+            && v.matches('@').count() == 1
+            && v.contains(';')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Delivered-To:` の値がセミコロン入りの宛名形か判定する
+/// (D2288)。
+///
+/// 最終配達先を記す欄なのにセミコロンを含む — 値を区切る実装・
+/// 末尾を削る実装・字面どおり保持する実装で配達履歴がずれる
+/// (片側欠落は D2272)。
+#[must_use]
+pub fn has_delivered_to_semiv(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "delivered-to"
+            && v.matches('@').count() == 1
+            && v.contains(';')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:` 等の値がセミコロン入りの宛名
+/// 形か判定する (D2289)。
+///
+/// 封書差出人を記す欄なのにセミコロンを含む — 値を区切る実装・
+/// 末尾を削る実装・字面どおり保持する実装で差出人履歴がずれる
+/// (片側欠落は D2273)。
+#[must_use]
+pub fn has_env_from_semiv(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-envelope-from"
+                | "x-envelope-sender"
+                | "x-mailfrom"
+                | "x-mail-from"
+                | "x-original-sender"
+                | "x-orig-sender"
+        ) && v.matches('@').count() == 1
+            && v.contains(';')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Errors-To:` の値がセミコロン入りの宛名形か判定する (D2290)。
+///
+/// 配送エラーの返送先を記す欄なのにセミコロンを含む — 値を区切
+/// る実装・末尾を削る実装・字面どおり保持する実装で返送先がず
+/// れる (片側欠落は D2274)。
+#[must_use]
+pub fn has_errors_to_semiv(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "errors-to"
+            && v.matches('@').count() == 1
+            && v.contains(';')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `X-Confirm-Reading-To:` の値が片側欠落の宛名形か判定する
 /// (D2283)。
 ///
@@ -73314,6 +73514,49 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 封書宛先がセミコロン入りなら発火() {
+        assert!(has_env_to_semiv(
+            b"From: a@x\r\nEnvelope-To: b@y;\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_semiv(
+            b"From: a@x\r\nEnvelope-To: b@y;c@z\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_semiv(
+            b"From: a@x\r\nEnvelope-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 配達記録がセミコロン入りなら発火() {
+        assert!(has_delivered_to_semiv(
+            b"From: a@x\r\nDelivered-To: b@y;\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_semiv(
+            b"From: a@x\r\nDelivered-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人がセミコロン入りなら発火() {
+        assert!(has_env_from_semiv(
+            b"From: a@x\r\nX-Envelope-From: a@x;\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_semiv(
+            b"From: a@x\r\nX-Envelope-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先がセミコロン入りなら発火() {
+        assert!(has_errors_to_semiv(
+            b"From: a@x\r\nErrors-To: e@x;\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_semiv(
+            b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]

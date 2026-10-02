@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2287: `Envelope-To:` 系のセミコロン入り宛名値 (`a@x;`/`a@x;b@y` — 封書宛先記録の区切り異形) を検出 — `Envelope` に `env_to_semiv` を追加。
+### Security — D2288: `Delivered-To:` のセミコロン入り宛名値 (配達記録の区切り異形) を検出 — `Envelope` に `delivered_to_semiv` を追加。
+### Security — D2289: `X-Envelope-From:` 系のセミコロン入り宛名値 (封書差出人記録の区切り異形) を検出 — `Envelope` に `env_from_semiv` を追加。
+### Security — D2290: `Errors-To:` のセミコロン入り宛名値 (返送先記録の区切り異形) を検出 — `Envelope` に `errors_to_semiv` を追加。
 ### Security — D2283: `X-Confirm-Reading-To:` の片側欠落宛名 (`@x`/`a@` — 閲覧確認先記録の addr-spec 違反) を検出 — `Envelope` に `confirm_reading_atside` を追加。
 ### Security — D2284: `Resent-Reply-To:` の片側欠落宛名 (再送返信口記録の addr-spec 違反) を検出 — `Envelope` に `resent_reply_to_atside` を追加。
 ### Security — D2285: `Apparently-Resent-*:` 系の片側欠落宛名 (再送残渣記録の addr-spec 違反) を検出 — `Envelope` に `apparently_resent_atside` を追加。
