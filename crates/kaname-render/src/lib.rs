@@ -2420,6 +2420,14 @@ pub struct Envelope {
     pub x_orig_to_eai: bool,
     /// `X-Original-From:` の値が非 ASCII 宛名 (D2358 — 元差出人ずれ)。
     pub x_orig_from_eai: bool,
+    /// `X-Original-Cc:` の値が非 ASCII 宛名 (D2359 — 元副宛ずれ)。
+    pub x_orig_cc_eai: bool,
+    /// `X-Original-Reply-To:` の値が非 ASCII 宛名 (D2360 — 元返信口ずれ)。
+    pub x_orig_reply_to_eai: bool,
+    /// `Disposition-Notification-To:` の値が非 ASCII 宛名 (D2361 — 開封通知先ずれ)。
+    pub disposition_to_eai: bool,
+    /// `Return-Receipt-To:` の値が非 ASCII 宛名 (D2362 — 受領通知先ずれ)。
+    pub return_receipt_eai: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5735,6 +5743,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_eai = has_apparently_from_eai(bytes);
     let x_orig_to_eai = has_x_orig_to_eai(bytes);
     let x_orig_from_eai = has_x_orig_from_eai(bytes);
+    let x_orig_cc_eai = has_x_orig_cc_eai(bytes);
+    let x_orig_reply_to_eai = has_x_orig_reply_to_eai(bytes);
+    let disposition_to_eai = has_disposition_to_eai(bytes);
+    let return_receipt_eai = has_return_receipt_eai(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6850,6 +6862,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_eai,
         x_orig_to_eai,
         x_orig_from_eai,
+        x_orig_cc_eai,
+        x_orig_reply_to_eai,
+        disposition_to_eai,
+        return_receipt_eai,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -44286,6 +44302,226 @@ pub fn has_return_receipt_pct(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Original-Cc:` の値が非 ASCII 宛名形か判定する (D2359)。
+///
+/// 元副宛を記す欄なのに非 ASCII 文字を含む宛名 — SMTPUTF8 を
+/// 受理する実装と拒否する実装で元副宛記録がずれる (アドレス欄
+/// 側は D1359、封書宛先側は D2351)。
+#[must_use]
+pub fn has_x_orig_cc_eai(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-cc"
+            && v.matches('@').count() == 1
+            && !v.is_ascii()
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Reply-To:` の値が非 ASCII 宛名形か判定する
+/// (D2360)。
+///
+/// 元返信口を記す欄なのに非 ASCII 文字を含む宛名 — SMTPUTF8
+/// を受理する実装と拒否する実装で元返信先記録がずれる (アドレス欄
+/// 側は D1407/D1546/D1620)。
+#[must_use]
+pub fn has_x_orig_reply_to_eai(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-reply-to"
+            && v.matches('@').count() == 1
+            && !v.is_ascii()
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Disposition-Notification-To:` の値が非 ASCII 宛名形か判定
+/// する (D2361)。
+///
+/// 開封通知先を記す欄なのに非 ASCII 文字を含む宛名 —
+/// SMTPUTF8 を受理する実装と拒否する実装で通知先がずれる (アドレス
+/// 欄側は D1407/D1546/D1620)。
+#[must_use]
+pub fn has_disposition_to_eai(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "disposition-notification-to" && v.matches('@').count() == 1
+            && !v.is_ascii()
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Return-Receipt-To:` の値が非 ASCII 宛名形か判定する
+/// (D2362)。
+///
+/// 受領通知先を記す欄なのに非 ASCII 文字を含む宛名 —
+/// SMTPUTF8 を受理する実装と拒否する実装で受領通知先がずれる (アドレス欄側は
+/// D1407/D1546/D1620)。
+#[must_use]
+pub fn has_return_receipt_eai(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "return-receipt-to"
+            && v.matches('@').count() == 1
+            && !v.is_ascii()
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `Apparently-To:`/`X-Apparently-To:` 系の値が非 ASCII 宛名形か
 /// 判定する (D2355)。
 ///
@@ -77175,6 +77411,46 @@ mod tests {
         ));
         assert!(!has_errors_to_pct(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元副宛が非ascii宛名なら発火() {
+        assert!(has_x_orig_cc_eai(
+            "From: a@x\r\nX-Original-Cc: b@éxample.com\r\nTo: b@y\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_x_orig_cc_eai(
+            b"From: a@x\r\nX-Original-Cc: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口が非ascii宛名なら発火() {
+        assert!(has_x_orig_reply_to_eai(
+            "From: a@x\r\nX-Original-Reply-To: b@éxample.com\r\nTo: b@y\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_x_orig_reply_to_eai(
+            b"From: a@x\r\nX-Original-Reply-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 開封通知先が非ascii宛名なら発火() {
+        assert!(has_disposition_to_eai(
+            "From: a@x\r\nDisposition-Notification-To: b@éxample.com\r\nTo: b@y\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_disposition_to_eai(
+            b"From: a@x\r\nDisposition-Notification-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領通知先が非ascii宛名なら発火() {
+        assert!(has_return_receipt_eai(
+            "From: a@x\r\nReturn-Receipt-To: b@éxample.com\r\nTo: b@y\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_return_receipt_eai(
+            b"From: a@x\r\nReturn-Receipt-To: b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
