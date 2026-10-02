@@ -1804,3 +1804,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2388 | Apparently-From/Apparently-Sender 系の逆斜線宛名値 (表差出人記録の脱字異形) | 表差出人ずれ |
 | D2389 | X-Original-To の逆斜線宛名値 (元宛先記録の脱字異形) | 元宛先ずれ |
 | D2390 | X-Original-From の逆斜線宛名値 (元差出人記録の脱字異形) | 元差出人ずれ |
+| D2391 | X-Original-Cc 系の逆斜線宛名値 (元副宛記録の脱字異形) | 元副宛ずれ |
+| D2392 | X-Original-Reply-To の逆斜線宛名値 (元返信口記録の脱字異形) | 元返信先ずれ |
+| D2393 | Disposition-Notification-To の逆斜線宛名値 (開封通知先記録の脱字異形) | 通知先ずれ |
+| D2394 | Return-Receipt-To の逆斜線宛名値 (受領通知先記録の脱字異形) | 受領通知先ずれ |
