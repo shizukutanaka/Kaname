@@ -1788,3 +1788,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2372 | Apparently-From/Apparently-Sender 系の端ハイフンラベル宛名値 (表差出人記録の DNS ラベル違反) | 表差出人ずれ |
 | D2373 | X-Original-To の端ハイフンラベル宛名値 (元宛先記録の DNS ラベル違反) | 元宛先ずれ |
 | D2374 | X-Original-From の端ハイフンラベル宛名値 (元差出人記録の DNS ラベル違反) | 元差出人ずれ |
+| D2375 | X-Original-Cc の端ハイフンラベル宛名値 (元副宛記録の DNS ラベル違反) | 元副宛ずれ |
+| D2376 | X-Original-Reply-To の端ハイフンラベル宛名値 (元返信口記録の DNS ラベル違反) | 元返信先ずれ |
+| D2377 | Disposition-Notification-To の端ハイフンラベル宛名値 (開封通知先記録の DNS ラベル違反) | 通知先ずれ |
+| D2378 | Return-Receipt-To の端ハイフンラベル宛名値 (受領通知先記録の DNS ラベル違反) | 受領通知先ずれ |
