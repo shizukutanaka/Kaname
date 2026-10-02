@@ -7541,6 +7541,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.errors_to_semiv {
         render_risks.push("返送先記録の宛名にセミコロンです—区切りの扱いで返送先がずれます".to_string());
     }
+    if env.apparently_to_semiv {
+        render_risks.push("見せ宛記録の宛名にセミコロンです—区切りの扱いで見せ宛履歴がずれます".to_string());
+    }
+    if env.apparently_from_semiv {
+        render_risks.push("表差出人記録の宛名にセミコロンです—区切りの扱いで表差出人がずれます".to_string());
+    }
+    if env.x_orig_to_semiv {
+        render_risks.push("元宛先記録の宛名にセミコロンです—区切りの扱いで元宛先がずれます".to_string());
+    }
+    if env.x_orig_from_semiv {
+        render_risks.push("元差出人記録の宛名にセミコロンです—区切りの扱いで元差出人がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
