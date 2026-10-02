@@ -1776,3 +1776,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2360 | X-Original-Reply-To の非 ASCII 宛名値 (元返信口記録の EAI/国際化異形) | 元返信口ずれ |
 | D2361 | Disposition-Notification-To の非 ASCII 宛名値 (開封通知先記録の EAI/国際化異形) | 開封通知先ずれ |
 | D2362 | Return-Receipt-To の非 ASCII 宛名値 (受領通知先記録の EAI/国際化異形) | 受領通知先ずれ |
+| D2363 | X-Confirm-Reading-To の非 ASCII 宛名値 (閲覧確認先記録の EAI/国際化異形) | 閲覧確認先ずれ |
+| D2364 | Resent-Reply-To の非 ASCII 宛名値 (再送返信口記録の EAI/国際化異形) | 再送返信口ずれ |
+| D2365 | Apparently-Resent-* 系の非 ASCII 宛名値 (再送残渣記録の EAI/国際化異形) | 再送残渣ずれ |
+| D2366 | X-Original-Rcpt-To 系の非 ASCII 宛名値 (元受取人記録の EAI/国際化異形) | 元受取人ずれ |
