@@ -2532,6 +2532,14 @@ pub struct Envelope {
     pub env_from_colon: bool,
     /// `Errors-To:` の値がコロン宛名 (D2402 — 返送先ずれ)。
     pub errors_to_colon: bool,
+    /// `Envelope-To:`/`X-Envelope-To:` 系の値が逆括弧宛名 (D2415 — 封書宛先ずれ)。
+    pub env_to_rparen: bool,
+    /// `Delivered-To:` の値が逆括弧宛名 (D2416 — 配達履歴ずれ)。
+    pub delivered_to_rparen: bool,
+    /// `X-Envelope-From:`/`X-MailFrom:` 等の値が逆括弧宛名 (D2417 — 封書差出人ずれ)。
+    pub env_from_rparen: bool,
+    /// `Errors-To:` の値が逆括弧宛名 (D2418 — 返送先ずれ)。
+    pub errors_to_rparen: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5903,6 +5911,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_colon = has_delivered_to_colon(bytes);
     let env_from_colon = has_env_from_colon(bytes);
     let errors_to_colon = has_errors_to_colon(bytes);
+    let env_to_rparen = has_env_to_rparen(bytes);
+    let delivered_to_rparen = has_delivered_to_rparen(bytes);
+    let env_from_rparen = has_env_from_rparen(bytes);
+    let errors_to_rparen = has_errors_to_rparen(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -7074,6 +7086,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_colon,
         env_from_colon,
         errors_to_colon,
+        env_to_rparen,
+        delivered_to_rparen,
+        env_from_rparen,
+        errors_to_rparen,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -46676,6 +46692,247 @@ pub fn has_x_orig_from_hyph(raw: &[u8]) -> bool {
     })
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` の値が逆括弧宛名形か判
+/// 定する (D2415)。
+///
+/// 封書宛先を記す欄なのに `a@x)` のように孤立 `)` を含む宛名
+/// — 括弧弧閉じの扱いをずらす実装と構文違反として拒否する実装で封
+/// 書宛先がずれる (引用符形は括弧系で既出)。
+#[must_use]
+pub fn has_env_to_rparen(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "envelope-to" || n == "x-envelope-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(')')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Delivered-To:` の値が逆括弧宛名形か判定する
+/// (D2416)。
+///
+/// 最終配達を記す欄なのに孤立 `)` を含む宛名 — 括弧閉じの扱
+/// いをずらす実装と構文違反として拒否する実装で配達履歴がずれる (アドレス欄
+/// 側は括弧系)。
+#[must_use]
+pub fn has_delivered_to_rparen(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "delivered-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(')')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:` 等の値が逆括弧宛名形か
+/// 判定する (D2417)。
+///
+/// 封書差出人を記す欄なのに孤立 `)` を含む宛名 — 括弧閉じ
+/// の扱いをずらす実装と構文違反として拒否する実装で差出人履歴がずれる (アドレス
+/// 欄側は括弧系)。
+#[must_use]
+pub fn has_env_from_rparen(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-envelope-from"
+                | "x-mailfrom"
+                | "x-mail-from"
+                | "envelope-from"
+                | "x-original-from-envelope"
+                | "x-sender-envelope"
+        ) && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(')')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Errors-To:` の値が逆括弧宛名形か判定する
+/// (D2418)。
+///
+/// 返送先を記す欄なのに孤立 `)` を含む宛名 — 括弧閉じの扱いを
+/// ずらす実装と構文違反として拒否する実装で返送先がずれる (アドレス欄側は
+/// 括弧系)。
+#[must_use]
+pub fn has_errors_to_rparen(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "errors-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v.contains(')')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` の値がコロン宛名形か判
 /// 定する (D2399)。
 ///
@@ -80748,6 +81005,46 @@ mod tests {
         ));
         assert!(!has_errors_to_pct(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書宛先が逆括弧宛名なら発火() {
+        assert!(has_env_to_rparen(
+            b"From: a@x\r\nEnvelope-To: a@xample.com)\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_rparen(
+            b"From: a@x\r\nEnvelope-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 配達履歴が逆括弧宛名なら発火() {
+        assert!(has_delivered_to_rparen(
+            b"From: a@x\r\nDelivered-To: a@xample.com)\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_rparen(
+            b"From: a@x\r\nDelivered-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人が逆括弧宛名なら発火() {
+        assert!(has_env_from_rparen(
+            b"From: a@x\r\nX-Envelope-From: a@xample.com)\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_rparen(
+            b"From: a@x\r\nX-Envelope-From: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先が逆括弧宛名なら発火() {
+        assert!(has_errors_to_rparen(
+            b"From: a@x\r\nErrors-To: a@xample.com)\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_rparen(
+            b"From: a@x\r\nErrors-To: b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
