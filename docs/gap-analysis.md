@@ -1696,3 +1696,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2280 | X-Original-Reply-To の片側欠落宛名 (元返信口記録の addr-spec 違反) | 元返信口ずれ |
 | D2281 | Disposition-Notification-To の片側欠落宛名 (開封通知先記録の addr-spec 違反) | 通知先ずれ |
 | D2282 | Return-Receipt-To の片側欠落宛名 (受領通知先記録の addr-spec 違反) | 受領通知先ずれ |
+| D2283 | X-Confirm-Reading-To の片側欠落宛名 (閲覧確認先記録の addr-spec 違反) | 確認先ずれ |
+| D2284 | Resent-Reply-To の片側欠落宛名 (再送返信口記録の addr-spec 違反) | 再送返信先ずれ |
+| D2285 | Apparently-Resent-* の片側欠落宛名 (再送残渣記録の addr-spec 違反) | 再送履歴ずれ |
+| D2286 | X-Original-Rcpt-To の片側欠落宛名 (元受取人記録の addr-spec 違反) | 受取人履歴ずれ |

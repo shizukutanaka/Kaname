@@ -2268,6 +2268,14 @@ pub struct Envelope {
     pub disposition_to_atside: bool,
     /// `Return-Receipt-To:` の値が片側欠落の宛名 (D2282 — 受領通知先ずれ)。
     pub return_receipt_atside: bool,
+    /// `X-Confirm-Reading-To:` の値が片側欠落の宛名 (D2283 — 確認先ずれ)。
+    pub confirm_reading_atside: bool,
+    /// `Resent-Reply-To:` の値が片側欠落の宛名 (D2284 — 再送返信先ずれ)。
+    pub resent_reply_to_atside: bool,
+    /// `Apparently-Resent-*:` 系の値が片側欠落の宛名 (D2285 — 再送履歴ずれ)。
+    pub apparently_resent_atside: bool,
+    /// `X-Original-Rcpt-To:` 系の値が片側欠落の宛名 (D2286 — 受取人履歴ずれ)。
+    pub x_orig_rcpt_to_atside: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5507,6 +5515,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_atside = has_x_orig_reply_to_atside(bytes);
     let disposition_to_atside = has_disposition_to_atside(bytes);
     let return_receipt_atside = has_return_receipt_atside(bytes);
+    let confirm_reading_atside = has_confirm_reading_atside(bytes);
+    let resent_reply_to_atside = has_resent_reply_to_atside(bytes);
+    let apparently_resent_atside = has_apparently_resent_atside(bytes);
+    let x_orig_rcpt_to_atside = has_x_orig_rcpt_to_atside(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6546,6 +6558,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_atside,
         disposition_to_atside,
         return_receipt_atside,
+        confirm_reading_atside,
+        resent_reply_to_atside,
+        apparently_resent_atside,
+        x_orig_rcpt_to_atside,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -43073,6 +43089,192 @@ fn first_addr_of_any(logical: &str, names: &[&str]) -> Option<String> {
     names.iter().find_map(|n| first_addr_of(logical, n))
 }
 
+/// `X-Confirm-Reading-To:` の値が片側欠落の宛名形か判定する
+/// (D2283)。
+///
+/// 閲覧確認要求先を記す欄なのに `@x` や `a@` のようにローカル部・
+/// ドメイン部のどちらかが空 — 補完する実装・空のまま保持する実
+/// 装・拒否する実装で確認先がずれる (@重複は D2267)。
+#[must_use]
+pub fn has_confirm_reading_atside(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-confirm-reading-to"
+            && v.matches('@').count() == 1
+            && (v.starts_with('@') || v.ends_with('@'))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Resent-Reply-To:` の値が片側欠落の宛名形か判定する (D2284)。
+///
+/// 再送返信口を記す欄なのにローカル部・ドメイン部のどちらかが
+/// 空 — 補完する実装・空のまま保持する実装・拒否する実装で再送
+/// 返信先がずれる (@重複は D2268)。
+#[must_use]
+pub fn has_resent_reply_to_atside(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "resent-reply-to"
+            && v.matches('@').count() == 1
+            && (v.starts_with('@') || v.ends_with('@'))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-Resent-To:`/`Apparently-Resent-From:` 等の値が片側欠
+/// 落の宛名形か判定する (D2285)。
+///
+/// 再送残渣を記す欄なのにローカル部・ドメイン部のどちらかが空
+/// — 補完する実装・空のまま保持する実装・拒否する実装で再送履
+/// 歴がずれる (@重複は D2269)。
+#[must_use]
+pub fn has_apparently_resent_atside(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ) && v.matches('@').count() == 1
+            && (v.starts_with('@') || v.ends_with('@'))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系の値が片側欠落の宛名形か判定する
+/// (D2286)。
+///
+/// 元受取人を記す欄なのにローカル部・ドメイン部のどちらかが空
+/// — 補完する実装・空のまま保持する実装・拒否する実装で受取人
+/// 履歴がずれる (@重複は D2270)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_atside(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-original-rcpt-to" | "x-orig-rcpt-to" | "x-rcpt-to" | "x-envelope-rcpt-to"
+        ) && v.matches('@').count() == 1
+            && (v.starts_with('@') || v.ends_with('@'))
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `X-Original-Cc:` の値が片側欠落の宛名形か判定する (D2279)。
 ///
 /// 元副宛先を記す欄なのに `@x` や `a@` のようにローカル部・ドメ
@@ -73112,6 +73314,49 @@ mod tests {
             b"References: <a@x> <a@x>\r\n\r\nx"
         ));
         assert!(!has_msgid_dup_pair(b""));
+    }
+
+    #[test]
+    fn 閲覧先が片側欠落なら発火() {
+        assert!(has_confirm_reading_atside(
+            b"From: a@x\r\nX-Confirm-Reading-To: @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(has_confirm_reading_atside(
+            b"From: a@x\r\nX-Confirm-Reading-To: b@\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_atside(
+            b"From: a@x\r\nX-Confirm-Reading-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口が片側欠落なら発火() {
+        assert!(has_resent_reply_to_atside(
+            b"From: a@x\r\nResent-From: a@x\r\nResent-Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nResent-Reply-To: @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_atside(
+            b"From: a@x\r\nResent-From: a@x\r\nResent-Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nResent-Reply-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣が片側欠落なら発火() {
+        assert!(has_apparently_resent_atside(
+            b"From: a@x\r\nApparently-Resent-To: @y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_atside(
+            b"From: a@x\r\nApparently-Resent-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人が片側欠落なら発火() {
+        assert!(has_x_orig_rcpt_to_atside(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_atside(
+            b"From: a@x\r\nX-Original-Rcpt-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
     }
 
     #[test]
