@@ -7985,6 +7985,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.return_receipt_rbrace {
         render_risks.push("受領通知先記録の宛名に逆波括弧です—波括弧閉じの扱いで受領先がずれます".to_string());
     }
+    if env.x_orig_cc_apos {
+        render_risks.push("元副宛記録の宛名に逆引用符です—引用符の扱いで元副宛がずれます".to_string());
+    }
+    if env.x_orig_reply_to_apos {
+        render_risks.push("元返信口記録の宛名に逆引用符です—引用符の扱いで元返信先がずれます".to_string());
+    }
+    if env.disposition_to_apos {
+        render_risks.push("開封通知先記録の宛名に逆引用符です—引用符の扱いで開封先がずれます".to_string());
+    }
+    if env.return_receipt_apos {
+        render_risks.push("受領通知先記録の宛名に逆引用符です—引用符の扱いで受領先がずれます".to_string());
+    }
     if env.confirm_reading_rbracket {
         render_risks.push("閲覧確認先記録の宛名に逆角括弧です—角括弧閉じの扱いで閲覧先がずれます".to_string());
     }
