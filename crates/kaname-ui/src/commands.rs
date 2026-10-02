@@ -7853,6 +7853,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.return_receipt_bslash {
         render_risks.push("受領通知先記録の宛名に逆斜線です—脱字の解釈で受領通知先がずれます".to_string());
     }
+    if env.env_to_bslash {
+        render_risks.push("封書宛先記録の宛名に逆斜線です—脱字の解釈で封書宛先がずれます".to_string());
+    }
+    if env.delivered_to_bslash {
+        render_risks.push("配達履歴記録の宛名に逆斜線です—脱字の解釈で配達履歴がずれます".to_string());
+    }
+    if env.env_from_bslash {
+        render_risks.push("封書差出人記録の宛名に逆斜線です—脱字の解釈で差出人履歴がずれます".to_string());
+    }
+    if env.errors_to_bslash {
+        render_risks.push("返送先記録の宛名に逆斜線です—脱字の解釈で返送先がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

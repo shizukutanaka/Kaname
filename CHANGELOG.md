@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2395: `Envelope-To:`/`X-Envelope-To:` 系の逆斜線宛名値 (封書宛先記録の脱字異形) を検出 — `Envelope` に `env_to_bslash` を追加。
+### Security — D2396: `Delivered-To:` の逆斜線宛名値 (配達履歴記録の脱字異形) を検出 — `Envelope` に `delivered_to_bslash` を追加。
+### Security — D2397: `X-Envelope-From:`/`X-MailFrom:` 等の逆斜線宛名値 (封書差出人記録の脱字異形) を検出 — `Envelope` に `env_from_bslash` を追加。
+### Security — D2398: `Errors-To:` の逆斜線宛名値 (返送先記録の脱字異形) を検出 — `Envelope` に `errors_to_bslash` を追加。
 ### Security — D2391: `X-Original-Cc:` 系の逆斜線宛名値 (元副宛記録の脱字異形) を検出 — `Envelope` に `x_orig_cc_bslash` を追加。
 ### Security — D2392: `X-Original-Reply-To:` の逆斜線宛名値 (元返信口記録の脱字異形) を検出 — `Envelope` に `x_orig_reply_to_bslash` を追加。
 ### Security — D2393: `Disposition-Notification-To:` の逆斜線宛名値 (開封通知先記録の脱字異形) を検出 — `Envelope` に `disposition_to_bslash` を追加。
