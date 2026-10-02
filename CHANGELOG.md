@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2479: `Envelope-To:`/`X-Envelope-To:` 系の疑問符宛名値 (封書宛先記録の孤立疑問符異形) を検出 — `Envelope` に `env_to_qmark` を追加。
+### Security — D2480: `Delivered-To:` の疑問符宛名値 (配達履歴記録の孤立疑問符異形) を検出 — `Envelope` に `delivered_to_qmark` を追加。
+### Security — D2481: `X-Envelope-From:`/`X-MailFrom:` 等の疑問符宛名値 (封書差出人記録の孤立疑問符異形) を検出 — `Envelope` に `env_from_qmark` を追加。
+### Security — D2482: `Errors-To:` の疑問符宛名値 (返送先記録の孤立疑問符異形) を検出 — `Envelope` に `errors_to_qmark` を追加。
 ### Security — D2475: `X-Confirm-Reading-To:` の逆引用符宛名値 (閲覧確認先記録の孤立引用符異形) を検出 — `Envelope` に `confirm_reading_apos` を追加。
 ### Security — D2476: `Resent-Reply-To:` の逆引用符宛名値 (再送返信口記録の孤立引用符異形) を検出 — `Envelope` に `resent_reply_to_apos` を追加。
 ### Security — D2477: `Apparently-Resent-*:` 系の逆引用符宛名値 (再送残渣記録の孤立引用符異形) を検出 — `Envelope` に `apparently_resent_apos` を追加。
