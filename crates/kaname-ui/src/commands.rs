@@ -7673,6 +7673,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_rcpt_to_bang {
         render_risks.push("元受取人記録の宛名にバン記号です—経路の扱いで元受取人がずれます".to_string());
     }
+    if env.env_to_domlit {
+        render_risks.push("封書宛先記録の宛名にドメインリテラルです—受理の扱いで封書宛先がずれます".to_string());
+    }
+    if env.delivered_to_domlit {
+        render_risks.push("配達記録の宛名にドメインリテラルです—受理の扱いで配達履歴がずれます".to_string());
+    }
+    if env.env_from_domlit {
+        render_risks.push("封書差出人記録の宛名にドメインリテラルです—受理の扱いで差出人履歴がずれます".to_string());
+    }
+    if env.errors_to_domlit {
+        render_risks.push("返送先記録の宛名にドメインリテラルです—受理の扱いで返送先がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

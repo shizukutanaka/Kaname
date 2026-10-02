@@ -2372,6 +2372,14 @@ pub struct Envelope {
     pub apparently_resent_bang: bool,
     /// `X-Original-Rcpt-To:` 系の値がバン経路宛名 (D2334 — 元受取人ずれ)。
     pub x_orig_rcpt_to_bang: bool,
+    /// `Envelope-To:` 系の値がドメインリテラル宛名 (D2335 — 封書宛先ずれ)。
+    pub env_to_domlit: bool,
+    /// `Delivered-To:` の値がドメインリテラル宛名 (D2336 — 配達履歴ずれ)。
+    pub delivered_to_domlit: bool,
+    /// `X-Envelope-From:` 系の値がドメインリテラル宛名 (D2337 — 差出人履歴ずれ)。
+    pub env_from_domlit: bool,
+    /// `Errors-To:` の値がドメインリテラル宛名 (D2338 — 返送先ずれ)。
+    pub errors_to_domlit: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5663,6 +5671,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let resent_reply_to_bang = has_resent_reply_to_bang(bytes);
     let apparently_resent_bang = has_apparently_resent_bang(bytes);
     let x_orig_rcpt_to_bang = has_x_orig_rcpt_to_bang(bytes);
+    let env_to_domlit = has_env_to_domlit(bytes);
+    let delivered_to_domlit = has_delivered_to_domlit(bytes);
+    let env_from_domlit = has_env_from_domlit(bytes);
+    let errors_to_domlit = has_errors_to_domlit(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -6754,6 +6766,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_reply_to_bang,
         apparently_resent_bang,
         x_orig_rcpt_to_bang,
+        env_to_domlit,
+        delivered_to_domlit,
+        env_from_domlit,
+        errors_to_domlit,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -44190,6 +44206,227 @@ pub fn has_return_receipt_pct(raw: &[u8]) -> bool {
     })
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` の値がドメインリテラル宛名形
+/// か判定する (D2335)。
+///
+/// 封書宛先を記す欄なのに `a@[1.2.3.4]` のように `[` `]` 括りの
+/// ドメインリテラル — リテラルを受理する実装と拒否する実装で
+/// 封書宛先がずれる (アドレス欄側は D1407/D1546/D1620)。
+#[must_use]
+pub fn has_env_to_domlit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        (n == "envelope-to" || n == "x-envelope-to")
+            && v.matches('@').count() == 1
+            && d.starts_with('[')
+            && d.ends_with(']')
+            && d.len() > 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Delivered-To:` の値がドメインリテラル宛名形か判定する
+/// (D2336)。
+///
+/// 最終配達を記す欄なのに `[` `]` 括りのドメインリテラル —
+/// 受理する実装と拒否する実装で配達履歴がずれる (アドレス欄
+/// 側は D1407/D1546/D1620)。
+#[must_use]
+pub fn has_delivered_to_domlit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        l[..c].trim() == "delivered-to"
+            && v.matches('@').count() == 1
+            && d.starts_with('[')
+            && d.ends_with(']')
+            && d.len() > 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:` 等の値がドメインリテラル宛
+/// 名形か判定する (D2337)。
+///
+/// 封書差出人を記す欄なのに `[` `]` 括りのドメインリテラル —
+/// 受理する実装と拒否する実装で差出人履歴がずれる (アドレス
+/// 欄側は D1407/D1546/D1620)。
+#[must_use]
+pub fn has_env_from_domlit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        matches!(
+            n,
+            "x-envelope-from"
+                | "x-mailfrom"
+                | "x-mail-from"
+                | "envelope-from"
+                | "x-original-from-envelope"
+                | "x-sender-envelope"
+        ) && v.matches('@').count() == 1
+            && d.starts_with('[')
+            && d.ends_with(']')
+            && d.len() > 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Errors-To:` の値がドメインリテラル宛名形か判定する
+/// (D2338)。
+///
+/// 返送先を記す欄なのに `[` `]` 括りのドメインリテラル — 受理
+/// する実装と拒否する実装で返送先がずれる (アドレス欄側は
+/// D1407/D1546/D1620)。
+#[must_use]
+pub fn has_errors_to_domlit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let Some(at) = v.rfind('@') else {
+            return false;
+        };
+        let d = &v[at + 1..];
+        l[..c].trim() == "errors-to"
+            && v.matches('@').count() == 1
+            && d.starts_with('[')
+            && d.ends_with(']')
+            && d.len() > 2
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains('(')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `X-Confirm-Reading-To:` の値がバン経路の宛名形か判定する
 /// (D2331)。
 ///
@@ -75755,6 +75992,46 @@ mod tests {
             b"From: a@x\r\nErrors-To: e%y@x\r\nTo: b@y\r\n\r\nx"
         ));
         assert!(!has_errors_to_pct(
+            b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書宛先がドメインリテラルなら発火() {
+        assert!(has_env_to_domlit(
+            b"From: a@x\r\nEnvelope-To: b@[1.2.3.4]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_domlit(
+            b"From: a@x\r\nEnvelope-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 配達記録がドメインリテラルなら発火() {
+        assert!(has_delivered_to_domlit(
+            b"From: a@x\r\nDelivered-To: b@[1.2.3.4]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_domlit(
+            b"From: a@x\r\nDelivered-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人がドメインリテラルなら発火() {
+        assert!(has_env_from_domlit(
+            b"From: a@x\r\nX-Envelope-From: a@[1.2.3.4]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_domlit(
+            b"From: a@x\r\nX-Envelope-From: a@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先がドメインリテラルなら発火() {
+        assert!(has_errors_to_domlit(
+            b"From: a@x\r\nErrors-To: e@[1.2.3.4]\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_domlit(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
         ));
     }

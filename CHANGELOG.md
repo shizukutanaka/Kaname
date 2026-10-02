@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2335: `Envelope-To:` 系のドメインリテラル宛名値 (`a@[1.2.3.4]` — 封書宛先記録のリテラル異形) を検出 — `Envelope` に `env_to_domlit` を追加。
+### Security — D2336: `Delivered-To:` のドメインリテラル宛名値 (配達記録のリテラル異形) を検出 — `Envelope` に `delivered_to_domlit` を追加。
+### Security — D2337: `X-Envelope-From:` 系のドメインリテラル宛名値 (封書差出人記録のリテラル異形) を検出 — `Envelope` に `env_from_domlit` を追加。
+### Security — D2338: `Errors-To:` のドメインリテラル宛名値 (返送先記録のリテラル異形) を検出 — `Envelope` に `errors_to_domlit` を追加。
 ### Security — D2331: `X-Confirm-Reading-To:` のバン経路宛名値 (閲覧確認先記録の経路異形) を検出 — `Envelope` に `confirm_reading_bang` を追加。
 ### Security — D2332: `Resent-Reply-To:` のバン経路宛名値 (再送返信口記録の経路異形) を検出 — `Envelope` に `resent_reply_to_bang` を追加。
 ### Security — D2333: `Apparently-Resent-*:` 系のバン経路宛名値 (再送残渣記録の経路異形) を検出 — `Envelope` に `apparently_resent_bang` を追加。
