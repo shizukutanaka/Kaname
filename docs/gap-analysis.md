@@ -1448,3 +1448,475 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2032 | `Message-ID:` 系欄の `<…>` 内側の `}` | 厳密弾き vs 緩い受理で識別子ずれ |
 | D2033 | `Message-ID:` 系欄の `<…>` 内側の `;` | 厳密弾き vs 緩い受理で識別子ずれ |
 | D2034 | `Message-ID:` 系欄の `<…>` 内側の非隣接 `<` | 厳密弾き vs 緩い受理で識別子ずれ (`<<` は `nested_msgid`) |
+| D2035 | `Message-ID:` 系欄 (refs 以外) の `<a><b>` 連結 | 境目読み vs 一語読みで識別子ずれ (refs は `refs_adjacent_angles`) |
+| D2036 | `Message-ID:` 系欄の `<a> w <b>` 対間の語 | 語読み飛ばし vs 欄破棄で識別子ずれ (IRT は `multi_inreply`) |
+| D2037 | `Message-ID:` 系欄の値が完全に空 | 欄破棄 vs 空識別子受理で識別子照合ずれ |
+| D2038 | `Message-ID:` 系欄 (refs 以外) の同一 `<id>` 反復 | 一意仮定 vs 一覧読みで識別子ずれ (refs は `msgid_ref_dup`) |
+| D2039 | References 末尾id ≠ In-Reply-To id | 糸参照ずれ |
+| D2040 | ~~References/In-Reply-To が自身の Message-ID を指す~~ (撤回 — D1379 `self_reply_ref` と同一) | — |
+| D2041 | Resent-Message-ID == Message-ID | 識別子ずれ |
+| D2042 | Resent-Reply-To 欄の残存 | 返信先ずれ |
+| D2043 | msgid 系欄 (refs 以外) の識別子前の隔離コメント | 識別子ずれ |
+| D2044 | Subject の地域接頭語 (AW/SV/RIF/YNT 等) | 糸認識ずれ |
+| D2045 | Resent-* ブロックに受取欄なし | 配送先ずれ |
+| D2046 | 非規格 Resent-* 欄名 | 再送ずれ |
+| D2047 | Resent-From+Date あるのに Resent-Message-ID が無い | 再送ずれ |
+| D2048 | msgid 系欄の大小文字違いの同一識別子反復 | 識別子ずれ |
+| D2049 | 外側メッセージ欄の Content-ID | 識別子ずれ |
+| D2050 | 宛先系欄の宛先数が 50 件超 | 配送先ずれ |
+| D2051 | Sender == From (冗長送信者欄) | 差出人ずれ |
+| D2052 | Reply-To == From | 返信先ずれ |
+| D2053 | In-Reply-To あるのに References 無し | 糸参照ずれ |
+| D2054 | Resent-From == From | 再送ずれ |
+| D2055 | Resent-To == To | 再送ずれ |
+| D2056 | Resent-To == From (差出人への再送) | 再送ずれ |
+| D2057 | Resent-Sender == Sender | 再送ずれ |
+| D2058 | Resent-Date == Date | 再送ずれ |
+| D2059 | Resent-Cc == Cc | 再送ずれ |
+| D2060 | Resent-To == Cc (副宛先の格上げ) | 再送ずれ |
+| D2061 | Resent-From == Sender | 再送ずれ |
+| D2062 | Resent-Sender == From | 再送ずれ |
+| D2063 | Resent-To == Resent-From (自己への再送) | 再送ずれ |
+| D2064 | Resent-Cc == Resent-From | 再送ずれ |
+| D2065 | Resent-Sender == Resent-From (ブロック内冗長代行) | 再送ずれ |
+| D2066 | Resent-Cc == Resent-To (ブロック内役割重複) | 再送ずれ |
+| D2067 | Resent-Cc == To (主宛先の降格) | 再送ずれ |
+| D2068 | Resent-Cc == From (差出人宛の副宛再送) | 再送ずれ |
+| D2069 | Resent-To == Resent-Sender (代行宛の再送) | 再送ずれ |
+| D2070 | Resent-Cc == Resent-Sender | 再送ずれ |
+| D2071 | To == Cc (受取役割の重複) | 届け先ずれ |
+| D2072 | Reply-To == To (受取人への返信ループ) | 返信先ずれ |
+| D2073 | From == To (自己送信) | 差出人ずれ |
+| D2074 | Reply-To == Sender (代行への返信) | 返信先ずれ |
+| D2075 | Reply-To == Cc (副宛への返信) | 返信先ずれ |
+| D2076 | Sender == To (宛先と同一の代行) | 届け先ずれ |
+| D2077 | Sender == Cc (副宛と同一の代行) | 届け先ずれ |
+| D2078 | From == Cc (副宛と同一の差出人) | 届け先ずれ |
+| D2079 | Delivered-To != To (宛名の化粧) | 届け先ずれ |
+| D2080 | Envelope-To/X-Envelope-To != To | 届け先ずれ |
+| D2081 | Delivered-To == Cc (実配達先が副宛) | 届け先ずれ |
+| D2082 | Return-Path != From (返送先と差出人の分離) | 差出人ずれ |
+| D2083 | Delivered-To == From (自分へ戻る配送) | 届け先ずれ |
+| D2084 | Delivered-To == Reply-To (実配と返信口の畳み) | 届け先ずれ |
+| D2085 | Envelope-To/X-Envelope-To == Cc | 届け先ずれ |
+| D2086 | Delivered-To == Sender (代行宛の配送) | 届け先ずれ |
+| D2087 | X-Original-From ≠ From (元の差出人記録との分離) | 差出人ずれ |
+| D2088 | X-Original-Subject ≠ Subject (元の件名記録との分離) | 件名ずれ |
+| D2089 | X-Original-Message-ID ≠ Message-ID (元の識別子記録との分離) | 糸参照ずれ |
+| D2090 | X-Original-Date ≠ Date (元の日時記録との分離) | 履歴ずれ |
+| D2091 | X-Original-To ≠ To (元の受取人記録との分離) | 届け先ずれ |
+| D2092 | X-Original-Cc ≠ Cc (元の副宛先記録との分離) | 届け先ずれ |
+| D2093 | X-Original-Sender ≠ Sender (元の代行記録との分離) | 代行者ずれ |
+| D2094 | X-Original-References ≠ References (元の糸参照記録との分離) | 糸参照ずれ |
+| D2095 | Disposition-Notification-To ≠ From (開封通知の別口返送) | 通知先ずれ |
+| D2096 | Return-Receipt-To ≠ From (受領通知の別口返送) | 通知先ずれ |
+| D2097 | X-Confirm-Reading-To ≠ From (閲覧確認の別口返送) | 通知先ずれ |
+| D2098 | Disposition-Notification-To ≠ Reply-To (通知欄と返信口の分岐) | 通知先ずれ |
+| D2099 | Apparently-To ≠ To (実受取人記録と宛先欄の分離) | 届け先ずれ |
+| D2100 | Apparently-To ≠ Delivered-To (配送記録どうしの食い違い) | 届け先ずれ |
+| D2101 | X-Original-To ≠ Delivered-To (展開記録と配達記録の食い違い) | 届け先ずれ |
+| D2102 | Resent-Reply-To ≠ Reply-To (旧式再送返信欄の食い違い) | 返信先ずれ |
+| D2103 | X-Envelope-From/X-Original-Sender 系 ≠ From (エンベロープ差出人記録の分離) | 差出人ずれ |
+| D2104 | Apparently-From/Apparently-Sender 系 ≠ From (sendmail 差出人記録の分離) | 差出人ずれ |
+| D2105 | Return-Receipt-To ≠ Reply-To (受領通知と返信口の分岐) | 通知先ずれ |
+| D2106 | X-Confirm-Reading-To ≠ Reply-To (閲覧確認と返信口の分岐) | 通知先ずれ |
+| D2107 | Apparently-Resent-* 残渣欄 (sendmail 再送モード記録) | 再送履歴ずれ |
+| D2108 | X-Original-Bcc 記録欄 (隠し宛先の露出) | 届け先ずれ |
+| D2109 | X-Original-Cc 記録欄 (元の副宛先の露出) | 届け先ずれ |
+| D2110 | X-Original-Reply-To 記録欄 (元の返信口の露出) | 返信先ずれ |
+| D2111 | Fcc/X-Fcc 格納欄 (差出控えの残渣) | 差出人ずれ |
+| D2112 | X-Forwarded-* 残渣欄 (転送元情報の露出) | 転送履歴ずれ |
+| D2113 | Apparently-To == To (受取欄不在時のみ記される記録の矛盾) | 届け先ずれ |
+| D2114 | X-Original-To == To (書き換えたはずの記録の矛盾) | 届け先ずれ |
+| D2115 | X-Original-From == From (書き換えたはずの記録の矛盾) | 差出人ずれ |
+| D2116 | X-Original-Subject == Subject (書き換えたはずの記録の矛盾) | 件名ずれ |
+| D2117 | X-Original-Message-ID == Message-ID (書き換えたはずの記録の矛盾) | 識別子ずれ |
+| D2118 | X-Original-Date == Date (書き換えたはずの記録の矛盾) | 日時ずれ |
+| D2119 | X-Original-Sender == Sender (書き換えたはずの記録の矛盾) | 差出人ずれ |
+| D2120 | X-Original-Cc == Cc (書き換えたはずの記録の矛盾) | 届け先ずれ |
+| D2121 | X-Original-Reply-To == Reply-To (書き換えたはずの記録の矛盾) | 返信先ずれ |
+| D2122 | X-Original-References == References (書き換えたはずの記録の矛盾) | 糸参照ずれ |
+| D2123 | X-Original-To ≠ Apparently-To (元受取人記録どうしの食い違い) | 届け先ずれ |
+| D2124 | X-Original-To ≠ Envelope-To (展開記録と封書記録の食い違い) | 届け先ずれ |
+| D2125 | Envelope-To ≠ Delivered-To (封書記録と配達記録の食い違い) | 届け先ずれ |
+| D2126 | Envelope-To ≠ Apparently-To (封書記録と見せ宛記録の食い違い) | 届け先ずれ |
+| D2127 | Return-Path ≠ X-Envelope-From 系 (返送先と封書差出人記録の食い違い) | 差出人ずれ |
+| D2128 | Return-Path ≠ Apparently-From 系 (返送先と sendmail 差出人記録の食い違い) | 差出人ずれ |
+| D2129 | X-Envelope-From 系 ≠ Apparently-From 系 (二つの差出人記録の食い違い) | 差出人ずれ |
+| D2130 | X-Original-From ≠ X-Envelope-From 系 (元差出人記録と封書記録の食い違い) | 差出人ずれ |
+| D2131 | Envelope-To/X-Envelope-To の重複出現 (封書受取人記録の多重化) | 届け先ずれ |
+| D2132 | Apparently-To/X-Apparently-To の重複出現 (見せ宛記録の多重化) | 届け先ずれ |
+| D2133 | X-Envelope-From 系の重複出現 (封書差出人記録の多重化) | 差出人ずれ |
+| D2134 | Apparently-From/Sender 系の重複出現 (表差出人記録の多重化) | 差出人ずれ |
+| D2135 | X-Original-To の重複出現 (元宛先記録の多重化) | 届け先履歴ずれ |
+| D2136 | X-Original-From の重複出現 (元差出人記録の多重化) | 差出人履歴ずれ |
+| D2137 | X-Original-Message-ID の重複出現 (元識別子記録の多重化) | 識別子履歴ずれ |
+| D2138 | X-Original-Subject の重複出現 (元件名記録の多重化) | 件名履歴ずれ |
+| D2139 | X-Original-Cc の重複出現 (元副宛先記録の多重化) | 副宛先履歴ずれ |
+| D2140 | X-Original-Reply-To の重複出現 (元返信口記録の多重化) | 返信先履歴ずれ |
+| D2141 | X-Original-Date の重複出現 (元日時記録の多重化) | 日時履歴ずれ |
+| D2142 | X-Original-References の重複出現 (元糸参照記録の多重化) | 参照履歴ずれ |
+| D2143 | Disposition-Notification-To の重複出現 (開封通知要求先の多重化) | 通知行き先ずれ |
+| D2144 | Return-Receipt-To の重複出現 (受領通知要求先の多重化) | 通知行き先ずれ |
+| D2145 | X-Confirm-Reading-To の重複出現 (閲覧確認要求先の多重化) | 通知行き先ずれ |
+| D2146 | Resent-Reply-To の重複出現 (旧式再送返信口の多重化) | 返信先ずれ |
+| D2147 | Envelope-To/X-Envelope-To の空値 (封書受取人記録の空欄) | 届け先ずれ |
+| D2148 | Apparently-To/X-Apparently-To の空値 (見せ宛記録の空欄) | 届け先ずれ |
+| D2149 | X-Envelope-From 系の空値 (封書差出人記録の空欄) | 差出人ずれ |
+| D2150 | Apparently-From/Sender 系の空値 (表差出人記録の空欄) | 差出人ずれ |
+| D2151 | Disposition-Notification-To の空値 (開封通知要求先の空欄) | 通知行き先ずれ |
+| D2152 | Return-Receipt-To の空値 (受領通知要求先の空欄) | 通知行き先ずれ |
+| D2153 | X-Confirm-Reading-To の空値 (閲覧確認要求先の空欄) | 通知行き先ずれ |
+| D2154 | Resent-Reply-To の空値 (旧式再送返信口の空欄) | 返信先ずれ |
+| D2155 | X-Original-To の空値 (元受取人記録の空欄) | 届け先履歴ずれ |
+| D2156 | X-Original-From の空値 (元差出人記録の空欄) | 差出人履歴ずれ |
+| D2157 | X-Original-Message-ID の空値 (元識別子記録の空欄) | 識別子履歴ずれ |
+| D2158 | X-Original-Subject の空値 (元件名記録の空欄) | 件名履歴ずれ |
+| D2159 | X-Original-Cc の空値 (元副宛先記録の空欄) | 届け先履歴ずれ |
+| D2160 | X-Original-Reply-To の空値 (元返信口記録の空欄) | 返信先履歴ずれ |
+| D2161 | X-Original-Date の空値 (元日時記録の空欄) | 日時履歴ずれ |
+| D2162 | X-Original-References の空値 (元糸参照記録の空欄) | 糸参照履歴ずれ |
+| D2163 | X-Original-Bcc の空値 (元隠し宛先記録の空欄) | 届け先履歴ずれ |
+| D2164 | Fcc/X-Fcc の空値 (送信控え欄の空欄) | 控え行き先ずれ |
+| D2165 | X-Forwarded-* 群の空値 (転送元記録の空欄) | 転送履歴ずれ |
+| D2166 | Apparently-Resent-* 群の空値 (再送残渣記録の空欄) | 再送履歴ずれ |
+| D2167 | X-Original-To-Headers の空値 (元宛先欄記録の空欄) | 届け先履歴ずれ |
+| D2168 | X-Original-Rcpt-To 系の空値 (元受取人記録の空欄) | 届け先履歴ずれ |
+| D2169 | X-Original-Authentication-Results の空値 (元認証結果記録の空欄) | 認証履歴ずれ |
+| D2170 | X-OriginalArrivalTime 系の空値 (元到着時刻記録の空欄) | 日時履歴ずれ |
+| D2171 | Authentication-Results 系の空値 (認証結果欄の空欄) | 認証評価ずれ |
+| D2172 | DKIM-Signature の空値 (署名欄の空欄) | 署名評価ずれ |
+| D2173 | Received-SPF の空値 (SPF判定欄の空欄) | 認証評価ずれ |
+| D2174 | 優先度欄 (X-Priority/X-MSMail-Priority/Priority/Importance) の空値 | 緊急度表示ずれ |
+| D2175 | Envelope-To 系の宛名でない値 (封書宛先記録の非宛名値) | 届け先ずれ |
+| D2176 | Apparently-To 系の宛名でない値 (見せ宛記録の非宛名値) | 届け先ずれ |
+| D2177 | 封書差出人記録欄の宛名でない値 | 差出人ずれ |
+| D2178 | Apparently-From/Sender 系の宛名でない値 (表差出人記録の非宛名値) | 差出人ずれ |
+| D2179 | X-Original-To の宛名でない値 (元宛先記録の非宛名値) | 届け先履歴ずれ |
+| D2180 | X-Original-From の宛名でない値 (元差出人記録の非宛名値) | 差出人履歴ずれ |
+| D2181 | X-Original-Cc の宛名でない値 (元副宛先記録の非宛名値) | 届け先履歴ずれ |
+| D2182 | X-Original-Reply-To の宛名でない値 (元返信口記録の非宛名値) | 返信先履歴ずれ |
+| D2183 | Disposition-Notification-To の宛名でない値 (開封通知先の非宛名値) | 通知行先ずれ |
+| D2184 | Return-Receipt-To の宛名でない値 (受領通知先の非宛名値) | 通知行先ずれ |
+| D2185 | X-Confirm-Reading-To の宛名でない値 (閲覧確認先の非宛名値) | 確認行先ずれ |
+| D2186 | Resent-Reply-To の宛名でない値 (再送返信口の非宛名値) | 返信先ずれ |
+| D2187 | Delivered-To の宛名でない値 (配達記録の非宛名値) | 届け先履歴ずれ |
+| D2188 | Errors-To の宛名でない値 (返送先記録の非宛名値) | 返送先評価ずれ |
+| D2189 | X-Original-Rcpt-To 系の宛名でない値 (元受取人記録の非宛名値) | 届け先履歴ずれ |
+| D2190 | Apparently-Resent-* 系の宛名でない値 (再送残渣の非宛名値) | 残渣評価ずれ |
+| D2191 | Envelope-To 系の複数値 (封書宛先記録のカンマ連結値) | 届け先ずれ |
+| D2192 | Delivered-To の複数値 (配達記録のカンマ連結値) | 届け先履歴ずれ |
+| D2193 | 封書差出人記録欄の複数値 | 差出人ずれ |
+| D2194 | Errors-To の複数値 (返送先記録のカンマ連結値) | 返送先評価ずれ |
+| D2195 | Apparently-To 系の複数値 (見せ宛記録のカンマ連結値) | 届け先ずれ |
+| D2196 | Apparently-From/Sender 系の複数値 (表差出人記録のカンマ連結値) | 差出人ずれ |
+| D2197 | X-Original-To の複数値 (元宛先記録のカンマ連結値) | 届け先履歴ずれ |
+| D2198 | X-Original-From の複数値 (元差出人記録のカンマ連結値) | 差出人履歴ずれ |
+| D2199 | X-Original-Cc の複数値 (元副宛記録のカンマ連結値) | 届け先履歴ずれ |
+| D2200 | X-Original-Reply-To の複数値 (元返信口記録のカンマ連結値) | 返信先ずれ |
+| D2201 | Disposition-Notification-To の複数値 (開封通知先記録のカンマ連結値) | 通知先ずれ |
+| D2202 | Return-Receipt-To の複数値 (受領通知先記録のカンマ連結値) | 通知先ずれ |
+| D2203 | X-Confirm-Reading-To の複数値 (閲覧確認先記録のカンマ連結値) | 通知先ずれ |
+| D2204 | Resent-Reply-To の複数値 (再送返信口記録のカンマ連結値) | 返信先ずれ |
+| D2205 | Apparently-Resent-* 系の複数値 (再送残渣記録のカンマ連結値) | 再送記録ずれ |
+| D2206 | X-Original-Rcpt-To 系の複数値 (元受取人記録のカンマ連結値) | 届け先履歴ずれ |
+| D2207 | Envelope-To 系の囲い値 (生宛名記録の括弧・引用形) | 届け先ずれ |
+| D2208 | Delivered-To の囲い値 (配達記録の括弧・引用形) | 届け先履歴ずれ |
+| D2209 | X-Envelope-From 系の囲い値 (封書差出人記録の括弧・引用形) | 差出人ずれ |
+| D2210 | Errors-To の囲い値 (返送先記録の括弧・引用形) | 返送先評価ずれ |
+| D2211 | Apparently-To 系の囲い値 (見せ宛記録の括弧・引用形) | 届け先ずれ |
+| D2212 | Apparently-From/Sender 系の囲い値 (表差出人記録の括弧・引用形) | 差出人ずれ |
+| D2213 | X-Original-To の囲い値 (元宛先記録の括弧・引用形) | 届け先履歴ずれ |
+| D2214 | X-Original-From の囲い値 (元差出人記録の括弧・引用形) | 差出人履歴ずれ |
+| D2215 | X-Original-Cc の囲い値 (元副宛記録の括弧・引用形) | 届け先履歴ずれ |
+| D2216 | X-Original-Reply-To の囲い値 (元返信口記録の括弧・引用形) | 返信先ずれ |
+| D2217 | Disposition-Notification-To の囲い値 (開封通知先記録の括弧・引用形) | 通知先ずれ |
+| D2218 | Return-Receipt-To の囲い値 (受領通知先記録の括弧・引用形) | 通知先ずれ |
+| D2219 | X-Confirm-Reading-To の囲い値 (閲覧確認先記録の括弧・引用形) | 通知先ずれ |
+| D2220 | Resent-Reply-To の囲い値 (再送返信口記録の括弧・引用形) | 返信先ずれ |
+| D2221 | Apparently-Resent-* 系の囲い値 (再送残渣記録の括弧・引用形) | 再送記録ずれ |
+| D2222 | X-Original-Rcpt-To 系の囲い値 (元受取人記録の括弧・引用形) | 届け先履歴ずれ |
+| D2223 | Envelope-To 系の空白入り値 (封書宛先記録の a @x 形) | 届け先ずれ |
+| D2224 | Delivered-To の空白入り値 (配達記録の a @x 形) | 配達履歴ずれ |
+| D2225 | X-Envelope-From 系の空白入り値 (封書差出人記録の a @x 形) | 差出人履歴ずれ |
+| D2226 | Errors-To の空白入り値 (返送先記録の a @x 形) | 返送先ずれ |
+| D2227 | Apparently-To 系の空白入り値 (見せ宛記録の a @x 形) | 受取人履歴ずれ |
+| D2228 | Apparently-From 系の空白入り値 (表差出人記録の a @x 形) | 差出人履歴ずれ |
+| D2229 | X-Original-To の空白入り値 (元宛先記録の a @x 形) | 元受取人ずれ |
+| D2230 | X-Original-From の空白入り値 (元差出人記録の a @x 形) | 元差出人ずれ |
+| D2231 | X-Original-Cc の空白入り値 (元副宛記録の a @x 形) | 副宛履歴ずれ |
+| D2232 | X-Original-Reply-To の空白入り値 (元返信口記録の a @x 形) | 返信先履歴ずれ |
+| D2233 | Disposition-Notification-To の空白入り値 (開封通知先記録の a @x 形) | 通知先ずれ |
+| D2234 | Return-Receipt-To の空白入り値 (受領通知先記録の a @x 形) | 通知先ずれ |
+| D2235 | X-Confirm-Reading-To の空白入り値 (閲覧確認先記録の a @x 形) | 通知先ずれ |
+| D2236 | Resent-Reply-To の空白入り値 (再送返信口記録の a @x 形) | 返信先ずれ |
+| D2237 | Apparently-Resent-* 系の空白入り値 (再送残渣記録の a @x 形) | 再送記録ずれ |
+| D2238 | X-Original-Rcpt-To 系の空白入り値 (元受取人記録の a @x 形) | 届け先履歴ずれ |
+| D2239 | Envelope-To 系のドット違反値 (封書宛先記録の a..b@x 形) | 届け先ずれ |
+| D2240 | Delivered-To のドット違反値 (配達記録の dot-atom 違反) | 配達履歴ずれ |
+| D2241 | X-Envelope-From 系のドット違反値 (封書差出人記録の dot-atom 違反) | 差出人履歴ずれ |
+| D2242 | Errors-To のドット違反値 (返送先記録の dot-atom 違反) | 返送先ずれ |
+| D2243 | Apparently-To 系のドット違反値 (見せ宛記録の dot-atom 違反) | 受取人履歴ずれ |
+| D2244 | Apparently-From 系のドット違反値 (表差出人記録の dot-atom 違反) | 差出人履歴ずれ |
+| D2245 | X-Original-To のドット違反値 (元宛先記録の dot-atom 違反) | 元受取人ずれ |
+| D2246 | X-Original-From のドット違反値 (元差出人記録の dot-atom 違反) | 元差出人ずれ |
+| D2247 | X-Original-Cc のドット違反値 (元副宛記録の dot-atom 違反) | 副宛履歴ずれ |
+| D2248 | X-Original-Reply-To のドット違反値 (元返信口記録の dot-atom 違反) | 返信先履歴ずれ |
+| D2249 | Disposition-Notification-To のドット違反値 (開封通知先記録の dot-atom 違反) | 通知先ずれ |
+| D2250 | Return-Receipt-To のドット違反値 (受領通知先記録の dot-atom 違反) | 通知先ずれ |
+| D2251 | X-Confirm-Reading-To のドット違反値 (閲覧確認先記録の dot-atom 違反) | 確認先ずれ |
+| D2252 | Resent-Reply-To のドット違反値 (再送返信口記録の dot-atom 違反) | 返信先ずれ |
+| D2253 | Apparently-Resent-* のドット違反値 (再送残渣記録の dot-atom 違反) | 再送履歴ずれ |
+| D2254 | X-Original-Rcpt-To のドット違反値 (元受取人記録の dot-atom 違反) | 受取人履歴ずれ |
+| D2255 | Envelope-To の複数@値 (封書宛先記録の addr-spec 違反) | 封書宛先ずれ |
+| D2256 | Delivered-To の複数@値 (配達記録の addr-spec 違反) | 配達履歴ずれ |
+| D2257 | X-Envelope-From の複数@値 (封書差出人記録の addr-spec 違反) | 差出人履歴ずれ |
+| D2258 | Errors-To の複数@値 (返送先記録の addr-spec 違反) | 返送先ずれ |
+| D2259 | Apparently-To の複数@値 (見せ宛記録の addr-spec 違反) | 受取人履歴ずれ |
+| D2260 | Apparently-From の複数@値 (表差出人記録の addr-spec 違反) | 差出人履歴ずれ |
+| D2261 | X-Original-To の複数@値 (元宛先記録の addr-spec 違反) | 元受取人ずれ |
+| D2262 | X-Original-From の複数@値 (元差出人記録の addr-spec 違反) | 元差出人ずれ |
+| D2263 | X-Original-Cc の複数@値 (元副宛記録の addr-spec 違反) | 副宛履歴ずれ |
+| D2264 | X-Original-Reply-To の複数@値 (元返信口記録の addr-spec 違反) | 返信先履歴ずれ |
+| D2265 | Disposition-Notification-To の複数@値 (開封通知先記録の addr-spec 違反) | 通知先ずれ |
+| D2266 | Return-Receipt-To の複数@値 (受領通知先記録の addr-spec 違反) | 通知先ずれ |
+| D2267 | X-Confirm-Reading-To の複数@値 (閲覧確認先記録の addr-spec 違反) | 確認先ずれ |
+| D2268 | Resent-Reply-To の複数@値 (再送返信口記録の addr-spec 違反) | 返信先ずれ |
+| D2269 | Apparently-Resent-* の複数@値 (再送残渣記録の addr-spec 違反) | 再送履歴ずれ |
+| D2270 | X-Original-Rcpt-To の複数@値 (元受取人記録の addr-spec 違反) | 受取人履歴ずれ |
+| D2271 | Envelope-To の片側欠落宛名 (封書宛先記録の addr-spec 違反) | 封書宛先ずれ |
+| D2272 | Delivered-To の片側欠落宛名 (配達記録の addr-spec 違反) | 配達履歴ずれ |
+| D2273 | X-Envelope-From の片側欠落宛名 (封書差出人記録の addr-spec 違反) | 差出人履歴ずれ |
+| D2274 | Errors-To の片側欠落宛名 (返送先記録の addr-spec 違反) | 返送先ずれ |
+| D2275 | Apparently-To の片側欠落宛名 (見せ宛記録の addr-spec 違反) | 見せ宛履歴ずれ |
+| D2276 | Apparently-From の片側欠落宛名 (表差出人記録の addr-spec 違反) | 表差出人ずれ |
+| D2277 | X-Original-To の片側欠落宛名 (元宛先記録の addr-spec 違反) | 元宛先ずれ |
+| D2278 | X-Original-From の片側欠落宛名 (元差出人記録の addr-spec 違反) | 元差出人ずれ |
+| D2279 | X-Original-Cc の片側欠落宛名 (元副宛記録の addr-spec 違反) | 元副宛先ずれ |
+| D2280 | X-Original-Reply-To の片側欠落宛名 (元返信口記録の addr-spec 違反) | 元返信口ずれ |
+| D2281 | Disposition-Notification-To の片側欠落宛名 (開封通知先記録の addr-spec 違反) | 通知先ずれ |
+| D2282 | Return-Receipt-To の片側欠落宛名 (受領通知先記録の addr-spec 違反) | 受領通知先ずれ |
+| D2283 | X-Confirm-Reading-To の片側欠落宛名 (閲覧確認先記録の addr-spec 違反) | 確認先ずれ |
+| D2284 | Resent-Reply-To の片側欠落宛名 (再送返信口記録の addr-spec 違反) | 再送返信先ずれ |
+| D2285 | Apparently-Resent-* の片側欠落宛名 (再送残渣記録の addr-spec 違反) | 再送履歴ずれ |
+| D2286 | X-Original-Rcpt-To の片側欠落宛名 (元受取人記録の addr-spec 違反) | 受取人履歴ずれ |
+| D2287 | Envelope-To のセミコロン入り宛名値 (封書宛先記録の区切り異形) | 封書宛先ずれ |
+| D2288 | Delivered-To のセミコロン入り宛名値 (配達記録の区切り異形) | 配達履歴ずれ |
+| D2289 | X-Envelope-From のセミコロン入り宛名値 (封書差出人記録の区切り異形) | 差出人履歴ずれ |
+| D2290 | Errors-To のセミコロン入り宛名値 (返送先記録の区切り異形) | 返送先ずれ |
+| D2291 | Apparently-To のセミコロン入り宛名値 (見せ宛記録の区切り異形) | 見せ宛履歴ずれ |
+| D2292 | Apparently-From のセミコロン入り宛名値 (表差出人記録の区切り異形) | 表差出人ずれ |
+| D2293 | X-Original-To のセミコロン入り宛名値 (元宛先記録の区切り異形) | 元宛先ずれ |
+| D2294 | X-Original-From のセミコロン入り宛名値 (元差出人記録の区切り異形) | 元差出人ずれ |
+| D2295 | X-Original-Cc のセミコロン入り宛名値 (元副宛記録の区切り異形) | 元副宛先ずれ |
+| D2296 | X-Original-Reply-To のセミコロン入り宛名値 (元返信口記録の区切り異形) | 元返信口ずれ |
+| D2297 | Disposition-Notification-To のセミコロン入り宛名値 (開封通知先記録の区切り異形) | 開封通知先ずれ |
+| D2298 | Return-Receipt-To のセミコロン入り宛名値 (受領通知先記録の区切り異形) | 受領通知先ずれ |
+| D2299 | X-Confirm-Reading-To のセミコロン入り宛名値 (閲覧確認先記録の区切り異形) | 閲覧確認先ずれ |
+| D2300 | Resent-Reply-To のセミコロン入り宛名値 (再送返信口記録の区切り異形) | 再送返信先ずれ |
+| D2301 | Apparently-Resent のセミコロン入り宛名値 (再送残渣記録の区切り異形) | 再送残渣ずれ |
+| D2302 | X-Original-Rcpt-To 系のセミコロン入り宛名値 (元受取人記録の区切り異形) | 元受取人ずれ |
+| D2303 | Envelope-To 系のパーセント経路宛名値 (封書宛先記録の経路異形) | 封書宛先ずれ |
+| D2304 | Delivered-To のパーセント経路宛名値 (配達記録の経路異形) | 配達履歴ずれ |
+| D2305 | X-Envelope-From 系のパーセント経路宛名値 (封書差出人記録の経路異形) | 差出人履歴ずれ |
+| D2306 | Errors-To のパーセント経路宛名値 (返送先記録の経路異形) | 返送先ずれ |
+| D2307 | Apparently-To のパーセント経路宛名値 (見せ宛記録の経路異形) | 見せ宛履歴ずれ |
+| D2308 | Apparently-From のパーセント経路宛名値 (表差出人記録の経路異形) | 表差出人ずれ |
+| D2309 | X-Original-To のパーセント経路宛名値 (元宛先記録の経路異形) | 元宛先ずれ |
+| D2310 | X-Original-From のパーセント経路宛名値 (元差出人記録の経路異形) | 元差出人ずれ |
+| D2311 | X-Original-Cc のパーセント経路宛名値 (元副宛記録の経路異形) | 元副宛先ずれ |
+| D2312 | X-Original-Reply-To のパーセント経路宛名値 (元返信口記録の経路異形) | 元返信口ずれ |
+| D2313 | Disposition-Notification-To のパーセント経路宛名値 (開封通知先記録の経路異形) | 開封通知先ずれ |
+| D2314 | Return-Receipt-To のパーセント経路宛名値 (受領通知先記録の経路異形) | 受領通知先ずれ |
+| D2315 | X-Confirm-Reading-To のパーセント経路宛名値 (閲覧確認先記録の経路異形) | 閲覧確認先ずれ |
+| D2316 | Resent-Reply-To のパーセント経路宛名値 (再送返信口記録の経路異形) | 再送返信先ずれ |
+| D2317 | Apparently-Resent のパーセント経路宛名値 (再送残渣記録の経路異形) | 再送残渣ずれ |
+| D2318 | X-Original-Rcpt-To 系のパーセント経路宛名値 (元受取人記録の経路異形) | 元受取人ずれ |
+| D2319 | Envelope-To 系のバン経路宛名値 (封書宛先記録の経路異形) | 封書宛先ずれ |
+| D2320 | Delivered-To のバン経路宛名値 (配達記録の経路異形) | 配達履歴ずれ |
+| D2321 | X-Envelope-From 系のバン経路宛名値 (封書差出人記録の経路異形) | 差出人履歴ずれ |
+| D2322 | Errors-To のバン経路宛名値 (返送先記録の経路異形) | 返送先ずれ |
+| D2323 | Apparently-To 系のバン経路宛名値 (見せ宛記録の経路異形) | 見せ宛ずれ |
+| D2324 | Apparently-From 系のバン経路宛名値 (表差出人記録の経路異形) | 表札ずれ |
+| D2325 | X-Original-To のバン経路宛名値 (元宛先記録の経路異形) | 元宛先ずれ |
+| D2326 | X-Original-From のバン経路宛名値 (元差出人記録の経路異形) | 元差出人ずれ |
+| D2327 | X-Original-Cc のバン経路宛名値 (元副宛記録の経路異形) | 元副宛ずれ |
+| D2328 | X-Original-Reply-To のバン経路宛名値 (元返信口記録の経路異形) | 元返信口ずれ |
+| D2329 | Disposition-Notification-To のバン経路宛名値 (開封通知先記録の経路異形) | 開封通知先ずれ |
+| D2330 | Return-Receipt-To のバン経路宛名値 (受領通知先記録の経路異形) | 受領通知先ずれ |
+| D2331 | X-Confirm-Reading-To のバン経路宛名値 (閲覧確認先記録の経路異形) | 閲覧確認先ずれ |
+| D2332 | Resent-Reply-To のバン経路宛名値 (再送返信口記録の経路異形) | 再送返信口ずれ |
+| D2333 | Apparently-Resent-* 系のバン経路宛名値 (再送残渣記録の経路異形) | 再送残渣ずれ |
+| D2334 | X-Original-Rcpt-To 系のバン経路宛名値 (元受取人記録の経路異形) | 元受取人ずれ |
+| D2335 | Envelope-To 系のドメインリテラル宛名値 (封書宛先記録のリテラル異形) | 封書宛先ずれ |
+| D2336 | Delivered-To のドメインリテラル宛名値 (配達記録のリテラル異形) | 配達履歴ずれ |
+| D2337 | X-Envelope-From 系のドメインリテラル宛名値 (封書差出人記録のリテラル異形) | 差出人履歴ずれ |
+| D2338 | Errors-To のドメインリテラル宛名値 (返送先記録のリテラル異形) | 返送先ずれ |
+| D2339 | Apparently-To 系のドメインリテラル宛名値 (見せ宛記録のリテラル異形) | 見せ宛ずれ |
+| D2340 | Apparently-From 系のドメインリテラル宛名値 (表差出人記録のリテラル異形) | 表札ずれ |
+| D2341 | X-Original-To のドメインリテラル宛名値 (元宛先記録のリテラル異形) | 元宛先ずれ |
+| D2342 | X-Original-From のドメインリテラル宛名値 (元差出人記録のリテラル異形) | 元差出人ずれ |
+| D2343 | X-Original-Cc のドメインリテラル宛名値 (元副宛記録のリテラル異形) | 元副宛ずれ |
+| D2344 | X-Original-Reply-To のドメインリテラル宛名値 (元返信口記録のリテラル異形) | 元返信口ずれ |
+| D2345 | Disposition-Notification-To のドメインリテラル宛名値 (開封通知先記録のリテラル異形) | 開封通知先ずれ |
+| D2346 | Return-Receipt-To のドメインリテラル宛名値 (受領通知先記録のリテラル異形) | 受領通知先ずれ |
+| D2347 | X-Confirm-Reading-To のドメインリテラル宛名値 (閲覧確認先記録のリテラル異形) | 閲覧確認先ずれ |
+| D2348 | Resent-Reply-To のドメインリテラル宛名値 (再送返信口記録のリテラル異形) | 再送返信口ずれ |
+| D2349 | Apparently-Resent-* 系のドメインリテラル宛名値 (再送残渣記録のリテラル異形) | 再送残渣ずれ |
+| D2350 | X-Original-Rcpt-To 系のドメインリテラル宛名値 (元受取人記録のリテラル異形) | 元受取人ずれ |
+| D2351 | Envelope-To/X-Envelope-To の非 ASCII 宛名値 (封書宛先記録の EAI/国際化異形) | 封書宛先ずれ |
+| D2352 | Delivered-To の非 ASCII 宛名値 (配達記録の EAI/国際化異形) | 配達履歴ずれ |
+| D2353 | X-Envelope-From/X-MailFrom 等の非 ASCII 宛名値 (封書差出人記録の EAI/国際化異形) | 差出人履歴ずれ |
+| D2354 | Errors-To の非 ASCII 宛名値 (返送先記録の EAI/国際化異形) | 返送先ずれ |
+| D2355 | Apparently-To/X-Apparently-To 系の非 ASCII 宛名値 (見せ宛記録の EAI/国際化異形) | 見せ宛ずれ |
+| D2356 | Apparently-From/Apparently-Sender 系の非 ASCII 宛名値 (表差出人記録の EAI/国際化異形) | 表差出人ずれ |
+| D2357 | X-Original-To の非 ASCII 宛名値 (元宛先記録の EAI/国際化異形) | 元宛先ずれ |
+| D2358 | X-Original-From の非 ASCII 宛名値 (元差出人記録の EAI/国際化異形) | 元差出人ずれ |
+| D2359 | X-Original-Cc の非 ASCII 宛名値 (元副宛記録の EAI/国際化異形) | 元副宛ずれ |
+| D2360 | X-Original-Reply-To の非 ASCII 宛名値 (元返信口記録の EAI/国際化異形) | 元返信口ずれ |
+| D2361 | Disposition-Notification-To の非 ASCII 宛名値 (開封通知先記録の EAI/国際化異形) | 開封通知先ずれ |
+| D2362 | Return-Receipt-To の非 ASCII 宛名値 (受領通知先記録の EAI/国際化異形) | 受領通知先ずれ |
+| D2363 | X-Confirm-Reading-To の非 ASCII 宛名値 (閲覧確認先記録の EAI/国際化異形) | 閲覧確認先ずれ |
+| D2364 | Resent-Reply-To の非 ASCII 宛名値 (再送返信口記録の EAI/国際化異形) | 再送返信口ずれ |
+| D2365 | Apparently-Resent-* 系の非 ASCII 宛名値 (再送残渣記録の EAI/国際化異形) | 再送残渣ずれ |
+| D2366 | X-Original-Rcpt-To 系の非 ASCII 宛名値 (元受取人記録の EAI/国際化異形) | 元受取人ずれ |
+| D2367 | Envelope-To/X-Envelope-To の端ハイフンラベル宛名値 (封書宛先記録の DNS ラベル違反) | 封書宛先ずれ |
+| D2368 | Delivered-To の端ハイフンラベル宛名値 (配達記録の DNS ラベル違反) | 配達履歴ずれ |
+| D2369 | X-Envelope-From/X-MailFrom 等の端ハイフンラベル宛名値 (封書差出人記録の DNS ラベル違反) | 差出人履歴ずれ |
+| D2370 | Errors-To の端ハイフンラベル宛名値 (返送先記録の DNS ラベル違反) | 返送先ずれ |
+| D2371 | Apparently-To/X-Apparently-To の端ハイフンラベル宛名値 (見せ宛記録の DNS ラベル違反) | 見せ宛ずれ |
+| D2372 | Apparently-From/Apparently-Sender 系の端ハイフンラベル宛名値 (表差出人記録の DNS ラベル違反) | 表差出人ずれ |
+| D2373 | X-Original-To の端ハイフンラベル宛名値 (元宛先記録の DNS ラベル違反) | 元宛先ずれ |
+| D2374 | X-Original-From の端ハイフンラベル宛名値 (元差出人記録の DNS ラベル違反) | 元差出人ずれ |
+| D2375 | X-Original-Cc の端ハイフンラベル宛名値 (元副宛記録の DNS ラベル違反) | 元副宛ずれ |
+| D2376 | X-Original-Reply-To の端ハイフンラベル宛名値 (元返信口記録の DNS ラベル違反) | 元返信先ずれ |
+| D2377 | Disposition-Notification-To の端ハイフンラベル宛名値 (開封通知先記録の DNS ラベル違反) | 通知先ずれ |
+| D2378 | Return-Receipt-To の端ハイフンラベル宛名値 (受領通知先記録の DNS ラベル違反) | 受領通知先ずれ |
+| D2379 | X-Confirm-Reading-To の端ハイフンラベル宛名値 (閲覧確認先記録の DNS ラベル違反) | 閲覧確認先ずれ |
+| D2380 | Resent-Reply-To の端ハイフンラベル宛名値 (再送返信口記録の DNS ラベル違反) | 再送返信先ずれ |
+| D2381 | Apparently-Resent-* 系の端ハイフンラベル宛名値 (再送残渣記録の DNS ラベル違反) | 再送記録ずれ |
+| D2382 | X-Original-Rcpt-To 系の端ハイフンラベル宛名値 (元受取人記録の DNS ラベル違反) | 元受取人ずれ |
+| D2383 | X-Confirm-Reading-To の逆斜線宛名値 (閲覧確認先記録の脱字異形) | 閲覧確認先ずれ |
+| D2384 | Resent-Reply-To の逆斜線宛名値 (再送返信口記録の脱字異形) | 再送返信先ずれ |
+| D2385 | Apparently-Resent-* 系の逆斜線宛名値 (再送残渣記録の脱字異形) | 再送記録ずれ |
+| D2386 | X-Original-Rcpt-To 系の逆斜線宛名値 (元受取人記録の脱字異形) | 元受取人ずれ |
+| D2387 | Apparently-To/X-Apparently-To 系の逆斜線宛名値 (見せ宛記録の脱字異形) | 見せ宛ずれ |
+| D2388 | Apparently-From/Apparently-Sender 系の逆斜線宛名値 (表差出人記録の脱字異形) | 表差出人ずれ |
+| D2389 | X-Original-To の逆斜線宛名値 (元宛先記録の脱字異形) | 元宛先ずれ |
+| D2390 | X-Original-From の逆斜線宛名値 (元差出人記録の脱字異形) | 元差出人ずれ |
+| D2391 | X-Original-Cc 系の逆斜線宛名値 (元副宛記録の脱字異形) | 元副宛ずれ |
+| D2392 | X-Original-Reply-To の逆斜線宛名値 (元返信口記録の脱字異形) | 元返信先ずれ |
+| D2393 | Disposition-Notification-To の逆斜線宛名値 (開封通知先記録の脱字異形) | 通知先ずれ |
+| D2394 | Return-Receipt-To の逆斜線宛名値 (受領通知先記録の脱字異形) | 受領通知先ずれ |
+| D2395 | Envelope-To/X-Envelope-To 系の逆斜線宛名値 (封書宛先記録の脱字異形) | 封書宛先ずれ |
+| D2396 | Delivered-To の逆斜線宛名値 (配達履歴記録の脱字異形) | 配達履歴ずれ |
+| D2397 | X-Envelope-From/X-MailFrom 等の逆斜線宛名値 (封書差出人記録の脱字異形) | 差出人履歴ずれ |
+| D2398 | Errors-To の逆斜線宛名値 (返送先記録の脱字異形) | 返送先ずれ |
+| D2399 | Envelope-To/X-Envelope-To 系のコロン宛名値 (封書宛先記録の接頭辞異形) | 封書宛先ずれ |
+| D2400 | Delivered-To のコロン宛名値 (配達履歴記録の接頭辞異形) | 配達履歴ずれ |
+| D2401 | X-Envelope-From/X-MailFrom 等のコロン宛名値 (封書差出人記録の接頭辞異形) | 差出人履歴ずれ |
+| D2402 | Errors-To のコロン宛名値 (返送先記録の接頭辞異形) | 返送先ずれ |
+| D2403 | Apparently-To/X-Apparently-To 系のコロン宛名値 (見せ宛記録の接頭辞異形) | 見せ宛ずれ |
+| D2404 | Apparently-From/Apparently-Sender 系のコロン宛名値 (表差出人記録の接頭辞異形) | 表差出人ずれ |
+| D2405 | X-Original-To のコロン宛名値 (元宛先記録の接頭辞異形) | 元宛先ずれ |
+| D2406 | X-Original-From のコロン宛名値 (元差出人記録の接頭辞異形) | 元差出人ずれ |
+| D2407 | X-Original-Cc のコロン宛名値 (元副宛記録の接頭辞異形) | 元副宛ずれ |
+| D2408 | X-Original-Reply-To のコロン宛名値 (元返信口記録の接頭辞異形) | 元返信先ずれ |
+| D2409 | Disposition-Notification-To のコロン宛名値 (開封通知先記録の接頭辞異形) | 通知先ずれ |
+| D2410 | Return-Receipt-To のコロン宛名値 (受領通知先記録の接頭辞異形) | 受領先ずれ |
+| D2411 | X-Confirm-Reading-To のコロン宛名値 (閲覧確認先記録の接頭辞異形) | 確認先ずれ |
+| D2412 | Resent-Reply-To のコロン宛名値 (再送返信口記録の接頭辞異形) | 再送返信先ずれ |
+| D2413 | Apparently-Resent-* 系のコロン宛名値 (再送残渣記録の接頭辞異形) | 再送履歴ずれ |
+| D2414 | X-Original-Rcpt-To 系のコロン宛名値 (元受取人記録の接頭辞異形) | 元受取人ずれ |
+| D2415 | Envelope-To/X-Envelope-To 系の逆括弧宛名値 (封書宛先記録の孤立括弧閉じ異形) | 封書宛先ずれ |
+| D2416 | Delivered-To の逆括弧宛名値 (配達履歴記録の孤立括弧閉じ異形) | 配達履歴ずれ |
+| D2417 | X-Envelope-From/X-MailFrom 等の逆括弧宛名値 (封書差出人記録の孤立括弧閉じ異形) | 差出人履歴ずれ |
+| D2418 | Errors-To の逆括弧宛名値 (返送先記録の孤立括弧閉じ異形) | 返送先ずれ |
+| D2419 | Apparently-To/X-Apparently-To 系の逆括弧宛名値 (見せ宛記録の孤立括弧閉じ異形) | 見せ宛ずれ |
+| D2420 | Apparently-From/Apparently-Sender 系の逆括弧宛名値 (表差出人記録の孤立括弧閉じ異形) | 表差出人ずれ |
+| D2421 | X-Original-To の逆括弧宛名値 (元宛先記録の孤立括弧閉じ異形) | 元宛先ずれ |
+| D2422 | X-Original-From の逆括弧宛名値 (元差出人記録の孤立括弧閉じ異形) | 元差出人ずれ |
+| D2423 | X-Original-Cc の逆括弧宛名値 (元副宛記録の孤立括弧閉じ異形) | 元副宛ずれ |
+| D2424 | X-Original-Reply-To の逆括弧宛名値 (元返信口記録の孤立括弧閉じ異形) | 元返信先ずれ |
+| D2425 | Disposition-Notification-To の逆括弧宛名値 (開封通知先記録の孤立括弧閉じ異形) | 開封先ずれ |
+| D2426 | Return-Receipt-To の逆括弧宛名値 (受領通知先記録の孤立括弧閉じ異形) | 受領先ずれ |
+| D2427 | X-Confirm-Reading-To の逆括弧宛名値 (閲覧確認先記録の孤立括弧閉じ異形) | 閲覧確認先ずれ |
+| D2428 | Resent-Reply-To の逆括弧宛名値 (再送返信口記録の孤立括弧閉じ異形) | 再送返信先ずれ |
+| D2429 | Apparently-Resent-* 系の逆括弧宛名値 (再送残渣記録の孤立括弧閉じ異形) | 再送履歴ずれ |
+| D2430 | X-Original-Rcpt-To 系の逆括弧宛名値 (元受取人記録の孤立括弧閉じ異形) | 元受取人ずれ |
+| D2431 | Envelope-To/X-Envelope-To 系の逆角括弧宛名値 (封書宛先記録の孤立角括弧閉じ異形) | 封書宛先ずれ |
+| D2432 | Delivered-To の逆角括弧宛名値 (配達履歴記録の孤立角括弧閉じ異形) | 配達履歴ずれ |
+| D2433 | X-Envelope-From/X-MailFrom 等の逆角括弧宛名値 (封書差出人記録の孤立角括弧閉じ異形) | 差出人履歴ずれ |
+| D2434 | Errors-To の逆角括弧宛名値 (返送先記録の孤立角括弧閉じ異形) | 返送先ずれ |
+| D2435 | Apparently-To/X-Apparently-To 系の逆角括弧宛名値 (見せ宛記録の孤立角括弧閉じ異形) | 見せ宛ずれ |
+| D2436 | Apparently-From/Apparently-Sender 系の逆角括弧宛名値 (表差出人記録の孤立角括弧閉じ異形) | 表差出人ずれ |
+| D2437 | X-Original-To の逆角括弧宛名値 (元宛先記録の孤立角括弧閉じ異形) | 元宛先ずれ |
+| D2438 | X-Original-From の逆角括弧宛名値 (元差出人記録の孤立角括弧閉じ異形) | 元差出人ずれ |
+| D2439 | X-Original-Cc の逆角括弧宛名値 (元副宛記録の孤立角括弧閉じ異形) | 元副宛ずれ |
+| D2440 | X-Original-Reply-To の逆角括弧宛名値 (元返信口記録の孤立角括弧閉じ異形) | 元返信先ずれ |
+| D2441 | Disposition-Notification-To の逆角括弧宛名値 (開封通知先記録の孤立角括弧閉じ異形) | 開封先ずれ |
+| D2442 | Return-Receipt-To の逆角括弧宛名値 (受領通知先記録の孤立角括弧閉じ異形) | 受領先ずれ |
+| D2443 | X-Confirm-Reading-To の逆角括弧宛名値 (閲覧確認先記録の孤立角括弧閉じ異形) | 閲覧先ずれ |
+| D2444 | Resent-Reply-To の逆角括弧宛名値 (再送返信口記録の孤立角括弧閉じ異形) | 再送先ずれ |
+| D2445 | Apparently-Resent-* 系の逆角括弧宛名値 (再送残渣記録の孤立角括弧閉じ異形) | 再送宛ずれ |
+| D2446 | X-Original-Rcpt-To 系の逆角括弧宛名値 (元受取人記録の孤立角括弧閉じ異形) | 元受取人ずれ |
+| D2447 | Envelope-To/X-Envelope-To 系の逆波括弧宛名値 (封書宛先記録の孤立波括弧閉じ異形) | 封書宛先ずれ |
+| D2448 | Delivered-To の逆波括弧宛名値 (配達履歴記録の孤立波括弧閉じ異形) | 配達先ずれ |
+| D2449 | X-Envelope-From/X-MailFrom 等の逆波括弧宛名値 (封書差出人記録の孤立波括弧閉じ異形) | 封書差出人ずれ |
+| D2450 | Errors-To の逆波括弧宛名値 (返送先記録の孤立波括弧閉じ異形) | 返送先ずれ |
+| D2451 | Apparently-To/X-Apparently-To 系の逆波括弧宛名値 (見せ宛記録の孤立波括弧閉じ異形) | 見せ宛ずれ |
+| D2452 | Apparently-From/Apparently-Sender 系の逆波括弧宛名値 (表差出人記録の孤立波括弧閉じ異形) | 表差出人ずれ |
+| D2453 | X-Original-To の逆波括弧宛名値 (元宛先記録の孤立波括弧閉じ異形) | 元宛先ずれ |
+| D2454 | X-Original-From の逆波括弧宛名値 (元差出人記録の孤立波括弧閉じ異形) | 元差出人ずれ |
+| D2455 | X-Original-Cc の逆波括弧宛名値 (元副宛記録の孤立波括弧閉じ異形) | 元副宛ずれ |
+| D2456 | X-Original-Reply-To の逆波括弧宛名値 (元返信口記録の孤立波括弧閉じ異形) | 元返信先ずれ |
+| D2457 | Disposition-Notification-To の逆波括弧宛名値 (開封通知先記録の孤立波括弧閉じ異形) | 開封先ずれ |
+| D2458 | Return-Receipt-To の逆波括弧宛名値 (受領通知先記録の孤立波括弧閉じ異形) | 受領先ずれ |
+| D2459 | X-Confirm-Reading-To の逆波括弧宛名値 (閲覧確認先記録の孤立波括弧閉じ異形) | 閲覧先ずれ |
+| D2460 | Resent-Reply-To の逆波括弧宛名値 (再送返信口記録の孤立波括弧閉じ異形) | 再送先ずれ |
+| D2461 | Apparently-Resent-* 系の逆波括弧宛名値 (再送残渣記録の孤立波括弧閉じ異形) | 再送宛ずれ |
+| D2462 | X-Original-Rcpt-To 系の逆波括弧宛名値 (元受取人記録の孤立波括弧閉じ異形) | 元受取人ずれ |
+| D2463 | Envelope-To/X-Envelope-To 系の逆引用符宛名値 (封書宛先記録の孤立引用符異形) | 封書宛先ずれ |
+| D2464 | Delivered-To の逆引用符宛名値 (配達履歴記録の孤立引用符異形) | 配達履歴ずれ |
+| D2465 | X-Envelope-From/X-MailFrom 等の逆引用符宛名値 (封書差出人記録の孤立引用符異形) | 封書差出人ずれ |
+| D2466 | Errors-To の逆引用符宛名値 (返送先記録の孤立引用符異形) | 返送先ずれ |
+| D2467 | Apparently-To/X-Apparently-To 系の逆引用符宛名値 (見せ宛記録の孤立引用符異形) | 見せ宛ずれ |
+| D2468 | Apparently-From/Apparently-Sender 系の逆引用符宛名値 (表差出人記録の孤立引用符異形) | 表差出人ずれ |
+| D2469 | X-Original-To の逆引用符宛名値 (元宛先記録の孤立引用符異形) | 元宛先ずれ |
+| D2470 | X-Original-From の逆引用符宛名値 (元差出人記録の孤立引用符異形) | 元差出人ずれ |
+| D2471 | X-Original-Cc の逆引用符宛名値 (元副宛記録の孤立引用符異形) | 元副宛ずれ |
+| D2472 | X-Original-Reply-To の逆引用符宛名値 (元返信口記録の孤立引用符異形) | 元返信先ずれ |
+| D2473 | Disposition-Notification-To の逆引用符宛名値 (開封通知先記録の孤立引用符異形) | 開封先ずれ |
+| D2474 | Return-Receipt-To の逆引用符宛名値 (受領通知先記録の孤立引用符異形) | 受領先ずれ |
+| D2475 | X-Confirm-Reading-To の逆引用符宛名値 (閲覧確認先記録の孤立引用符異形) | 閲覧先ずれ |
+| D2476 | Resent-Reply-To の逆引用符宛名値 (再送返信口記録の孤立引用符異形) | 再送先ずれ |
+| D2477 | Apparently-Resent-* 系の逆引用符宛名値 (再送残渣記録の孤立引用符異形) | 再送宛ずれ |
+| D2478 | X-Original-Rcpt-To 系の逆引用符宛名値 (元受取人記録の孤立引用符異形) | 元受取人ずれ |
+| D2479 | Envelope-To/X-Envelope-To 系の疑問符宛名値 (封書宛先記録の孤立疑問符異形) | 封書宛先ずれ |
+| D2480 | Delivered-To の疑問符宛名値 (配達履歴記録の孤立疑問符異形) | 配達履歴ずれ |
+| D2481 | X-Envelope-From/X-MailFrom 等の疑問符宛名値 (封書差出人記録の孤立疑問符異形) | 封書差出人ずれ |
+| D2482 | Errors-To の疑問符宛名値 (返送先記録の孤立疑問符異形) | 返送先ずれ |
+| D2483 | Apparently-To/X-Apparently-To 系の疑問符宛名値 (見せ宛記録の孤立疑問符異形) | 見せ宛ずれ |
+| D2484 | Apparently-From/Apparently-Sender 系の疑問符宛名値 (表差出人記録の孤立疑問符異形) | 表差出人ずれ |
+| D2485 | X-Original-To の疑問符宛名値 (元宛先記録の孤立疑問符異形) | 元宛先ずれ |
+| D2486 | X-Original-From の疑問符宛名値 (元差出人記録の孤立疑問符異形) | 元差出人ずれ |
+| D2487 | X-Original-Cc の疑問符宛名値 (元副宛記録の孤立疑問符異形) | 元副宛ずれ |
+| D2488 | X-Original-Reply-To の疑問符宛名値 (元返信口記録の孤立疑問符異形) | 元返信口ずれ |
+| D2489 | Disposition-Notification-To の疑問符宛名値 (開封通知先記録の孤立疑問符異形) | 開封通知先ずれ |
+| D2490 | Return-Receipt-To の疑問符宛名値 (受領通知先記録の孤立疑問符異形) | 受領通知先ずれ |
+| D2491 | X-Confirm-Reading-To の疑問符宛名値 (閲覧確認先記録の孤立疑問符異形) | 閲覧確認先ずれ |
+| D2492 | Resent-Reply-To の疑問符宛名値 (再送返信口記録の孤立疑問符異形) | 再送返信口ずれ |
+| D2493 | Apparently-Resent-* 系の疑問符宛名値 (再送残渣記録の孤立疑問符異形) | 再送残渣ずれ |
+| D2494 | X-Original-Rcpt-To 系の疑問符宛名値 (元受取人記録の孤立疑問符異形) | 元受取人ずれ |
+| D2495 | Envelope-To/X-Envelope-To 系のプラス宛名値 (封書宛先記録のドメイン側孤立プラス異形) | 封書宛先ずれ |
+| D2496 | Delivered-To のプラス宛名値 (配達履歴記録のドメイン側孤立プラス異形) | 配達履歴ずれ |
+| D2497 | X-Envelope-From/X-MailFrom 等のプラス宛名値 (封書差出人記録のドメイン側孤立プラス異形) | 封書差出人ずれ |
+| D2498 | Errors-To のプラス宛名値 (返送先記録のドメイン側孤立プラス異形) | 返送先ずれ |
+| D2499 | Apparently-To/X-Apparently-To 系のプラス宛名値 (見せ宛記録のドメイン側孤立プラス異形) | 見せ宛ずれ |
+| D2500 | Apparently-From/Apparently-Sender 系のプラス宛名値 (表差出人記録のドメイン側孤立プラス異形) | 表差出人ずれ |
+| D2501 | X-Original-To のプラス宛名値 (元宛先記録のドメイン側孤立プラス異形) | 元宛先ずれ |
+| D2502 | X-Original-From のプラス宛名値 (元差出人記録のドメイン側孤立プラス異形) | 元差出人ずれ |
+| D2503 | X-Original-Cc のプラス宛名値 (元副宛記録のドメイン側孤立プラス異形) | 元副宛ずれ |
+| D2504 | X-Original-Reply-To のプラス宛名値 (元返信口記録のドメイン側孤立プラス異形) | 元返信口ずれ |
+| D2505 | Disposition-Notification-To のプラス宛名値 (開封通知先記録のドメイン側孤立プラス異形) | 開封通知先ずれ |
+| D2506 | Return-Receipt-To のプラス宛名値 (受領通知先記録のドメイン側孤立プラス異形) | 受領通知先ずれ |

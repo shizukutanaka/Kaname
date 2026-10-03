@@ -1,5 +1,478 @@
 ## [Unreleased]
 
+### Fixed — Devin Review (#678): `received_*` 節異字検出群 (138 検出器) がヘッダ区画ではなくメッセージ全体を走査しており、本文中の `Received:` 風行で誤発火していた問題を修正。全検出器を `header_end` (最初の空行) 区画へ統一。
+### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
+### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
+### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2503: `X-Original-Cc:` のプラス宛名値 (元副宛記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `x_orig_cc_plus` を追加。
+### Security — D2504: `X-Original-Reply-To:` のプラス宛名値 (元返信口記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `x_orig_reply_to_plus` を追加。
+### Security — D2505: `Disposition-Notification-To:` のプラス宛名値 (開封通知先記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `disposition_to_plus` を追加。
+### Security — D2506: `Return-Receipt-To:` のプラス宛名値 (受領通知先記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `return_receipt_plus` を追加。
+### Security — D2499: `Apparently-To:`/`X-Apparently-To:` 系のプラス宛名値 (見せ宛記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `apparently_to_plus` を追加。
+### Security — D2500: `Apparently-From:`/`Apparently-Sender:` 系のプラス宛名値 (表差出人記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `apparently_from_plus` を追加。
+### Security — D2501: `X-Original-To:` のプラス宛名値 (元宛先記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `x_orig_to_plus` を追加。
+### Security — D2502: `X-Original-From:` のプラス宛名値 (元差出人記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `x_orig_from_plus` を追加。
+### Security — D2495: `Envelope-To:`/`X-Envelope-To:` 系のプラス宛名値 (封書宛先記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `env_to_plus` を追加。
+### Security — D2496: `Delivered-To:` のプラス宛名値 (配達履歴記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `delivered_to_plus` を追加。
+### Security — D2497: `X-Envelope-From:`/`X-MailFrom:` 等のプラス宛名値 (封書差出人記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `env_from_plus` を追加。
+### Security — D2498: `Errors-To:` のプラス宛名値 (返送先記録のドメイン側孤立プラス異形) を検出 — `Envelope` に `errors_to_plus` を追加。
+### Security — D2491: `X-Confirm-Reading-To:` の疑問符宛名値 (閲覧確認先記録の孤立疑問符異形) を検出 — `Envelope` に `confirm_reading_qmark` を追加。
+### Security — D2492: `Resent-Reply-To:` の疑問符宛名値 (再送返信口記録の孤立疑問符異形) を検出 — `Envelope` に `resent_reply_to_qmark` を追加。
+### Security — D2493: `Apparently-Resent-*:` 系の疑問符宛名値 (再送残渣記録の孤立疑問符異形) を検出 — `Envelope` に `apparently_resent_qmark` を追加。
+### Security — D2494: `X-Original-Rcpt-To:` 系の疑問符宛名値 (元受取人記録の孤立疑問符異形) を検出 — `Envelope` に `x_orig_rcpt_to_qmark` を追加。
+### Security — D2487: `X-Original-Cc:` の疑問符宛名値 (元副宛記録の孤立疑問符異形) を検出 — `Envelope` に `x_orig_cc_qmark` を追加。
+### Security — D2488: `X-Original-Reply-To:` の疑問符宛名値 (元返信口記録の孤立疑問符異形) を検出 — `Envelope` に `x_orig_reply_to_qmark` を追加。
+### Security — D2489: `Disposition-Notification-To:` の疑問符宛名値 (開封通知先記録の孤立疑問符異形) を検出 — `Envelope` に `disposition_to_qmark` を追加。
+### Security — D2490: `Return-Receipt-To:` の疑問符宛名値 (受領通知先記録の孤立疑問符異形) を検出 — `Envelope` に `return_receipt_qmark` を追加。
+### Security — D2483: `Apparently-To:`/`X-Apparently-To:` 系の疑問符宛名値 (見せ宛記録の孤立疑問符異形) を検出 — `Envelope` に `apparently_to_qmark` を追加。
+### Security — D2484: `Apparently-From:`/`Apparently-Sender:` 系の疑問符宛名値 (表差出人記録の孤立疑問符異形) を検出 — `Envelope` に `apparently_from_qmark` を追加。
+### Security — D2485: `X-Original-To:` の疑問符宛名値 (元宛先記録の孤立疑問符異形) を検出 — `Envelope` に `x_orig_to_qmark` を追加。
+### Security — D2486: `X-Original-From:` の疑問符宛名値 (元差出人記録の孤立疑問符異形) を検出 — `Envelope` に `x_orig_from_qmark` を追加。
+### Security — D2479: `Envelope-To:`/`X-Envelope-To:` 系の疑問符宛名値 (封書宛先記録の孤立疑問符異形) を検出 — `Envelope` に `env_to_qmark` を追加。
+### Security — D2480: `Delivered-To:` の疑問符宛名値 (配達履歴記録の孤立疑問符異形) を検出 — `Envelope` に `delivered_to_qmark` を追加。
+### Security — D2481: `X-Envelope-From:`/`X-MailFrom:` 等の疑問符宛名値 (封書差出人記録の孤立疑問符異形) を検出 — `Envelope` に `env_from_qmark` を追加。
+### Security — D2482: `Errors-To:` の疑問符宛名値 (返送先記録の孤立疑問符異形) を検出 — `Envelope` に `errors_to_qmark` を追加。
+### Security — D2475: `X-Confirm-Reading-To:` の逆引用符宛名値 (閲覧確認先記録の孤立引用符異形) を検出 — `Envelope` に `confirm_reading_apos` を追加。
+### Security — D2476: `Resent-Reply-To:` の逆引用符宛名値 (再送返信口記録の孤立引用符異形) を検出 — `Envelope` に `resent_reply_to_apos` を追加。
+### Security — D2477: `Apparently-Resent-*:` 系の逆引用符宛名値 (再送残渣記録の孤立引用符異形) を検出 — `Envelope` に `apparently_resent_apos` を追加。
+### Security — D2478: `X-Original-Rcpt-To:` 系の逆引用符宛名値 (元受取人記録の孤立引用符異形) を検出 — `Envelope` に `x_orig_rcpt_to_apos` を追加。
+### Security — D2471: `X-Original-Cc:` の逆引用符宛名値 (元副宛記録の孤立引用符異形) を検出 — `Envelope` に `x_orig_cc_apos` を追加。
+### Security — D2472: `X-Original-Reply-To:` の逆引用符宛名値 (元返信口記録の孤立引用符異形) を検出 — `Envelope` に `x_orig_reply_to_apos` を追加。
+### Security — D2473: `Disposition-Notification-To:` の逆引用符宛名値 (開封通知先記録の孤立引用符異形) を検出 — `Envelope` に `disposition_to_apos` を追加。
+### Security — D2474: `Return-Receipt-To:` の逆引用符宛名値 (受領通知先記録の孤立引用符異形) を検出 — `Envelope` に `return_receipt_apos` を追加。
+### Security — D2467: `Apparently-To:`/`X-Apparently-To:` 系の逆引用符宛名値 (見せ宛記録の孤立引用符異形) を検出 — `Envelope` に `apparently_to_apos` を追加。
+### Security — D2468: `Apparently-From:`/`Apparently-Sender:` 系の逆引用符宛名値 (表差出人記録の孤立引用符異形) を検出 — `Envelope` に `apparently_from_apos` を追加。
+### Security — D2469: `X-Original-To:` の逆引用符宛名値 (元宛先記録の孤立引用符異形) を検出 — `Envelope` に `x_orig_to_apos` を追加。
+### Security — D2470: `X-Original-From:` の逆引用符宛名値 (元差出人記録の孤立引用符異形) を検出 — `Envelope` に `x_orig_from_apos` を追加。
+### Security — D2463: `Envelope-To:`/`X-Envelope-To:` 系の逆引用符宛名値 (封書宛先記録の孤立引用符異形) を検出 — `Envelope` に `env_to_apos` を追加。
+### Security — D2464: `Delivered-To:` の逆引用符宛名値 (配達履歴記録の孤立引用符異形) を検出 — `Envelope` に `delivered_to_apos` を追加。
+### Security — D2465: `X-Envelope-From:`/`X-MailFrom:` 等の逆引用符宛名値 (封書差出人記録の孤立引用符異形) を検出 — `Envelope` に `env_from_apos` を追加。
+### Security — D2466: `Errors-To:` の逆引用符宛名値 (返送先記録の孤立引用符異形) を検出 — `Envelope` に `errors_to_apos` を追加。
+### Security — D2459: `X-Confirm-Reading-To:` の逆波括弧宛名値 (閲覧確認先記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `confirm_reading_rbrace` を追加。
+### Security — D2460: `Resent-Reply-To:` の逆波括弧宛名値 (再送返信口記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `resent_reply_to_rbrace` を追加。
+### Security — D2461: `Apparently-Resent-*:` 系の逆波括弧宛名値 (再送残渣記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `apparently_resent_rbrace` を追加。
+### Security — D2462: `X-Original-Rcpt-To:` 系の逆波括弧宛名値 (元受取人記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `x_orig_rcpt_to_rbrace` を追加。
+### Security — D2455: `X-Original-Cc:` の逆波括弧宛名値 (元副宛記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `x_orig_cc_rbrace` を追加。
+### Security — D2456: `X-Original-Reply-To:` の逆波括弧宛名値 (元返信口記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `x_orig_reply_to_rbrace` を追加。
+### Security — D2457: `Disposition-Notification-To:` の逆波括弧宛名値 (開封通知先記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `disposition_to_rbrace` を追加。
+### Security — D2458: `Return-Receipt-To:` の逆波括弧宛名値 (受領通知先記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `return_receipt_rbrace` を追加。
+### Security — D2451: `Apparently-To:`/`X-Apparently-To:` 系の逆波括弧宛名値 (見せ宛記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `apparently_to_rbrace` を追加。
+### Security — D2452: `Apparently-From:`/`Apparently-Sender:` 系の逆波括弧宛名値 (表差出人記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `apparently_from_rbrace` を追加。
+### Security — D2453: `X-Original-To:` の逆波括弧宛名値 (元宛先記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `x_orig_to_rbrace` を追加。
+### Security — D2454: `X-Original-From:` の逆波括弧宛名値 (元差出人記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `x_orig_from_rbrace` を追加。
+### Security — D2447: `Envelope-To:`/`X-Envelope-To:` 系の逆波括弧宛名値 (封書宛先記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `env_to_rbrace` を追加。
+### Security — D2448: `Delivered-To:` の逆波括弧宛名値 (配達履歴記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `delivered_to_rbrace` を追加。
+### Security — D2449: `X-Envelope-From:`/`X-MailFrom:` 等の逆波括弧宛名値 (封書差出人記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `env_from_rbrace` を追加。
+### Security — D2450: `Errors-To:` の逆波括弧宛名値 (返送先記録の孤立波括弧閉じ異形) を検出 — `Envelope` に `errors_to_rbrace` を追加。
+### Security — D2443: `X-Confirm-Reading-To:` の逆角括弧宛名値 (閲覧確認先記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `confirm_reading_rbracket` を追加。
+### Security — D2444: `Resent-Reply-To:` の逆角括弧宛名値 (再送返信口記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `resent_reply_to_rbracket` を追加。
+### Security — D2445: `Apparently-Resent-*:` 系の逆角括弧宛名値 (再送残渣記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `apparently_resent_rbracket` を追加。
+### Security — D2446: `X-Original-Rcpt-To:` 系の逆角括弧宛名値 (元受取人記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `x_orig_rcpt_to_rbracket` を追加。
+### Security — D2439: `X-Original-Cc:` の逆角括弧宛名値 (元副宛記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `x_orig_cc_rbracket` を追加。
+### Security — D2440: `X-Original-Reply-To:` の逆角括弧宛名値 (元返信口記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `x_orig_reply_to_rbracket` を追加。
+### Security — D2441: `Disposition-Notification-To:` の逆角括弧宛名値 (開封通知先記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `disposition_to_rbracket` を追加。
+### Security — D2442: `Return-Receipt-To:` の逆角括弧宛名値 (受領通知先記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `return_receipt_rbracket` を追加。
+### Security — D2435: `Apparently-To:`/`X-Apparently-To:` 系の逆角括弧宛名値 (見せ宛記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `apparently_to_rbracket` を追加。
+### Security — D2436: `Apparently-From:`/`Apparently-Sender:` 系の逆角括弧宛名値 (表差出人記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `apparently_from_rbracket` を追加。
+### Security — D2437: `X-Original-To:` の逆角括弧宛名値 (元宛先記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `x_orig_to_rbracket` を追加。
+### Security — D2438: `X-Original-From:` の逆角括弧宛名値 (元差出人記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `x_orig_from_rbracket` を追加。
+### Security — D2431: `Envelope-To:`/`X-Envelope-To:` 系の逆角括弧宛名値 (封書宛先記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `env_to_rbracket` を追加。
+### Security — D2432: `Delivered-To:` の逆角括弧宛名値 (配達履歴記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `delivered_to_rbracket` を追加。
+### Security — D2433: `X-Envelope-From:`/`X-MailFrom:` 等の逆角括弧宛名値 (封書差出人記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `env_from_rbracket` を追加。
+### Security — D2434: `Errors-To:` の逆角括弧宛名値 (返送先記録の孤立角括弧閉じ異形) を検出 — `Envelope` に `errors_to_rbracket` を追加。
+### Security — D2427: `X-Confirm-Reading-To:` の逆括弧宛名値 (閲覧確認先記録の孤立括弧閉じ異形) を検出 — `Envelope` に `confirm_reading_rparen` を追加。
+### Security — D2428: `Resent-Reply-To:` の逆括弧宛名値 (再送返信口記録の孤立括弧閉じ異形) を検出 — `Envelope` に `resent_reply_to_rparen` を追加。
+### Security — D2429: `Apparently-Resent-*:` 系の逆括弧宛名値 (再送残渣記録の孤立括弧閉じ異形) を検出 — `Envelope` に `apparently_resent_rparen` を追加。
+### Security — D2430: `X-Original-Rcpt-To:` 系の逆括弧宛名値 (元受取人記録の孤立括弧閉じ異形) を検出 — `Envelope` に `x_orig_rcpt_to_rparen` を追加。
+### Security — D2423: `X-Original-Cc:` の逆括弧宛名値 (元副宛記録の孤立括弧閉じ異形) を検出 — `Envelope` に `x_orig_cc_rparen` を追加。
+### Security — D2424: `X-Original-Reply-To:` の逆括弧宛名値 (元返信口記録の孤立括弧閉じ異形) を検出 — `Envelope` に `x_orig_reply_to_rparen` を追加。
+### Security — D2425: `Disposition-Notification-To:` の逆括弧宛名値 (開封通知先記録の孤立括弧閉じ異形) を検出 — `Envelope` に `disposition_to_rparen` を追加。
+### Security — D2426: `Return-Receipt-To:` の逆括弧宛名値 (受領通知先記録の孤立括弧閉じ異形) を検出 — `Envelope` に `return_receipt_rparen` を追加。
+### Security — D2419: `Apparently-To:`/`X-Apparently-To:` 系の逆括弧宛名値 (見せ宛記録の孤立括弧閉じ異形) を検出 — `Envelope` に `apparently_to_rparen` を追加。
+### Security — D2420: `Apparently-From:`/`Apparently-Sender:` 系の逆括弧宛名値 (表差出人記録の孤立括弧閉じ異形) を検出 — `Envelope` に `apparently_from_rparen` を追加。
+### Security — D2421: `X-Original-To:` の逆括弧宛名値 (元宛先記録の孤立括弧閉じ異形) を検出 — `Envelope` に `x_orig_to_rparen` を追加。
+### Security — D2422: `X-Original-From:` の逆括弧宛名値 (元差出人記録の孤立括弧閉じ異形) を検出 — `Envelope` に `x_orig_from_rparen` を追加。
+### Security — D2415: `Envelope-To:`/`X-Envelope-To:` 系の逆括弧宛名値 (封書宛先記録の孤立括弧閉じ異形) を検出 — `Envelope` に `env_to_rparen` を追加。
+### Security — D2416: `Delivered-To:` の逆括弧宛名値 (配達履歴記録の孤立括弧閉じ異形) を検出 — `Envelope` に `delivered_to_rparen` を追加。
+### Security — D2417: `X-Envelope-From:`/`X-MailFrom:` 等の逆括弧宛名値 (封書差出人記録の孤立括弧閉じ異形) を検出 — `Envelope` に `env_from_rparen` を追加。
+### Security — D2418: `Errors-To:` の逆括弧宛名値 (返送先記録の孤立括弧閉じ異形) を検出 — `Envelope` に `errors_to_rparen` を追加。
+### Security — D2411: `X-Confirm-Reading-To:` のコロン宛名値 (閲覧確認先記録の接頭辞異形) を検出 — `Envelope` に `confirm_reading_colon` を追加。
+### Security — D2412: `Resent-Reply-To:` のコロン宛名値 (再送返信口記録の接頭辞異形) を検出 — `Envelope` に `resent_reply_to_colon` を追加。
+### Security — D2413: `Apparently-Resent-*:` 系のコロン宛名値 (再送残渣記録の接頭辞異形) を検出 — `Envelope` に `apparently_resent_colon` を追加。
+### Security — D2414: `X-Original-Rcpt-To:` 系のコロン宛名値 (元受取人記録の接頭辞異形) を検出 — `Envelope` に `x_orig_rcpt_to_colon` を追加。
+### Security — D2407: `X-Original-Cc:` のコロン宛名値 (元副宛記録の接頭辞異形) を検出 — `Envelope` に `x_orig_cc_colon` を追加。
+### Security — D2408: `X-Original-Reply-To:` のコロン宛名値 (元返信口記録の接頭辞異形) を検出 — `Envelope` に `x_orig_reply_to_colon` を追加。
+### Security — D2409: `Disposition-Notification-To:` のコロン宛名値 (開封通知先記録の接頭辞異形) を検出 — `Envelope` に `disposition_to_colon` を追加。
+### Security — D2410: `Return-Receipt-To:` のコロン宛名値 (受領通知先記録の接頭辞異形) を検出 — `Envelope` に `return_receipt_colon` を追加。
+### Security — D2403: `Apparently-To:`/`X-Apparently-To:` 系のコロン宛名値 (見せ宛記録の接頭辞異形) を検出 — `Envelope` に `apparently_to_colon` を追加。
+### Security — D2404: `Apparently-From:`/`Apparently-Sender:` 系のコロン宛名値 (表差出人記録の接頭辞異形) を検出 — `Envelope` に `apparently_from_colon` を追加。
+### Security — D2405: `X-Original-To:` のコロン宛名値 (元宛先記録の接頭辞異形) を検出 — `Envelope` に `x_orig_to_colon` を追加。
+### Security — D2406: `X-Original-From:` のコロン宛名値 (元差出人記録の接頭辞異形) を検出 — `Envelope` に `x_orig_from_colon` を追加。
+### Security — D2399: `Envelope-To:`/`X-Envelope-To:` 系のコロン宛名値 (封書宛先記録の接頭辞異形) を検出 — `Envelope` に `env_to_colon` を追加。
+### Security — D2400: `Delivered-To:` のコロン宛名値 (配達履歴記録の接頭辞異形) を検出 — `Envelope` に `delivered_to_colon` を追加。
+### Security — D2401: `X-Envelope-From:`/`X-MailFrom:` 等のコロン宛名値 (封書差出人記録の接頭辞異形) を検出 — `Envelope` に `env_from_colon` を追加。
+### Security — D2402: `Errors-To:` のコロン宛名値 (返送先記録の接頭辞異形) を検出 — `Envelope` に `errors_to_colon` を追加。
+### Security — D2395: `Envelope-To:`/`X-Envelope-To:` 系の逆斜線宛名値 (封書宛先記録の脱字異形) を検出 — `Envelope` に `env_to_bslash` を追加。
+### Security — D2396: `Delivered-To:` の逆斜線宛名値 (配達履歴記録の脱字異形) を検出 — `Envelope` に `delivered_to_bslash` を追加。
+### Security — D2397: `X-Envelope-From:`/`X-MailFrom:` 等の逆斜線宛名値 (封書差出人記録の脱字異形) を検出 — `Envelope` に `env_from_bslash` を追加。
+### Security — D2398: `Errors-To:` の逆斜線宛名値 (返送先記録の脱字異形) を検出 — `Envelope` に `errors_to_bslash` を追加。
+### Security — D2391: `X-Original-Cc:` 系の逆斜線宛名値 (元副宛記録の脱字異形) を検出 — `Envelope` に `x_orig_cc_bslash` を追加。
+### Security — D2392: `X-Original-Reply-To:` の逆斜線宛名値 (元返信口記録の脱字異形) を検出 — `Envelope` に `x_orig_reply_to_bslash` を追加。
+### Security — D2393: `Disposition-Notification-To:` の逆斜線宛名値 (開封通知先記録の脱字異形) を検出 — `Envelope` に `disposition_to_bslash` を追加。
+### Security — D2394: `Return-Receipt-To:` の逆斜線宛名値 (受領通知先記録の脱字異形) を検出 — `Envelope` に `return_receipt_bslash` を追加。
+### Security — D2387: `Apparently-To:`/`X-Apparently-To:` 系の逆斜線宛名値 (見せ宛記録の脱字異形) を検出 — `Envelope` に `apparently_to_bslash` を追加。
+### Security — D2388: `Apparently-From:`/`Apparently-Sender:` 系の逆斜線宛名値 (表差出人記録の脱字異形) を検出 — `Envelope` に `apparently_from_bslash` を追加。
+### Security — D2389: `X-Original-To:` の逆斜線宛名値 (元宛先記録の脱字異形) を検出 — `Envelope` に `x_orig_to_bslash` を追加。
+### Security — D2390: `X-Original-From:` の逆斜線宛名値 (元差出人記録の脱字異形) を検出 — `Envelope` に `x_orig_from_bslash` を追加。
+### Security — D2383: `X-Confirm-Reading-To:` の逆斜線宛名値 (閲覧確認先記録の脱字異形) を検出 — `Envelope` に `confirm_reading_bslash` を追加。
+### Security — D2384: `Resent-Reply-To:` の逆斜線宛名値 (再送返信口記録の脱字異形) を検出 — `Envelope` に `resent_reply_to_bslash` を追加。
+### Security — D2385: `Apparently-Resent-*:` 系の逆斜線宛名値 (再送残渣記録の脱字異形) を検出 — `Envelope` に `apparently_resent_bslash` を追加。
+### Security — D2386: `X-Original-Rcpt-To:` 系の逆斜線宛名値 (元受取人記録の脱字異形) を検出 — `Envelope` に `x_orig_rcpt_to_bslash` を追加。
+### Security — D2379: `X-Confirm-Reading-To:` の端ハイフンラベル宛名値 (閲覧確認先記録の DNS ラベル違反) を検出 — `Envelope` に `confirm_reading_hyph` を追加。
+### Security — D2380: `Resent-Reply-To:` の端ハイフンラベル宛名値 (再送返信口記録の DNS ラベル違反) を検出 — `Envelope` に `resent_reply_to_hyph` を追加。
+### Security — D2381: `Apparently-Resent-*:` 系の端ハイフンラベル宛名値 (再送残渣記録の DNS ラベル違反) を検出 — `Envelope` に `apparently_resent_hyph` を追加。
+### Security — D2382: `X-Original-Rcpt-To:` 系の端ハイフンラベル宛名値 (元受取人記録の DNS ラベル違反) を検出 — `Envelope` に `x_orig_rcpt_to_hyph` を追加。
+### Security — D2375: `X-Original-Cc:` の端ハイフンラベル宛名値 (元副宛記録の DNS ラベル違反) を検出 — `Envelope` に `x_orig_cc_hyph` を追加。
+### Security — D2376: `X-Original-Reply-To:` の端ハイフンラベル宛名値 (元返信口記録の DNS ラベル違反) を検出 — `Envelope` に `x_orig_reply_to_hyph` を追加。
+### Security — D2377: `Disposition-Notification-To:` の端ハイフンラベル宛名値 (開封通知先記録の DNS ラベル違反) を検出 — `Envelope` に `disposition_to_hyph` を追加。
+### Security — D2378: `Return-Receipt-To:` の端ハイフンラベル宛名値 (受領通知先記録の DNS ラベル違反) を検出 — `Envelope` に `return_receipt_hyph` を追加。
+### Security — D2371: `Apparently-To:`/`X-Apparently-To:` の端ハイフンラベル宛名値 (見せ宛記録の DNS ラベル違反) を検出 — `Envelope` に `apparently_to_hyph` を追加。
+### Security — D2372: `Apparently-From:`/`Apparently-Sender:` 系の端ハイフンラベル宛名値 (表差出人記録の DNS ラベル違反) を検出 — `Envelope` に `apparently_from_hyph` を追加。
+### Security — D2373: `X-Original-To:` の端ハイフンラベル宛名値 (元宛先記録の DNS ラベル違反) を検出 — `Envelope` に `x_orig_to_hyph` を追加。
+### Security — D2374: `X-Original-From:` の端ハイフンラベル宛名値 (元差出人記録の DNS ラベル違反) を検出 — `Envelope` に `x_orig_from_hyph` を追加。
+### Security — D2367: `Envelope-To:`/`X-Envelope-To:` の端ハイフンラベル宛名値 (封書宛先記録の DNS ラベル違反) を検出 — `Envelope` に `env_to_hyph` を追加。
+### Security — D2368: `Delivered-To:` の端ハイフンラベル宛名値 (配達記録の DNS ラベル違反) を検出 — `Envelope` に `delivered_to_hyph` を追加。
+### Security — D2369: `X-Envelope-From:`/`X-MailFrom:` 等の端ハイフンラベル宛名値 (封書差出人記録の DNS ラベル違反) を検出 — `Envelope` に `env_from_hyph` を追加。
+### Security — D2370: `Errors-To:` の端ハイフンラベル宛名値 (返送先記録の DNS ラベル違反) を検出 — `Envelope` に `errors_to_hyph` を追加。
+### Security — D2363: `X-Confirm-Reading-To:` の非 ASCII 宛名値 (閲覧確認先記録の EAI/国際化異形) を検出 — `Envelope` に `confirm_reading_eai` を追加。
+### Security — D2364: `Resent-Reply-To:` の非 ASCII 宛名値 (再送返信口記録の EAI/国際化異形) を検出 — `Envelope` に `resent_reply_to_eai` を追加。
+### Security — D2365: `Apparently-Resent-*:` 系の非 ASCII 宛名値 (再送残渣記録の EAI/国際化異形) を検出 — `Envelope` に `apparently_resent_eai` を追加。
+### Security — D2366: `X-Original-Rcpt-To:` 系の非 ASCII 宛名値 (元受取人記録の EAI/国際化異形) を検出 — `Envelope` に `x_orig_rcpt_to_eai` を追加。
+### Security — D2359: `X-Original-Cc:` の非 ASCII 宛名値 (元副宛記録の EAI/国際化異形) を検出 — `Envelope` に `x_orig_cc_eai` を追加。
+### Security — D2360: `X-Original-Reply-To:` の非 ASCII 宛名値 (元返信口記録の EAI/国際化異形) を検出 — `Envelope` に `x_orig_reply_to_eai` を追加。
+### Security — D2361: `Disposition-Notification-To:` の非 ASCII 宛名値 (開封通知先記録の EAI/国際化異形) を検出 — `Envelope` に `disposition_to_eai` を追加。
+### Security — D2362: `Return-Receipt-To:` の非 ASCII 宛名値 (受領通知先記録の EAI/国際化異形) を検出 — `Envelope` に `return_receipt_eai` を追加。
+### Security — D2355: `Apparently-To:`/`X-Apparently-To:` 系の非 ASCII 宛名値 (見せ宛記録の EAI/国際化異形) を検出 — `Envelope` に `apparently_to_eai` を追加。
+### Security — D2356: `Apparently-From:`/`Apparently-Sender:` 系の非 ASCII 宛名値 (表差出人記録の EAI/国際化異形) を検出 — `Envelope` に `apparently_from_eai` を追加。
+### Security — D2357: `X-Original-To:` の非 ASCII 宛名値 (元宛先記録の EAI/国際化異形) を検出 — `Envelope` に `x_orig_to_eai` を追加。
+### Security — D2358: `X-Original-From:` の非 ASCII 宛名値 (元差出人記録の EAI/国際化異形) を検出 — `Envelope` に `x_orig_from_eai` を追加。
+### Security — D2351: `Envelope-To:`/`X-Envelope-To:` の非 ASCII 宛名値 (封書宛先記録の EAI/国際化異形) を検出 — `Envelope` に `env_to_eai` を追加。
+### Security — D2352: `Delivered-To:` の非 ASCII 宛名値 (配達記録の EAI/国際化異形) を検出 — `Envelope` に `delivered_to_eai` を追加。
+### Security — D2353: `X-Envelope-From:`/`X-MailFrom:` 等の非 ASCII 宛名値 (封書差出人記録の EAI/国際化異形) を検出 — `Envelope` に `env_from_eai` を追加。
+### Security — D2354: `Errors-To:` の非 ASCII 宛名値 (返送先記録の EAI/国際化異形) を検出 — `Envelope` に `errors_to_eai` を追加。
+### Security — D2347: `X-Confirm-Reading-To:` のドメインリテラル宛名値 (閲覧確認先記録のリテラル異形) を検出 — `Envelope` に `confirm_reading_domlit` を追加。
+### Security — D2348: `Resent-Reply-To:` のドメインリテラル宛名値 (再送返信口記録のリテラル異形) を検出 — `Envelope` に `resent_reply_to_domlit` を追加。
+### Security — D2349: `Apparently-Resent-*:` 系のドメインリテラル宛名値 (再送残渣記録のリテラル異形) を検出 — `Envelope` に `apparently_resent_domlit` を追加。
+### Security — D2350: `X-Original-Rcpt-To:` 系のドメインリテラル宛名値 (元受取人記録のリテラル異形) を検出 — `Envelope` に `x_orig_rcpt_to_domlit` を追加。
+### Security — D2343: `X-Original-Cc:` のドメインリテラル宛名値 (元副宛記録のリテラル異形) を検出 — `Envelope` に `x_orig_cc_domlit` を追加。
+### Security — D2344: `X-Original-Reply-To:` のドメインリテラル宛名値 (元返信口記録のリテラル異形) を検出 — `Envelope` に `x_orig_reply_to_domlit` を追加。
+### Security — D2345: `Disposition-Notification-To:` のドメインリテラル宛名値 (開封通知先記録のリテラル異形) を検出 — `Envelope` に `disposition_to_domlit` を追加。
+### Security — D2346: `Return-Receipt-To:` のドメインリテラル宛名値 (受領通知先記録のリテラル異形) を検出 — `Envelope` に `return_receipt_domlit` を追加。
+### Security — D2339: `Apparently-To:` 系のドメインリテラル宛名値 (見せ宛記録のリテラル異形) を検出 — `Envelope` に `apparently_to_domlit` を追加。
+### Security — D2340: `Apparently-From:` 系のドメインリテラル宛名値 (表差出人記録のリテラル異形) を検出 — `Envelope` に `apparently_from_domlit` を追加。
+### Security — D2341: `X-Original-To:` のドメインリテラル宛名値 (元宛先記録のリテラル異形) を検出 — `Envelope` に `x_orig_to_domlit` を追加。
+### Security — D2342: `X-Original-From:` のドメインリテラル宛名値 (元差出人記録のリテラル異形) を検出 — `Envelope` に `x_orig_from_domlit` を追加。
+### Security — D2335: `Envelope-To:` 系のドメインリテラル宛名値 (`a@[1.2.3.4]` — 封書宛先記録のリテラル異形) を検出 — `Envelope` に `env_to_domlit` を追加。
+### Security — D2336: `Delivered-To:` のドメインリテラル宛名値 (配達記録のリテラル異形) を検出 — `Envelope` に `delivered_to_domlit` を追加。
+### Security — D2337: `X-Envelope-From:` 系のドメインリテラル宛名値 (封書差出人記録のリテラル異形) を検出 — `Envelope` に `env_from_domlit` を追加。
+### Security — D2338: `Errors-To:` のドメインリテラル宛名値 (返送先記録のリテラル異形) を検出 — `Envelope` に `errors_to_domlit` を追加。
+### Security — D2331: `X-Confirm-Reading-To:` のバン経路宛名値 (閲覧確認先記録の経路異形) を検出 — `Envelope` に `confirm_reading_bang` を追加。
+### Security — D2332: `Resent-Reply-To:` のバン経路宛名値 (再送返信口記録の経路異形) を検出 — `Envelope` に `resent_reply_to_bang` を追加。
+### Security — D2333: `Apparently-Resent-*:` 系のバン経路宛名値 (再送残渣記録の経路異形) を検出 — `Envelope` に `apparently_resent_bang` を追加。
+### Security — D2334: `X-Original-Rcpt-To:` 系のバン経路宛名値 (元受取人記録の経路異形) を検出 — `Envelope` に `x_orig_rcpt_to_bang` を追加。
+### Security — D2327: `X-Original-Cc:` のバン経路宛名値 (元副宛記録の経路異形) を検出 — `Envelope` に `x_orig_cc_bang` を追加。
+### Security — D2328: `X-Original-Reply-To:` のバン経路宛名値 (元返信口記録の経路異形) を検出 — `Envelope` に `x_orig_reply_to_bang` を追加。
+### Security — D2329: `Disposition-Notification-To:` のバン経路宛名値 (開封通知先記録の経路異形) を検出 — `Envelope` に `disposition_to_bang` を追加。
+### Security — D2330: `Return-Receipt-To:` のバン経路宛名値 (受領通知先記録の経路異形) を検出 — `Envelope` に `return_receipt_bang` を追加。
+### Security — D2323: `Apparently-To:` 系のバン経路宛名値 (見せ宛記録の経路異形) を検出 — `Envelope` に `apparently_to_bang` を追加。
+### Security — D2324: `Apparently-From:` 系のバン経路宛名値 (表差出人記録の経路異形) を検出 — `Envelope` に `apparently_from_bang` を追加。
+### Security — D2325: `X-Original-To:` のバン経路宛名値 (元宛先記録の経路異形) を検出 — `Envelope` に `x_orig_to_bang` を追加。
+### Security — D2326: `X-Original-From:` のバン経路宛名値 (元差出人記録の経路異形) を検出 — `Envelope` に `x_orig_from_bang` を追加。
+### Security — D2319: `Envelope-To:` 系のバン経路宛名値 (`a!b@x` — 封書宛先記録の経路異形) を検出 — `Envelope` に `env_to_bang` を追加。
+### Security — D2320: `Delivered-To:` のバン経路宛名値 (配達記録の経路異形) を検出 — `Envelope` に `delivered_to_bang` を追加。
+### Security — D2321: `X-Envelope-From:` 系のバン経路宛名値 (封書差出人記録の経路異形) を検出 — `Envelope` に `env_from_bang` を追加。
+### Security — D2322: `Errors-To:` のバン経路宛名値 (返送先記録の経路異形) を検出 — `Envelope` に `errors_to_bang` を追加。
+### Security — D2315: `X-Confirm-Reading-To:` のパーセント経路宛名値 (閲覧確認先記録の経路異形) を検出 — `Envelope` に `confirm_reading_pct` を追加。
+### Security — D2316: `Resent-Reply-To:` のパーセント経路宛名値 (再送返信口記録の経路異形) を検出 — `Envelope` に `resent_reply_to_pct` を追加。
+### Security — D2317: `Apparently-Resent-*:` 系のパーセント経路宛名値 (再送残渣記録の経路異形) を検出 — `Envelope` に `apparently_resent_pct` を追加。
+### Security — D2318: `X-Original-Rcpt-To:` 系のパーセント経路宛名値 (元受取人記録の経路異形) を検出 — `Envelope` に `x_orig_rcpt_to_pct` を追加。
+### Security — D2311: `X-Original-Cc:` のパーセント経路宛名値 (元副宛記録の経路異形) を検出 — `Envelope` に `x_orig_cc_pct` を追加。
+### Security — D2312: `X-Original-Reply-To:` のパーセント経路宛名値 (元返信口記録の経路異形) を検出 — `Envelope` に `x_orig_reply_to_pct` を追加。
+### Security — D2313: `Disposition-Notification-To:` のパーセント経路宛名値 (開封通知先記録の経路異形) を検出 — `Envelope` に `disposition_to_pct` を追加。
+### Security — D2314: `Return-Receipt-To:` のパーセント経路宛名値 (受領通知先記録の経路異形) を検出 — `Envelope` に `return_receipt_pct` を追加。
+### Security — D2307: `Apparently-To:` 系のパーセント経路宛名値 (`a%b@x` — 見せ宛記録の経路異形) を検出 — `Envelope` に `apparently_to_pct` を追加。
+### Security — D2308: `Apparently-From:` 系のパーセント経路宛名値 (表差出人記録の経路異形) を検出 — `Envelope` に `apparently_from_pct` を追加。
+### Security — D2309: `X-Original-To:` のパーセント経路宛名値 (元宛先記録の経路異形) を検出 — `Envelope` に `x_orig_to_pct` を追加。
+### Security — D2310: `X-Original-From:` のパーセント経路宛名値 (元差出人記録の経路異形) を検出 — `Envelope` に `x_orig_from_pct` を追加。
+### Security — D2303: `Envelope-To:` 系のパーセント経路宛名値 (`a%b@x` — 封書宛先記録の経路異形) を検出 — `Envelope` に `env_to_pct` を追加。
+### Security — D2304: `Delivered-To:` のパーセント経路宛名値 (配達記録の経路異形) を検出 — `Envelope` に `delivered_to_pct` を追加。
+### Security — D2305: `X-Envelope-From:` 系のパーセント経路宛名値 (封書差出人記録の経路異形) を検出 — `Envelope` に `env_from_pct` を追加。
+### Security — D2306: `Errors-To:` のパーセント経路宛名値 (返送先記録の経路異形) を検出 — `Envelope` に `errors_to_pct` を追加。
+### Security — D2299: `X-Confirm-Reading-To:` のセミコロン入り宛名値 (閲覧確認先記録の区切り異形) を検出 — `Envelope` に `confirm_reading_semiv` を追加。
+### Security — D2300: `Resent-Reply-To:` のセミコロン入り宛名値 (再送返信口記録の区切り異形) を検出 — `Envelope` に `resent_reply_to_semiv` を追加。
+### Security — D2301: `Apparently-Resent-*:` 系のセミコロン入り宛名値 (再送残渣記録の区切り異形) を検出 — `Envelope` に `apparently_resent_semiv` を追加。
+### Security — D2302: `X-Original-Rcpt-To:` 系のセミコロン入り宛名値 (元受取人記録の区切り異形) を検出 — `Envelope` に `x_orig_rcpt_to_semiv` を追加。
+### Security — D2295: `X-Original-Cc:` のセミコロン入り宛名値 (元副宛記録の区切り異形) を検出 — `Envelope` に `x_orig_cc_semiv` を追加。
+### Security — D2296: `X-Original-Reply-To:` のセミコロン入り宛名値 (元返信口記録の区切り異形) を検出 — `Envelope` に `x_orig_reply_to_semiv` を追加。
+### Security — D2297: `Disposition-Notification-To:` のセミコロン入り宛名値 (開封通知先記録の区切り異形) を検出 — `Envelope` に `disposition_to_semiv` を追加。
+### Security — D2298: `Return-Receipt-To:` のセミコロン入り宛名値 (受領通知先記録の区切り異形) を検出 — `Envelope` に `return_receipt_semiv` を追加。
+### Security — D2291: `Apparently-To:` 系のセミコロン入り宛名値 (`a@x;` — 見せ宛記録の区切り異形) を検出 — `Envelope` に `apparently_to_semiv` を追加。
+### Security — D2292: `Apparently-From:` 系のセミコロン入り宛名値 (表差出人記録の区切り異形) を検出 — `Envelope` に `apparently_from_semiv` を追加。
+### Security — D2293: `X-Original-To:` のセミコロン入り宛名値 (元宛先記録の区切り異形) を検出 — `Envelope` に `x_orig_to_semiv` を追加。
+### Security — D2294: `X-Original-From:` のセミコロン入り宛名値 (元差出人記録の区切り異形) を検出 — `Envelope` に `x_orig_from_semiv` を追加。
+### Security — D2287: `Envelope-To:` 系のセミコロン入り宛名値 (`a@x;`/`a@x;b@y` — 封書宛先記録の区切り異形) を検出 — `Envelope` に `env_to_semiv` を追加。
+### Security — D2288: `Delivered-To:` のセミコロン入り宛名値 (配達記録の区切り異形) を検出 — `Envelope` に `delivered_to_semiv` を追加。
+### Security — D2289: `X-Envelope-From:` 系のセミコロン入り宛名値 (封書差出人記録の区切り異形) を検出 — `Envelope` に `env_from_semiv` を追加。
+### Security — D2290: `Errors-To:` のセミコロン入り宛名値 (返送先記録の区切り異形) を検出 — `Envelope` に `errors_to_semiv` を追加。
+### Security — D2283: `X-Confirm-Reading-To:` の片側欠落宛名 (`@x`/`a@` — 閲覧確認先記録の addr-spec 違反) を検出 — `Envelope` に `confirm_reading_atside` を追加。
+### Security — D2284: `Resent-Reply-To:` の片側欠落宛名 (再送返信口記録の addr-spec 違反) を検出 — `Envelope` に `resent_reply_to_atside` を追加。
+### Security — D2285: `Apparently-Resent-*:` 系の片側欠落宛名 (再送残渣記録の addr-spec 違反) を検出 — `Envelope` に `apparently_resent_atside` を追加。
+### Security — D2286: `X-Original-Rcpt-To:` 系の片側欠落宛名 (元受取人記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_rcpt_to_atside` を追加。
+### Security — D2279: `X-Original-Cc:` の片側欠落宛名 (`@x`/`a@` — 元副宛記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_cc_atside` を追加。
+### Security — D2280: `X-Original-Reply-To:` の片側欠落宛名 (元返信口記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_reply_to_atside` を追加。
+### Security — D2281: `Disposition-Notification-To:` の片側欠落宛名 (開封通知先記録の addr-spec 違反) を検出 — `Envelope` に `disposition_to_atside` を追加。
+### Security — D2282: `Return-Receipt-To:` の片側欠落宛名 (受領通知先記録の addr-spec 違反) を検出 — `Envelope` に `return_receipt_atside` を追加。
+### Security — D2275: `Apparently-To:` 系の片側欠落宛名 (`@x`/`a@` — 見せ宛記録の addr-spec 違反) を検出 — `Envelope` に `apparently_to_atside` を追加。
+### Security — D2276: `Apparently-From:` 系の片側欠落宛名 (表差出人記録の addr-spec 違反) を検出 — `Envelope` に `apparently_from_atside` を追加。
+### Security — D2277: `X-Original-To:` の片側欠落宛名 (元宛先記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_to_atside` を追加。
+### Security — D2278: `X-Original-From:` の片側欠落宛名 (元差出人記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_from_atside` を追加。
+### Security — D2271: `Envelope-To:` 系の片側欠落宛名 (`@x`/`a@` — 封書宛先記録の addr-spec 違反) を検出 — `Envelope` に `env_to_atside` を追加。
+### Security — D2272: `Delivered-To:` の片側欠落宛名 (配達記録の addr-spec 違反) を検出 — `Envelope` に `delivered_to_atside` を追加。
+### Security — D2273: `X-Envelope-From:` 系の片側欠落宛名 (封書差出人記録の addr-spec 違反) を検出 — `Envelope` に `env_from_atside` を追加。
+### Security — D2274: `Errors-To:` の片側欠落宛名 (返送先記録の addr-spec 違反) を検出 — `Envelope` に `errors_to_atside` を追加。
+### Security — D2267: `X-Confirm-Reading-To:` の複数 `@` 値 (閲覧確認先記録の addr-spec 違反) を検出 — `Envelope` に `confirm_reading_atdup` を追加。
+### Security — D2268: `Resent-Reply-To:` の複数 `@` 値 (再送返信口記録の addr-spec 違反) を検出 — `Envelope` に `resent_reply_to_atdup` を追加。
+### Security — D2269: `Apparently-Resent-*` 系の複数 `@` 値 (再送残渣記録の addr-spec 違反) を検出 — `Envelope` に `apparently_resent_atdup` を追加。
+### Security — D2270: `X-Original-Rcpt-To:` 系の複数 `@` 値 (元受取人記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_rcpt_to_atdup` を追加。
+### Security — D2263: `X-Original-Cc:` の複数 `@` 値 (元副宛記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_cc_atdup` を追加。
+### Security — D2264: `X-Original-Reply-To:` の複数 `@` 値 (元返信口記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_reply_to_atdup` を追加。
+### Security — D2265: `Disposition-Notification-To:` の複数 `@` 値 (開封通知先記録の addr-spec 違反) を検出 — `Envelope` に `disposition_to_atdup` を追加。
+### Security — D2266: `Return-Receipt-To:` の複数 `@` 値 (受領通知先記録の addr-spec 違反) を検出 — `Envelope` に `return_receipt_atdup` を追加。
+### Security — D2259: `Apparently-To:` 系の複数 `@` 値 (見せ宛記録の addr-spec 違反) を検出 — `Envelope` に `apparently_to_atdup` を追加。
+### Security — D2260: `Apparently-From:`/`Apparently-Sender:` 系の複数 `@` 値 (表差出人記録の addr-spec 違反) を検出 — `Envelope` に `apparently_from_atdup` を追加。
+### Security — D2261: `X-Original-To:` の複数 `@` 値 (元宛先記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_to_atdup` を追加。
+### Security — D2262: `X-Original-From:` の複数 `@` 値 (元差出人記録の addr-spec 違反) を検出 — `Envelope` に `x_orig_from_atdup` を追加。
+### Security — D2255: `Envelope-To:` 系の複数 `@` 値 (封書宛先記録の addr-spec 違反) を検出 — `Envelope` に `env_to_atdup` を追加。
+### Security — D2256: `Delivered-To:` の複数 `@` 値 (配達記録の addr-spec 違反) を検出 — `Envelope` に `delivered_to_atdup` を追加。
+### Security — D2257: `X-Envelope-From:` 系の複数 `@` 値 (封書差出人記録の addr-spec 違反) を検出 — `Envelope` に `env_from_atdup` を追加。
+### Security — D2258: `Errors-To:` の複数 `@` 値 (返送先記録の addr-spec 違反) を検出 — `Envelope` に `errors_to_atdup` を追加。
+### Security — D2251: `X-Confirm-Reading-To:` のドット配置違反値 (閲覧確認先記録の dot-atom 違反) を検出 — `Envelope` に `confirm_reading_dotmal` を追加。
+### Security — D2252: `Resent-Reply-To:` のドット配置違反値 (再送返信口記録の dot-atom 違反) を検出 — `Envelope` に `resent_reply_to_dotmal` を追加。
+### Security — D2253: `Apparently-Resent-*` 系のドット配置違反値 (再送残渣記録の dot-atom 違反) を検出 — `Envelope` に `apparently_resent_dotmal` を追加。
+### Security — D2254: `X-Original-Rcpt-To:` 系のドット配置違反値 (元受取人記録の dot-atom 違反) を検出 — `Envelope` に `x_orig_rcpt_to_dotmal` を追加。
+### Security — D2247: `X-Original-Cc:` のドット配置違反値 (元副宛記録の dot-atom 違反) を検出 — `Envelope` に `x_orig_cc_dotmal` を追加。
+### Security — D2248: `X-Original-Reply-To:` のドット配置違反値 (元返信口記録の dot-atom 違反) を検出 — `Envelope` に `x_orig_reply_to_dotmal` を追加。
+### Security — D2249: `Disposition-Notification-To:` のドット配置違反値 (開封通知先記録の dot-atom 違反) を検出 — `Envelope` に `disposition_to_dotmal` を追加。
+### Security — D2250: `Return-Receipt-To:` のドット配置違反値 (受領通知先記録の dot-atom 違反) を検出 — `Envelope` に `return_receipt_dotmal` を追加。
+### Security — D2243: `Apparently-To:`/`X-Apparently-To:` のドット配置違反値 (見せ宛記録の dot-atom 違反) を検出 — `Envelope` に `apparently_to_dotmal` を追加。
+### Security — D2244: `Apparently-From:`/`Apparently-Sender:` 系のドット配置違反値 (表差出人記録の dot-atom 違反) を検出 — `Envelope` に `apparently_from_dotmal` を追加。
+### Security — D2245: `X-Original-To:` のドット配置違反値 (元宛先記録の dot-atom 違反) を検出 — `Envelope` に `x_orig_to_dotmal` を追加。
+### Security — D2246: `X-Original-From:` のドット配置違反値 (元差出人記録の dot-atom 違反) を検出 — `Envelope` に `x_orig_from_dotmal` を追加。
+### Security — D2239: `Envelope-To:`/`X-Envelope-To:` のドット配置違反値 (`a..b@x`/`a@.x` 形) を検出 — `Envelope` に `env_to_dotmal` を追加。
+### Security — D2240: `Delivered-To:` のドット配置違反値 (配達記録の dot-atom 違反) を検出 — `Envelope` に `delivered_to_dotmal` を追加。
+### Security — D2241: `X-Envelope-From:`/`X-MailFrom:` 系のドット配置違反値 (封書差出人記録の dot-atom 違反) を検出 — `Envelope` に `env_from_dotmal` を追加。
+### Security — D2242: `Errors-To:` のドット配置違反値 (返送先記録の dot-atom 違反) を検出 — `Envelope` に `errors_to_dotmal` を追加。
+### Security — D2235: `X-Confirm-Reading-To:` の空白入り宛名値 (閲覧確認先記録の空白形) を検出 — `Envelope` に `confirm_reading_spaced` を追加。
+### Security — D2236: `Resent-Reply-To:` の空白入り宛名値 (再送返信口記録の空白形) を検出 — `Envelope` に `resent_reply_to_spaced` を追加。
+### Security — D2237: `Apparently-Resent-*:` 系の空白入り宛名値 (再送残渣記録の空白形) を検出 — `Envelope` に `apparently_resent_spaced` を追加。
+### Security — D2238: `X-Original-Rcpt-To:` 系の空白入り宛名値 (元受取人記録の空白形) を検出 — `Envelope` に `x_orig_rcpt_to_spaced` を追加。
+### Security — D2231: `X-Original-Cc:` の空白入り宛名値 (元副宛記録の空白形) を検出 — `Envelope` に `x_orig_cc_spaced` を追加。
+### Security — D2232: `X-Original-Reply-To:` の空白入り宛名値 (元返信口記録の空白形) を検出 — `Envelope` に `x_orig_reply_to_spaced` を追加。
+### Security — D2233: `Disposition-Notification-To:` の空白入り宛名値 (開封通知先記録の空白形) を検出 — `Envelope` に `disposition_to_spaced` を追加。
+### Security — D2234: `Return-Receipt-To:` の空白入り宛名値 (受領通知先記録の空白形) を検出 — `Envelope` に `return_receipt_spaced` を追加。
+### Security — D2227: `Apparently-To:`/`X-Apparently-To:` の空白入り宛名値 (見せ宛記録の空白形) を検出 — `Envelope` に `apparently_to_spaced` を追加。
+### Security — D2228: `Apparently-From:`/`Apparently-Sender:` 系の空白入り宛名値 (表差出人記録の空白形) を検出 — `Envelope` に `apparently_from_spaced` を追加。
+### Security — D2229: `X-Original-To:` の空白入り宛名値 (元宛先記録の空白形) を検出 — `Envelope` に `x_orig_to_spaced` を追加。
+### Security — D2230: `X-Original-From:` の空白入り宛名値 (元差出人記録の空白形) を検出 — `Envelope` に `x_orig_from_spaced` を追加。
+### Security — D2223: `Envelope-To:`/`X-Envelope-To:` の空白入り宛名値 (`a @x` 形) を検出 — `Envelope` に `env_to_spaced` を追加。
+### Security — D2224: `Delivered-To:` の空白入り宛名値 (配達記録の空白形) を検出 — `Envelope` に `delivered_to_spaced` を追加。
+### Security — D2225: `X-Envelope-From:`/`X-MailFrom:` 系の空白入り宛名値 (封書差出人記録の空白形) を検出 — `Envelope` に `env_from_spaced` を追加。
+### Security — D2226: `Errors-To:` の空白入り宛名値 (返送先記録の空白形) を検出 — `Envelope` に `errors_to_spaced` を追加。
+### Security — D2219: `X-Confirm-Reading-To:` の括弧・引用囲い値 (閲覧確認先記録の囲い形) を検出 — `Envelope` に `confirm_reading_bracketed` を追加。
+### Security — D2220: `Resent-Reply-To:` の括弧・引用囲い値 (再送返信口記録の囲い形) を検出 — `Envelope` に `resent_reply_to_bracketed` を追加。
+### Security — D2221: `Apparently-Resent-*:` 系の括弧・引用囲い値 (再送残渣記録の囲い形) を検出 — `Envelope` に `apparently_resent_bracketed` を追加。
+### Security — D2222: `X-Original-Rcpt-To:` 系の括弧・引用囲い値 (元受取人記録の囲い形) を検出 — `Envelope` に `x_orig_rcpt_to_bracketed` を追加。
+### Security — D2215: `X-Original-Cc:` の括弧・引用囲い値 (元副宛記録の囲い形) を検出 — `Envelope` に `x_orig_cc_bracketed` を追加。
+### Security — D2216: `X-Original-Reply-To:` の括弧・引用囲い値 (元返信口記録の囲い形) を検出 — `Envelope` に `x_orig_reply_to_bracketed` を追加。
+### Security — D2217: `Disposition-Notification-To:` の括弧・引用囲い値 (開封通知先記録の囲い形) を検出 — `Envelope` に `disposition_to_bracketed` を追加。
+### Security — D2218: `Return-Receipt-To:` の括弧・引用囲い値 (受領通知先記録の囲い形) を検出 — `Envelope` に `return_receipt_bracketed` を追加。
+### Security — D2211: `Apparently-To:` 系の括弧・引用囲い値 (見せ宛記録の囲い形) を検出 — `Envelope` に `apparently_to_bracketed` を追加。
+### Security — D2212: `Apparently-From:`/`Apparently-Sender:` 系の括弧・引用囲い値 (表差出人記録の囲い形) を検出 — `Envelope` に `apparently_from_bracketed` を追加。
+### Security — D2213: `X-Original-To:` の括弧・引用囲い値 (元宛先記録の囲い形) を検出 — `Envelope` に `x_orig_to_bracketed` を追加。
+### Security — D2214: `X-Original-From:` の括弧・引用囲い値 (元差出人記録の囲い形) を検出 — `Envelope` に `x_orig_from_bracketed` を追加。
+### Security — D2207: `Envelope-To:` 系の括弧・引用囲い値 (生宛名記録の囲い形) を検出 — `Envelope` に `env_to_bracketed` を追加。
+### Security — D2208: `Delivered-To:` の括弧・引用囲い値 (配達記録の囲い形) を検出 — `Envelope` に `delivered_to_bracketed` を追加。
+### Security — D2209: `X-Envelope-From:` 系の括弧・引用囲い値 (封書差出人記録の囲い形) を検出 — `Envelope` に `env_from_bracketed` を追加。
+### Security — D2210: `Errors-To:` の括弧・引用囲い値 (返送先記録の囲い形) を検出 — `Envelope` に `errors_to_bracketed` を追加。
+### Security — D2203: `X-Confirm-Reading-To:` の複数値 (閲覧確認先記録のカンマ連結値) を検出 — `Envelope` に `confirm_reading_addr_list` を追加。
+### Security — D2204: `Resent-Reply-To:` の複数値 (再送返信口記録のカンマ連結値) を検出 — `Envelope` に `resent_reply_to_addr_list` を追加。
+### Security — D2205: `Apparently-Resent-*:` 系の複数値 (再送残渣記録のカンマ連結値) を検出 — `Envelope` に `apparently_resent_addr_list` を追加。
+### Security — D2206: `X-Original-Rcpt-To:` 系の複数値 (元受取人記録のカンマ連結値) を検出 — `Envelope` に `x_orig_rcpt_to_addr_list` を追加。
+### Security — D2199: `X-Original-Cc:` の複数値 (元副宛記録のカンマ連結値) を検出 — `Envelope` に `x_orig_cc_addr_list` を追加。
+### Security — D2200: `X-Original-Reply-To:` の複数値 (元返信口記録のカンマ連結値) を検出 — `Envelope` に `x_orig_reply_to_addr_list` を追加。
+### Security — D2201: `Disposition-Notification-To:` の複数値 (開封通知先記録のカンマ連結値) を検出 — `Envelope` に `disposition_to_addr_list` を追加。
+### Security — D2202: `Return-Receipt-To:` の複数値 (受領通知先記録のカンマ連結値) を検出 — `Envelope` に `return_receipt_addr_list` を追加。
+### Security — D2195: `Apparently-To:` 系の複数値 (見せ宛記録のカンマ連結値) を検出 — `Envelope` に `apparently_to_addr_list` を追加。
+### Security — D2196: `Apparently-From:`/`Apparently-Sender:` 系の複数値 (表差出人記録のカンマ連結値) を検出 — `Envelope` に `apparently_from_addr_list` を追加。
+### Security — D2197: `X-Original-To:` の複数値 (元宛先記録のカンマ連結値) を検出 — `Envelope` に `x_orig_to_addr_list` を追加。
+### Security — D2198: `X-Original-From:` の複数値 (元差出人記録のカンマ連結値) を検出 — `Envelope` に `x_orig_from_addr_list` を追加。
+### Security — D2191: `Envelope-To:` 系の複数値 (封書宛先記録のカンマ連結値) を検出 — `Envelope` に `env_to_addr_list` を追加。
+### Security — D2192: `Delivered-To:` の複数値 (配達記録のカンマ連結値) を検出 — `Envelope` に `delivered_to_addr_list` を追加。
+### Security — D2193: 封書差出人記録欄 (`X-Envelope-From:`/`X-MailFrom:` 等) の複数値を検出 — `Envelope` に `env_from_addr_list` を追加。
+### Security — D2194: `Errors-To:` の複数値 (返送先記録のカンマ連結値) を検出 — `Envelope` に `errors_to_addr_list` を追加。
+### Security — D2187: `Delivered-To:` の宛名でない値 (配達記録の非宛名値) を検出 — `Envelope` に `delivered_to_non_addr` を追加。
+### Security — D2188: `Errors-To:` の宛名でない値 (返送先記録の非宛名値) を検出 — `Envelope` に `errors_to_non_addr` を追加。
+### Security — D2189: `X-Original-Rcpt-To:` 系の宛名でない値 (元受取人記録の非宛名値) を検出 — `Envelope` に `x_orig_rcpt_to_non_addr` を追加。
+### Security — D2190: `Apparently-Resent-*:` 系の宛名でない値 (再送残渣の非宛名値) を検出 — `Envelope` に `apparently_resent_non_addr` を追加。
+### Security — D2183: `Disposition-Notification-To:` の宛名でない値 (開封通知先の非宛名値) を検出 — `Envelope` に `disposition_to_non_addr` を追加。
+### Security — D2184: `Return-Receipt-To:` の宛名でない値 (受領通知先の非宛名値) を検出 — `Envelope` に `return_receipt_to_non_addr` を追加。
+### Security — D2185: `X-Confirm-Reading-To:` の宛名でない値 (閲覧確認先の非宛名値) を検出 — `Envelope` に `confirm_reading_non_addr` を追加。
+### Security — D2186: `Resent-Reply-To:` の宛名でない値 (再送返信口の非宛名値) を検出 — `Envelope` に `resent_reply_to_non_addr` を追加。
+### Security — D2179: `X-Original-To:` の宛名でない値 (元宛先記録の非宛名値) を検出 — `Envelope` に `x_orig_to_non_addr` を追加。
+### Security — D2180: `X-Original-From:` の宛名でない値 (元差出人記録の非宛名値) を検出 — `Envelope` に `x_orig_from_non_addr` を追加。
+### Security — D2181: `X-Original-Cc:` の宛名でない値 (元副宛先記録の非宛名値) を検出 — `Envelope` に `x_orig_cc_non_addr` を追加。
+### Security — D2182: `X-Original-Reply-To:` の宛名でない値 (元返信口記録の非宛名値) を検出 — `Envelope` に `x_orig_reply_to_non_addr` を追加。
+### Security — D2175: `Envelope-To:` 系の宛名でない値 (封書宛先記録の非宛名値) を検出 — `Envelope` に `env_to_non_addr` を追加。
+### Security — D2176: `Apparently-To:` 系の宛名でない値 (見せ宛記録の非宛名値) を検出 — `Envelope` に `apparently_to_non_addr` を追加。
+### Security — D2177: 封書差出人記録欄 (`X-Envelope-From:`/`X-MailFrom:` 等) の宛名でない値を検出 — `Envelope` に `env_from_non_addr` を追加。
+### Security — D2178: `Apparently-From:`/`Apparently-Sender:` 系の宛名でない値 (表差出人記録の非宛名値) を検出 — `Envelope` に `apparently_from_non_addr` を追加。
+### Security — D2171: `Authentication-Results:` 系の空値 (認証結果欄の空欄) を検出 — `Envelope` に `auth_results_empty` を追加。
+### Security — D2172: `DKIM-Signature:` の空値 (署名欄の空欄) を検出 — `Envelope` に `dkim_sig_empty` を追加。
+### Security — D2173: `Received-SPF:` の空値 (SPF判定欄の空欄) を検出 — `Envelope` に `received_spf_empty` を追加。
+### Security — D2174: 優先度欄 (`X-Priority:`/`X-MSMail-Priority:`/`Priority:`/`Importance:`) の空値を検出 — `Envelope` に `priority_headers_empty` を追加。
+### Security — D2167: `X-Original-To-Headers:` の空値 (元宛先欄記録の空欄) を検出 — `Envelope` に `x_orig_to_headers_empty` を追加。
+### Security — D2168: `X-Original-Rcpt-To:` 系の空値 (元受取人記録の空欄) を検出 — `Envelope` に `x_orig_rcpt_to_empty` を追加。
+### Security — D2169: `X-Original-Authentication-Results:` の空値 (元認証結果記録の空欄) を検出 — `Envelope` に `x_orig_ar_empty` を追加。
+### Security — D2170: `X-OriginalArrivalTime:` 系の空値 (元到着時刻記録の空欄) を検出 — `Envelope` に `x_orig_arrival_empty` を追加。
+### Security — D2163: `X-Original-Bcc:` の空値 (元隠し宛先記録の空欄) を検出 — `Envelope` に `x_orig_bcc_empty` を追加。
+### Security — D2164: `Fcc:`/`X-Fcc:` の空値 (送信控え欄の空欄) を検出 — `Envelope` に `fcc_empty` を追加。
+### Security — D2165: `X-Forwarded-*` 群の空値 (転送元記録の空欄) を検出 — `Envelope` に `x_forwarded_empty` を追加。
+### Security — D2166: `Apparently-Resent-*` 群の空値 (再送残渣記録の空欄) を検出 — `Envelope` に `apparently_resent_empty` を追加。
+### Security — D2159: `X-Original-Cc:` の空値 (元副宛先記録の空欄) を検出 — `Envelope` に `x_orig_cc_empty` を追加。
+### Security — D2160: `X-Original-Reply-To:` の空値 (元返信口記録の空欄) を検出 — `Envelope` に `x_orig_reply_to_empty` を追加。
+### Security — D2161: `X-Original-Date:` の空値 (元日時記録の空欄) を検出 — `Envelope` に `x_orig_date_empty` を追加。
+### Security — D2162: `X-Original-References:` の空値 (元糸参照記録の空欄) を検出 — `Envelope` に `x_orig_refs_empty` を追加。
+### Security — D2155: `X-Original-To:` の空値 (元受取人記録の空欄) を検出 — `Envelope` に `x_orig_to_empty` を追加。
+### Security — D2156: `X-Original-From:` の空値 (元差出人記録の空欄) を検出 — `Envelope` に `x_orig_from_empty` を追加。
+### Security — D2157: `X-Original-Message-ID:` の空値 (元識別子記録の空欄) を検出 — `Envelope` に `x_orig_msgid_empty` を追加。
+### Security — D2158: `X-Original-Subject:` の空値 (元件名記録の空欄) を検出 — `Envelope` に `x_orig_subject_empty` を追加。
+### Security — D2151: `Disposition-Notification-To:` の空値 (開封通知要求先の空欄) を検出 — `Envelope` に `disposition_to_empty` を追加。
+### Security — D2152: `Return-Receipt-To:` の空値 (旧式受領通知要求先の空欄) を検出 — `Envelope` に `return_receipt_to_empty` を追加。
+### Security — D2153: `X-Confirm-Reading-To:` の空値 (旧式閲覧確認要求先の空欄) を検出 — `Envelope` に `confirm_reading_empty` を追加。
+### Security — D2154: `Resent-Reply-To:` の空値 (旧式再送返信口の空欄) を検出 — `Envelope` に `resent_reply_to_empty` を追加。
+### Security — D2147: `Envelope-To:`/`X-Envelope-To:` の空値 (封書受取人記録の空欄) を検出 — `Envelope` に `env_to_empty` を追加。
+### Security — D2148: `Apparently-To:`/`X-Apparently-To:` の空値 (見せかけ宛先記録の空欄) を検出 — `Envelope` に `apparently_to_empty` を追加。
+### Security — D2149: `X-Envelope-From:` 等エンベロープ差出人記録欄の空値 (封書差出人記録の空欄) を検出 — `Envelope` に `env_from_empty` を追加。
+### Security — D2150: `Apparently-From:`/`Apparently-Sender:` 系の空値 (表差出人記録の空欄) を検出 — `Envelope` に `apparently_from_empty` を追加。
+### Security — D2143: `Disposition-Notification-To:` の重複出現 (開封通知要求先の多重化) を検出 — `Envelope` に `multi_disposition_to` を追加。
+### Security — D2144: `Return-Receipt-To:` の重複出現 (旧式受領通知要求先の多重化) を検出 — `Envelope` に `multi_return_receipt_to` を追加。
+### Security — D2145: `X-Confirm-Reading-To:` の重複出現 (旧式閲覧確認要求先の多重化) を検出 — `Envelope` に `multi_confirm_reading` を追加。
+### Security — D2146: `Resent-Reply-To:` の重複出現 (旧式再送返信口の多重化) を検出 — `Envelope` に `multi_resent_reply_to` を追加。
+### Security — D2139: `X-Original-Cc:` の重複出現 (元副宛先書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_cc` を追加。
+### Security — D2140: `X-Original-Reply-To:` の重複出現 (元返信口書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_reply_to` を追加。
+### Security — D2141: `X-Original-Date:` の重複出現 (元日時書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_date` を追加。
+### Security — D2142: `X-Original-References:` の重複出現 (元糸参照書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_refs` を追加。
+### Security — D2135: `X-Original-To:` の重複出現 (元宛先書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_to` を追加。
+### Security — D2136: `X-Original-From:` の重複出現 (元差出人書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_from` を追加。
+### Security — D2137: `X-Original-Message-ID:` の重複出現 (元識別子書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_msgid` を追加。
+### Security — D2138: `X-Original-Subject:` の重複出現 (元件名書き換え記録の多重化) を検出 — `Envelope` に `multi_x_orig_subject` を追加。
+### Security — D2131: `Envelope-To:`/`X-Envelope-To:` の重複出現 (封書受取人記録の多重化で先頭/末尾/一覧読みが分かれる形) を検出 — `Envelope` に `multi_env_to` を追加。
+### Security — D2132: `Apparently-To:`/`X-Apparently-To:` の重複出現 (見せかけ宛先記録の多重化) を検出 — `Envelope` に `multi_apparently_to` を追加。
+### Security — D2133: `X-Envelope-From:` 等エンベロープ差出人記録欄の重複出現 (封書差出人記録の多重化) を検出 — `Envelope` に `multi_env_from` を追加。
+### Security — D2134: `Apparently-From:`/`Apparently-Sender:` 系の重複出現 (sendmail 差出人記録の多重化) を検出 — `Envelope` に `multi_apparently_from` を追加。
+### Security — D2127: `Return-Path:` と `X-Envelope-From:` 等のエンベロープ差出人記録の不一致アドレス (二つの配送記録の食い違い) を検出 — `Envelope` に `return_path_differs_env_from` を追加。
+### Security — D2128: `Return-Path:` と `Apparently-From:`/`Apparently-Sender:` 系の不一致アドレス (返送先と sendmail 差出人記録の食い違い) を検出 — `Envelope` に `return_path_differs_apparently_from` を追加。
+### Security — D2129: `X-Envelope-From:` 等のエンベロープ差出人記録と `Apparently-From:` 系の不一致アドレス (二つの差出人記録の食い違い) を検出 — `Envelope` に `env_from_differs_apparently_from` を追加。
+### Security — D2130: `X-Original-From:` と `X-Envelope-From:` 等のエンベロープ差出人記録の不一致アドレス (元差出人記録と封書記録の食い違い) を検出 — `Envelope` に `x_orig_from_differs_env_from` を追加。
+### Security — D2123: `X-Original-To:` と `Apparently-To:` の不一致アドレス (二つの「元の受取人」記録の食い違い) を検出 — `Envelope` に `x_orig_to_differs_apparently_to` を追加。
+### Security — D2124: `X-Original-To:` と `Envelope-To:` の不一致アドレス (エイリアス展開記録とエンベロープ記録の食い違い) を検出 — `Envelope` に `x_orig_to_differs_envelope_to` を追加。
+### Security — D2125: `Envelope-To:` と `Delivered-To:` の不一致アドレス (エンベロープ記録と最終配達記録の食い違い) を検出 — `Envelope` に `envelope_to_differs_delivered_to` を追加。
+### Security — D2126: `Envelope-To:` と `Apparently-To:` の不一致アドレス (エンベロープ記録と見せかけ宛先記録の食い違い) を検出 — `Envelope` に `envelope_to_differs_apparently_to` を追加。
+### Security — D2119: `X-Original-Sender:` と `Sender:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_sender_same_as_sender` を追加。
+### Security — D2120: `X-Original-Cc:` と `Cc:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_cc_same_as_cc` を追加。
+### Security — D2121: `X-Original-Reply-To:` と `Reply-To:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_reply_to_same_as_reply_to` を追加。
+### Security — D2122: `X-Original-References:` と `References:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_refs_same_as_refs` を追加。
+### Security — D2115: `X-Original-From:` と `From:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_from_same_as_from` を追加。
+### Security — D2116: `X-Original-Subject:` と `Subject:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_subject_same_as_subject` を追加。
+### Security — D2117: `X-Original-Message-ID:` と `Message-ID:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_msgid_same_as_msgid` を追加。
+### Security — D2118: `X-Original-Date:` と `Date:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_date_same_as_date` を追加。
+### Security — D2111: `Fcc:`/`X-Fcc:` (差出控えの格納欄の残渣) を検出 — `Envelope` に `fcc_mark` を追加。
+### Security — D2112: `X-Forwarded-*` 群 (転送元情報の残渣欄) を検出 — `Envelope` に `forwarded_marks` を追加。
+### Security — D2113: `Apparently-To:`/`X-Apparently-To:` と `To:` の一致 (受取欄不在時のみ記されるべき記録の矛盾) を検出 — `Envelope` に `apparently_to_same_as_to` を追加。
+### Security — D2114: `X-Original-To:` と `To:` の一致 (書き換えたはずの記録の矛盾) を検出 — `Envelope` に `x_orig_to_same_as_to` を追加。
+### Security — D2107: `Apparently-Resent-To:`/`Apparently-Resent-From:`/`Apparently-Resent-Sender:` (sendmail 再送モードの残渣欄) を検出 — `Envelope` に `apparently_resent_marks` を追加。
+### Security — D2108: `X-Original-Bcc:` (改変前の隠し宛先の記録欄露出) を検出 — `Envelope` に `x_orig_bcc_mark` を追加。
+### Security — D2109: `X-Original-Cc:` (改変前の副宛先の記録欄露出) を検出 — `Envelope` に `x_orig_cc_mark` を追加。
+### Security — D2110: `X-Original-Reply-To:` (改変前の返信口の記録欄露出) を検出 — `Envelope` に `x_orig_reply_to_mark` を追加。
+### Security — D2103: `X-Envelope-From:`/`X-Original-Sender:` 等のエンベロープ差出人記録と `From:` の不一致アドレスを検出 — `Envelope` に `env_from_differs_from` を追加。
+### Security — D2104: `Apparently-From:`/`Apparently-Sender:` 等の sendmail 差出人記録と `From:` の不一致アドレスを検出 — `Envelope` に `apparently_from_differs_from` を追加。
+### Security — D2105: `Return-Receipt-To:` と `Reply-To:` の不一致アドレス (受領通知が返信口と別口へ向かう追跡ループ) を検出 — `Envelope` に `rrt_differs_reply_to` を追加。
+### Security — D2106: `X-Confirm-Reading-To:` と `Reply-To:` の不一致アドレス (閲覧確認が返信口と別口へ向かう追跡ループ) を検出 — `Envelope` に `xrt_differs_reply_to` を追加。
+### Security — D2099: `Apparently-To:` と `To:` の不一致アドレス (実受取人記録と宛先欄の分離) を検出 — `Envelope` に `apparently_to_differs_to` を追加。
+### Security — D2100: `Apparently-To:` と `Delivered-To:` の不一致アドレス (sendmail 記録と MTA 配達記録の食い違い) を検出 — `Envelope` に `apparently_to_differs_delivered_to` を追加。
+### Security — D2101: `X-Original-To:` と `Delivered-To:` の不一致アドレス (エイリアス展開記録と最終配達記録の食い違い) を検出 — `Envelope` に `x_orig_to_differs_delivered_to` を追加。
+### Security — D2102: `Resent-Reply-To:` と `Reply-To:` の不一致アドレス (旧式再送返信欄と現返信口の食い違い) を検出 — `Envelope` に `resent_reply_to_differs_reply_to` を追加。
+### Security — D2095: `Disposition-Notification-To:` と `From:` の不一致アドレス (開封通知が別の受取口へ向かう追跡ループ) を検出 — `Envelope` に `dnt_differs_from` を追加。
+### Security — D2096: `Return-Receipt-To:` と `From:` の不一致アドレス (旧式受領通知が別の受取口へ向かう追跡ループ) を検出 — `Envelope` に `rrt_differs_from` を追加。
+### Security — D2097: `X-Confirm-Reading-To:` と `From:` の不一致アドレス (旧式閲覧確認が別の受取口へ向かう追跡ループ) を検出 — `Envelope` に `xrt_differs_from` を追加。
+### Security — D2098: `Disposition-Notification-To:` と `Reply-To:` の不一致アドレス (開封通知が返信口と別口へ向かう追跡ループ) を検出 — `Envelope` に `dnt_differs_reply_to` を追加。
+### Security — D2091: `X-Original-To:` と `To:` の不一致アドレス (エイリアス展開前の元受取人記録と表示宛先の分離) を検出 — `Envelope` に `x_orig_to_differs` を追加。
+### Security — D2092: `X-Original-Cc:` と `Cc:` の不一致アドレス (元の副宛先記録と表示副宛先の分離) を検出 — `Envelope` に `x_orig_cc_differs` を追加。
+### Security — D2093: `X-Original-Sender:` と `Sender:` の不一致アドレス (元の代行記録と表示代行者の分離) を検出 — `Envelope` に `x_orig_sender_differs` を追加。
+### Security — D2094: `X-Original-References:` と `References:` の不一致値 (元の糸参照記録と現参照一覧の分離) を検出 — `Envelope` に `x_orig_refs_differs` を追加。
+### Security — D2087: `X-Original-From:` と `From:` の不一致アドレス (元の差出人記録と表示差出人の分離) を検出 — `Envelope` に `x_orig_from_differs` を追加。
+### Security — D2088: `X-Original-Subject:` と `Subject:` の不一致値 (元の件名記録と表示件名の分離) を検出 — `Envelope` に `x_orig_subject_differs` を追加。
+### Security — D2089: `X-Original-Message-ID:` と `Message-ID:` の不一致識別子 (元の識別子記録と現識別子の分離) を検出 — `Envelope` に `x_orig_msgid_differs` を追加。
+### Security — D2090: `X-Original-Date:` と `Date:` の不一致値 (元の日時記録と表示日時の分離) を検出 — `Envelope` に `x_orig_date_differs` を追加。
+### Security — D2083: `Delivered-To:` と `From:` の同一アドレス (自分へ戻る配送) を検出 — `Envelope` に `delivered_to_same_as_from` を追加。
+### Security — D2084: `Delivered-To:` と `Reply-To:` の同一アドレス (宛名・返信口・実配の畳み) を検出 — `Envelope` に `delivered_to_same_as_reply_to` を追加。
+### Security — D2085: `Envelope-To:`/`X-Envelope-To:` と `Cc:` の同一アドレスを検出 — `Envelope` に `envelope_to_same_as_cc` を追加 (`delivered_to_same_as_cc` の派生欄版)。
+### Security — D2086: `Delivered-To:` と `Sender:` の同一アドレス (代行宛の配送) を検出 — `Envelope` に `delivered_to_same_as_sender` を追加。
+### Security — D2079: `Delivered-To:` と `To:` の相違アドレス (宛名の化粧) を検出 — `Envelope` に `delivered_to_differs_to` を追加。
+### Security — D2080: `Envelope-To:`/`X-Envelope-To:` と `To:` の相違アドレスを検出 — `Envelope` に `envelope_to_differs_to` を追加 (`delivered_to_differs_to` の派生欄版)。
+### Security — D2081: `Delivered-To:` と `Cc:` の同一アドレス (実配達先が副宛) を検出 — `Envelope` に `delivered_to_same_as_cc` を追加。
+### Security — D2082: `Return-Path:` と `From:` の相違アドレス (返送先と表示差出人の分離) を検出 — `Envelope` に `return_path_differs_from` を追加。
+### Security — D2075: `Reply-To:` と `Cc:` の同一アドレス (副宛への返信) を検出 — `Envelope` に `reply_to_same_as_cc` を追加。
+### Security — D2076: `Sender:` と `To:` の同一アドレス (宛先と同一の代行) を検出 — `Envelope` に `sender_same_as_to` を追加。
+### Security — D2077: `Sender:` と `Cc:` の同一アドレス (副宛と同一の代行) を検出 — `Envelope` に `sender_same_as_cc` を追加。
+### Security — D2078: `From:` と `Cc:` の同一アドレス (副宛と同一の差出人) を検出 — `Envelope` に `from_same_as_cc` を追加。
+### Security — D2071: `To:` と `Cc:` の同一アドレス (受取役割の重複) を検出 — `Envelope` に `to_same_as_cc` を追加 (`same_addr_dup` の欄間版)。
+### Security — D2072: `Reply-To:` と `To:` の同一アドレス (受取人への返信ループ) を検出 — `Envelope` に `reply_to_same_as_to` を追加。
+### Security — D2073: `From:` と `To:` の同一アドレス (自己送信) を検出 — `Envelope` に `from_same_as_to` を追加。
+### Security — D2074: `Reply-To:` と `Sender:` の同一アドレス (代行への返信) を検出 — `Envelope` に `reply_to_same_as_sender` を追加。
+### Security — D2067: `Resent-Cc:` と `To:` の同一アドレス (主宛先の副宛への降格) を検出 — `Envelope` に `resent_cc_same_as_to` を追加 (`resent_to_same_as_cc` の逆方向)。
+### Security — D2068: `Resent-Cc:` と `From:` の同一アドレス (差出人宛の副宛再送) を検出 — `Envelope` に `resent_cc_same_as_from` を追加 (`resent_to_same_as_from` の副宛版)。
+### Security — D2069: `Resent-To:` と `Resent-Sender:` の同一アドレス (再送代行宛の再送) を検出 — `Envelope` に `resent_to_same_as_resent_sender` を追加。
+### Security — D2070: `Resent-Cc:` と `Resent-Sender:` の同一アドレスを検出 — `Envelope` に `resent_cc_same_as_resent_sender` を追加。
+### Security — D2063: `Resent-To:` と `Resent-From:` の同一アドレス (自己への再送) を検出 — `Envelope` に `resent_to_same_as_resent_from` を追加。
+### Security — D2064: `Resent-Cc:` と `Resent-From:` の同一アドレスを検出 — `Envelope` に `resent_cc_same_as_resent_from` を追加。
+### Security — D2065: `Resent-Sender:` と `Resent-From:` の同一アドレス (再送ブロック内の冗長代行) を検出 — `Envelope` に `resent_sender_same_as_resent_from` を追加 (`from_sender_dup` の再送版)。
+### Security — D2066: `Resent-Cc:` と `Resent-To:` の同一アドレス (再送ブロック内の役割重複) を検出 — `Envelope` に `resent_cc_same_as_resent_to` を追加。
+### Security — D2059: `Resent-Cc:` と `Cc:` の同一アドレスを検出 — `Envelope` に `resent_cc_same_as_cc` を追加 (再送同一値系の補完)。
+### Security — D2060: `Resent-To:` と `Cc:` の同一アドレス (副宛先の格上げ) を検出 — `Envelope` に `resent_to_same_as_cc` を追加。
+### Security — D2061: `Resent-From:` と `Sender:` の同一アドレスを検出 — `Envelope` に `resent_from_same_as_sender` を追加。
+### Security — D2062: `Resent-Sender:` と `From:` の同一アドレスを検出 — `Envelope` に `resent_sender_same_as_from` を追加。
+### Security — D2055: `Resent-To:` と `To:` の同一アドレスを検出 — `Envelope` に `resent_to_same_as_to` を追加 (`resent_from_same_as_from` の補完)。
+### Security — D2056: `Resent-To:` と `From:` の同一アドレス (差出人への再送) を検出 — `Envelope` に `resent_to_same_as_from` を追加。
+### Security — D2057: `Resent-Sender:` と `Sender:` の同一アドレスを検出 — `Envelope` に `resent_sender_same_as_sender` を追加。
+### Security — D2058: `Resent-Date:` と `Date:` の同一値を検出 — `Envelope` に `resent_date_same_as_date` を追加。
+### Security — D2051: `Sender:` と `From:` の同一アドレスを検出 — `Envelope` に `from_sender_dup` を追加 (`sender_no_from` の補完)。
+### Security — D2052: `Reply-To:` と `From:` の同一アドレスを検出 — `Envelope` に `reply_to_same_as_from` を追加 (複数値の `multi_reply_to` の補完)。
+### Security — D2053: `In-Reply-To:` あるのに `References:` 無しを検出 — `Envelope` に `irt_no_refs` を追加 (糸参照値異常の `refs_*` 系の補完)。
+### Security — D2054: `Resent-From:` と `From:` の同一アドレスを検出 — `Envelope` に `resent_from_same_as_from` を追加 (`resent_msgid_same` の補完)。
+### Security — D2047: `Resent-*` ブロックの `Resent-Message-ID:` 欠落を検出 — `Envelope` に `resent_no_msgid` を追加 (必須欄欠落の D1476・受取欄欠落の D2045 の補完)。
+### Security — D2048: msgid 系欄の大小文字違いの同一識別子反復を検出 — `Envelope` に `msgid_case_variant_pair` を追加 (完全一致反復の D2038・refs 側の D1697 の補完)。
+### Security — D2049: 外側メッセージ欄の `Content-ID:` を検出 — `Envelope` に `content_id_top` を追加 (部品側異常の D1532・重複の D1369・参照先欠落の D1467 の補完)。
+### Security — D2050: 宛先系欄の宛先数過剰 (50 件超) を検出 — `Envelope` に `to_many_addrs` を追加 (空要素の D1366・宛先欠落の D1417 の補完)。
+### Security — D2046: 非規格 `Resent-*` 欄名を検出 — `Envelope` に `resent_unknown_field` を追加 (D2042 `resent_reply_to` の補完)。
+### Security — D2039: `References:` 末尾識別子と `In-Reply-To:` の食い違いを検出 — `Envelope` に `refs_irt_conflict` を追加 (糸参照系 D1449/`malformed_thread_refs` の補完)。
+### Withdrawn — D2040: `refs_self_reference` は既存 D1379 `self_reply_ref` と同一仕様のため撤回 (重複検出器を除去)。
+### Security — D2041: `Resent-Message-ID:` と `Message-ID:` の同一識別子を検出 — `Envelope` に `resent_msgid_same` を追加 (D1476 `incomplete_resent`・D1428 `resent_bcc` の補完)。
+### Security — D2042: 旧式欄 `Resent-Reply-To:` の残存を検出 — `Envelope` に `resent_reply_to` を追加 (Resent 系 D1476/D1428 の補完)。
+### Security — D2038: `Message-ID:` 系欄 (refs 以外) の同一 `<id>` 反復を検出 — `Envelope` に `msgid_dup_pair` を追加 (`msgid_ref_dup`/`multi_inreply` と役割分担)。
+### Security — D2037: `Message-ID:` 系欄の値が完全に空を検出 — `Envelope` に `msgid_empty_value` を追加 (裸値は `msgid_no_angle`/`bare_msgid_ref`)。
+### Security — D2036: `Message-ID:` 系欄の `<a> w <b>` 対間の語を検出 — `Envelope` に `msgid_word_between_angles` を追加 (In-Reply-To は `multi_inreply`、末尾残滓は `junk_after_angle`)。
+### Security — D2035: `Message-ID:` 系欄 (refs 以外) の `<a><b>` 連結を検出 — `Envelope` に `msgid_adjacent_angles` を追加 (References は `refs_adjacent_angles`、In-Reply-To は `multi_inreply`)。
 ### Security — D2034: `Message-ID:` 系欄の `<…>` 内側の非隣接 `<` を検出 — `Envelope` に `msgid_inner_lt` を追加 (`<<` 直結は `nested_msgid`)。
 ### Security — D2033: `Message-ID:` 系欄の `<…>` 内側の `;` を検出 — `Envelope` に `msgid_inner_semi` を追加 (内側の `|`/`\`/`?`/`&`/`'`/`=`/`:`/`/`/`,` は `msgid_bad_char`)。
 ### Security — D2032: `Message-ID:` 系欄の `<…>` 内側の `}` を検出 — `Envelope` に `msgid_inner_rbrace` を追加 (同上)。
