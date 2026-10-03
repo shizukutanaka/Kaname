@@ -8117,6 +8117,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_rcpt_to_qmark {
         render_risks.push("元受取人記録の宛名に疑問符です—疑問符の扱いで元受取人がずれます".to_string());
     }
+    if env.confirm_reading_plus {
+        render_risks.push("閲覧確認先記録の宛名ドメインにプラスです—プラスの扱いで閲覧確認先がずれます".to_string());
+    }
+    if env.resent_reply_to_plus {
+        render_risks.push("再送返信口記録の宛名ドメインにプラスです—プラスの扱いで再送返信口がずれます".to_string());
+    }
+    if env.apparently_resent_plus {
+        render_risks.push("再送残渣記録の宛名ドメインにプラスです—プラスの扱いで再送宛がずれます".to_string());
+    }
+    if env.x_orig_rcpt_to_plus {
+        render_risks.push("元受取人記録の宛名ドメインにプラスです—プラスの扱いで元受取人がずれます".to_string());
+    }
     if env.apparently_to_rparen {
         render_risks.push("見せ宛記録の宛名に逆括弧です—括弧閉じの扱いで見せ宛がずれます".to_string());
     }
