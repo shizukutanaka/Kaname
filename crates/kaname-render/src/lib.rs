@@ -51944,6 +51944,11 @@ pub fn has_errors_to_eq(raw: &[u8]) -> bool {
             && v.split_whitespace().count() == 1
     })
 }
+/// `Envelope-To:`/`X-Envelope-To:` の値が開き波括弧宛名形か判定する
+/// (D2527)。
+///
+/// 封書宛先を記す欄なのに `a@x{` のようにドメイン側に孤立 `{` を含む宛名
+/// — 開き波括弧の扱いをずらす実装と構文違反として拒否する実装で封
 /// 書宛先がずれる (アドレス欄側も未検出)。
 #[must_use]
 pub fn has_env_to_lbrace(raw: &[u8]) -> bool {
