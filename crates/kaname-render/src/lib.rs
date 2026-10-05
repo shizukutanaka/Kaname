@@ -2676,6 +2676,14 @@ pub struct Envelope {
     pub disposition_to_plus: bool,
     /// `Return-Receipt-To:` の値がプラス宛名 (D2506 — 受領通知先ずれ)。
     pub return_receipt_plus: bool,
+    /// `X-Original-Cc:` の値がイコール宛名 (D2519 — 元副宛ずれ)。
+    pub x_orig_cc_eq: bool,
+    /// `X-Original-Reply-To:` の値がイコール宛名 (D2520 — 元返信口ずれ)。
+    pub x_orig_reply_to_eq: bool,
+    /// `Disposition-Notification-To:` の値がイコール宛名 (D2521 — 開封通知先ずれ)。
+    pub disposition_to_eq: bool,
+    /// `Return-Receipt-To:` の値がイコール宛名 (D2522 — 受領通知先ずれ)。
+    pub return_receipt_eq: bool,
     /// `Envelope-To:`/`X-Envelope-To:` 系の値が逆斜線宛名 (D2395 — 封書宛先ずれ)。
     pub env_to_bslash: bool,
     /// `Delivered-To:` の値が逆斜線宛名 (D2396 — 配達履歴ずれ)。
@@ -2748,6 +2756,14 @@ pub struct Envelope {
     pub env_from_eq: bool,
     /// `Errors-To:` の値がイコール宛名 (D2514 — 返送先ずれ)。
     pub errors_to_eq: bool,
+    /// `Envelope-To:`/`X-Envelope-To:` 系の値が縦線宛名 (D2559 — 封書宛先ずれ)。
+    pub env_to_pipe: bool,
+    /// `Delivered-To:` の値が縦線宛名 (D2560 — 配達記録ずれ)。
+    pub delivered_to_pipe: bool,
+    /// `X-Envelope-From:`/`X-MailFrom:` 等の値が縦線宛名 (D2561 — 封書差出人ずれ)。
+    pub env_from_pipe: bool,
+    /// `Errors-To:` の値が縦線宛名 (D2562 — 返送先ずれ)。
+    pub errors_to_pipe: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -6191,6 +6207,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_plus = has_x_orig_reply_to_plus(bytes);
     let disposition_to_plus = has_disposition_to_plus(bytes);
     let return_receipt_plus = has_return_receipt_plus(bytes);
+    let x_orig_cc_eq = has_x_orig_cc_eq(bytes);
+    let x_orig_reply_to_eq = has_x_orig_reply_to_eq(bytes);
+    let disposition_to_eq = has_disposition_to_eq(bytes);
+    let return_receipt_eq = has_return_receipt_eq(bytes);
     let env_to_bslash = has_env_to_bslash(bytes);
     let delivered_to_bslash = has_delivered_to_bslash(bytes);
     let env_from_bslash = has_env_from_bslash(bytes);
@@ -6227,6 +6247,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_eq = has_delivered_to_eq(bytes);
     let env_from_eq = has_env_from_eq(bytes);
     let errors_to_eq = has_errors_to_eq(bytes);
+    let env_to_pipe = has_env_to_pipe(bytes);
+    let delivered_to_pipe = has_delivered_to_pipe(bytes);
+    let env_from_pipe = has_env_from_pipe(bytes);
+    let errors_to_pipe = has_errors_to_pipe(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -7470,6 +7494,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_plus,
         disposition_to_plus,
         return_receipt_plus,
+        x_orig_cc_eq,
+        x_orig_reply_to_eq,
+        disposition_to_eq,
+        return_receipt_eq,
         env_to_bslash,
         delivered_to_bslash,
         env_from_bslash,
@@ -7506,6 +7534,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_eq,
         env_from_eq,
         errors_to_eq,
+        env_to_pipe,
+        delivered_to_pipe,
+        env_from_pipe,
+        errors_to_pipe,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -47437,6 +47469,246 @@ pub fn has_x_orig_rcpt_to_hyph(raw: &[u8]) -> bool {
 /// — プラスの扱いをずらす実装と構文違反として拒否する実装で元
 /// 副宛記録がずれる (アドレス欄側も未検出)。
 #[must_use]
+pub fn has_x_orig_cc_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-cc"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Reply-To:` の値がイコール宛名形か判定する
+/// (D2520)。
+///
+/// 元返信口を記す欄なのにドメイン側に孤立 `=` を含む宛名 — イコールの扱いを
+/// ずらす実装と構文違反として拒否する実装で元返信先記録がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_reply_to_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-reply-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Disposition-Notification-To:` の値がイコール宛名形か判
+/// 定する (D2521)。
+///
+/// 開封通知先を記す欄なのにドメイン側に孤立 `=` を含む宛名 — イコールの扱い
+/// をずらす実装と構文違反として拒否する実装で通知先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_disposition_to_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "disposition-notification-to" && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Return-Receipt-To:` の値がイコール宛名形か判定する
+/// (D2522)。
+///
+/// 受領通知先を記す欄なのにドメイン側に孤立 `=` を含む宛名 — イコールの扱いを
+/// ずらす実装と構文違反として拒否する実装で受領通知先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_return_receipt_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "return-receipt-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// 副宛記録がずれる (アドレス欄側も未検出)。
+#[must_use]
 pub fn has_x_orig_cc_plus(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
@@ -51954,6 +52226,258 @@ pub fn has_x_orig_from_hyph(raw: &[u8]) -> bool {
     })
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` の値が縦線宛名形か判
+/// 定する (D2559)。
+///
+/// 封書宛先を記す欄なのに `a@x|` のようにドメイン側に孤立 `|` を含む宛名
+/// — 縦線の扱いをずらす実装と構文違反として拒否する実装で封
+/// 書宛先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_to_pipe(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "envelope-to" || n == "x-envelope-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('|'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Delivered-To:` の値が縦線宛名形か判定する
+/// (D2560)。
+///
+/// 最終配達を記す欄なのにドメイン側に孤立 `|` を含む宛名 — 縦線の扱
+/// いをずらす実装と構文違反として拒否する実装で配達履歴がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_delivered_to_pipe(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "delivered-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('|'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:` 等の値が縦線宛名形か
+/// 判定する (D2561)。
+///
+/// 封書差出人を記す欄なのにドメイン側に孤立 `|` を含む宛名 — 縦線の扱いをずらす実装と構文違反として拒否する実装で差出人履歴がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_from_pipe(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-envelope-from"
+                | "x-mailfrom"
+                | "x-mail-from"
+                | "envelope-from"
+                | "x-original-from-envelope"
+                | "x-sender-envelope"
+        ) && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('|'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Errors-To:` の値が縦線宛名形か判定する
+/// (D2562)。
+///
+/// 返送先を記す欄なのにドメイン側に孤立 `|` を含む宛名 — 縦線の扱いを
+/// ずらす実装と構文違反として拒否する実装で返送先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_errors_to_pipe(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "errors-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('|'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
 /// 書宛先がずれる (アドレス欄側も未検出)。
 #[must_use]
 pub fn has_env_to_eq(raw: &[u8]) -> bool {
@@ -87741,6 +88265,46 @@ mod tests {
     }
 
     #[test]
+    fn 封書宛先が縦線宛名なら発火() {
+        assert!(has_env_to_pipe(
+            b"From: a@x\r\nEnvelope-To: a@xample|.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_pipe(
+            b"From: a@x\r\nEnvelope-To: a|b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 配達履歴が縦線宛名なら発火() {
+        assert!(has_delivered_to_pipe(
+            b"From: a@x\r\nDelivered-To: a@xample|.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_pipe(
+            b"From: a@x\r\nDelivered-To: a|b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人が縦線宛名なら発火() {
+        assert!(has_env_from_pipe(
+            b"From: a@x\r\nX-Envelope-From: a@xample|.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_pipe(
+            b"From: a@x\r\nX-Envelope-From: a|b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先が縦線宛名なら発火() {
+        assert!(has_errors_to_pipe(
+            b"From: a@x\r\nErrors-To: a@xample|.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_pipe(
+            b"From: a@x\r\nErrors-To: a|b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
     fn 封書宛先がイコール宛名なら発火() {
         assert!(has_env_to_eq(
             b"From: a@x\r\nEnvelope-To: a@xample=.com\r\nTo: b@y\r\n\r\nx"
@@ -88097,6 +88661,46 @@ mod tests {
         ));
         assert!(!has_errors_to_bslash(
             b"From: a@x\r\nErrors-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元副宛がイコール宛名なら発火() {
+        assert!(has_x_orig_cc_eq(
+            b"From: a@x\r\nX-Original-Cc: a@xample=.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_eq(
+            b"From: a@x\r\nX-Original-Cc: a=b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口がイコール宛名なら発火() {
+        assert!(has_x_orig_reply_to_eq(
+            b"From: a@x\r\nX-Original-Reply-To: a@xample=.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_eq(
+            b"From: a@x\r\nX-Original-Reply-To: a=b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 開封通知先がイコール宛名なら発火() {
+        assert!(has_disposition_to_eq(
+            b"From: a@x\r\nDisposition-Notification-To: a@xample=.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_eq(
+            b"From: a@x\r\nDisposition-Notification-To: a=b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領通知先がイコール宛名なら発火() {
+        assert!(has_return_receipt_eq(
+            b"From: a@x\r\nReturn-Receipt-To: a@xample=.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_eq(
+            b"From: a@x\r\nReturn-Receipt-To: a=b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
