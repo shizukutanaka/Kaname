@@ -8321,6 +8321,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_rcpt_to_caret {
         render_risks.push("元受取人記録の宛名ドメインにハットです—ハットの扱いで元受取人がずれます".to_string());
     }
+    if env.confirm_reading_star {
+        render_risks.push("閲覧確認先記録の宛名ドメインに星です—星の扱いで閲覧確認先がずれます".to_string());
+    }
+    if env.resent_reply_to_star {
+        render_risks.push("再送返信口記録の宛名ドメインに星です—星の扱いで再送返信口がずれます".to_string());
+    }
+    if env.apparently_resent_star {
+        render_risks.push("再送残渣記録の宛名ドメインに星です—星の扱いで再送宛がずれます".to_string());
+    }
+    if env.x_orig_rcpt_to_star {
+        render_risks.push("元受取人記録の宛名ドメインに星です—星の扱いで元受取人がずれます".to_string());
+    }
     if env.confirm_reading_pipe {
         render_risks.push("閲覧確認先記録の宛名ドメインに縦線です—縦線の扱いで閲覧確認先がずれます".to_string());
     }
