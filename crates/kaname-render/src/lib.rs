@@ -2612,6 +2612,14 @@ pub struct Envelope {
     pub x_orig_to_plus: bool,
     /// `X-Original-From:` の値がプラス宛名 (D2502 — 元差出人ずれ)。
     pub x_orig_from_plus: bool,
+    /// `Apparently-To:` 系の値が開き波括弧宛名 (D2531 — 見せ宛ずれ)。
+    pub apparently_to_lbrace: bool,
+    /// `Apparently-From:` 系の値が開き波括弧宛名 (D2532 — 表差出人ずれ)。
+    pub apparently_from_lbrace: bool,
+    /// `X-Original-To:` の値が開き波括弧宛名 (D2533 — 元宛先ずれ)。
+    pub x_orig_to_lbrace: bool,
+    /// `X-Original-From:` の値が開き波括弧宛名 (D2534 — 元差出人ずれ)。
+    pub x_orig_from_lbrace: bool,
     /// `Apparently-To:` 系の値がイコール宛名 (D2515 — 見せ宛ずれ)。
     pub apparently_to_eq: bool,
     /// `Apparently-From:` 系の値がイコール宛名 (D2516 — 表差出人ずれ)。
@@ -6199,6 +6207,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_plus = has_apparently_from_plus(bytes);
     let x_orig_to_plus = has_x_orig_to_plus(bytes);
     let x_orig_from_plus = has_x_orig_from_plus(bytes);
+    let apparently_to_lbrace = has_apparently_to_lbrace(bytes);
+    let apparently_from_lbrace = has_apparently_from_lbrace(bytes);
+    let x_orig_to_lbrace = has_x_orig_to_lbrace(bytes);
+    let x_orig_from_lbrace = has_x_orig_from_lbrace(bytes);
     let apparently_to_eq = has_apparently_to_eq(bytes);
     let apparently_from_eq = has_apparently_from_eq(bytes);
     let x_orig_to_eq = has_x_orig_to_eq(bytes);
@@ -7498,6 +7510,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_plus,
         x_orig_to_plus,
         x_orig_from_plus,
+        apparently_to_lbrace,
+        apparently_from_lbrace,
+        x_orig_to_lbrace,
+        x_orig_from_lbrace,
         apparently_to_eq,
         apparently_from_eq,
         x_orig_to_eq,
@@ -50618,11 +50634,258 @@ pub fn has_x_orig_from_amp(raw: &[u8]) -> bool {
             && v.split_whitespace().count() == 1
     })
 }
-/// `Apparently-To:`/`X-Apparently-To:` 系の値がプラス宛名
-/// 形か判定する (D2499)。
+/// `Apparently-To:`/`X-Apparently-To:` 系の値が開き波括弧宛
+/// 名形か判定する (D2531)。
 ///
-/// 見せ宛を記す欄なのに `a@x+` のようにドメイン側に孤立 `+` を含む宛名
-/// — プラスの扱いをずらす実装と構文違反として拒否する実装で見
+/// 見せ宛を記す欄なのに `a@x{` のようにドメイン側に孤立 `{` を含む宛名
+/// — 開き波括弧の扱いをずらす実装と構文違反として拒否する実装で見
+/// せ宛記録がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_to_lbrace(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-to" || n == "x-apparently-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('{'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系の値が開き波括弧宛
+/// 名形か判定する (D2532)。
+///
+/// 表差出人を記す欄なのにドメイン側に孤立 `{` を含む宛名 — 開き波括弧の扱いをずらす実装と構文違反として拒否する実装で表札記録がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_from_lbrace(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "apparently-from" | "x-apparently-from" | "apparently-sender" | "x-apparently-sender"
+        )
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('{'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-To:` の値が開き波括弧宛名形か判定する
+/// (D2533)。
+///
+/// 元宛先を記す欄なのにドメイン側に孤立 `{` を含む宛名 — 開き波括弧の扱い
+/// をずらす実装と構文違反として拒否する実装で元宛先記録がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_to_lbrace(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-to" && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('{'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-From:` の値が開き波括弧宛名形か判定する
+/// (D2534)。
+///
+/// 元差出人を記す欄なのにドメイン側に孤立 `{` を含む宛名 — 開き波括弧の扱
+/// いをずらす実装と構文違反として拒否する実装で元差出人記録がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_from_lbrace(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-from"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('{'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `Apparently-To:`/`X-Apparently-To:` 系の値がイコール宛
+/// 名形か判定する (D2515)。
+///
+/// 見せ宛を記す欄なのにドメイン側に孤立 `=` を含む宛名 — イコールの扱いをずらす実装と構文違反として拒否する実装で見
 /// せ宛記録がずれる (アドレス欄側も未検出)。
 #[must_use]
 pub fn has_apparently_to_eq(raw: &[u8]) -> bool {
@@ -50866,6 +51129,11 @@ pub fn has_x_orig_from_eq(raw: &[u8]) -> bool {
             && v.split_whitespace().count() == 1
     })
 }
+/// `Apparently-To:`/`X-Apparently-To:` 系の値がプラス宛名
+/// 形か判定する (D2499)。
+///
+/// 見せ宛を記す欄なのに `a@x+` のようにドメイン側に孤立 `+` を含む宛名
+/// — プラスの扱いをずらす実装と構文違反として拒否する実装で見
 /// せ宛記録がずれる (アドレス欄側も未検出)。
 #[must_use]
 pub fn has_apparently_to_plus(raw: &[u8]) -> bool {
@@ -53271,6 +53539,10 @@ pub fn has_errors_to_pipe(raw: &[u8]) -> bool {
             && v.split_whitespace().count() == 1
     })
 }
+/// `Envelope-To:`/`X-Envelope-To:` の値がイコール宛名形か判定する
+/// (D2511)。
+///
+/// 封書宛先を記す欄なのにドメイン側に孤立 `=` を含む宛名 — イコールの扱いをずらす実装と構文違反として拒否する実装で封
 /// 書宛先がずれる (アドレス欄側も未検出)。
 #[must_use]
 pub fn has_env_to_eq(raw: &[u8]) -> bool {
@@ -89934,6 +90206,46 @@ mod tests {
         ));
         assert!(!has_x_orig_from_eq(
             b"From: a@x\r\nX-Original-From: a=b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 見せ宛が開き波括弧宛名なら発火() {
+        assert!(has_apparently_to_lbrace(
+            b"From: a@x\r\nApparently-To: a@xample{.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_lbrace(
+            b"From: a@x\r\nApparently-To: a{b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表差出人が開き波括弧宛名なら発火() {
+        assert!(has_apparently_from_lbrace(
+            b"From: a@x\r\nApparently-From: a@xample{.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_lbrace(
+            b"From: a@x\r\nApparently-From: a{b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛先が開き波括弧宛名なら発火() {
+        assert!(has_x_orig_to_lbrace(
+            b"From: a@x\r\nX-Original-To: a@xample{.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_lbrace(
+            b"From: a@x\r\nX-Original-To: a{b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人が開き波括弧宛名なら発火() {
+        assert!(has_x_orig_from_lbrace(
+            b"From: a@x\r\nX-Original-From: a@xample{.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_lbrace(
+            b"From: a@x\r\nX-Original-From: a{b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
