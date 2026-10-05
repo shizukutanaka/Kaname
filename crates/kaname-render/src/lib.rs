@@ -2772,6 +2772,14 @@ pub struct Envelope {
     pub disposition_to_eq: bool,
     /// `Return-Receipt-To:` の値がイコール宛名 (D2522 — 受領通知先ずれ)。
     pub return_receipt_eq: bool,
+    /// `X-Original-Cc:` 系の値がローカル部星宛名 (D2774 — 元副宛ずれ)。
+    pub x_orig_cc_star_local: bool,
+    /// `X-Original-Reply-To:` の値がローカル部星宛名 (D2775 — 元返信口ずれ)。
+    pub x_orig_reply_to_star_local: bool,
+    /// `Disposition-Notification-To:` の値がローカル部星宛名 (D2776 — 開封通知先ずれ)。
+    pub disposition_to_star_local: bool,
+    /// `Return-Receipt-To:` の値がローカル部星宛名 (D2777 — 受領通知先ずれ)。
+    pub return_receipt_star_local: bool,
     /// `Envelope-To:`/`X-Envelope-To:` 系の値が逆斜線宛名 (D2395 — 封書宛先ずれ)。
     pub env_to_bslash: bool,
     /// `Delivered-To:` の値が逆斜線宛名 (D2396 — 配達履歴ずれ)。
@@ -6375,6 +6383,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_eq = has_x_orig_reply_to_eq(bytes);
     let disposition_to_eq = has_disposition_to_eq(bytes);
     let return_receipt_eq = has_return_receipt_eq(bytes);
+    let x_orig_cc_star_local = has_x_orig_cc_star_local(bytes);
+    let x_orig_reply_to_star_local = has_x_orig_reply_to_star_local(bytes);
+    let disposition_to_star_local = has_disposition_to_star_local(bytes);
+    let return_receipt_star_local = has_return_receipt_star_local(bytes);
     let env_to_bslash = has_env_to_bslash(bytes);
     let delivered_to_bslash = has_delivered_to_bslash(bytes);
     let env_from_bslash = has_env_from_bslash(bytes);
@@ -7722,6 +7734,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_eq,
         disposition_to_eq,
         return_receipt_eq,
+        x_orig_cc_star_local,
+        x_orig_reply_to_star_local,
+        disposition_to_star_local,
+        return_receipt_star_local,
         env_to_bslash,
         delivered_to_bslash,
         env_from_bslash,
@@ -48663,6 +48679,258 @@ pub fn has_apparently_resent_hyph(raw: &[u8]) -> bool {
 ///
 /// 元受取人を記す欄なのにラベル端が `-` のドメイン —
 /// DNS ラベル規則の厳格実装と寛容実装で元受取人がずれる (アドレス欄側は
+/// `X-Original-Cc:` の値が星をローカル部に含む宛名形か判
+/// 定する (D2774)。
+///
+/// 元副宛を記す欄なのに `a*b@y` のようにローカル部に星を含む宛名
+/// — 星付きアドレスとして受理する実装と構文違反として拒否する実装で元
+/// 副宛がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_cc_star_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-original-cc")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('*'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Reply-To:` の値が星をローカル部に含む宛名形か判定する
+/// (D2775)。
+///
+/// 元返信口を記す欄なのに `a*b@y` のようにローカル部に星を含む宛名
+/// — 星付きアドレスとして受理する実装と構文違反として拒否する実装で元
+/// 返信口がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_reply_to_star_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-reply-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('*'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:`/`X-Mail-From:` の値が星をローカル部に
+/// 含む宛名形か判定する (D2776)。
+///
+/// 開封通知先を記す欄なのに `a*b@y` のようにローカル部に星を含む宛名
+/// — 星付きアドレスとして受理する実装と構文違反として拒否する実装で開
+/// 封通知先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_disposition_to_star_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "disposition-notification-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('*'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Return-Receipt-To:` の値が星をローカル部に含む宛名形か判定する
+/// (D2777)。
+///
+/// 受領通知先を記す欄なのに `a*b@y` のようにローカル部に星を含む宛名
+/// — 星付きアドレスとして受理する実装と構文違反として拒否する実装で受
+/// 領通知先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_return_receipt_star_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "return-receipt-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('*'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// D1560)。
 #[must_use]
 pub fn has_x_orig_rcpt_to_hyph(raw: &[u8]) -> bool {
@@ -92827,6 +93095,46 @@ mod tests {
         ));
         assert!(!has_errors_to_bslash(
             b"From: a@x\r\nErrors-To: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元副宛が星ローカル宛名なら発火() {
+        assert!(has_x_orig_cc_star_local(
+            b"From: a@x\r\nX-Original-Cc: a*b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_star_local(
+            b"From: a@x\r\nX-Original-Cc: a@xample*.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口が星ローカル宛名なら発火() {
+        assert!(has_x_orig_reply_to_star_local(
+            b"From: a@x\r\nX-Original-Reply-To: a*b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_star_local(
+            b"From: a@x\r\nX-Original-Reply-To: a@xample*.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 開封通知先が星ローカル宛名なら発火() {
+        assert!(has_disposition_to_star_local(
+            b"From: a@x\r\nDisposition-Notification-To: a*b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_star_local(
+            b"From: a@x\r\nDisposition-Notification-To: a@xample*.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領通知先が星ローカル宛名なら発火() {
+        assert!(has_return_receipt_star_local(
+            b"From: a@x\r\nReturn-Receipt-To: a*b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_star_local(
+            b"From: a@x\r\nReturn-Receipt-To: a@xample*.com\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
