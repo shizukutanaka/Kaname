@@ -7985,6 +7985,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.errors_to_eq {
         render_risks.push("返送先記録の宛名ドメインにイコールです—イコールの扱いで返送先がずれます".to_string());
     }
+    if env.env_to_star {
+        render_risks.push("封書宛先記録の宛名ドメインに星です—星の扱いで封書宛先がずれます".to_string());
+    }
+    if env.delivered_to_star {
+        render_risks.push("配達履歴記録の宛名ドメインに星です—星の扱いで配達履歴がずれます".to_string());
+    }
+    if env.env_from_star {
+        render_risks.push("封書差出人記録の宛名ドメインに星です—星の扱いで差出人履歴がずれます".to_string());
+    }
+    if env.errors_to_star {
+        render_risks.push("返送先記録の宛名ドメインに星です—星の扱いで返送先がずれます".to_string());
+    }
     if env.env_to_tilde {
         render_risks.push("封書宛先記録の宛名ドメインに波線です—波線の扱いで封書宛先がずれます".to_string());
     }
