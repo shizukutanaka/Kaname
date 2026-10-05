@@ -2564,6 +2564,14 @@ pub struct Envelope {
     pub apparently_resent_amp: bool,
     /// `X-Original-Rcpt-To:` 系の値がアンパサンド宛名 (D2558 — 元受取人ずれ)。
     pub x_orig_rcpt_to_amp: bool,
+    /// `X-Confirm-Reading-To:` の値がローカル部低線宛名 (D2763 — 閲覧確認先ずれ)。
+    pub confirm_reading_underscore_local: bool,
+    /// `Resent-Reply-To:` の値がローカル部低線宛名 (D2764 — 再送返信口ずれ)。
+    pub resent_reply_to_underscore_local: bool,
+    /// `Apparently-Resent-*:` 系の値がローカル部低線宛名 (D2765 — 再送残渣ずれ)。
+    pub apparently_resent_underscore_local: bool,
+    /// `X-Original-Rcpt-To:` 系の値がローカル部低線宛名 (D2766 — 元受取人ずれ)。
+    pub x_orig_rcpt_to_underscore_local: bool,
     /// `Apparently-To:`/`X-Apparently-To:` 系の値が逆斜線宛名 (D2387 — 見せ宛ずれ)。
     pub apparently_to_bslash: bool,
     /// `Apparently-From:`/`Apparently-Sender:` 系の値が逆斜線宛名 (D2388 — 表差出人ずれ)。
@@ -6255,6 +6263,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let resent_reply_to_amp = has_resent_reply_to_amp(bytes);
     let apparently_resent_amp = has_apparently_resent_amp(bytes);
     let x_orig_rcpt_to_amp = has_x_orig_rcpt_to_amp(bytes);
+    let confirm_reading_underscore_local = has_confirm_reading_underscore_local(bytes);
+    let resent_reply_to_underscore_local = has_resent_reply_to_underscore_local(bytes);
+    let apparently_resent_underscore_local = has_apparently_resent_underscore_local(bytes);
+    let x_orig_rcpt_to_underscore_local = has_x_orig_rcpt_to_underscore_local(bytes);
     let apparently_to_bslash = has_apparently_to_bslash(bytes);
     let apparently_from_bslash = has_apparently_from_bslash(bytes);
     let x_orig_to_bslash = has_x_orig_to_bslash(bytes);
@@ -7594,6 +7606,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_reply_to_amp,
         apparently_resent_amp,
         x_orig_rcpt_to_amp,
+        confirm_reading_underscore_local,
+        resent_reply_to_underscore_local,
+        apparently_resent_underscore_local,
+        x_orig_rcpt_to_underscore_local,
         apparently_to_bslash,
         apparently_from_bslash,
         x_orig_to_bslash,
@@ -45351,6 +45367,269 @@ pub fn has_apparently_resent_pipe(raw: &[u8]) -> bool {
                 .split('@')
                 .nth(1)
                 .map_or(false, |d| d.contains('|'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Confirm-Reading-To:` の値が低線をローカル部に含む宛名形か判
+/// 定する (D2763)。
+///
+/// 閲覧確認先を記す欄なのに `a_b@y` のようにローカル部に低線を含む宛名
+/// — 下線入りアドレスとして受理する実装と構文違反として拒否する実装で閲
+/// 覧確認先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_confirm_reading_underscore_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-confirm-reading-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('_'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Resent-Reply-To:` の値が低線をローカル部に含む宛名形か判定する
+/// (D2764)。
+///
+/// 再送返信口を記す欄なのに `a_b@y` のようにローカル部に低線を含む宛名
+/// — 下線入りアドレスとして受理する実装と構文違反として拒否する実装で再
+/// 送返信口がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_resent_reply_to_underscore_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "resent-reply-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('_'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:`/`X-Mail-From:` の値が低線をローカル部に
+/// 含む宛名形か判定する (D2765)。
+///
+/// 再送残渣を記す欄なのに `a_b@y` のようにローカル部に低線を含む宛名
+/// — 下線入りアドレスとして受理する実装と構文違反として拒否する実装で再
+/// 送宛がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_resent_underscore_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (matches!(
+            n,
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ))
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('_'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系 の値が低線をローカル部に含む宛名形か判定する
+/// (D2766)。
+///
+/// 元受取人を記す欄なのに `a_b@y` のようにローカル部に低線を含む宛名
+/// — 下線入りアドレスとして受理する実装と構文違反として拒否する実装で元
+/// 受取人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_underscore_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-original-rcpt-to" | "x-orig-rcpt-to" | "x-rcpt-to" | "x-envelope-rcpt-to"
+        )
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -93275,6 +93554,46 @@ mod tests {
         ));
         assert!(!has_apparently_resent_pipe(
             b"From: a@x\r\nApparently-Resent-To: a|b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 閲覧確認先が低線ローカル宛名なら発火() {
+        assert!(has_confirm_reading_underscore_local(
+            b"From: a@x\r\nX-Confirm-Reading-To: a_b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_underscore_local(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@xample_.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口が低線ローカル宛名なら発火() {
+        assert!(has_resent_reply_to_underscore_local(
+            b"From: a@x\r\nResent-Reply-To: a_b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_underscore_local(
+            b"From: a@x\r\nResent-Reply-To: a@xample_.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣が低線ローカル宛名なら発火() {
+        assert!(has_apparently_resent_underscore_local(
+            b"From: a@x\r\nApparently-Resent-To: a_b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_underscore_local(
+            b"From: a@x\r\nApparently-Resent-To: a@xample_.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人が低線ローカル宛名なら発火() {
+        assert!(has_x_orig_rcpt_to_underscore_local(
+            b"From: a@x\r\nX-Original-Rcpt-To: a_b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_underscore_local(
+            b"From: a@x\r\nX-Original-Rcpt-To: a@xample_.com\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
