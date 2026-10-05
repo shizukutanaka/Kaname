@@ -12,6 +12,10 @@
 ### Security — D2688: `Delivered-To:` 欄のドメイン側低線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_underscore` を追加。
 ### Security — D2689: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側低線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_underscore` を追加。
 ### Security — D2690: `Errors-To:` 欄のドメイン側低線宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_underscore` を追加。
+### Security — D2619: `X-Confirm-Reading-To:` 欄のドメイン側井桁宛名値 (`a@xample#.com` 形) を閲覧確認先ずれとして検出 — `Envelope` に `confirm_reading_hash` を追加。
+### Security — D2620: `Resent-Reply-To:` 欄のドメイン側井桁宛名値を再送返信口ずれとして検出 — `Envelope` に `resent_reply_to_hash` を追加。
+### Security — D2621: `Apparently-Resent-*:` 系欄のドメイン側井桁宛名値を再送残渣ずれとして検出 — `Envelope` に `apparently_resent_hash` を追加。
+### Security — D2622: `X-Original-Rcpt-To:` 系欄のドメイン側井桁宛名値を元受取人ずれとして検出 — `Envelope` に `x_orig_rcpt_to_hash` を追加。
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
