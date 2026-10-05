@@ -1996,3 +1996,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2568 | X-Original-Reply-To の縦線宛名値 (元返信口記録のドメイン側孤立縦線異形) | 元返信口ずれ |
 | D2569 | Disposition-Notification-To の縦線宛名値 (開封通知先記録のドメイン側孤立縦線異形) | 開封通知先ずれ |
 | D2570 | Return-Receipt-To の縦線宛名値 (受領通知先記録のドメイン側孤立縦線異形) | 受領先ずれ |
+| D2579 | Apparently-To/X-Apparently-To 系の波線宛名値 (見せ宛記録のドメイン側孤立波線異形) | 見せ宛ずれ |
+| D2580 | Apparently-From/Apparently-Sender 系の波線宛名値 (表差出人記録のドメイン側孤立波線異形) | 表差出人ずれ |
+| D2581 | X-Original-To の波線宛名値 (元宛先記録のドメイン側孤立波線異形) | 元宛先ずれ |
+| D2582 | X-Original-From の波線宛名値 (元差出人記録のドメイン側孤立波線異形) | 元差出人ずれ |
