@@ -4,6 +4,10 @@
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。
 ### Security — D2045: `Resent-*` ブロックの受取欄 (`Resent-To:`/`Cc:`/`Bcc:`) 全欠落を検出 — `Envelope` に `resent_no_recipient` を追加 (D1476 `incomplete_resent` の補完)。
+### Security — D2711: `X-Original-Cc:` 欄のローカル部プラス宛名値 (`a+b@y` 形) を元副宛ずれとして検出 — `Envelope` に `x_orig_cc_plus_local` を追加。
+### Security — D2712: `X-Original-Reply-To:` 欄のローカル部プラス宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_plus_local` を追加。
+### Security — D2713: `Disposition-Notification-To:` 欄のローカル部プラス宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_plus_local` を追加。
+### Security — D2714: `Return-Receipt-To:` 欄のローカル部プラス宛名値を受領通知先ずれとして検出 — `Envelope` に `return_receipt_plus_local` を追加。
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。

@@ -8189,6 +8189,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.return_receipt_plus {
         render_risks.push("受領通知先記録の宛名ドメインにプラスです—プラスの扱いで受領先がずれます".to_string());
     }
+    if env.x_orig_cc_plus_local {
+        render_risks.push("元副宛記録の宛名ローカル部にプラスです—プラスの扱いで元副宛がずれます".to_string());
+    }
+    if env.x_orig_reply_to_plus_local {
+        render_risks.push("元返信口記録の宛名ローカル部にプラスです—プラスの扱いで元返信口がずれます".to_string());
+    }
+    if env.disposition_to_plus_local {
+        render_risks.push("開封通知先記録の宛名ローカル部にプラスです—プラスの扱いで開封通知先がずれます".to_string());
+    }
+    if env.return_receipt_plus_local {
+        render_risks.push("受領通知先記録の宛名ローカル部にプラスです—プラスの扱いで受領先がずれます".to_string());
+    }
     if env.x_orig_cc_pipe {
         render_risks.push("元副宛記録の宛名ドメインに縦線です—縦線の扱いで元副宛がずれます".to_string());
     }
