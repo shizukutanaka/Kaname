@@ -36,6 +36,10 @@
 ### Security — D2532: `Apparently-From:`/`Apparently-Sender:` 系の開き波括弧宛名値 (表差出人記録のドメイン側孤立開き波括弧異形) を検出 — `Envelope` に `apparently_from_lbrace` を追加。
 ### Security — D2533: `X-Original-To:` の開き波括弧宛名値 (元宛先記録のドメイン側孤立開き波括弧異形) を検出 — `Envelope` に `x_orig_to_lbrace` を追加。
 ### Security — D2534: `X-Original-From:` の開き波括弧宛名値 (元差出人記録のドメイン側孤立開き波括弧異形) を検出 — `Envelope` に `x_orig_from_lbrace` を追加。
+### Security — D2527: `Envelope-To:`/`X-Envelope-To:` 系の開き波括弧宛名値 (封書宛先記録のドメイン側孤立開き波括弧異形) を検出 — `Envelope` に `env_to_lbrace` を追加。
+### Security — D2528: `Delivered-To:` の開き波括弧宛名値 (配達履歴記録のドメイン側孤立開き波括弧異形) を検出 — `Envelope` に `delivered_to_lbrace` を追加。
+### Security — D2529: `X-Envelope-From:`/`X-MailFrom:` 等の開き波括弧宛名値 (封書差出人記録のドメイン側孤立開き波括弧異形) を検出 — `Envelope` に `env_from_lbrace` を追加。
+### Security — D2530: `Errors-To:` の開き波括弧宛名値 (返送先記録のドメイン側孤立開き波括弧異形) を検出 — `Envelope` に `errors_to_lbrace` を追加。
 ### Security — D2515: `Apparently-To:`/`X-Apparently-To:` 系のイコール宛名値 (見せ宛記録のドメイン側孤立イコール異形) を検出 — `Envelope` に `apparently_to_eq` を追加。
 ### Security — D2516: `Apparently-From:`/`Apparently-Sender:` 系のイコール宛名値 (表差出人記録のドメイン側孤立イコール異形) を検出 — `Envelope` に `apparently_from_eq` を追加。
 ### Security — D2517: `X-Original-To:` のイコール宛名値 (元宛先記録のドメイン側孤立イコール異形) を検出 — `Envelope` に `x_orig_to_eq` を追加。
