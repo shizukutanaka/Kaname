@@ -2836,6 +2836,14 @@ pub struct Envelope {
     pub env_from_eq: bool,
     /// `Errors-To:` の値がイコール宛名 (D2514 — 返送先ずれ)。
     pub errors_to_eq: bool,
+    /// `Envelope-To:`/`X-Envelope-To:` 系の値が波線宛名 (D2575 — 封書宛先ずれ)。
+    pub env_to_tilde: bool,
+    /// `Delivered-To:` の値が波線宛名 (D2576 — 配達記録ずれ)。
+    pub delivered_to_tilde: bool,
+    /// `X-Envelope-From:`/`X-MailFrom:` 等の値が波線宛名 (D2577 — 封書差出人ずれ)。
+    pub env_from_tilde: bool,
+    /// `Errors-To:` の値が波線宛名 (D2578 — 返送先ずれ)。
+    pub errors_to_tilde: bool,
     /// `Envelope-To:`/`X-Envelope-To:` 系の値が縦線宛名 (D2559 — 封書宛先ずれ)。
     pub env_to_pipe: bool,
     /// `Delivered-To:` の値が縦線宛名 (D2560 — 配達記録ずれ)。
@@ -6371,6 +6379,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_pipe = has_delivered_to_pipe(bytes);
     let env_from_pipe = has_env_from_pipe(bytes);
     let errors_to_pipe = has_errors_to_pipe(bytes);
+    let env_to_tilde = has_env_to_tilde(bytes);
+    let delivered_to_tilde = has_delivered_to_tilde(bytes);
+    let env_from_tilde = has_env_from_tilde(bytes);
+    let errors_to_tilde = has_errors_to_tilde(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -7698,6 +7710,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_pipe,
         env_from_pipe,
         errors_to_pipe,
+        env_to_tilde,
+        delivered_to_tilde,
+        env_from_tilde,
+        errors_to_tilde,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -54390,6 +54406,258 @@ pub fn has_x_orig_from_hyph(raw: &[u8]) -> bool {
     })
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` の値が波線宛名形か判
+/// 定する (D2575)。
+///
+/// 封書宛先を記す欄なのに `a@x~` のようにドメイン側に孤立 `~` を含む宛名
+/// — 波線の扱いをずらす実装と構文違反として拒否する実装で封
+/// 書宛先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_to_tilde(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "envelope-to" || n == "x-envelope-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('~'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Delivered-To:` の値が波線宛名形か判定する
+/// (D2576)。
+///
+/// 最終配達を記す欄なのにドメイン側に孤立 `~` を含む宛名 — 波線の扱
+/// いをずらす実装と構文違反として拒否する実装で配達履歴がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_delivered_to_tilde(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "delivered-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('~'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:` 等の値が波線宛名形か
+/// 判定する (D2577)。
+///
+/// 封書差出人を記す欄なのにドメイン側に孤立 `~` を含む宛名 — 波線の扱いをずらす実装と構文違反として拒否する実装で差出人履歴がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_from_tilde(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-envelope-from"
+                | "x-mailfrom"
+                | "x-mail-from"
+                | "envelope-from"
+                | "x-original-from-envelope"
+                | "x-sender-envelope"
+        ) && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('~'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Errors-To:` の値が波線宛名形か判定する
+/// (D2578)。
+///
+/// 返送先を記す欄なのにドメイン側に孤立 `~` を含む宛名 — 波線の扱いを
+/// ずらす実装と構文違反として拒否する実装で返送先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_errors_to_tilde(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "errors-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('~'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
 /// `Envelope-To:`/`X-Envelope-To:` の値が縦線宛名形か判
 /// 定する (D2559)。
 ///
@@ -90932,6 +91200,46 @@ mod tests {
         ));
         assert!(!has_errors_to_pct(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書宛先が波線宛名なら発火() {
+        assert!(has_env_to_tilde(
+            b"From: a@x\r\nEnvelope-To: a@xample~.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_tilde(
+            b"From: a@x\r\nEnvelope-To: a~b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 配達履歴が波線宛名なら発火() {
+        assert!(has_delivered_to_tilde(
+            b"From: a@x\r\nDelivered-To: a@xample~.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_tilde(
+            b"From: a@x\r\nDelivered-To: a~b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人が波線宛名なら発火() {
+        assert!(has_env_from_tilde(
+            b"From: a@x\r\nX-Envelope-From: a@xample~.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_tilde(
+            b"From: a@x\r\nX-Envelope-From: a~b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先が波線宛名なら発火() {
+        assert!(has_errors_to_tilde(
+            b"From: a@x\r\nErrors-To: a@xample~.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_tilde(
+            b"From: a@x\r\nErrors-To: a~b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
