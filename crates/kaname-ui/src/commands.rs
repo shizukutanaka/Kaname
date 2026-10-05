@@ -7949,6 +7949,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.errors_to_plus {
         render_risks.push("返送先記録の宛名ドメインにプラスです—プラスの扱いで返送先がずれます".to_string());
     }
+    if env.env_to_amp {
+        render_risks.push("封書宛先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで封書宛先がずれます".to_string());
+    }
+    if env.delivered_to_amp {
+        render_risks.push("配達履歴記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで配達履歴がずれます".to_string());
+    }
+    if env.env_from_amp {
+        render_risks.push("封書差出人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで差出人履歴がずれます".to_string());
+    }
+    if env.errors_to_amp {
+        render_risks.push("返送先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで返送先がずれます".to_string());
+    }
+    if env.env_to_lbrace {
+        render_risks.push("封書宛先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで封書宛先がずれます".to_string());
+    }
+    if env.delivered_to_lbrace {
+        render_risks.push("配達履歴記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで配達履歴がずれます".to_string());
+    }
+    if env.env_from_lbrace {
+        render_risks.push("差出人履歴記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで差出人履歴がずれます".to_string());
+    }
+    if env.errors_to_lbrace {
+        render_risks.push("返送先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで返送先がずれます".to_string());
+    }
     if env.env_to_eq {
         render_risks.push("封書宛先記録の宛名ドメインにイコールです—イコールの扱いで封書宛先がずれます".to_string());
     }
@@ -7960,6 +7984,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     if env.errors_to_eq {
         render_risks.push("返送先記録の宛名ドメインにイコールです—イコールの扱いで返送先がずれます".to_string());
+    }
+    if env.env_to_pipe {
+        render_risks.push("封書宛先記録の宛名ドメインに縦線です—縦線の扱いで封書宛先がずれます".to_string());
+    }
+    if env.delivered_to_pipe {
+        render_risks.push("配達履歴記録の宛名ドメインに縦線です—縦線の扱いで配達履歴がずれます".to_string());
+    }
+    if env.env_from_pipe {
+        render_risks.push("封書差出人記録の宛名ドメインに縦線です—縦線の扱いで差出人履歴がずれます".to_string());
+    }
+    if env.errors_to_pipe {
+        render_risks.push("返送先記録の宛名ドメインに縦線です—縦線の扱いで返送先がずれます".to_string());
     }
     if env.apparently_to_rbracket {
         render_risks.push("見せ宛記録の宛名に逆角括弧です—角括弧閉じの扱いで見せ宛がずれます".to_string());
@@ -8021,6 +8057,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_from_plus {
         render_risks.push("元差出人記録の宛名ドメインにプラスです—プラスの扱いで元差出人がずれます".to_string());
     }
+    if env.apparently_to_lbrace {
+        render_risks.push("見せ宛記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで見せ宛がずれます".to_string());
+    }
+    if env.apparently_from_lbrace {
+        render_risks.push("表差出人記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで表差出人がずれます".to_string());
+    }
+    if env.x_orig_to_lbrace {
+        render_risks.push("元宛先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元宛先がずれます".to_string());
+    }
+    if env.x_orig_from_lbrace {
+        render_risks.push("元差出人記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元差出人がずれます".to_string());
+    }
     if env.apparently_to_eq {
         render_risks.push("見せ宛記録の宛名ドメインにイコールです—イコールの扱いで見せ宛がずれます".to_string());
     }
@@ -8032,6 +8080,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     if env.x_orig_from_eq {
         render_risks.push("元差出人記録の宛名ドメインにイコールです—イコールの扱いで元差出人がずれます".to_string());
+    }
+    if env.apparently_to_amp {
+        render_risks.push("見せ宛記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで見せ宛がずれます".to_string());
+    }
+    if env.apparently_from_amp {
+        render_risks.push("表差出人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで表差出人がずれます".to_string());
+    }
+    if env.x_orig_to_amp {
+        render_risks.push("元宛先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元宛先がずれます".to_string());
+    }
+    if env.x_orig_from_amp {
+        render_risks.push("元差出人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元差出人がずれます".to_string());
     }
     if env.x_orig_cc_rbracket {
         render_risks.push("元副宛記録の宛名に逆角括弧です—角括弧閉じの扱いで元副宛がずれます".to_string());
@@ -8092,6 +8152,42 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     if env.return_receipt_plus {
         render_risks.push("受領通知先記録の宛名ドメインにプラスです—プラスの扱いで受領先がずれます".to_string());
+    }
+    if env.x_orig_cc_amp {
+        render_risks.push("元副宛記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元副宛がずれます".to_string());
+    }
+    if env.x_orig_reply_to_amp {
+        render_risks.push("元返信口記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元返信口がずれます".to_string());
+    }
+    if env.disposition_to_amp {
+        render_risks.push("開封通知先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで開封通知先がずれます".to_string());
+    }
+    if env.return_receipt_amp {
+        render_risks.push("受領通知先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで受領先がずれます".to_string());
+    }
+    if env.x_orig_cc_lbrace {
+        render_risks.push("元副宛記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元副宛がずれます".to_string());
+    }
+    if env.x_orig_reply_to_lbrace {
+        render_risks.push("元返信口記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元返信口がずれます".to_string());
+    }
+    if env.disposition_to_lbrace {
+        render_risks.push("開封通知先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで開封通知先がずれます".to_string());
+    }
+    if env.return_receipt_lbrace {
+        render_risks.push("受領通知先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで受領先がずれます".to_string());
+    }
+    if env.x_orig_cc_eq {
+        render_risks.push("元副宛記録の宛名ドメインにイコールです—イコールの扱いで元副宛がずれます".to_string());
+    }
+    if env.x_orig_reply_to_eq {
+        render_risks.push("元返信口記録の宛名ドメインにイコールです—イコールの扱いで元返信口がずれます".to_string());
+    }
+    if env.disposition_to_eq {
+        render_risks.push("開封通知先記録の宛名ドメインにイコールです—イコールの扱いで開封通知先がずれます".to_string());
+    }
+    if env.return_receipt_eq {
+        render_risks.push("受領通知先記録の宛名ドメインにイコールです—イコールの扱いで受領先がずれます".to_string());
     }
     if env.confirm_reading_rbracket {
         render_risks.push("閲覧確認先記録の宛名に逆角括弧です—角括弧閉じの扱いで閲覧先がずれます".to_string());
@@ -8164,6 +8260,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     if env.x_orig_rcpt_to_lbrace {
         render_risks.push("元受取人記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元受取人がずれます".to_string());
+    }
+    if env.confirm_reading_eq {
+        render_risks.push("閲覧確認先記録の宛名ドメインにイコールです—イコールの扱いで閲覧確認先がずれます".to_string());
+    }
+    if env.resent_reply_to_eq {
+        render_risks.push("再送返信口記録の宛名ドメインにイコールです—イコールの扱いで再送返信口がずれます".to_string());
+    }
+    if env.apparently_resent_eq {
+        render_risks.push("再送残渣記録の宛名ドメインにイコールです—イコールの扱いで再送宛がずれます".to_string());
+    }
+    if env.x_orig_rcpt_to_eq {
+        render_risks.push("元受取人記録の宛名ドメインにイコールです—イコールの扱いで元受取人がずれます".to_string());
+    }
+    if env.confirm_reading_amp {
+        render_risks.push("閲覧確認先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで閲覧確認先がずれます".to_string());
+    }
+    if env.resent_reply_to_amp {
+        render_risks.push("再送返信口記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで再送返信口がずれます".to_string());
+    }
+    if env.apparently_resent_amp {
+        render_risks.push("再送残渣記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで再送宛がずれます".to_string());
+    }
+    if env.x_orig_rcpt_to_amp {
+        render_risks.push("元受取人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元受取人がずれます".to_string());
     }
     if env.apparently_to_rparen {
         render_risks.push("見せ宛記録の宛名に逆括弧です—括弧閉じの扱いで見せ宛がずれます".to_string());
