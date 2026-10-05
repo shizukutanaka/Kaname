@@ -2868,6 +2868,14 @@ pub struct Envelope {
     pub env_from_tilde: bool,
     /// `Errors-To:` の値が波線宛名 (D2578 — 返送先ずれ)。
     pub errors_to_tilde: bool,
+    /// `Envelope-To:`/`X-Envelope-To:` 系の値がドル符宛名 (D2623 — 封書宛先ずれ)。
+    pub env_to_dollar: bool,
+    /// `Delivered-To:` の値がドル符宛名 (D2624 — 配達履歴ずれ)。
+    pub delivered_to_dollar: bool,
+    /// `X-Envelope-From:`/`X-MailFrom:` 等の値がドル符宛名 (D2625 — 封書差出人ずれ)。
+    pub env_from_dollar: bool,
+    /// `Errors-To:` の値がドル符宛名 (D2626 — 返送先ずれ)。
+    pub errors_to_dollar: bool,
     /// `Envelope-To:`/`X-Envelope-To:` 系の値が縦線宛名 (D2559 — 封書宛先ずれ)。
     pub env_to_pipe: bool,
     /// `Delivered-To:` の値が縦線宛名 (D2560 — 配達記録ずれ)。
@@ -6431,6 +6439,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_underscore = has_delivered_to_underscore(bytes);
     let env_from_underscore = has_env_from_underscore(bytes);
     let errors_to_underscore = has_errors_to_underscore(bytes);
+    let env_to_dollar = has_env_to_dollar(bytes);
+    let delivered_to_dollar = has_delivered_to_dollar(bytes);
+    let env_from_dollar = has_env_from_dollar(bytes);
+    let errors_to_dollar = has_errors_to_dollar(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -7778,6 +7790,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_underscore,
         env_from_underscore,
         errors_to_underscore,
+        env_to_dollar,
+        delivered_to_dollar,
+        env_from_dollar,
+        errors_to_dollar,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -55225,6 +55241,258 @@ pub fn has_x_orig_from_hyph(raw: &[u8]) -> bool {
 ///
 /// 封書宛先を記す欄なのに `a@x~` のようにドメイン側に孤立 `~` を含む宛名
 /// — 波線の扱いをずらす実装と構文違反として拒否する実装で封
+/// `Envelope-To:`/`X-Envelope-To:` の値がドル符宛名形か判
+/// 定する (D2623)。
+///
+/// 封書宛先を記す欄なのに `a@x$` のようにドメイン側に孤立 `$` を含む宛名
+/// — ドル符の扱いをずらす実装と構文違反として拒否する実装で封
+/// 書宛先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_to_dollar(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "envelope-to" || n == "x-envelope-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Delivered-To:` の値がドル符宛名形か判定する
+/// (D2624)。
+///
+/// 最終配達を記す欄なのにドメイン側に孤立 `$` を含む宛名 — ドル符の扱
+/// いをずらす実装と構文違反として拒否する実装で配達履歴がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_delivered_to_dollar(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "delivered-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:` 等の値がドル符宛名形か
+/// 判定する (D2625)。
+///
+/// 封書差出人を記す欄なのにドメイン側に孤立 `$` を含む宛名 — ドル符の扱いをずらす実装と構文違反として拒否する実装で差出人履歴がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_from_dollar(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-envelope-from"
+                | "x-mailfrom"
+                | "x-mail-from"
+                | "envelope-from"
+                | "x-original-from-envelope"
+                | "x-sender-envelope"
+        ) && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Errors-To:` の値がドル符宛名形か判定する
+/// (D2626)。
+///
+/// 返送先を記す欄なのにドメイン側に孤立 `$` を含む宛名 — ドル符の扱いを
+/// ずらす実装と構文違反として拒否する実装で返送先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_errors_to_dollar(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "errors-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
 /// 書宛先がずれる (アドレス欄側も未検出)。
 #[must_use]
 pub fn has_env_to_tilde(raw: &[u8]) -> bool {
@@ -92267,6 +92535,46 @@ mod tests {
         ));
         assert!(!has_errors_to_pct(
             b"From: a@x\r\nErrors-To: e@x\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書宛先がドル符宛名なら発火() {
+        assert!(has_env_to_dollar(
+            b"From: a@x\r\nEnvelope-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_dollar(
+            b"From: a@x\r\nEnvelope-To: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 配達履歴がドル符宛名なら発火() {
+        assert!(has_delivered_to_dollar(
+            b"From: a@x\r\nDelivered-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_dollar(
+            b"From: a@x\r\nDelivered-To: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人がドル符宛名なら発火() {
+        assert!(has_env_from_dollar(
+            b"From: a@x\r\nX-Envelope-From: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_dollar(
+            b"From: a@x\r\nX-Envelope-From: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先がドル符宛名なら発火() {
+        assert!(has_errors_to_dollar(
+            b"From: a@x\r\nErrors-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_dollar(
+            b"From: a@x\r\nErrors-To: a$b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
