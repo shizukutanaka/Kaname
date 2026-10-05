@@ -7949,6 +7949,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.errors_to_plus {
         render_risks.push("返送先記録の宛名ドメインにプラスです—プラスの扱いで返送先がずれます".to_string());
     }
+    if env.env_to_amp {
+        render_risks.push("封書宛先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで封書宛先がずれます".to_string());
+    }
+    if env.delivered_to_amp {
+        render_risks.push("配達履歴記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで配達履歴がずれます".to_string());
+    }
+    if env.env_from_amp {
+        render_risks.push("封書差出人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで差出人履歴がずれます".to_string());
+    }
+    if env.errors_to_amp {
+        render_risks.push("返送先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで返送先がずれます".to_string());
+    }
     if env.env_to_lbrace {
         render_risks.push("封書宛先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで封書宛先がずれます".to_string());
     }
