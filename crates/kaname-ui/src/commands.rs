@@ -8081,6 +8081,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_from_eq {
         render_risks.push("元差出人記録の宛名ドメインにイコールです—イコールの扱いで元差出人がずれます".to_string());
     }
+    if env.apparently_to_pipe {
+        render_risks.push("見せ宛記録の宛名ドメインに縦線です—縦線の扱いで見せ宛がずれます".to_string());
+    }
+    if env.apparently_from_pipe {
+        render_risks.push("表差出人記録の宛名ドメインに縦線です—縦線の扱いで表差出人がずれます".to_string());
+    }
+    if env.x_orig_to_pipe {
+        render_risks.push("元宛先記録の宛名ドメインに縦線です—縦線の扱いで元宛先がずれます".to_string());
+    }
+    if env.x_orig_from_pipe {
+        render_risks.push("元差出人記録の宛名ドメインに縦線です—縦線の扱いで元差出人がずれます".to_string());
+    }
     if env.apparently_to_amp {
         render_risks.push("見せ宛記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで見せ宛がずれます".to_string());
     }

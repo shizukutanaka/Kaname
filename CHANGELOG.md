@@ -52,6 +52,10 @@
 ### Security — D2540: `Resent-Reply-To:` 欄のドメイン側開き波括弧宛名値を再送返信口ずれとして検出 — `Envelope` に `resent_reply_to_lbrace` を追加。
 ### Security — D2541: `Apparently-Resent-*:` 系欄のドメイン側開き波括弧宛名値を再送残渣ずれとして検出 — `Envelope` に `apparently_resent_lbrace` を追加。
 ### Security — D2542: `X-Original-Rcpt-To:` 系欄のドメイン側開き波括弧宛名値を元受取人ずれとして検出 — `Envelope` に `x_orig_rcpt_to_lbrace` を追加。
+### Security — D2563: `Apparently-To:`/`X-Apparently-To:` 系欄のドメイン側縦線宛名値を見せ宛ずれとして検出 — `Envelope` に `apparently_to_pipe` を追加。
+### Security — D2564: `Apparently-From:`/`Apparently-Sender:` 系欄のドメイン側縦線宛名値を表差出人ずれとして検出 — `Envelope` に `apparently_from_pipe` を追加。
+### Security — D2565: `X-Original-To:` 欄のドメイン側縦線宛名値を元宛先ずれとして検出 — `Envelope` に `x_orig_to_pipe` を追加。
+### Security — D2566: `X-Original-From:` 欄のドメイン側縦線宛名値を元差出人ずれとして検出 — `Envelope` に `x_orig_from_pipe` を追加。
 ### Security — D2515: `Apparently-To:`/`X-Apparently-To:` 系のイコール宛名値 (見せ宛記録のドメイン側孤立イコール異形) を検出 — `Envelope` に `apparently_to_eq` を追加。
 ### Security — D2516: `Apparently-From:`/`Apparently-Sender:` 系のイコール宛名値 (表差出人記録のドメイン側孤立イコール異形) を検出 — `Envelope` に `apparently_from_eq` を追加。
 ### Security — D2517: `X-Original-To:` のイコール宛名値 (元宛先記録のドメイン側孤立イコール異形) を検出 — `Envelope` に `x_orig_to_eq` を追加。
