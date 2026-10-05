@@ -2868,6 +2868,14 @@ pub struct Envelope {
     pub env_from_pipe: bool,
     /// `Errors-To:` の値が縦線宛名 (D2562 — 返送先ずれ)。
     pub errors_to_pipe: bool,
+    /// `Envelope-To:`/`X-Envelope-To:` 系の値がローカル部イコール宛名 (D2719 — 封書宛先ずれ)。
+    pub env_to_eq_local: bool,
+    /// `Delivered-To:` の値がローカル部イコール宛名 (D2720 — 配達履歴ずれ)。
+    pub delivered_to_eq_local: bool,
+    /// `X-Envelope-From:`/`X-MailFrom:` 等の値がローカル部イコール宛名 (D2721 — 封書差出人ずれ)。
+    pub env_from_eq_local: bool,
+    /// `Errors-To:` の値がローカル部イコール宛名 (D2722 — 返送先ずれ)。
+    pub errors_to_eq_local: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -6407,6 +6415,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_tilde = has_delivered_to_tilde(bytes);
     let env_from_tilde = has_env_from_tilde(bytes);
     let errors_to_tilde = has_errors_to_tilde(bytes);
+    let env_to_eq_local = has_env_to_eq_local(bytes);
+    let delivered_to_eq_local = has_delivered_to_eq_local(bytes);
+    let env_from_eq_local = has_env_from_eq_local(bytes);
+    let errors_to_eq_local = has_errors_to_eq_local(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -7746,6 +7758,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_tilde,
         env_from_tilde,
         errors_to_tilde,
+        env_to_eq_local,
+        delivered_to_eq_local,
+        env_from_eq_local,
+        errors_to_eq_local,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -55435,6 +55451,258 @@ pub fn has_errors_to_pipe(raw: &[u8]) -> bool {
             && v.split_whitespace().count() == 1
     })
 }
+/// `Envelope-To:`/`X-Envelope-To:` の値がイコールをローカル部に含む宛名形か判
+/// 定する (D2719)。
+///
+/// 封書宛先を記す欄なのに `a=b@y` のようにローカル部にイコールを含む宛名
+/// — 等号入りアドレスとして受理する実装と構文違反として拒否する実装で封
+/// 書宛先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_to_eq_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "envelope-to" || n == "x-envelope-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Delivered-To:` の値がイコールをローカル部に含む宛名形か判定する
+/// (D2720)。
+///
+/// 配達履歴を記す欄なのに `a=b@y` のようにローカル部にイコールを含む宛名
+/// — 等号入りアドレスとして受理する実装と構文違反として拒否する実装で配
+/// 達履歴がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_delivered_to_eq_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "delivered-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:`/`X-Mail-From:` の値がイコールをローカル部に
+/// 含む宛名形か判定する (D2721)。
+///
+/// 封書差出人を記す欄なのに `a=b@y` のようにローカル部にイコールを含む宛名
+/// — 等号入りアドレスとして受理する実装と構文違反として拒否する実装で封
+/// 書差出人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_from_eq_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-envelope-from" || n == "x-mailfrom" || n == "x-mail-from")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Errors-To:` の値がイコールをローカル部に含む宛名形か判定する
+/// (D2722)。
+///
+/// 返送先を記す欄なのに `a=b@y` のようにローカル部にイコールを含む宛名
+/// — 等号入りアドレスとして受理する実装と構文違反として拒否する実装で返
+/// 送先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_errors_to_eq_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "errors-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` の値がイコール宛名形か判定する
 /// (D2511)。
 ///
@@ -91765,6 +92033,46 @@ mod tests {
         ));
         assert!(!has_errors_to_tilde(
             b"From: a@x\r\nErrors-To: a~b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書宛先がイコールローカル宛名なら発火() {
+        assert!(has_env_to_eq_local(
+            b"From: a@x\r\nEnvelope-To: a=b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_eq_local(
+            b"From: a@x\r\nEnvelope-To: a@xample=.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 配達履歴がイコールローカル宛名なら発火() {
+        assert!(has_delivered_to_eq_local(
+            b"From: a@x\r\nDelivered-To: a=b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_eq_local(
+            b"From: a@x\r\nDelivered-To: a@xample=.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人がイコールローカル宛名なら発火() {
+        assert!(has_env_from_eq_local(
+            b"From: a@x\r\nX-Envelope-From: a=b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_eq_local(
+            b"From: a@x\r\nX-Envelope-From: a@xample=.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先がイコールローカル宛名なら発火() {
+        assert!(has_errors_to_eq_local(
+            b"From: a@x\r\nErrors-To: a=b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_eq_local(
+            b"From: a@x\r\nErrors-To: a@xample=.com\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
