@@ -8009,6 +8009,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.errors_to_pipe {
         render_risks.push("返送先記録の宛名ドメインに縦線です—縦線の扱いで返送先がずれます".to_string());
     }
+    if env.env_to_underscore {
+        render_risks.push("封書宛先記録の宛名ドメインに低線です—低線の扱いで封書宛先がずれます".to_string());
+    }
+    if env.delivered_to_underscore {
+        render_risks.push("配達履歴記録の宛名ドメインに低線です—低線の扱いで配達履歴がずれます".to_string());
+    }
+    if env.env_from_underscore {
+        render_risks.push("封書差出人記録の宛名ドメインに低線です—低線の扱いで差出人履歴がずれます".to_string());
+    }
+    if env.errors_to_underscore {
+        render_risks.push("返送先記録の宛名ドメインに低線です—低線の扱いで返送先がずれます".to_string());
+    }
     if env.apparently_to_rbracket {
         render_risks.push("見せ宛記録の宛名に逆角括弧です—角括弧閉じの扱いで見せ宛がずれます".to_string());
     }
