@@ -2532,6 +2532,14 @@ pub struct Envelope {
     pub apparently_resent_plus: bool,
     /// `X-Original-Rcpt-To:` 系の値がプラス宛名 (D2510 — 元受取人ずれ)。
     pub x_orig_rcpt_to_plus: bool,
+    /// `X-Confirm-Reading-To:` の値がイコール宛名 (D2523 — 閲覧確認先ずれ)。
+    pub confirm_reading_eq: bool,
+    /// `Resent-Reply-To:` の値がイコール宛名 (D2524 — 再送返信口ずれ)。
+    pub resent_reply_to_eq: bool,
+    /// `Apparently-Resent-*:` 系の値がイコール宛名 (D2525 — 再送残渣ずれ)。
+    pub apparently_resent_eq: bool,
+    /// `X-Original-Rcpt-To:` 系の値がイコール宛名 (D2526 — 元受取人ずれ)。
+    pub x_orig_rcpt_to_eq: bool,
     /// `X-Confirm-Reading-To:` の値がアンパサンド宛名 (D2555 — 閲覧確認先ずれ)。
     pub confirm_reading_amp: bool,
     /// `Resent-Reply-To:` の値がアンパサンド宛名 (D2556 — 再送返信口ずれ)。
@@ -6135,6 +6143,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let resent_reply_to_plus = has_resent_reply_to_plus(bytes);
     let apparently_resent_plus = has_apparently_resent_plus(bytes);
     let x_orig_rcpt_to_plus = has_x_orig_rcpt_to_plus(bytes);
+    let confirm_reading_eq = has_confirm_reading_eq(bytes);
+    let resent_reply_to_eq = has_resent_reply_to_eq(bytes);
+    let apparently_resent_eq = has_apparently_resent_eq(bytes);
+    let x_orig_rcpt_to_eq = has_x_orig_rcpt_to_eq(bytes);
     let confirm_reading_amp = has_confirm_reading_amp(bytes);
     let resent_reply_to_amp = has_resent_reply_to_amp(bytes);
     let apparently_resent_amp = has_apparently_resent_amp(bytes);
@@ -7422,6 +7434,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_reply_to_plus,
         apparently_resent_plus,
         x_orig_rcpt_to_plus,
+        confirm_reading_eq,
+        resent_reply_to_eq,
+        apparently_resent_eq,
+        x_orig_rcpt_to_eq,
         confirm_reading_amp,
         resent_reply_to_amp,
         apparently_resent_amp,
@@ -45236,6 +45252,258 @@ pub fn has_x_orig_rcpt_to_amp(raw: &[u8]) -> bool {
 ///
 /// 閲覧確認先を記す欄なのに `a@x+` のようにドメイン側に孤立 `+` を
 /// 含む宛名 — プラスの扱いをずらす実装と構文違反として拒否する
+/// 実装で閲覧確認先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_confirm_reading_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-confirm-reading-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Resent-Reply-To:` の値がイコール宛名形か判定する
+/// (D2524)。
+///
+/// 再送返信口を記す欄なのにドメイン側に孤立 `=` を含む宛名 — イコールの扱いを
+/// ずらす実装と構文違反として拒否する実装で再送返信先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_resent_reply_to_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "resent-reply-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-Resent-*:` 系の値がイコール宛名形か判定する
+/// (D2525)。
+///
+/// 再送残渣を記す欄なのにドメイン側に孤立 `=` を含む宛名 — イコールの扱いを
+/// ずらす実装と構文違反として拒否する実装で再送記録がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_resent_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "apparently-resent-to"
+                | "apparently-resent-from"
+                | "apparently-resent-sender"
+                | "x-apparently-resent-to"
+                | "x-apparently-resent-from"
+                | "x-apparently-resent-sender"
+        ) && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系の値がイコール宛名形か判定する
+/// (D2526)。
+///
+/// 元受取人を記す欄なのにドメイン側に孤立 `=` を含む宛名 — イコールの扱いを
+/// ずらす実装と構文違反として拒否する実装で元受取人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "x-original-rcpt-to" | "x-orig-rcpt-to" | "x-rcpt-to" | "x-envelope-rcpt-to"
+        )
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('='))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
 /// 実装で閲覧確認先がずれる (アドレス欄側も未検出)。
 #[must_use]
 pub fn has_confirm_reading_plus(raw: &[u8]) -> bool {
@@ -89381,6 +89649,46 @@ mod tests {
         ));
         assert!(!has_x_orig_from_bslash(
             b"From: a@x\r\nX-Original-From: b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 閲覧確認先がイコール宛名なら発火() {
+        assert!(has_confirm_reading_eq(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@xample=.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_eq(
+            b"From: a@x\r\nX-Confirm-Reading-To: a=b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口がイコール宛名なら発火() {
+        assert!(has_resent_reply_to_eq(
+            b"From: a@x\r\nResent-Reply-To: a@xample=.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_eq(
+            b"From: a@x\r\nResent-Reply-To: a=b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣がイコール宛名なら発火() {
+        assert!(has_apparently_resent_eq(
+            b"From: a@x\r\nApparently-Resent-To: a@xample=.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_eq(
+            b"From: a@x\r\nApparently-Resent-To: a=b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人がイコール宛名なら発火() {
+        assert!(has_x_orig_rcpt_to_eq(
+            b"From: a@x\r\nX-Original-Rcpt-To: a@xample=.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_eq(
+            b"From: a@x\r\nX-Original-Rcpt-To: a=b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
