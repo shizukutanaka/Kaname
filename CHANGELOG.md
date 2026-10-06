@@ -12,6 +12,10 @@
 ### Security — D2688: `Delivered-To:` 欄のドメイン側低線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_underscore` を追加。
 ### Security — D2689: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側低線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_underscore` を追加。
 ### Security — D2690: `Errors-To:` 欄のドメイン側低線宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_underscore` を追加。
+### Security — D2639: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側星宛名値 (`a@xample*.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_star` を追加。
+### Security — D2640: `Delivered-To:` 欄のドメイン側星宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_star` を追加。
+### Security — D2641: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側星宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_star` を追加。
+### Security — D2642: `Errors-To:` 欄のドメイン側星宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_star` を追加。
 ### Security — D2643: `Apparently-To:`/`X-Apparently-To:` 系欄のドメイン側星宛名値 (`a@xample*.com` 形) を見せ宛ずれとして検出 — `Envelope` に `apparently_to_star` を追加。
 ### Security — D2644: `Apparently-From:`/`Apparently-Sender:` 系欄のドメイン側星宛名値を表差出人ずれとして検出 — `Envelope` に `apparently_from_star` を追加。
 ### Security — D2645: `X-Original-To:` 欄のドメイン側星宛名値を元宛先ずれとして検出 — `Envelope` に `x_orig_to_star` を追加。
