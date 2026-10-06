@@ -8114,6 +8114,15 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.errors_to_star_local {
         render_risks.push("返送先記録の宛名ローカル部に星です—星の扱いで返送先がずれます".to_string());
     }
+    if env.env_to_hash_local {
+        render_risks.push("封書宛先記録の宛名ローカル部に井桁です—井桁の扱いで封書宛先がずれます".to_string());
+    }
+    if env.env_from_hash_local {
+        render_risks.push("封書差出人記録の宛名ローカル部に井桁です—井桁の扱いで封書差出人がずれます".to_string());
+    }
+    if env.errors_to_hash_local {
+        render_risks.push("返送先記録の宛名ローカル部に井桁です—井桁の扱いで返送先がずれます".to_string());
+    }
     if env.apparently_to_rbracket {
         render_risks.push("見せ宛記録の宛名に逆角括弧です—角括弧閉じの扱いで見せ宛がずれます".to_string());
     }
