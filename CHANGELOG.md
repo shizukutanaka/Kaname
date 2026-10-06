@@ -12,6 +12,10 @@
 ### Security — D2688: `Delivered-To:` 欄のドメイン側低線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_underscore` を追加。
 ### Security — D2689: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側低線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_underscore` を追加。
 ### Security — D2690: `Errors-To:` 欄のドメイン側低線宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_underscore` を追加。
+### Security — D2631: `X-Original-Cc:` 欄のドメイン側ドル符宛名値 (`a@xample$.com` 形) を元副宛ずれとして検出 — `Envelope` に `x_orig_cc_dollar` を追加。
+### Security — D2632: `X-Original-Reply-To:` 欄のドメイン側ドル符宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_dollar` を追加。
+### Security — D2633: `Disposition-Notification-To:` 欄のドメイン側ドル符宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_dollar` を追加。
+### Security — D2634: `Return-Receipt-To:` 欄のドメイン側ドル符宛名値を受領通知先ずれとして検出 — `Envelope` に `return_receipt_dollar` を追加。
 ### Security — D2635: `X-Confirm-Reading-To:` 欄のドメイン側ドル符宛名値 (`a@xample$.com` 形) を閲覧確認先ずれとして検出 — `Envelope` に `confirm_reading_dollar` を追加。
 ### Security — D2636: `Resent-Reply-To:` 欄のドメイン側ドル符宛名値を再送返信口ずれとして検出 — `Envelope` に `resent_reply_to_dollar` を追加。
 ### Security — D2637: `Apparently-Resent-*:` 系欄のドメイン側ドル符宛名値を再送残渣ずれとして検出 — `Envelope` に `apparently_resent_dollar` を追加。
