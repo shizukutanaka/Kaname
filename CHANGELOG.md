@@ -12,6 +12,10 @@
 ### Security — D2688: `Delivered-To:` 欄のドメイン側低線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_underscore` を追加。
 ### Security — D2689: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側低線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_underscore` を追加。
 ### Security — D2690: `Errors-To:` 欄のドメイン側低線宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_underscore` を追加。
+### Security — D2770: `Apparently-To:`/`X-Apparently-To:` 系欄のローカル部星宛名値 (`a*b@y` 形) を見せ宛ずれとして検出 — `Envelope` に `apparently_to_star_local` を追加。
+### Security — D2771: `Apparently-From:`/`Apparently-Sender:` 系欄のローカル部星宛名値を表差出人ずれとして検出 — `Envelope` に `apparently_from_star_local` を追加。
+### Security — D2772: `X-Original-To:` 欄のローカル部星宛名値を元宛先ずれとして検出 — `Envelope` に `x_orig_to_star_local` を追加。
+### Security — D2773: `X-Original-From:` 欄のローカル部星宛名値を元差出人ずれとして検出 — `Envelope` に `x_orig_from_star_local` を追加。
 ### Security — D2774: `X-Original-Cc:` 系欄のローカル部星宛名値 (`a*b@y` 形) を元副宛ずれとして検出 — `Envelope` に `x_orig_cc_star_local` を追加。
 ### Security — D2775: `X-Original-Reply-To:` 欄のローカル部星宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_star_local` を追加。
 ### Security — D2776: `Disposition-Notification-To:` 欄のローカル部星宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_star_local` を追加。
