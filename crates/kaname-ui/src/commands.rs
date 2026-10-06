@@ -8150,6 +8150,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_from_amp {
         render_risks.push("元差出人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元差出人がずれます".to_string());
     }
+    if env.apparently_to_slash_local {
+        render_risks.push("見せ宛記録の宛名ローカル部に斜線です—斜線の扱いで見せ宛がずれます".to_string());
+    }
+    if env.apparently_from_slash_local {
+        render_risks.push("表差出人記録の宛名ローカル部に斜線です—斜線の扱いで表差出人がずれます".to_string());
+    }
+    if env.x_orig_to_slash_local {
+        render_risks.push("元宛先記録の宛名ローカル部に斜線です—斜線の扱いで元宛先がずれます".to_string());
+    }
+    if env.x_orig_from_slash_local {
+        render_risks.push("元差出人記録の宛名ローカル部に斜線です—斜線の扱いで元差出人がずれます".to_string());
+    }
     if env.apparently_to_star_local {
         render_risks.push("見せ宛記録の宛名ローカル部に星です—星の扱いで見せ宛がずれます".to_string());
     }
