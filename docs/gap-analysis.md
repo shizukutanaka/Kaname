@@ -2008,6 +2008,9 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2688 | Delivered-To の低線宛名値 (配達履歴記録のドメイン側孤立低線異形) | 配達履歴ずれ |
 | D2689 | X-Envelope-From/X-MailFrom 等の低線宛名値 (封書差出人記録のドメイン側孤立低線異形) | 差出人履歴ずれ |
 | D2690 | Errors-To の低線宛名値 (返送先記録のドメイン側孤立低線異形) | 返送先ずれ |
+| D2767 | X-Envelope-To のローカル部星宛名値 (封書宛先記録のローカル部星異形 — Envelope-To 本命は addr_star_local で網羅済み) | 封書宛先ずれ |
+| D2768 | X-Envelope-From/X-MailFrom/X-Mail-From のローカル部星宛名値 (封書差出人記録のローカル部星異形) | 封書差出人ずれ |
+| D2769 | Errors-To のローカル部星宛名値 (返送先記録のローカル部星異形) | 返送先ずれ |
 | D2770 | Apparently-To/X-Apparently-To 系のローカル部星宛名値 (見せ宛記録のローカル部星異形) | 見せ宛ずれ |
 | D2771 | Apparently-From/Apparently-Sender 系のローカル部星宛名値 (表差出人記録のローカル部星異形) | 表差出人ずれ |
 | D2772 | X-Original-To のローカル部星宛名値 (元宛先記録のローカル部星異形) | 元宛先ずれ |
