@@ -2708,6 +2708,14 @@ pub struct Envelope {
     pub x_orig_to_amp: bool,
     /// `X-Original-From:` の値がアンパサンド宛名 (D2550 — 元差出人ずれ)。
     pub x_orig_from_amp: bool,
+    /// `Apparently-To:`/`X-Apparently-To:` 系の値が反転符宛名 (D2675 — 見せ宛ずれ)。
+    pub apparently_to_backtick: bool,
+    /// `Apparently-From:`/`Apparently-Sender:` 系の値が反転符宛名 (D2676 — 表差出人ずれ)。
+    pub apparently_from_backtick: bool,
+    /// `X-Original-To:` の値が反転符宛名 (D2677 — 元宛先ずれ)。
+    pub x_orig_to_backtick: bool,
+    /// `X-Original-From:` の値が反転符宛名 (D2678 — 元差出人ずれ)。
+    pub x_orig_from_backtick: bool,
     /// `Apparently-To:`/`X-Apparently-To:` 系の値が低線宛名 (D2691 — 見せ宛ずれ)。
     pub apparently_to_underscore: bool,
     /// `Apparently-From:`/`Apparently-Sender:` 系の値が低線宛名 (D2692 — 表差出人ずれ)。
@@ -6437,6 +6445,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_amp = has_apparently_from_amp(bytes);
     let x_orig_to_amp = has_x_orig_to_amp(bytes);
     let x_orig_from_amp = has_x_orig_from_amp(bytes);
+    let apparently_to_backtick = has_apparently_to_backtick(bytes);
+    let apparently_from_backtick = has_apparently_from_backtick(bytes);
+    let x_orig_to_backtick = has_x_orig_to_backtick(bytes);
+    let x_orig_from_backtick = has_x_orig_from_backtick(bytes);
     let apparently_to_pipe = has_apparently_to_pipe(bytes);
     let apparently_from_pipe = has_apparently_from_pipe(bytes);
     let x_orig_to_pipe = has_x_orig_to_pipe(bytes);
@@ -7835,6 +7847,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_amp,
         x_orig_to_amp,
         x_orig_from_amp,
+        apparently_to_backtick,
+        apparently_from_backtick,
+        x_orig_to_backtick,
+        x_orig_from_backtick,
         apparently_to_pipe,
         apparently_from_pipe,
         x_orig_to_pipe,
@@ -54551,6 +54567,255 @@ pub fn has_x_orig_from_amp(raw: &[u8]) -> bool {
             && v.split_whitespace().count() == 1
     })
 }
+
+/// `Apparently-To:`X-Apparently-To:` 系の値が反転符宛名
+/// 形か判定する (D2675)。
+///
+/// 見せ宛を記す欄なのに `a@x`` のようにドメイン側に孤立 ` を含む宛名
+/// — 反転符の扱いをずらす実装と構文違反として拒否する実装で見
+/// せ宛記録がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_to_backtick(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-to" || n == "x-apparently-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('`'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-From:`Apparently-Sender:` 系の値が反転符宛
+/// 名形か判定する (D2676)。
+///
+/// 表差出人を記す欄なのにドメイン側に孤立 ` を含む宛名 — 反転符の扱いをずらす実装と構文違反として拒否する実装で表札記録がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_from_backtick(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(
+            n,
+            "apparently-from" | "x-apparently-from" | "apparently-sender" | "x-apparently-sender"
+        )
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('`'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-To:` の値が反転符宛名形か判定する
+/// (D2677)。
+///
+/// 元宛先を記す欄なのにドメイン側に孤立 ` を含む宛名 — 反転符の扱い
+/// をずらす実装と構文違反として拒否する実装で元宛先記録がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_to_backtick(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-to" && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('`'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-From:` の値が反転符宛名形か判定する
+/// (D2678)。
+///
+/// 元差出人を記す欄なのにドメイン側に孤立 ` を含む宛名 — 反転符の扱
+/// いをずらす実装と構文違反として拒否する実装で元差出人記録がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_from_backtick(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        l[..c].trim() == "x-original-from"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .nth(1)
+                .map_or(false, |d| d.contains('`'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
 /// `Apparently-To:`/`X-Apparently-To:` 系の値が開き波括弧宛
 /// 名形か判定する (D2531)。
 ///
@@ -97168,6 +97433,46 @@ mod tests {
         ));
         assert!(!has_x_orig_from_pipe(
             b"From: a@x\r\nX-Original-From: a|b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 見せ宛が反転符宛名なら発火() {
+        assert!(has_apparently_to_backtick(
+            b"From: a@x\r\nApparently-To: a@xample`.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_backtick(
+            b"From: a@x\r\nApparently-To: a`b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表差出人が反転符宛名なら発火() {
+        assert!(has_apparently_from_backtick(
+            b"From: a@x\r\nApparently-From: a@xample`.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_backtick(
+            b"From: a@x\r\nApparently-From: a`b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛先が反転符宛名なら発火() {
+        assert!(has_x_orig_to_backtick(
+            b"From: a@x\r\nX-Original-To: a@xample`.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_backtick(
+            b"From: a@x\r\nX-Original-To: a`b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人が反転符宛名なら発火() {
+        assert!(has_x_orig_from_backtick(
+            b"From: a@x\r\nX-Original-From: a@xample`.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_backtick(
+            b"From: a@x\r\nX-Original-From: a`b@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 

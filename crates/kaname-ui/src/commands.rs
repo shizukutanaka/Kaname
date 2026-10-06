@@ -8162,6 +8162,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_from_amp {
         render_risks.push("元差出人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元差出人がずれます".to_string());
     }
+    if env.apparently_to_backtick {
+        render_risks.push("見せ宛記録の宛名ドメインに反転符です—反転符の扱いで見せ宛がずれます".to_string());
+    }
+    if env.apparently_from_backtick {
+        render_risks.push("表差出人記録の宛名ドメインに反転符です—反転符の扱いで表差出人がずれます".to_string());
+    }
+    if env.x_orig_to_backtick {
+        render_risks.push("元宛先記録の宛名ドメインに反転符です—反転符の扱いで元宛先がずれます".to_string());
+    }
+    if env.x_orig_from_backtick {
+        render_risks.push("元差出人記録の宛名ドメインに反転符です—反転符の扱いで元差出人がずれます".to_string());
+    }
     if env.apparently_to_underscore {
         render_risks.push("見せ宛記録の宛名ドメインに低線です—低線の扱いで見せ宛がずれます".to_string());
     }
