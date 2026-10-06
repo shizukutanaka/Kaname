@@ -12,6 +12,10 @@
 ### Security — D2688: `Delivered-To:` 欄のドメイン側低線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_underscore` を追加。
 ### Security — D2689: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側低線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_underscore` を追加。
 ### Security — D2690: `Errors-To:` 欄のドメイン側低線宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_underscore` を追加。
+### Security — D2679: `X-Original-Cc:` 欄のドメイン側反転符宛名値 (`a@xample` `.com` 形) を元副宛ずれとして検出 — `Envelope` に `x_orig_cc_backtick` を追加。
+### Security — D2680: `X-Original-Reply-To:` 欄のドメイン側反転符宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_backtick` を追加。
+### Security — D2681: `Disposition-Notification-To:` 欄のドメイン側反転符宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_backtick` を追加。
+### Security — D2682: `Return-Receipt-To:` 欄のドメイン側反転符宛名値を受領通知先ずれとして検出 — `Envelope` に `return_receipt_backtick` を追加。
 ### Security — D2683: `X-Confirm-Reading-To:` 欄のドメイン側反転符宛名値 (`a@xample` `.com` 形) を閲覧確認先ずれとして検出 — `Envelope` に `confirm_reading_backtick` を追加。
 ### Security — D2684: `Resent-Reply-To:` 欄のドメイン側反転符宛名値を再送返信口ずれとして検出 — `Envelope` に `resent_reply_to_backtick` を追加。
 ### Security — D2685: `Apparently-Resent-*:` 系欄のドメイン側反転符宛名値を再送残渣ずれとして検出 — `Envelope` に `apparently_resent_backtick` を追加。
