@@ -2932,6 +2932,14 @@ pub struct Envelope {
     pub env_from_underscore: bool,
     /// `Errors-To:` の値が低線宛名 (D2690 — 返送先ずれ)。
     pub errors_to_underscore: bool,
+    /// `Envelope-To:`/`X-Envelope-To:` 系の値がローカル部斜線宛名 (D2735 — 封書宛先ずれ)。
+    pub env_to_slash_local: bool,
+    /// `Delivered-To:` の値がローカル部斜線宛名 (D2736 — 配達履歴ずれ)。
+    pub delivered_to_slash_local: bool,
+    /// `X-Envelope-From:`/`X-MailFrom:` 等の値がローカル部斜線宛名 (D2737 — 封書差出人ずれ)。
+    pub env_from_slash_local: bool,
+    /// `Errors-To:` の値がローカル部斜線宛名 (D2738 — 返送先ずれ)。
+    pub errors_to_slash_local: bool,
     /// `X-Envelope-To:` の値がローカル部星宛名 (D2767 — 封書宛先ずれ)。
     pub env_to_star_local: bool,
     /// `X-Envelope-From:`/`X-MailFrom:` 等の値がローカル部星宛名 (D2768 — 封書差出人ずれ)。
@@ -6509,6 +6517,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let delivered_to_underscore = has_delivered_to_underscore(bytes);
     let env_from_underscore = has_env_from_underscore(bytes);
     let errors_to_underscore = has_errors_to_underscore(bytes);
+    let env_to_slash_local = has_env_to_slash_local(bytes);
+    let delivered_to_slash_local = has_delivered_to_slash_local(bytes);
+    let env_from_slash_local = has_env_from_slash_local(bytes);
+    let errors_to_slash_local = has_errors_to_slash_local(bytes);
     let env_to_star_local = has_env_to_star_local(bytes);
     let env_from_star_local = has_env_from_star_local(bytes);
     let errors_to_star_local = has_errors_to_star_local(bytes);
@@ -7883,6 +7895,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         delivered_to_underscore,
         env_from_underscore,
         errors_to_underscore,
+        env_to_slash_local,
+        delivered_to_slash_local,
+        env_from_slash_local,
+        errors_to_slash_local,
         env_to_star_local,
         env_from_star_local,
         errors_to_star_local,
@@ -57615,6 +57631,258 @@ pub fn has_errors_to_underscore(raw: &[u8]) -> bool {
     })
 }
 
+/// `Envelope-To:`/`X-Envelope-To:` の値が斜線をローカル部に含む宛名形か判
+/// 定する (D2735)。
+///
+/// 封書宛先を記す欄なのに `a/b@y` のようにローカル部に斜線を含む宛名
+/// — パス風アドレスとして受理する実装と構文違反として拒否する実装で封
+/// 書宛先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_to_slash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "envelope-to" || n == "x-envelope-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('/'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Delivered-To:` の値が斜線をローカル部に含む宛名形か判定する
+/// (D2736)。
+///
+/// 配達履歴を記す欄なのに `a/b@y` のようにローカル部に斜線を含む宛名
+/// — パス風アドレスとして受理する実装と構文違反として拒否する実装で配
+/// 達履歴がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_delivered_to_slash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "delivered-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('/'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:`/`X-Mail-From:` の値が斜線をローカル部に
+/// 含む宛名形か判定する (D2737)。
+///
+/// 封書差出人を記す欄なのに `a/b@y` のようにローカル部に斜線を含む宛名
+/// — パス風アドレスとして受理する実装と構文違反として拒否する実装で封
+/// 書差出人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_from_slash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-envelope-from" || n == "x-mailfrom" || n == "x-mail-from")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('/'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Errors-To:` の値が斜線をローカル部に含む宛名形か判定する
+/// (D2738)。
+///
+/// 返送先を記す欄なのに `a/b@y` のようにローカル部に斜線を含む宛名
+/// — パス風アドレスとして受理する実装と構文違反として拒否する実装で返
+/// 送先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_errors_to_slash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "errors-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('/'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 
 /// `X-Envelope-To:` の値が星をローカル部に含む宛名形か判
 /// 定する (D2767)。
@@ -94174,6 +94442,46 @@ mod tests {
         ));
         assert!(!has_errors_to_underscore(
             b"From: a@x\r\nErrors-To: a_b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書宛先が斜線ローカル宛名なら発火() {
+        assert!(has_env_to_slash_local(
+            b"From: a@x\r\nEnvelope-To: a/b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_slash_local(
+            b"From: a@x\r\nEnvelope-To: a@xample/.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 配達履歴が斜線ローカル宛名なら発火() {
+        assert!(has_delivered_to_slash_local(
+            b"From: a@x\r\nDelivered-To: a/b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_slash_local(
+            b"From: a@x\r\nDelivered-To: a@xample/.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人が斜線ローカル宛名なら発火() {
+        assert!(has_env_from_slash_local(
+            b"From: a@x\r\nX-Envelope-From: a/b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_slash_local(
+            b"From: a@x\r\nX-Envelope-From: a@xample/.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先が斜線ローカル宛名なら発火() {
+        assert!(has_errors_to_slash_local(
+            b"From: a@x\r\nErrors-To: a/b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_slash_local(
+            b"From: a@x\r\nErrors-To: a@xample/.com\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
