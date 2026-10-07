@@ -3394,6 +3394,14 @@ pub struct Envelope {
     pub display_punct_bad: bool,
     /// アドレス欄の表示名が100文字超
     pub display_long_bad: bool,
+    /// Received-SPF: の判定語彙が外れている (D2971)。
+    pub recv_spf_bad: bool,
+    /// TLS-Required: が `No` でない (D2972)。
+    pub tls_required_bad: bool,
+    /// Require-Recipient-Valid-Since: が `宛名; 日時` 形でない (D2973)。
+    pub req_rcpt_bad: bool,
+    /// BIMI-Location:/BIMI-Indicator: が既定形でない (D2974)。
+    pub bimi_mark_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7221,6 +7229,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let display_domain_bad = has_display_domain_bad(bytes);
     let display_punct_bad = has_display_punct_bad(bytes);
     let display_long_bad = has_display_long_bad(bytes);
+    let recv_spf_bad = has_recv_spf_bad(bytes);
+    let tls_required_bad = has_tls_required_bad(bytes);
+    let req_rcpt_bad = has_req_rcpt_bad(bytes);
+    let bimi_mark_bad = has_bimi_mark_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8834,6 +8846,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         display_domain_bad,
         display_punct_bad,
         display_long_bad,
+        recv_spf_bad,
+        tls_required_bad,
+        req_rcpt_bad,
+        bimi_mark_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -50077,6 +50093,102 @@ pub fn has_display_long_bad(raw: &[u8]) -> bool {
             .map(|p| p.chars().count() > 100)
             .unwrap_or(false)
     })
+}
+
+fn auth_resid_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2971)。
+fn has_recv_spf_bad(bytes: &[u8]) -> bool {
+    let logical = auth_resid_hdr_text(bytes);
+    const VOCAB: [&str; 7] = [
+        "pass", "fail", "softfail", "neutral", "none", "temperror", "permerror",
+    ];
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("received-spf:")
+            .or_else(|| low.strip_prefix("x-received-spf:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            let first = v.split(|c: char| c == ' ' || c == '\t').next().unwrap_or("");
+            if !VOCAB.contains(&first) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2972)。
+fn has_tls_required_bad(bytes: &[u8]) -> bool {
+    let logical = auth_resid_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("tls-required:") {
+            if v.trim() != "no" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2973)。
+fn has_req_rcpt_bad(bytes: &[u8]) -> bool {
+    let logical = auth_resid_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("require-recipient-valid-since:") {
+            let v = v.trim();
+            // `宛名; 日時` の形
+            let Some(s) = v.find(';') else { return true; };
+            let (addr, date) = (v[..s].trim(), v[s + 1..].trim());
+            let addr_ok = addr.contains('@') || (addr.starts_with('<') && addr.ends_with('>'));
+            let date_ok = date.bytes().any(|b| b.is_ascii_digit()) && date.contains(':');
+            if !addr_ok || !date_ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2974)。
+fn has_bimi_mark_bad(bytes: &[u8]) -> bool {
+    let logical = auth_resid_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("bimi-location:") {
+            // 場所欄は https URL
+            if !v.trim_start().starts_with("https://") {
+                return true;
+            }
+        } else if let Some(v) = low.strip_prefix("bimi-indicator:") {
+            let v = v.trim();
+            // 本体欄は base64 の単一トークン
+            if v.is_empty()
+                || !v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// (D2635)。
@@ -129581,3 +129693,32 @@ fn 迷惑点欄が異形なら発火() {
         assert!(!has_display_long_bad(ok.as_bytes()));
         assert!(!has_display_long_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+#[test]
+fn 受信素朴判定欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nReceived-SPF: x\r\n\r\nx").unwrap();
+    assert!(e.recv_spf_bad);
+    let e = parse(b"From: a@x.com\r\nReceived-SPF: pass (x) receiver=y\r\n\r\nx").unwrap();
+    assert!(!e.recv_spf_bad);
+}
+#[test]
+fn 暗号必須欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nTLS-Required: x\r\n\r\nx").unwrap();
+    assert!(e.tls_required_bad);
+    let e = parse(b"From: a@x.com\r\nTLS-Required: No\r\n\r\nx").unwrap();
+    assert!(!e.tls_required_bad);
+}
+#[test]
+fn 受取人時限欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nRequire-Recipient-Valid-Since: x\r\n\r\nx").unwrap();
+    assert!(e.req_rcpt_bad);
+    let e = parse(b"From: a@x.com\r\nRequire-Recipient-Valid-Since: a@x.com; Sun, 15 Mar 2020 08:59:42 -0700\r\n\r\nx").unwrap();
+    assert!(!e.req_rcpt_bad);
+}
+#[test]
+fn 印章欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nBIMI-Location: http://x.com/a.svg\r\n\r\nx").unwrap();
+    assert!(e.bimi_mark_bad);
+    let e = parse(b"From: a@x.com\r\nBIMI-Location: https://x.com/a.svg\r\n\r\nx").unwrap();
+    assert!(!e.bimi_mark_bad);
+}
