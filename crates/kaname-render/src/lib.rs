@@ -3298,6 +3298,14 @@ pub struct Envelope {
     pub ms_latency_bad: bool,
     /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
     pub mailer_bad: bool,
+    /// X-Spam-Flag: が YES/NO 語彙でない (D2967)。
+    pub spam_flag_bad: bool,
+    /// X-Spam-Status: が `Yes|No … score=…` 形でない (D2968)。
+    pub spam_status_bad: bool,
+    /// X-Spam-Level: が星のみでない (D2969)。
+    pub spam_level_bad: bool,
+    /// X-Spam-Score:/X-Spam-Rating: が数値でない (D2970)。
+    pub spam_score_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7077,6 +7085,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
     let ms_latency_bad = has_ms_latency_bad(bytes);
     let mailer_bad = has_mailer_bad(bytes);
+    let spam_flag_bad = has_spam_flag_bad(bytes);
+    let spam_status_bad = has_spam_status_bad(bytes);
+    let spam_level_bad = has_spam_level_bad(bytes);
+    let spam_score_bad = has_spam_score_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8642,6 +8654,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         tnef_correlator_bad,
         ms_latency_bad,
         mailer_bad,
+        spam_flag_bad,
+        spam_status_bad,
+        spam_level_bad,
+        spam_score_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48477,6 +48493,94 @@ pub fn has_mailer_bad(raw: &[u8]) -> bool {
         v.is_empty()
             || v.chars().any(|c| !c.is_ascii() || (c.is_ascii_control() && c != '\t'))
     })
+}
+
+fn spam_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2967)。
+fn has_spam_flag_bad(bytes: &[u8]) -> bool {
+    let logical = spam_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-spam-flag:")
+            .or_else(|| low.strip_prefix("x-spam-flagged:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            if v != "yes" && v != "no" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2968)。
+fn has_spam_status_bad(bytes: &[u8]) -> bool {
+    let logical = spam_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-spam-status:") {
+            let v = v.trim();
+            // `Yes|No` で始まり score=… を含む体裁
+            let ok = (v.starts_with("yes") || v.starts_with("no"))
+                && v.contains("score=");
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2969)。
+fn has_spam_level_bad(bytes: &[u8]) -> bool {
+    let logical = spam_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-spam-level:") {
+            let v = v.trim();
+            // 星のみ (空を含む)
+            if !v.bytes().all(|b| b == b'*') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2970)。
+fn has_spam_score_bad(bytes: &[u8]) -> bool {
+    let logical = spam_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-spam-score:")
+            .or_else(|| low.strip_prefix("x-spam-rating:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 数値 (小数点あり/なし)
+            let ok = v.parse::<f64>().is_ok() && !v.is_empty();
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// (D2635)。
@@ -127563,3 +127667,32 @@ body";
         assert!(!has_mailer_bad(b"User-Agent: Thunderbird/115.0\r\n\r\nbody"));
         assert!(!has_mailer_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+#[test]
+fn 迷惑旗欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Flag: x\r\n\r\nx").unwrap();
+    assert!(e.spam_flag_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Flag: YES\r\n\r\nx").unwrap();
+    assert!(!e.spam_flag_bad);
+}
+#[test]
+fn 迷惑状態欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Status: x\r\n\r\nx").unwrap();
+    assert!(e.spam_status_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Status: No, score=0.1 required=5\r\n\r\nx").unwrap();
+    assert!(!e.spam_status_bad);
+}
+#[test]
+fn 迷惑度欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Level: x\r\n\r\nx").unwrap();
+    assert!(e.spam_level_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Level: *****\r\n\r\nx").unwrap();
+    assert!(!e.spam_level_bad);
+}
+#[test]
+fn 迷惑点欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Score: x\r\n\r\nx").unwrap();
+    assert!(e.spam_score_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Score: 1.5\r\n\r\nx").unwrap();
+    assert!(!e.spam_score_bad);
+}

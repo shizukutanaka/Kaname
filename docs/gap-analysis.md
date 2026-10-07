@@ -2226,4 +2226,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2928 | X-MS-TNEF-Correlator 系の非base64値 (相関子欄の値異形) | 経路ずれ |
 | D2929 | X-MS-Exchange 遅延欄の非時刻値 (遅延欄の値異形) | 経路ずれ |
 | D2930 | X-Mailer/User-Agent 系の制御文字・非ascii (送信器欄の値異形) | 経路ずれ |
+| D2967 | X-Spam-Flag 系の非 YES/NO 値 (迷惑旗欄の値異形) | 迷惑判定ずれ |
+| D2968 | X-Spam-Status: の非 Yes|No+score 値 (迷惑状態欄の値異形) | 迷惑判定ずれ |
+| D2969 | X-Spam-Level: の非星値 (迷惑度欄の値異形) | 迷惑判定ずれ |
+| D2970 | X-Spam-Score 系の非数値 (迷惑点欄の値異形) | 迷惑判定ずれ |
 devin/1791332973-unclosed-cell1
