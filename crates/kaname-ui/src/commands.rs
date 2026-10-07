@@ -8395,6 +8395,15 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.arc_chain_incomplete {
         render_risks.push("ARC記録の組が揃っていません—記録組欠落の扱いで認証がずれます".to_string());
     }
+    if env.auto_submitted_bad {
+        render_risks.push("自動応答欄の値が未規定です—応答値の扱いで経路がずれます".to_string());
+    }
+    if env.x_orig_ip_bad {
+        render_risks.push("送信元IP欄が異形です—送信元値の扱いで経路がずれます".to_string());
+    }
+    if env.x_auto_suppress_bad {
+        render_risks.push("応答抑制欄の値が異形です—抑制値の扱いで経路がずれます".to_string());
+    }
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }

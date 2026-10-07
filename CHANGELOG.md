@@ -356,6 +356,14 @@ devin/1791331333-quoted-local-cell2
 
 ### Security — D2914: `ARC-Seal:` 系欄が存在するのに `ARC-Authentication-Results:`/`ARC-Message-Signature:` が欠けるARC記録組欠落を検出 — `Envelope` に `arc_chain_incomplete` を追加。
 
+### Security — D2915: `Auto-Submitted:` 欄の値が RFC 3834 の規定語彙外の異形を検出 — `Envelope` に `auto_submitted_bad` を追加。
+
+### Security — D2916: `Precedence:` 欄の値が規定語彙外の配送優先度異形を検出 — `Envelope` に `precedence_bad` を追加。
+
+### Security — D2917: `X-Originating-IP:` 欄が角括弧付き IP 表記でない送信元異形を検出 — `Envelope` に `x_orig_ip_bad` を追加。
+
+### Security — D2918: `X-Auto-Response-Suppress:` 欄のトークンが Exchange 規定語彙外の抑制指定異形を検出 — `Envelope` に `x_auto_suppress_bad` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
