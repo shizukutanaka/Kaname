@@ -3410,6 +3410,14 @@ pub struct Envelope {
     pub cancel_lock_bad: bool,
     /// NNTP-Posting-Host: が単一トークン形でない (D2962)。
     pub posting_host_bad: bool,
+    /// アドレス欄の表示名に生の非ascii文字がある
+    pub display_raw_nonascii: bool,
+    /// アドレス欄の表示名の encoded-word が構造文字に復号される
+    pub display_ew_danger: bool,
+    /// アドレス欄の表示名にエスケープなし鉤括弧が混在する
+    pub display_inner_quote: bool,
+    /// アドレス欄の表示名が空白のみ
+    pub display_ws_only: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7245,6 +7253,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let supersedes_bad = has_supersedes_bad(bytes);
     let cancel_lock_bad = has_cancel_lock_bad(bytes);
     let posting_host_bad = has_posting_host_bad(bytes);
+    let display_raw_nonascii = has_display_raw_nonascii(bytes);
+    let display_ew_danger = has_display_ew_danger(bytes);
+    let display_inner_quote = has_display_inner_quote(bytes);
+    let display_ws_only = has_display_ws_only(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8866,6 +8878,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         supersedes_bad,
         cancel_lock_bad,
         posting_host_bad,
+        display_raw_nonascii,
+        display_ew_danger,
+        display_inner_quote,
+        display_ws_only,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -50310,6 +50326,178 @@ fn has_posting_host_bad(bytes: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// アドレス欄の値から表示名 (phrase) 部分を取り出す。
+///
+/// `<addr>` があればその前を切り出し、外側の鉤括弧を外した値を返す。
+/// `<addr>` がない行は表示名を持たない (phrase-only の判定は別検出器の領分)。
+fn phrase_head(val: &str) -> Option<&str> {
+    let lt = val.find('<')?;
+    let mut p = val[..lt].trim();
+    if p.starts_with('"') && p.ends_with('"') && p.len() >= 2 {
+        p = &p[1..p.len() - 1];
+    }
+    if p.is_empty() {
+        return None;
+    }
+    Some(p)
+}
+
+/// アドレス欄の表示名に符号化なしの生非ascii文字が混ざっていれば表示名異形として検出する (D2935)。
+///
+/// phrase 部は印字ASCIIが規格 — 生の8bitは「encoded-wordで受ける
+/// 実装」と「生のまま表示する実装」で名の読みがずれる。
+pub fn has_display_raw_nonascii(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        phrase_head(&l[colon + 1..])
+            .map(|p| p.chars().any(|c| !c.is_ascii()))
+            .unwrap_or(false)
+    })
+}
+
+/// アドレス欄の表示名の encoded-word が構造文字に復号されれば表示名異形として検出する (D2936)。
+///
+/// 復号後に `<`・`>`・`"`・`,`・`;`・`@` 等を生む encoded-word は、
+/// 復号する実装としない実装で「名とアドレスの境界」がずれる擬装。
+pub fn has_display_ew_danger(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let danger = |bytes: &[u8]| -> bool {
+        bytes
+            .iter()
+            .any(|b| matches!(b, b'<' | b'>' | b'"' | b'(' | b')' | b',' | b';' | b'@' | b':'))
+    };
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        let Some(p) = phrase_head(&l[colon + 1..]) else { return false };
+        let mut rest = p;
+        while let Some(a) = rest.find("=?") {
+            let after = &rest[a + 2..];
+            let Some(q) = after.find("?=") else { break };
+            let ew = &after[..q];
+            let parts: Vec<&str> = ew.splitn(3, '?').collect();
+            if parts.len() == 3 {
+                let decoded = if parts[1].eq_ignore_ascii_case("b") {
+                    decode_b64_simple(parts[2])
+                } else if parts[1].eq_ignore_ascii_case("q") {
+                    decode_qp_body(&parts[2].replace('_', " "))
+                } else {
+                    Vec::new()
+                };
+                if danger(&decoded) {
+                    return true;
+                }
+            }
+            rest = &rest[a + 2 + q + 2..];
+        }
+        false
+    })
+}
+
+/// アドレス欄の表示名の鉤括弧内にエスケープなしの鉤括弧が混在すれば表示名異形として検出する (D2937)。
+///
+/// `"a"b"c"` 形 — 鉤括弧の内側を別解釈する実装で名の切れ目がずれる。
+pub fn has_display_inner_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        let v = l[colon + 1..].trim_start();
+        let Some(lt) = v.find('<') else { return false };
+        let before = v[..lt].trim();
+        if before.len() < 4 || !before.starts_with('"') || !before.ends_with('"') {
+            return false;
+        }
+        let inner = &before[1..before.len() - 1];
+        let b = inner.as_bytes();
+        (0..b.len()).any(|i| b[i] == b'"' && (i == 0 || b[i - 1] != b'\\'))
+    })
+}
+
+/// アドレス欄の表示名が空白のみで構成されていれば表示名異形として検出する (D2938)。
+///
+/// `"   "` 形 — 名が欠落しているのに括弧構造だけ残る値。
+pub fn has_display_ws_only(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        let v = l[colon + 1..].trim_start();
+        let Some(lt) = v.find('<') else { return false };
+        let before = v[..lt].trim();
+        before.starts_with('"')
+            && before.ends_with('"')
+            && before.len() >= 3
+            && before[1..before.len() - 1].chars().all(|c| c.is_whitespace())
+    })
 }
 
 /// (D2635)。
@@ -129872,3 +130060,47 @@ fn 投稿機欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nNNTP-Posting-Host: news.example.com\r\n\r\nx").unwrap();
     assert!(!e.posting_host_bad);
 }
+
+    #[test]
+    fn 表示名に生非asciiがあれば発火() {
+        assert!(has_display_raw_nonascii(
+            "From: \"名前です\" <a@b>\r\n\r\nbody".as_bytes()
+        ));
+        assert!(!has_display_raw_nonascii(
+            b"From: \"Name San\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(!has_display_raw_nonascii(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名のencoded_wordが構造文字に復号されれば発火() {
+        assert!(has_display_ew_danger(
+            b"From: \"=?utf-8?B?PGV2aWw+?=\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(has_display_ew_danger(
+            b"From: \"=?utf-8?B?PGFAYj4=?=\" <c@d>\r\n\r\nbody"
+        ));
+        assert!(!has_display_ew_danger(
+            b"From: \"=?utf-8?B?TmFtZQ==?=\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(!has_display_ew_danger(b"From: \"Name\" <a@b>\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名に内側鉤括弧があれば発火() {
+        assert!(has_display_inner_quote(
+            b"From: \"a\"b\"c\" <x@y>\r\n\r\nbody"
+        ));
+        assert!(!has_display_inner_quote(
+            b"From: \"Name\" <x@y>\r\n\r\nbody"
+        ));
+        assert!(!has_display_inner_quote(b"From: x@y\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名が空白のみなら発火() {
+        assert!(has_display_ws_only(b"From: \"   \" <x@y>\r\n\r\nbody"));
+        assert!(!has_display_ws_only(b"From: \"\" <x@y>\r\n\r\nbody"));
+        assert!(!has_display_ws_only(b"From: \"N\" <x@y>\r\n\r\nbody"));
+        assert!(!has_display_ws_only(b"From: x@y\r\n\r\nbody"));
+    }
