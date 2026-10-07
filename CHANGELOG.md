@@ -215,6 +215,11 @@
 ### Security — D2860: `Errors-To:` 欄の未閉塞クオート宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_unclosed` を追加。
 
 devin/1791332973-unclosed-cell1
+### Security — D2895: `Subject:` 欄のゼロ幅文字 (U+200B–U+200D, U+FEFF) を件名ずれとして検出 — `Envelope` に `subject_zero_width` を追加。
+### Security — D2896: `Subject:` 欄の双方向制御文字 (U+202A–U+202E, U+2066–U+2069) を件名ずれとして検出 — `Envelope` に `subject_bidi` を追加。
+### Security — D2897: `Subject:` 欄のタグ文字 (U+E0000–U+E007F) を件名ずれとして検出 — `Envelope` に `subject_tag_chars` を追加。
+### Security — D2898: `Subject:` 欄の制御文字 (C0/C1) を件名ずれとして検出 — `Envelope` に `subject_ctrl` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
