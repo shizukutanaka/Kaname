@@ -310,6 +310,10 @@ devin/1791332973-unclosed-cell1
 ### Security — D2972: `TLS-Required:` が `No` でない値を検出 (`tls_required_bad`)
 ### Security — D2973: `Require-Recipient-Valid-Since:` が `宛名; 日時` 形でない値を検出 (`req_rcpt_bad`)
 ### Security — D2974: `BIMI-Location:` が https でない / `BIMI-Indicator:` が単一トークンでない値を検出 (`bimi_mark_bad`)
+### Security — D2959: `Control:` が `動詞 引数` 形でない値を検出 (`control_bad`)
+### Security — D2960: `Supersedes:`/`Also-Control:` が msgid `<…@…>` を含まない値を検出 (`supersedes_bad`)
+### Security — D2961: `Cancel-Lock:`/`Cancel-Key:` の各要素が `方式:データ` 形でない値を検出 (`cancel_lock_bad`)
+### Security — D2962: `NNTP-Posting-Host:` が単一トークン形でない値を検出 (`posting_host_bad`)
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。

@@ -2278,4 +2278,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2972 | TLS-Required: の非 No 値 (暗号必須欄の値異形) | 暗号経路ずれ |
 | D2973 | Require-Recipient-Valid-Since: の非 宛名;日時 値 (受取人時限欄の値異形) | 宛先検証ずれ |
 | D2974 | BIMI-Location/Indicator: の非既定値 (印章欄の値異形) | 印章表示ずれ |
+| D2959 | Control: の非 動詞 引数 値 (制御欄の値異形) | 制御処理ずれ |
+| D2960 | Supersedes:/Also-Control: の非 msgid 値 (置換欄の値異形) | 記事同定ずれ |
+| D2961 | Cancel-Lock:/Cancel-Key: の非 方式:データ 値 (解除錠欄の値異形) | 取消照合ずれ |
+| D2962 | NNTP-Posting-Host: の非単一トークン値 (投稿機欄の値異形) | 投稿元ずれ |
 devin/1791332973-unclosed-cell1

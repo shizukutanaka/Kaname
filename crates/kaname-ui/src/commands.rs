@@ -8310,6 +8310,19 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("印章欄の値が異形です—印章値の扱いで印章表示がずれます".to_string());
     }
 
+    if env.control_bad {
+        render_risks.push("制御欄の値が異形です—制御値の扱いで制御処理がずれます".to_string());
+    }
+    if env.supersedes_bad {
+        render_risks.push("置換欄の値が異形です—置換値の扱いで記事同定がずれます".to_string());
+    }
+    if env.cancel_lock_bad {
+        render_risks.push("解除錠欄の値が異形です—解除錠値の扱いで取消照合がずれます".to_string());
+    }
+    if env.posting_host_bad {
+        render_risks.push("投稿機欄の値が異形です—投稿機値の扱いで投稿元がずれます".to_string());
+    }
+
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }
