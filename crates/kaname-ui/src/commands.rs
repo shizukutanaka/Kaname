@@ -9397,6 +9397,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.list_followup_bad {
         render_risks.push("追従先欄の値が異形です—追従値の扱いで返信経路がずれます".to_string());
     }
+    if env.xip_asf_bad {
+        render_risks.push("機器判定欄の値が真偽形でないです—判定値の扱いで経路評価がずれます".to_string());
+    }
+    if env.xip_av_bad {
+        render_risks.push("機器検査欄の値が連接形でないです—検査値の扱いで経路評価がずれます".to_string());
+    }
+    if env.xip_asr_bad {
+        render_risks.push("機器結果欄の値が符号形でないです—結果値の扱いで照合がずれます".to_string());
+    }
+    if env.xpp_sdet_bad {
+        render_risks.push("機器詳細欄の値が連接形でないです—詳細値の扱いで経路評価がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

@@ -3315,6 +3315,14 @@ pub struct Envelope {
     pub content_return_bad: bool,
     /// `Mail-Followup-To:`/`Mail-Reply-To:` 欄の値が宛名/poster 形でない (D2994 — 追従ずれ)。
     pub list_followup_bad: bool,
+    /// `X-IronPort-Anti-Spam-Filtered:` 欄の値がtrue/falseでない (D3007 — 機器判定ずれ)。
+    pub xip_asf_bad: bool,
+    /// `X-IronPort-AV:` 欄の値が `名=値` 連接でない (D3008 — 機器検査ずれ)。
+    pub xip_av_bad: bool,
+    /// `X-IronPort-Anti-Spam-Result:` 欄の値がbase64形でない (D3009 — 機器結果ずれ)。
+    pub xip_asr_bad: bool,
+    /// `X-Proofpoint-Spam-Details:` 欄の値が `名=値` 空白連接でない (D3010 — 機器詳細ずれ)。
+    pub xpp_sdet_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7272,6 +7280,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let openpgp_bad = has_openpgp_bad(bytes);
     let content_return_bad = has_content_return_bad(bytes);
     let list_followup_bad = has_list_followup_bad(bytes);
+    let xip_asf_bad = has_xip_asf_bad(bytes);
+    let xip_av_bad = has_xip_av_bad(bytes);
+    let xip_asr_bad = has_xip_asr_bad(bytes);
+    let xpp_sdet_bad = has_xpp_sdet_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -8935,6 +8947,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         openpgp_bad,
         content_return_bad,
         list_followup_bad,
+        xip_asf_bad,
+        xip_av_bad,
+        xip_asr_bad,
+        xpp_sdet_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -51802,6 +51818,139 @@ fn has_list_followup_bad(bytes: &[u8]) -> bool {
         {
             let t = v.trim();
             if t.is_empty() || (t != "poster" && !t.contains('@')) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// セキュリティ機器 (`X-IronPort-*`/`X-Proofpoint-*`) の記録欄の値形検査用に、
+/// ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す (D3007–D3010)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn vnd_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-IronPort-Anti-Spam-Filtered:` 欄の値が `true`/`false` でなければ
+/// IronPort 迷惑フィルタ判定記録の異形として検出する (D3007)。
+///
+/// IronPort が刻む判定欄は真偽値の単一値 — それ以外の値は
+/// 「機器検査を通った体裁」の擬態 (バラクーダ等の prefix は存在検出
+/// 済みだが IronPort/Proofpoint はどの検出器にも触れられていなかった)。
+fn has_xip_asf_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ironport-anti-spam-filtered:") {
+            let t = v.trim();
+            if t != "true" && t != "false" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-IronPort-AV:` 欄の値が `名=値` の `;` 連接でなければ
+/// IronPort アンチウイルス検査記録の異形として検出する (D3008)。
+///
+/// 実値は `E=Sophos;i="4.98"` のような `;` 連接の `名=値` —
+/// 構造を欠く値は「AV 検査を記録した体裁」の擬態。
+fn has_xip_av_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ironport-av:") {
+            let t = v.trim().trim_end_matches(';').trim_end();
+            let ok = !t.is_empty()
+                && t.split(';').all(|e| {
+                    let e = e.trim();
+                    !e.is_empty()
+                        && e.contains('=')
+                        && !e.starts_with('=')
+                        && !e.ends_with('=')
+                });
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-IronPort-Anti-Spam-Result:` 欄の値が base64 系の単一トークンで
+/// なければ IronPort 迷惑判定結果記録の異形として検出する (D3009)。
+///
+/// 実値は結果を符号化した長い不透明トークン — 短い・空白を含む・
+/// base64 字種でない値は「判定結果を記録した体裁」の擬態。
+fn has_xip_asr_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ironport-anti-spam-result:") {
+            let t = v.trim();
+            let ok = t.len() >= 20
+                && !t.contains(char::is_whitespace)
+                && t.chars().all(|c| {
+                    c.is_ascii_alphanumeric()
+                        || c == '+'
+                        || c == '/'
+                        || c == '='
+                });
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Proofpoint-Spam-Details:` 欄の値が `名=値` の空白連接でなければ
+/// Proofpoint 迷惑判定詳細記録の異形として検出する (D3010)。
+///
+/// 実値は `rule=… score=… suspectscore=…` のような空白区切り
+/// `名=値` トークン列 — `=` を欠く要素を含む値は
+/// 「判定詳細を記録した体裁」の擬態。
+fn has_xpp_sdet_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-proofpoint-spam-details:") {
+            let t = v.trim();
+            let ok = !t.is_empty()
+                && t.split_whitespace()
+                    .all(|e| e.contains('=') && !e.starts_with('='));
+            if !ok {
                 return true;
             }
         }
@@ -132092,4 +132241,70 @@ fn 投稿機欄が異形なら発火() {
             b"Mail-Followup-To: poster\r\n\r\nbody"
         ));
         assert!(!has_list_followup_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3007_xip_asf_bad() {
+        assert!(has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered: yes\r\n\r\nbody"
+        ));
+        assert!(has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered:\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered: true\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered: false\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asf_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3008_xip_av_bad() {
+        assert!(has_xip_av_bad(
+            b"X-IronPort-AV: clean\r\n\r\nbody"
+        ));
+        assert!(has_xip_av_bad(
+            b"X-IronPort-AV: E=Sophos; i=\r\n\r\nbody"
+        ));
+        assert!(has_xip_av_bad(b"X-IronPort-AV:\r\n\r\nbody"));
+        assert!(!has_xip_av_bad(
+            b"X-IronPort-AV: E=Sophos;i=\"4.98\"\r\n\r\nbody"
+        ));
+        assert!(!has_xip_av_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3009_xip_asr_bad() {
+        assert!(has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result: clean\r\n\r\nbody"
+        ));
+        assert!(has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result: iQRJ HQBg AAA\r\n\r\nbody"
+        ));
+        assert!(has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result:\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result: iQRJHQBgAAAADAQAMNzk3Ljk2MTY5ODc2\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3010_xpp_sdet_bad() {
+        assert!(has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details: mail is clean\r\n\r\nbody"
+        ));
+        assert!(has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details: rule=notspam bogus\r\n\r\nbody"
+        ));
+        assert!(has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details:\r\n\r\nbody"
+        ));
+        assert!(!has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details: rule=notspam score=98 suspectscore=98 classifier=spam\r\n\r\nbody"
+        ));
+        assert!(!has_xpp_sdet_bad(b"From: a@b\r\n\r\nbody"));
     }
