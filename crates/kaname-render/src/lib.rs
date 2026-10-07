@@ -3298,6 +3298,14 @@ pub struct Envelope {
     pub ms_latency_bad: bool,
     /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
     pub mailer_bad: bool,
+    /// Precedence: 系が単一トークンでない (D2979)。
+    pub precedence_bad: bool,
+    /// X-Loop: が宛名形でない (D2980)。
+    pub x_loop_bad: bool,
+    /// UIDL 系が空白なし印字トークンでない (D2981)。
+    pub uidl_bad: bool,
+    /// X-Received: が by/with/id 構造を欠く (D2982)。
+    pub x_received_bad: bool,
     /// Disposition-Notification-Options: の各要素が 名=required|optional 形でない (D2975)。
     pub dnt_opt_bad: bool,
     /// VBR-Info: の各要素が 名=値 形でない (D2976)。
@@ -7085,6 +7093,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
     let ms_latency_bad = has_ms_latency_bad(bytes);
     let mailer_bad = has_mailer_bad(bytes);
+    let precedence_bad = has_precedence_bad(bytes);
+    let x_loop_bad = has_x_loop_bad(bytes);
+    let uidl_bad = has_uidl_bad(bytes);
+    let x_received_bad = has_x_received_bad(bytes);
     let dnt_opt_bad = has_dnt_opt_bad(bytes);
     let vbr_info_bad = has_vbr_info_bad(bytes);
     let feedback_type_bad = has_feedback_type_bad(bytes);
@@ -8654,6 +8666,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         tnef_correlator_bad,
         ms_latency_bad,
         mailer_bad,
+        precedence_bad,
+        x_loop_bad,
+        uidl_bad,
+        x_received_bad,
         dnt_opt_bad,
         vbr_info_bad,
         feedback_type_bad,
@@ -48592,6 +48608,98 @@ fn has_feedback_id_bad(bytes: &[u8]) -> bool {
             // `名1:名2:名3:名4` の4要素
             let parts: Vec<&str> = v.split(':').collect();
             if parts.len() != 4 || parts.iter().any(|p| p.trim().is_empty()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn route_opt_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2979)。
+fn has_precedence_bad(bytes: &[u8]) -> bool {
+    let logical = route_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("precedence:")
+            .or_else(|| low.strip_prefix("x-precedence:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 単一の印字可能トークン
+            if v.is_empty() || v.split_whitespace().count() != 1
+                || !v.bytes().all(|b| (0x21..=0x7e).contains(&b))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2980)。
+fn has_x_loop_bad(bytes: &[u8]) -> bool {
+    let logical = route_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-loop:") {
+            let v = v.trim();
+            // 宛名形 (@ を持つ)
+            if v.is_empty() || !v.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2981)。
+fn has_uidl_bad(bytes: &[u8]) -> bool {
+    let logical = route_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-uidl:")
+            .or_else(|| low.strip_prefix("uidl:"))
+            .or_else(|| low.strip_prefix("x-uid:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 空白なしの印字可能トークン
+            if v.is_empty() || !v.bytes().all(|b| (0x21..=0x7e).contains(&b)) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2982)。
+fn has_x_received_bad(bytes: &[u8]) -> bool {
+    let logical = route_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-received:") {
+            let v = v.trim();
+            // `by 名 with 方式 id 識別` 構造
+            if !v.contains(" by ") && !v.starts_with("by ") {
+                return true;
+            }
+            if !v.contains(" with ") && !v.contains(" id ") {
                 return true;
             }
         }
@@ -127711,4 +127819,33 @@ fn 反応識別欄が異形なら発火() {
     assert!(e.feedback_id_bad);
     let e = parse(b"From: a@x.com\r\nFeedback-ID: a:b:c:d\r\n\r\nx").unwrap();
     assert!(!e.feedback_id_bad);
+}
+
+#[test]
+fn 優先順位欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nPrecedence: \r\n\r\nx").unwrap();
+    assert!(e.precedence_bad);
+    let e = parse(b"From: a@x.com\r\nPrecedence: bulk\r\n\r\nx").unwrap();
+    assert!(!e.precedence_bad);
+}
+#[test]
+fn 巡回欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Loop: notanaddr\r\n\r\nx").unwrap();
+    assert!(e.x_loop_bad);
+    let e = parse(b"From: a@x.com\r\nX-Loop: list@x.com\r\n\r\nx").unwrap();
+    assert!(!e.x_loop_bad);
+}
+#[test]
+fn 一意識別欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-UIDL: has space\r\n\r\nx").unwrap();
+    assert!(e.uidl_bad);
+    let e = parse(b"From: a@x.com\r\nX-UIDL: ABCdef123==\r\n\r\nx").unwrap();
+    assert!(!e.uidl_bad);
+}
+#[test]
+fn 副受信欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Received: garbage\r\n\r\nx").unwrap();
+    assert!(e.x_received_bad);
+    let e = parse(b"From: a@x.com\r\nX-Received: by mail.x.com with SMTP id abc.123\r\n\r\nx").unwrap();
+    assert!(!e.x_received_bad);
 }
