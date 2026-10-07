@@ -4526,3 +4526,7 @@ devin/1791332973-unclosed-cell1
 
 X-MS-Has-Attach の語彙は yes/no のみ、TNEF-Correlator は base64 相関子、EndToEndLatency は `HH:MM:SS.mmm`、X-Mailer は印字可能ASCII — いずれも「書く権限が運輸側にある」欄で、値の形が規定を外れるなら運輸記録の擬態となる。攻撃者は「MS経路が刻んだように見せる」欄を任意に置けるが、形が外れれば確実な異形として切れる — 値の語彙・形両方を閉じた欄は検出に最適。
 
+## ラウンド 455 — 「報告は誰が書いたか」の自問自答
+
+DSN/MDN の記録欄 (Original-Recipient・Final-Recipient・Reporting-MTA・MDN-Gateway) は配送機が残す署名帳。送信側から届くこれは既に異様だが、値が `型;値` の構文を守らなければ「転記された正規報告」と「体裁だけ真似た擬装」を区別できる — 共通文法の値検査として追加した。
+

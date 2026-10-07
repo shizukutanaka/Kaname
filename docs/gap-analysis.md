@@ -2226,4 +2226,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2928 | X-MS-TNEF-Correlator 系の非base64値 (相関子欄の値異形) | 経路ずれ |
 | D2929 | X-MS-Exchange 遅延欄の非時刻値 (遅延欄の値異形) | 経路ずれ |
 | D2930 | X-Mailer/User-Agent 系の制御文字・非ascii (送信器欄の値異形) | 経路ずれ |
+| D2947 | Original-Recipient 欄の非 型;宛名 値 (値形異形) | 経路ずれ |
+| D2948 | Final-Recipient 欄の非 型;宛名 値 (値形異形) | 経路ずれ |
+| D2949 | Reporting-MTA 欄の非 型;名 値 (値形異形) | 報告経路ずれ |
+| D2950 | MDN-Gateway 欄の非 型;名 値 (値形異形) | 通知経路ずれ |
 devin/1791332973-unclosed-cell1
