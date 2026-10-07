@@ -3458,7 +3458,6 @@ pub struct Envelope {
     /// Auto-Submitted 欄の値が規定語彙外
     pub auto_submitted_bad: bool,
     /// Precedence 欄の値が規定語彙外
-    pub precedence_bad: bool,
     /// X-Originating-IP 欄の値が角括弧付きIP表記でない
     pub x_orig_ip_bad: bool,
     /// X-Auto-Response-Suppress 欄のトークンが規定語彙外
@@ -7327,7 +7326,6 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let arc_seal_bad_i = has_arc_seal_bad_i(bytes);
     let arc_chain_incomplete = has_arc_chain_incomplete(bytes);
     let auto_submitted_bad = has_auto_submitted_bad(bytes);
-    let precedence_bad = has_precedence_bad(bytes);
     let x_orig_ip_bad = has_x_orig_ip_bad(bytes);
     let x_auto_suppress_bad = has_x_auto_suppress_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
@@ -8980,7 +8978,6 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         arc_seal_bad_i,
         arc_chain_incomplete,
         auto_submitted_bad,
-        precedence_bad,
         x_orig_ip_bad,
         x_auto_suppress_bad,
         env_to_backtick_local,
@@ -51319,34 +51316,6 @@ pub fn has_auto_submitted_bad(raw: &[u8]) -> bool {
         }
         let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
         !["auto-generated", "auto-replied", "auto-forwarded", "no"]
-            .iter()
-            .any(|k| v == *k)
-    })
-}
-
-/// Precedence 欄の値が規定語彙外なら配送優先度の異形として検出する (D2916)。
-pub fn has_precedence_bad(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
-    let header_end = text.find("\n\n").unwrap_or(text.len());
-    let mut logical = String::with_capacity(header_end + 1);
-    let mut first = true;
-    for l in text[..header_end].lines() {
-        if l.starts_with(' ') || l.starts_with('\t') {
-            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
-        } else {
-            if !first { logical.push('\n'); }
-            first = false;
-            logical.push_str(l);
-        }
-    }
-    let lower = logical.to_ascii_lowercase();
-    lower.lines().any(|l| {
-        if !l.starts_with("precedence:") {
-            return false;
-        }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
-        !["bulk", "junk", "list", "normal", "first-class", "special-delivery", "non-delivery"]
             .iter()
             .any(|k| v == *k)
     })
@@ -131509,15 +131478,6 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_auto_submitted_bad(b"Auto-Submitted: no\r\n\r\nbody"));
         assert!(!has_auto_submitted_bad(b"From: a@b\r\n\r\nbody"));
-    }
-
-    #[test]
-    fn 配送優先欄が未規定値なら発火() {
-        assert!(has_precedence_bad(b"Precedence: urgent-secret\r\n\r\nbody"));
-        assert!(has_precedence_bad(b"Precedence: \r\n\r\nbody"));
-        assert!(!has_precedence_bad(b"Precedence: bulk\r\n\r\nbody"));
-        assert!(!has_precedence_bad(b"Precedence: list\r\n\r\nbody"));
-        assert!(!has_precedence_bad(b"From: a@b\r\n\r\nbody"));
     }
 
     #[test]

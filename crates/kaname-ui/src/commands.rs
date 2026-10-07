@@ -8398,9 +8398,6 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.auto_submitted_bad {
         render_risks.push("自動応答欄の値が未規定です—応答値の扱いで経路がずれます".to_string());
     }
-    if env.precedence_bad {
-        render_risks.push("配送優先欄の値が未規定です—優先値の扱いで経路がずれます".to_string());
-    }
     if env.x_orig_ip_bad {
         render_risks.push("送信元IP欄が異形です—送信元値の扱いで経路がずれます".to_string());
     }
