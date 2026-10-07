@@ -3298,6 +3298,14 @@ pub struct Envelope {
     pub ms_latency_bad: bool,
     /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
     pub mailer_bad: bool,
+    /// List-Post 等の操作欄が `<URI>` 形でない (D2963)。
+    pub list_uri_bad: bool,
+    /// List-Unsubscribe-Post: の値が One-Click 語彙でない (D2964)。
+    pub unsub_post_bad: bool,
+    /// Archived-At: が URI 形でない (D2965)。
+    pub archived_at_bad: bool,
+    /// Injection-Info: の各要素が 名=値 形でない (D2966)。
+    pub injection_info_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7077,6 +7085,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
     let ms_latency_bad = has_ms_latency_bad(bytes);
     let mailer_bad = has_mailer_bad(bytes);
+    let list_uri_bad = has_list_uri_bad(bytes);
+    let unsub_post_bad = has_unsub_post_bad(bytes);
+    let archived_at_bad = has_archived_at_bad(bytes);
+    let injection_info_bad = has_injection_info_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8642,6 +8654,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         tnef_correlator_bad,
         ms_latency_bad,
         mailer_bad,
+        list_uri_bad,
+        unsub_post_bad,
+        archived_at_bad,
+        injection_info_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48477,6 +48493,116 @@ pub fn has_mailer_bad(raw: &[u8]) -> bool {
         v.is_empty()
             || v.chars().any(|c| !c.is_ascii() || (c.is_ascii_control() && c != '\t'))
     })
+}
+
+fn list_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2963)。
+fn has_list_uri_bad(bytes: &[u8]) -> bool {
+    let logical = list_hdr_text(bytes);
+    const KEYS: [&str; 7] = [
+        "list-post:", "list-subscribe:", "list-unsubscribe:",
+        "list-help:", "list-archive:", "list-owner:", "list-url:",
+    ];
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        for k in KEYS {
+            if let Some(v) = low.strip_prefix(k) {
+                let v = v.trim();
+                // 各要素 `<URI>` — 角括弧と内部の `:` が要る
+                let ok = v.find('<').is_some_and(|open| {
+                    v.rfind('>').is_some_and(|close| {
+                        close > open + 1 && v[open + 1..close].contains(':')
+                    })
+                });
+                if !ok {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// (D2964)。
+fn has_unsub_post_bad(bytes: &[u8]) -> bool {
+    let logical = list_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("list-unsubscribe-post:") {
+            let v = v.trim();
+            if v != "list-unsubscribe=one-click" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2965)。
+fn has_archived_at_bad(bytes: &[u8]) -> bool {
+    let logical = list_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("archived-at:")
+            .or_else(|| low.strip_prefix("x-archived-at:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // `<URI>` または URI 直接 — 何らかの `名:` を含むこと
+            let ok = if v.starts_with('<') && v.ends_with('>') {
+                v[1..v.len() - 1].contains(':') && v.len() > 3
+            } else {
+                v.split(':').next().is_some_and(|s| {
+                    !s.is_empty()
+                        && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+                }) && v.contains(':')
+            };
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2966)。
+fn has_injection_info_bad(bytes: &[u8]) -> bool {
+    let logical = list_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("injection-info:") {
+            let v = v.trim();
+            let parts: Vec<&str> = v.split(';').map(str::trim).filter(|p| !p.is_empty()).collect();
+            if parts.is_empty() {
+                return true;
+            }
+            for p in parts {
+                // 名=値 の形
+                let Some(eq) = p.find('=') else { return true; };
+                let (k, val) = (p[..eq].trim(), p[eq + 1..].trim());
+                if k.is_empty() || val.is_empty() {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 /// (D2635)。
@@ -127563,3 +127689,32 @@ body";
         assert!(!has_mailer_bad(b"User-Agent: Thunderbird/115.0\r\n\r\nbody"));
         assert!(!has_mailer_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+#[test]
+fn 一覧操作欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nList-Unsubscribe: mailto:a@x.com\r\n\r\nx").unwrap();
+    assert!(e.list_uri_bad);
+    let e = parse(b"From: a@x.com\r\nList-Unsubscribe: <mailto:a@x.com>\r\n\r\nx").unwrap();
+    assert!(!e.list_uri_bad);
+}
+#[test]
+fn 解除投稿欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nList-Unsubscribe-Post: x\r\n\r\nx").unwrap();
+    assert!(e.unsub_post_bad);
+    let e = parse(b"From: a@x.com\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n\r\nx").unwrap();
+    assert!(!e.unsub_post_bad);
+}
+#[test]
+fn 保管先欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nArchived-At: \r\n\r\nx").unwrap();
+    assert!(e.archived_at_bad);
+    let e = parse(b"From: a@x.com\r\nArchived-At: <https://ex.com/a>\r\n\r\nx").unwrap();
+    assert!(!e.archived_at_bad);
+}
+#[test]
+fn 注入情報欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nInjection-Info: x\r\n\r\nx").unwrap();
+    assert!(e.injection_info_bad);
+    let e = parse(b"From: a@x.com\r\nInjection-Info: mailng-host=mx; logging-id=1\r\n\r\nx").unwrap();
+    assert!(!e.injection_info_bad);
+}
