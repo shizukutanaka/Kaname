@@ -338,6 +338,11 @@ devin/1791331333-quoted-local-cell2
 ### Security — D2901: `Subject:` 欄が三段以上の返信・転送接頭語を持つ深い返信連鎖異形を件名ずれとして検出 — `Envelope` に `subject_reply_chain` を追加。
 ### Security — D2902: `Subject:` 欄にHTMLタグ片やエンティティを含むHTML混入異形を件名ずれとして検出 — `Envelope` に `subject_html` を追加。
 
+### Security — D2903: `Subject:` 欄に符号化されない生の非ASCII文字を含む生非ASCII混入異形を件名ずれとして検出 — `Envelope` に `subject_raw_nonascii` を追加。
+### Security — D2904: `Subject:` 欄にURL形文字列を含む誘導URL混入異形を件名ずれとして検出 — `Envelope` に `subject_url` を追加。
+### Security — D2905: `Subject:` 欄に閉じない括弧を含む未閉塞括弧異形を件名ずれとして検出 — `Envelope` に `subject_unclosed_comment` を追加。
+### Security — D2906: `Subject:` 欄のエンコードドワードが75バイト超の過長符号化語異形を件名ずれとして検出 — `Envelope` に `subject_long_ew` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
