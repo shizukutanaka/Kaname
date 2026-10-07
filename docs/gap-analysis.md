@@ -2222,8 +2222,97 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2858 | Envelope-To:/Delivered-To:/X-Envelope-To: 系の未閉塞クオート宛名値 (封書宛記録のクオート未閉塞異形) | 封書宛ずれ |
 | D2859 | X-Envelope-From:/X-MailFrom:/X-Mail-From: 系の未閉塞クオート宛名値 (封書差出人記録のクオート未閉塞異形) | 封書差出人ずれ |
 | D2860 | Errors-To: の未閉塞クオート宛名値 (返送先記録のクオート未閉塞異形) | 返送先ずれ |
+| D2927 | X-MS-Has-Attach 系の yes/no 語彙外れ (添付標旗欄の値異形) | 経路ずれ |
+| D2928 | X-MS-TNEF-Correlator 系の非base64値 (相関子欄の値異形) | 経路ずれ |
+| D2929 | X-MS-Exchange 遅延欄の非時刻値 (遅延欄の値異形) | 経路ずれ |
+| D2930 | X-Mailer/User-Agent 系の制御文字・非ascii (送信器欄の値異形) | 経路ずれ |
+| D2987 | X-Spam-Report 系の非報告構造値 (迷惑報告欄の値異形) | 判定経緯ずれ |
+| D2988 | X-Spam-Checker-Version: の版番号欠落値 (検査版欄の値異形) | 検査把握ずれ |
+| D2989 | X-BeenThere: の非宛名値 (巡回跡欄の値異形) | 巡回特定ずれ |
+| D2990 | X-No-Archive 系の語彙外値 (保存抑止欄の値異形) | 保存方針ずれ |
+| D2983 | X-Originating-IP: の非 [IP] 値 (起源識別欄の値異形) | 発信特定ずれ |
+| D2984 | X-Complaints/Report-Abuse 系の非宛名/URI値 (虐待窓口欄の値異形) | 通報先ずれ |
+| D2985 | Auto-Submitted: の語彙外値 (自動応答欄の値異形) | 応答分類ずれ |
+| D2986 | X-Authenticated-Sender 系の非宛名値 (認証送信人欄の値異形) | 送信認証ずれ |
+| D2979 | Precedence 系の非単一トークン値 (優先順位欄の値異形) | 優先判定ずれ |
+| D2980 | X-Loop: の非宛名値 (巡回欄の値異形) | 巡回防止ずれ |
+| D2981 | UIDL 系の空白入り/非印字値 (一意識別欄の値異形) | 受信管理ずれ |
+| D2982 | X-Received: の by/with/id 構造欠落 (副受信欄の値異形) | 経路把握ずれ |
+| D2963 | List-Post 等の非 <URI> 値 (一覧操作欄の値異形) | 一覧処理ずれ |
+| D2964 | List-Unsubscribe-Post: の非 One-Click 値 (解除投稿欄の値異形) | 解除処理ずれ |
+| D2965 | Archived-At: の非 URI 値 (保管先欄の値異形) | 保管参照ずれ |
+| D2966 | Injection-Info: の非 名=値 値 (注入情報欄の値異形) | 投稿記録ずれ |
+| D2975 | Disposition-Notification-Options: の非 名=required|optional 値 (通知選択欄の値異形) | 通知要求ずれ |
+| D2976 | VBR-Info: の非 名=値 値 (信託情報欄の値異形) | 信託照合ずれ |
+| D2977 | Feedback-Type 系の語彙外値 (反応種別欄の値異形) | 報告種別ずれ |
+| D2978 | Feedback-ID 系の非4要素値 (反応識別欄の値異形) | 報告照合ずれ |
+| D2967 | X-Spam-Flag 系の非 YES/NO 値 (迷惑旗欄の値異形) | 迷惑判定ずれ |
+| D2968 | X-Spam-Status: の非 Yes|No+score 値 (迷惑状態欄の値異形) | 迷惑判定ずれ |
+| D2969 | X-Spam-Level: の非星値 (迷惑度欄の値異形) | 迷惑判定ずれ |
+| D2970 | X-Spam-Score 系の非数値 (迷惑点欄の値異形) | 迷惑判定ずれ |
+| D2943 | Newsgroups 欄の非群連接値 (値形異形) | 経路ずれ |
+| D2944 | Path 欄の非 bang-path 値 (値形異形) | 経路ずれ |
+| D2945 | Xref 欄の非参照番号値 (値形異形) | 既読ずれ |
+| D2946 | Followup-To 欄の非群連接値 (値形異形) | 返信先ずれ |
+| D2947 | Original-Recipient 欄の非 型;宛名 値 (値形異形) | 経路ずれ |
+| D2948 | Final-Recipient 欄の非 型;宛名 値 (値形異形) | 経路ずれ |
+| D2949 | Reporting-MTA 欄の非 型;名 値 (値形異形) | 報告経路ずれ |
+| D2950 | MDN-Gateway 欄の非 型;名 値 (値形異形) | 通知経路ずれ |
+| D2951 | Remote-MTA 欄の非 型;名 値 (値形異形) | 配達経路ずれ |
+| D2952 | Status 欄の非三段数字値 (値形異形) | 不達区分ずれ |
+| D2953 | Original-Envelope-Id 欄の非識別子値 (値形異形) | 封書同定ずれ |
+| D2954 | Diagnostic-Code 欄の非 型;診断文 値 (値形異形) | 不達診断ずれ |
+| D2955 | Original-Message-ID 欄の非 msgid 値 (値形異形) | 元メール同定ずれ |
+| D2956 | Disposition 欄の非 方式/種別 値 (値形異形) | 開封扱いずれ |
+| D2957 | Reporting-UA 欄の非 UA名 値 (値形異形) | 報告元ずれ |
+| D2958 | Message-Context 欄の語彙外値 (値形異形) | 種別判定ずれ |
+| D2939 | Content-MD5 欄の非24文字base64値 (値形異形) | 検証ずれ |
+| D2940 | Content-Language 欄の非言語タグ値 (値形異形) | 言語ずれ |
+| D2941 | Content-Digest 欄の非アルゴ=値 (値形異形) | 検証ずれ |
+| D2942 | Content-Features 欄の非連接値 (値形異形) | 特徴ずれ |
+| D2931 | アドレス欄表示名の制御文字・不可視文字 (表示名異形) | 送信者ずれ |
+| D2932 | アドレス欄表示名の裸ドメイン形 (表示名異形) | 送信者ずれ |
+| D2933 | アドレス欄表示名の非文字値 (表示名異形) | 送信者ずれ |
+| D2934 | アドレス欄表示名の100文字超 (表示名異形) | 送信者ずれ |
+| D2971 | Received-SPF 系の非判定語彙値 (素朴判定欄の値異形) | 送信域判定ずれ |
+| D2972 | TLS-Required: の非 No 値 (暗号必須欄の値異形) | 暗号経路ずれ |
+| D2973 | Require-Recipient-Valid-Since: の非 宛名;日時 値 (受取人時限欄の値異形) | 宛先検証ずれ |
+| D2974 | BIMI-Location/Indicator: の非既定値 (印章欄の値異形) | 印章表示ずれ |
+| D2959 | Control: の非 動詞 引数 値 (制御欄の値異形) | 制御処理ずれ |
+| D2960 | Supersedes:/Also-Control: の非 msgid 値 (置換欄の値異形) | 記事同定ずれ |
+| D2961 | Cancel-Lock:/Cancel-Key: の非 方式:データ 値 (解除錠欄の値異形) | 取消照合ずれ |
+| D2962 | NNTP-Posting-Host: の非単一トークン値 (投稿機欄の値異形) | 投稿元ずれ |
+| D2935 | アドレス欄表示名の生非ascii文字 (表示名異形) | 送信者ずれ |
+| D2936 | アドレス欄表示名の構造文字に復号されるEW (表示名異形) | 送信者ずれ |
+| D2937 | アドレス欄表示名の内側鉤括弧 (表示名異形) | 送信者ずれ |
+| D2938 | アドレス欄表示名の空白のみ値 (表示名異形) | 送信者ずれ |
+| D2899 | Subject: 欄の件名空欄異形 (値が空の件名ずれ) | 件名ずれ |
+| D2900 | Subject: 欄の件名二重化異形 (複数件名の件名ずれ) | 件名ずれ |
+| D2901 | Subject: 欄の深い返信連鎖異形 (三段以上の返信・転送接頭語) | 件名ずれ |
+| D2902 | Subject: 欄のHTML混入異形 (タグ片・エンティティ含み) | 件名ずれ |
+| D2903 | Subject: 欄の生非ASCII混入異形 (符号化されない非ASCII文字含み) | 件名ずれ |
+| D2904 | Subject: 欄の誘導URL混入異形 (http://・https://・www. 含み) | 件名ずれ |
+| D2905 | Subject: 欄の未閉塞括弧異形 (閉じない括弧含み) | 件名ずれ |
+| D2906 | Subject: 欄の過長符号化語異形 (75バイト超のエンコードドワード) | 件名ずれ |
+| D2907 | Authentication-Results:/Received-SPF: 系欄の認証失敗判定異形 | 認証ずれ |
+| D2908 | Authentication-Results:/Received-SPF: 系欄の未規定判定値異形 | 認証ずれ |
+| D2909 | ARC-Seal: 欄の合否値異形 (cv= が none/pass/fail 外) | 認証ずれ |
+| D2910 | DKIM-Signature: 系欄の署名者欠落異形 (d= タグ欠落) | 認証ずれ |
+| D2911 | DKIM-Signature: 系の `s=` 選択子タグ欠落 (署名欄の選択子欠落異形) | 認証ずれ |
+| D2912 | DKIM-Signature: 系の `b=` 署名値タグ欠落 (署名欄の署名値欠落異形) | 認証ずれ |
+| D2913 | ARC-Seal: 系の `i=` 連鎖番号異形 (ARC記録の番号異形) | 認証ずれ |
+| D2914 | ARC-Seal: 単独で ARC-Authentication-Results/ARC-Message-Signature 欠落 (ARC記録組欠落異形) | 認証ずれ |
 | D2915 | Auto-Submitted: の未規定値 (自動応答欄の語彙外値異形) | 経路ずれ |
 | D2916 | Precedence: の未規定値 (配送優先欄の語彙外値異形) | 経路ずれ |
 | D2917 | X-Originating-IP: の非IP表記値 (送信元欄の値異形) | 経路ずれ |
 | D2918 | X-Auto-Response-Suppress: の語彙外トークン (応答抑制欄の値異形) | 経路ずれ |
 devin/1791332973-unclosed-cell1
+| D2846 | Apparently-To:/X-Apparently-To: 系のローカル部鉤括弧宛名値 (見せ宛記録のローカル部鉤括弧異形) | 見せ宛ずれ |
+| D2847 | Apparently-From:/Apparently-Sender: 系のローカル部鉤括弧宛名値 (表差出人記録のローカル部鉤括弧異形) | 表差出人ずれ |
+| D2848 | X-Original-To: のローカル部鉤括弧宛名値 (元宛記録のローカル部鉤括弧異形) | 元宛ずれ |
+| D2849 | X-Original-From: のローカル部鉤括弧宛名値 (元差出人記録のローカル部鉤括弧異形) | 元差出人ずれ |
+devin/1791331333-quoted-local-cell2
+| D2895 | Subject: のゼロ幅文字 (件名の不可視分割異形) | 件名ずれ |
+| D2896 | Subject: の双方向制御文字 (件名の表示順異形) | 件名ずれ |
+| D2897 | Subject: のタグ文字 (件名の不可視タグ異形) | 件名ずれ |
+| D2898 | Subject: の制御文字 (件名の生制御文字異形) | 件名ずれ |
