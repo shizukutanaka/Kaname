@@ -2246,4 +2246,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2944 | Path 欄の非 bang-path 値 (値形異形) | 経路ずれ |
 | D2945 | Xref 欄の非参照番号値 (値形異形) | 既読ずれ |
 | D2946 | Followup-To 欄の非群連接値 (値形異形) | 返信先ずれ |
+| D2947 | Original-Recipient 欄の非 型;宛名 値 (値形異形) | 経路ずれ |
+| D2948 | Final-Recipient 欄の非 型;宛名 値 (値形異形) | 経路ずれ |
+| D2949 | Reporting-MTA 欄の非 型;名 値 (値形異形) | 報告経路ずれ |
+| D2950 | MDN-Gateway 欄の非 型;名 値 (値形異形) | 通知経路ずれ |
 devin/1791332973-unclosed-cell1

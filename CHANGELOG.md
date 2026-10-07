@@ -258,6 +258,14 @@ devin/1791332973-unclosed-cell1
 
 ### Security — D2946: `Followup-To:` の値がニュース群連接形 (`poster` を除く) でないことを値形異形として検出 — `Envelope` に `followup_bad` を追加。
 
+### Security — D2947: `Original-Recipient:` の値が `型;宛名` 形でないことを値形異形として検出 — `Envelope` に `orig_recipient_bad` を追加。
+
+### Security — D2948: `Final-Recipient:` の値が `型;宛名` 形でないことを値形異形として検出 — `Envelope` に `final_recipient_bad` を追加。
+
+### Security — D2949: `Reporting-MTA:` の値が `型;名` 形でないことを値形異形として検出 — `Envelope` に `reporting_mta_bad` を追加。
+
+### Security — D2950: `MDN-Gateway:` の値が `型;名` 形でないことを値形異形として検出 — `Envelope` に `mdn_gateway_bad` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。

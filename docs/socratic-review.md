@@ -4546,3 +4546,6 @@ X-MS-Has-Attach の語彙は yes/no のみ、TNEF-Correlator は base64 相関�
 ## ラウンド 454 — 「ニュース欄は誰が読むか」の自問自答
 
 Newsgroups・Path・Xref・Followup-To は NNTP 由来の欄で、既存は `nntp_routing` の存在検出のみ。メール経路に混ざる NNTP 欄はそれ自体が異様だが、値の形まで見れば「転記されただけの正規値」と「形を守らない擬装値」を区別できる — 群連接・bang-path・群:番号の各文法を値検査として追加した。
+## ラウンド 455 — 「報告は誰が書いたか」の自問自答
+
+DSN/MDN の記録欄 (Original-Recipient・Final-Recipient・Reporting-MTA・MDN-Gateway) は配送機が残す署名帳。送信側から届くこれは既に異様だが、値が `型;値` の構文を守らなければ「転記された正規報告」と「体裁だけ真似た擬装」を区別できる — 共通文法の値検査として追加した。
