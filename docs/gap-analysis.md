@@ -2215,4 +2215,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2858 | Envelope-To:/Delivered-To:/X-Envelope-To: 系の未閉塞クオート宛名値 (封書宛記録のクオート未閉塞異形) | 封書宛ずれ |
 | D2859 | X-Envelope-From:/X-MailFrom:/X-Mail-From: 系の未閉塞クオート宛名値 (封書差出人記録のクオート未閉塞異形) | 封書差出人ずれ |
 | D2860 | Errors-To: の未閉塞クオート宛名値 (返送先記録のクオート未閉塞異形) | 返送先ずれ |
+| D2907 | Authentication-Results:/Received-SPF: 系欄の認証失敗判定異形 | 認証ずれ |
+| D2908 | Authentication-Results:/Received-SPF: 系欄の未規定判定値異形 | 認証ずれ |
+| D2909 | ARC-Seal: 欄の合否値異形 (cv= が none/pass/fail 外) | 認証ずれ |
+| D2910 | DKIM-Signature: 系欄の署名者欠落異形 (d= タグ欠落) | 認証ずれ |
 devin/1791332973-unclosed-cell1

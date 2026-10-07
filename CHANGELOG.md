@@ -219,6 +219,11 @@
 ### Security — D2860: `Errors-To:` 欄の未閉塞クオート宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_unclosed` を追加。
 
 devin/1791332973-unclosed-cell1
+### Security — D2907: `Authentication-Results:`/`Received-SPF:` 系欄の失敗判定異形 (=fail/=softfail/=permerror/=temperror/=reject/=discard) を認証ずれとして検出 — `Envelope` に `authres_fail` を追加。
+### Security — D2908: `Authentication-Results:`/`Received-SPF:` 系欄の未規定判定値異形 (`spf=wut` 形) を認証ずれとして検出 — `Envelope` に `authres_bad_verdict` を追加。
+### Security — D2909: `ARC-Seal:` 欄の `cv=` 合否値が規定外のARC合否異形を認証ずれとして検出 — `Envelope` に `arc_cv_bad` を追加。
+### Security — D2910: `DKIM-Signature:`/`DomainKey-Signature:` 欄に `d=` 署名者タグが無い署名者欠落異形を認証ずれとして検出 — `Envelope` に `dkim_sig_no_d` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
