@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+### Fixed — Devin Review (#803): `Autocrypt:` は `keydata=` 必須化・`OpenPGP:` は `id=`/`url=` 必須化 (`preference=` 単独を異形へ)・`Mail-Followup-To:`/`Mail-Reply-To:` は宛名列を要素ごとに検査・自己申告欄のヘッダ走査を本文全体変換から生バイト境界検出へ変更 (解析コスト削減)。
+### Security — D2995: `X-MS-PublicTrafficType:` 欄の非 `Email` 値を輸送種別ずれとして検出 — `Envelope` に `ms_ptt_bad` を追加。
+### Security — D2996: `X-MS-Exchange-Organization-AuthAs:` 欄の語彙外値 (`Internal`/`Anonymous`/`External` 以外) を認証主体ずれとして検出 — `Envelope` に `ms_authas_bad` を追加。
+### Security — D2997: `X-MS-Exchange-CrossTenant-OriginalArrivalTime:` 欄の非日時形値を越境到着ずれとして検出 — `Envelope` に `ms_ct_oat_bad` を追加。
+### Security — D2998: `X-Forefront-PRVS:` 欄の非16進トークン値を報酬識別ずれとして検出 — `Envelope` に `ms_prvs_bad` を追加。
+
 ### Fixed — Devin Review (#678): `received_*` 節異字検出群 (138 検出器) がヘッダ区画ではなくメッセージ全体を走査しており、本文中の `Received:` 風行で誤発火していた問題を修正。全検出器を `header_end` (最初の空行) 区画へ統一。
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。

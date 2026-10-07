@@ -2326,3 +2326,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2992 | OpenPGP: の非 名=値/鍵要素値 (鍵識別欄の値異形) | 鍵識別ずれ |
 | D2993 | Content-Return: の語彙外値 (本文返却欄の値異形) | 返却ずれ |
 | D2994 | Mail-Followup-To:/Mail-Reply-To: の非宛名値 (追従先欄の値異形) | 追従ずれ |
+| D2995 | X-MS-PublicTrafficType: の非 Email 値 (輸送種別欄の値異形) | 輸送ずれ |
+| D2996 | X-MS-Exchange-Organization-AuthAs: の語彙外値 (認証主体欄の値異形) | 主体ずれ |
+| D2997 | X-MS-Exchange-CrossTenant-OriginalArrivalTime: の非日時形値 (越境到着欄の値異形) | 越境ずれ |
+| D2998 | X-Forefront-PRVS: の非16進値 (報酬識別欄の値異形) | 識別ずれ |
