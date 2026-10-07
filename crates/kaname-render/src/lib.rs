@@ -2877,6 +2877,15 @@ pub struct Envelope {
     pub x_orig_to_backtick_local: bool,
     /// `X-Original-From:` の値がローカル部反転符宛名 (D2821 — 元差出人ずれ)。
     pub x_orig_from_backtick_local: bool,
+
+    /// `Apparently-To:`/`X-Apparently-To:` 系の値が未閉塞クオート宛名形か (D2861)。
+    pub apparently_to_unclosed: bool,
+    /// `Apparently-From:`/`Apparently-Sender:` 系の値が未閉塞クオート宛名形か (D2862)。
+    pub apparently_from_unclosed: bool,
+    /// `X-Original-To:` の値が未閉塞クオート宛名形か (D2863)。
+    pub x_orig_to_unclosed: bool,
+    /// `X-Original-From:` の値が未閉塞クオート宛名形か (D2864)。
+    pub x_orig_from_unclosed: bool,
     /// `X-Original-Cc:` 系の値が逆斜線宛名 (D2391 — 元副宛ずれ)。
     pub x_orig_cc_bslash: bool,
     /// `X-Original-Reply-To:` の値が逆斜線宛名 (D2392 — 元返信口ずれ)。
@@ -6830,6 +6839,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_backtick_local = has_apparently_from_backtick_local(bytes);
     let x_orig_to_backtick_local = has_x_orig_to_backtick_local(bytes);
     let x_orig_from_backtick_local = has_x_orig_from_backtick_local(bytes);
+    let apparently_to_unclosed = has_apparently_to_unclosed(bytes);
+    let apparently_from_unclosed = has_apparently_from_unclosed(bytes);
+    let x_orig_to_unclosed = has_x_orig_to_unclosed(bytes);
+    let x_orig_from_unclosed = has_x_orig_from_unclosed(bytes);
     let x_orig_cc_bslash = has_x_orig_cc_bslash(bytes);
     let x_orig_reply_to_bslash = has_x_orig_reply_to_bslash(bytes);
     let disposition_to_bslash = has_disposition_to_bslash(bytes);
@@ -8378,6 +8391,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_backtick_local,
         x_orig_to_backtick_local,
         x_orig_from_backtick_local,
+        apparently_to_unclosed,
+        apparently_from_unclosed,
+        x_orig_to_unclosed,
+        x_orig_from_unclosed,
         x_orig_cc_bslash,
         x_orig_reply_to_bslash,
         disposition_to_bslash,
@@ -63676,6 +63693,217 @@ pub fn has_x_orig_from_backtick_local(raw: &[u8]) -> bool {
     })
 }
 
+/// `Apparently-To:`/`X-Apparently-To:` 系 の値が未閉塞クオートの宛名形か判定する
+/// (D2861)。
+///
+/// 見せ宛を記す欄なのに `"a@y` のように鉤括弧が始まって閉じない宛名
+/// — 行末まで引用と読む実装とクオートを捨てる実装で見せ宛がずれる (アドレス欄側は `unclosed_addr_quote` 済み)。
+#[must_use]
+pub fn has_apparently_to_unclosed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-to" || n == "x-apparently-to")
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..].contains('@')
+            && !v[1..].contains('"')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系 の値が未閉塞クオートの宛名形か判定する
+/// (D2862)。
+///
+/// 表差出人を記す欄なのに `"a@y` のように鉤括弧が始まって閉じない宛名
+/// — 行末まで引用と読む実装とクオートを捨てる実装で表差出人がずれる (アドレス欄側は `unclosed_addr_quote` 済み)。
+#[must_use]
+pub fn has_apparently_from_unclosed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-from"
+            || n == "x-apparently-from"
+            || n == "apparently-sender"
+            || n == "x-apparently-sender")
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..].contains('@')
+            && !v[1..].contains('"')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `X-Original-To:` の値が未閉塞クオートの宛名形か判定する
+/// (D2863)。
+///
+/// 元宛を記す欄なのに `"a@y` のように鉤括弧が始まって閉じない宛名
+/// — 行末まで引用と読む実装とクオートを捨てる実装で元宛がずれる (アドレス欄側は `unclosed_addr_quote` 済み)。
+#[must_use]
+pub fn has_x_orig_to_unclosed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-to"
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..].contains('@')
+            && !v[1..].contains('"')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `X-Original-From:` の値が未閉塞クオートの宛名形か判定する
+/// (D2864)。
+///
+/// 元差出人を記す欄なのに `"a@y` のように鉤括弧が始まって閉じない宛名
+/// — 行末まで引用と読む実装とクオートを捨てる実装で元差出人がずれる (アドレス欄側は `unclosed_addr_quote` 済み)。
+#[must_use]
+pub fn has_x_orig_from_unclosed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-from"
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..].contains('@')
+            && !v[1..].contains('"')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
 /// `Apparently-To:`/`X-Apparently-To:` 系の値がプラス宛名
 /// 形か判定する (D2499)。
 ///
@@ -108150,6 +108378,61 @@ mod tests {
             b"From: a@x\r\nX-Original-From: a@xample`.com\r\nTo: b@y\r\n\r\nx"
         ));
         assert!(!has_x_orig_from_backtick_local(
+            b"From: a@x\r\nX-Original-From: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 見せ宛が未閉塞クオートなら発火() {
+        assert!(has_apparently_to_unclosed(
+            b"From: a@x\r\nApparently-To: \"a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(has_apparently_to_unclosed(
+            b"From: a@x\r\nX-Apparently-To: \"a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_unclosed(
+            b"From: a@x\r\nApparently-To: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_unclosed(
+            b"From: a@x\r\nApparently-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表差出人が未閉塞クオートなら発火() {
+        assert!(has_apparently_from_unclosed(
+            b"From: a@x\r\nApparently-From: \"a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_unclosed(
+            b"From: a@x\r\nApparently-From: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_unclosed(
+            b"From: a@x\r\nApparently-From: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛が未閉塞クオートなら発火() {
+        assert!(has_x_orig_to_unclosed(
+            b"From: a@x\r\nX-Original-To: \"a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_unclosed(
+            b"From: a@x\r\nX-Original-To: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_unclosed(
+            b"From: a@x\r\nX-Original-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人が未閉塞クオートなら発火() {
+        assert!(has_x_orig_from_unclosed(
+            b"From: a@x\r\nX-Original-From: \"a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_unclosed(
+            b"From: a@x\r\nX-Original-From: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_unclosed(
             b"From: a@x\r\nX-Original-From: a@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
