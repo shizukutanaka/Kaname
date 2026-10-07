@@ -2314,13 +2314,15 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2924 | X-MS-Exchange 追跡欄の非GUID値 (追跡欄の値異形) | 経路ずれ |
 | D2925 | X-Forefront/X-Microsoft Antispam 系の非対連接値 (判定記録欄の値異形) | 経路ずれ |
 | D2926 | Feedback-ID 系の非4区分値 (報酬識別欄の値異形) | 経路ずれ |
-devin/1791332973-unclosed-cell1
 | D2846 | Apparently-To:/X-Apparently-To: 系のローカル部鉤括弧宛名値 (見せ宛記録のローカル部鉤括弧異形) | 見せ宛ずれ |
 | D2847 | Apparently-From:/Apparently-Sender: 系のローカル部鉤括弧宛名値 (表差出人記録のローカル部鉤括弧異形) | 表差出人ずれ |
 | D2848 | X-Original-To: のローカル部鉤括弧宛名値 (元宛記録のローカル部鉤括弧異形) | 元宛ずれ |
 | D2849 | X-Original-From: のローカル部鉤括弧宛名値 (元差出人記録のローカル部鉤括弧異形) | 元差出人ずれ |
-devin/1791331333-quoted-local-cell2
 | D2895 | Subject: のゼロ幅文字 (件名の不可視分割異形) | 件名ずれ |
 | D2896 | Subject: の双方向制御文字 (件名の表示順異形) | 件名ずれ |
 | D2897 | Subject: のタグ文字 (件名の不可視タグ異形) | 件名ずれ |
 | D2898 | Subject: の制御文字 (件名の生制御文字異形) | 件名ずれ |
+| D2991 | Autocrypt: の非 名=値/addr= 値 (暗号交渉欄の値異形) | 交渉ずれ |
+| D2992 | OpenPGP: の非 名=値/鍵要素値 (鍵識別欄の値異形) | 鍵識別ずれ |
+| D2993 | Content-Return: の語彙外値 (本文返却欄の値異形) | 返却ずれ |
+| D2994 | Mail-Followup-To:/Mail-Reply-To: の非宛名値 (追従先欄の値異形) | 追従ずれ |

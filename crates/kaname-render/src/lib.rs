@@ -3307,6 +3307,14 @@ pub struct Envelope {
     pub ms_latency_bad: bool,
     /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
     pub mailer_bad: bool,
+    /// `Autocrypt:` 欄の値が `名=値` 連接+`addr=` 宛名形でない (D2991 — 交渉ずれ)。
+    pub autocrypt_bad: bool,
+    /// `OpenPGP:` 欄の値が `名=値` 連接+鍵要素形でない (D2992 — 鍵識別ずれ)。
+    pub openpgp_bad: bool,
+    /// `Content-Return:` 欄の値が allowed/prohibited 語彙外 (D2993 — 返却ずれ)。
+    pub content_return_bad: bool,
+    /// `Mail-Followup-To:`/`Mail-Reply-To:` 欄の値が宛名/poster 形でない (D2994 — 追従ずれ)。
+    pub list_followup_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7260,6 +7268,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
     let ms_latency_bad = has_ms_latency_bad(bytes);
     let mailer_bad = has_mailer_bad(bytes);
+    let autocrypt_bad = has_autocrypt_bad(bytes);
+    let openpgp_bad = has_openpgp_bad(bytes);
+    let content_return_bad = has_content_return_bad(bytes);
+    let list_followup_bad = has_list_followup_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -8919,6 +8931,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         tnef_correlator_bad,
         ms_latency_bad,
         mailer_bad,
+        autocrypt_bad,
+        openpgp_bad,
+        content_return_bad,
+        list_followup_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -51650,6 +51666,147 @@ pub fn has_ms_as_report_bad(raw: &[u8]) -> bool {
                 }
             })
     })
+}
+
+/// 暗号・交渉系自己申告欄 (`Autocrypt:`/`OpenPGP:`/`Content-Return:`/
+/// `Mail-Followup-To:`/`Mail-Reply-To:`) の値形検査用に、ヘッダ部を
+/// 論理行 (折り畳みを継続行へ展開) へ直す (D2991–D2994)。
+fn crypto_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `Autocrypt:` 欄の値が `名=値` の `;` 連接で `addr=` 要素の宛名形を
+/// 持たなければ暗号交渉記録の異形として検出する (D2991)。
+///
+/// `Autocrypt:` (draft-ietf-autocrypt) は送信側が自分の鍵素材と
+/// 宛名を申告する交渉欄 — `addr=` を欠く、要素が `名=値` 形を外れる、
+/// addr 値が宛名形を欠く値は「鍵交渉できる体裁」の擬態。
+fn has_autocrypt_bad(bytes: &[u8]) -> bool {
+    let logical = crypto_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("autocrypt:") {
+            let mut has_addr = false;
+            for el in v.split(';') {
+                let e = el.trim();
+                if e.is_empty() {
+                    continue;
+                }
+                let Some(p) = e.find('=') else {
+                    return true;
+                };
+                if p == 0 || e[p + 1..].trim().is_empty() {
+                    return true;
+                }
+                if &e[..p] == "addr" {
+                    has_addr = true;
+                    if !e[p + 1..].contains('@') {
+                        return true;
+                    }
+                }
+            }
+            if !has_addr {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `OpenPGP:` 欄の値が `名=値` の `;` 連接で `id=`/`url=`/`preference=`
+/// のいずれかも持たなければ鍵識別記録の異形として検出する (D2992)。
+///
+/// `OpenPGP:` (draft-josefsson-openpgp-email-news-header) は送信側の
+/// 鍵指紋・鍵 URL・署名/暗号の希望を記す欄 — 要素が `名=値` を欠く、
+/// 鍵要素を何も持たない値は「鍵を提示した体裁」の擬態。
+fn has_openpgp_bad(bytes: &[u8]) -> bool {
+    let logical = crypto_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("openpgp:") {
+            let mut has_key = false;
+            for el in v.split(';') {
+                let e = el.trim();
+                if e.is_empty() {
+                    continue;
+                }
+                let Some(p) = e.find('=') else {
+                    return true;
+                };
+                if p == 0 || e[p + 1..].trim().is_empty() {
+                    return true;
+                }
+                if matches!(&e[..p], "id" | "url" | "preference") {
+                    has_key = true;
+                }
+            }
+            if !has_key {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Return:` 欄の値が `allowed`/`prohibited` (RFC 2156) の
+/// 語彙外であれば本文返却記録の異形として検出する (D2993)。
+///
+/// `Content-Return:` は返送時に本文を添えてよいかの方針を記す
+/// X.400 系欄 — 語彙外の値は「返却方針を記した体裁」の擬態。
+fn has_content_return_bad(bytes: &[u8]) -> bool {
+    let logical = crypto_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("content-return:") {
+            let t = v.trim();
+            if t != "allowed" && t != "prohibited" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Mail-Followup-To:`/`Mail-Reply-To:` 欄の値が `poster` 語彙でも
+/// 宛名形でもなければ追従先記録の異形として検出する (D2994)。
+///
+/// `Mail-Followup-To:`/`Mail-Reply-To:` はメーリングリスト慣習の
+/// 追従先指定欄 — `poster` でも `@` を持つ宛名列でもない値は
+/// 「追従経路を記した体裁」の擬態。
+fn has_list_followup_bad(bytes: &[u8]) -> bool {
+    let logical = crypto_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low
+            .strip_prefix("mail-followup-to:")
+            .or_else(|| low.strip_prefix("mail-reply-to:"))
+        {
+            let t = v.trim();
+            if t.is_empty() || (t != "poster" && !t.contains('@')) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// (D2635)。
@@ -131886,4 +132043,53 @@ fn 投稿機欄が異形なら発火() {
             b"X-Microsoft-Antispam: BCL:0\r\n\r\nbody"
         ));
         assert!(!has_ms_as_report_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2991_autocrypt_bad() {
+        assert!(has_autocrypt_bad(b"Autocrypt: keydata=AAAA\r\n\r\nbody"));
+        assert!(has_autocrypt_bad(b"Autocrypt: junk\r\n\r\nbody"));
+        assert!(has_autocrypt_bad(b"Autocrypt: addr=alice\r\n\r\nbody"));
+        assert!(!has_autocrypt_bad(
+            b"Autocrypt: addr=alice@example.com; prefer-encrypt=mutual; keydata=AAAA\r\n\r\nbody"
+        ));
+        assert!(!has_autocrypt_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2992_openpgp_bad() {
+        assert!(has_openpgp_bad(b"OpenPGP: fingerprint\r\n\r\nbody"));
+        assert!(has_openpgp_bad(b"OpenPGP: id\r\n\r\nbody"));
+        assert!(has_openpgp_bad(b"OpenPGP:\r\n\r\nbody"));
+        assert!(!has_openpgp_bad(
+            b"OpenPGP: id=0123456789ABCDEF0123456789ABCDEF01234567; url=https://x/key.asc\r\n\r\nbody"
+        ));
+        assert!(!has_openpgp_bad(b"OpenPGP: preference=sign\r\n\r\nbody"));
+        assert!(!has_openpgp_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2993_content_return_bad() {
+        assert!(has_content_return_bad(b"Content-Return: maybe\r\n\r\nbody"));
+        assert!(has_content_return_bad(b"Content-Return:\r\n\r\nbody"));
+        assert!(!has_content_return_bad(b"Content-Return: allowed\r\n\r\nbody"));
+        assert!(!has_content_return_bad(
+            b"Content-Return: prohibited\r\n\r\nbody"
+        ));
+        assert!(!has_content_return_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2994_list_followup_bad() {
+        assert!(has_list_followup_bad(
+            b"Mail-Followup-To: someone\r\n\r\nbody"
+        ));
+        assert!(has_list_followup_bad(b"Mail-Reply-To: x\r\n\r\nbody"));
+        assert!(!has_list_followup_bad(
+            b"Mail-Followup-To: list@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_list_followup_bad(
+            b"Mail-Followup-To: poster\r\n\r\nbody"
+        ));
+        assert!(!has_list_followup_bad(b"From: a@b\r\n\r\nbody"));
     }
