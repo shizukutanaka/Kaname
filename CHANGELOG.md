@@ -226,6 +226,14 @@
 ### Security — D2860: `Errors-To:` 欄の未閉塞クオート宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_unclosed` を追加。
 
 devin/1791332973-unclosed-cell1
+### Security — D2927: `X-MS-Has-Attach:`/`X-Has-Attach:` 系欄の yes/no 語彙外れを添付標旗記録異形として検出 — `Envelope` に `ms_has_attach_bad` を追加。
+
+### Security — D2928: `X-MS-TNEF-Correlator:`/`X-TNEFCorrelator:` 系欄の base64 相関子形外れを添付相関記録異形として検出 — `Envelope` に `tnef_correlator_bad` を追加。
+
+### Security — D2929: `X-MS-Exchange-Transport-EndToEndLatency:` 系欄の `HH:MM:SS.mmm` 経過時刻形外れを運輸遅延記録異形として検出 — `Envelope` に `ms_latency_bad` を追加。
+
+### Security — D2930: `X-Mailer:`/`User-Agent:`/`X-MimeOLE:` 系欄の制御文字・非ascii混入を送信器記録異形として検出 — `Envelope` に `mailer_bad` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。

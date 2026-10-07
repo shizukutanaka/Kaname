@@ -3290,6 +3290,14 @@ pub struct Envelope {
     pub env_from_quoted_local: bool,
     /// `Errors-To:` の値が鉤括弧ローカル宛名形か (D2845)。
     pub errors_to_quoted_local: bool,
+    /// X-MS-Has-Attach 系欄の値が yes/no 語彙外
+    pub ms_has_attach_bad: bool,
+    /// X-MS-TNEF-Correlator 系欄の値が相関子形でない
+    pub tnef_correlator_bad: bool,
+    /// X-MS-Exchange 運輸遅延欄の値が経過時刻形でない
+    pub ms_latency_bad: bool,
+    /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
+    pub mailer_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7065,6 +7073,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let env_to_quoted_local = has_env_to_quoted_local(bytes);
     let env_from_quoted_local = has_env_from_quoted_local(bytes);
     let errors_to_quoted_local = has_errors_to_quoted_local(bytes);
+    let ms_has_attach_bad = has_ms_has_attach_bad(bytes);
+    let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
+    let ms_latency_bad = has_ms_latency_bad(bytes);
+    let mailer_bad = has_mailer_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8626,6 +8638,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         env_to_quoted_local,
         env_from_quoted_local,
         errors_to_quoted_local,
+        ms_has_attach_bad,
+        tnef_correlator_bad,
+        ms_latency_bad,
+        mailer_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48342,6 +48358,127 @@ pub fn has_x_orig_rcpt_to_caret_local(raw: &[u8]) -> bool {
 }
 
 /// `X-Confirm-Reading-To:` の値がドル符宛名形か判定する
+/// `X-MS-Has-Attach:`/`X-Has-Attach:` 系欄の値が yes/no の語彙外なら添付標旗記録の異形として検出する (D2927)。
+pub fn has_ms_has_attach_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-ms-has-attach:") || l.starts_with("x-has-attach:")) {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        !(v == "yes" || v == "no")
+    })
+}
+
+/// `X-MS-TNEF-Correlator:`/`X-TNEFCorrelator:` 系欄の値が base64 相関子形でなければ添付相関記録の異形として検出する (D2928)。
+pub fn has_tnef_correlator_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-ms-tnef-correlator:") || l.starts_with("x-tnefcorrelator:")) {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        v.is_empty()
+            || v.len() < 8
+            || !v.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+    })
+}
+
+/// `X-MS-Exchange-Transport-EndToEndLatency:` 系欄の値が `HH:MM:SS.mmm` の経過時刻形でなければ運輸遅延記録の異形として検出する (D2929)。
+pub fn has_ms_latency_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-ms-exchange-transport-endtoendlatency:")
+            || l.starts_with("x-ms-exchange-transport-end2endlatency:"))
+        {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let t: Vec<&str> = v.split(':').collect();
+        let ok = t.len() == 3
+            && t.iter().take(2).all(|p| p.len() == 2 && p.chars().all(|c| c.is_ascii_digit()))
+            && {
+                let s: Vec<&str> = t[2].split('.').collect();
+                s.len() == 2
+                    && s[0].len() == 2
+                    && s[0].chars().all(|c| c.is_ascii_digit())
+                    && s[1].len() == 3
+                    && s[1].chars().all(|c| c.is_ascii_digit())
+            };
+        !ok
+    })
+}
+
+/// `X-Mailer:`/`User-Agent:` 系欄の値が制御文字や非asciiを含むなら送信器記録の異形として検出する (D2930)。
+pub fn has_mailer_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-mailer:") || l.starts_with("user-agent:") || l.starts_with("x-mimeole:")) {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        v.is_empty()
+            || v.chars().any(|c| !c.is_ascii() || (c.is_ascii_control() && c != '\t'))
+    })
+}
+
 /// (D2635)。
 ///
 /// 閲覧確認先を記す欄なのに `a@x$` のようにドメイン側に孤立 `$` を
@@ -127375,4 +127512,54 @@ body";
             b"From: \"Taro Tanaka\" <a@b>\r\n\r\nbody"
         ));
         assert!(!has_url_display_name(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 添付標旗欄が異形なら発火() {
+        assert!(has_ms_has_attach_bad(b"X-MS-Has-Attach: maybe\r\n\r\nbody"));
+        assert!(has_ms_has_attach_bad(b"X-Has-Attach: 1\r\n\r\nbody"));
+        assert!(!has_ms_has_attach_bad(b"X-MS-Has-Attach: yes\r\n\r\nbody"));
+        assert!(!has_ms_has_attach_bad(b"X-MS-Has-Attach: no\r\n\r\nbody"));
+        assert!(!has_ms_has_attach_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 相関子欄が異形なら発火() {
+        assert!(has_tnef_correlator_bad(
+            b"X-MS-TNEF-Correlator: abc!!\r\n\r\nbody"
+        ));
+        assert!(has_tnef_correlator_bad(
+            b"X-MS-TNEF-Correlator: ab\r\n\r\nbody"
+        ));
+        assert!(!has_tnef_correlator_bad(
+            b"X-MS-TNEF-Correlator: AQHRMzVhYzEyMzQ=\r\n\r\nbody"
+        ));
+        assert!(!has_tnef_correlator_bad(
+            b"X-TNEFCorrelator: aGVsbG93b3JsZA==\r\n\r\nbody"
+        ));
+        assert!(!has_tnef_correlator_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 遅延欄が異形なら発火() {
+        assert!(has_ms_latency_bad(
+            b"X-MS-Exchange-Transport-EndToEndLatency: fast\r\n\r\nbody"
+        ));
+        assert!(has_ms_latency_bad(
+            b"X-MS-Exchange-Transport-EndToEndLatency: 1:2:3\r\n\r\nbody"
+        ));
+        assert!(!has_ms_latency_bad(
+            b"X-MS-Exchange-Transport-EndToEndLatency: 00:00:01.234\r\n\r\nbody"
+        ));
+        assert!(!has_ms_latency_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 送信器欄が異形なら発火() {
+        assert!(has_mailer_bad(b"X-Mailer:\r\n\r\nbody"));
+        assert!(has_mailer_bad(b"X-Mailer: tool\x7fbad\r\n\r\nbody"));
+        assert!(has_mailer_bad(b"User-Agent: tool\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\r\n\r\nbody"));
+        assert!(!has_mailer_bad(b"X-Mailer: Outlook 16.0\r\n\r\nbody"));
+        assert!(!has_mailer_bad(b"User-Agent: Thunderbird/115.0\r\n\r\nbody"));
+        assert!(!has_mailer_bad(b"From: a@b\r\n\r\nbody"));
     }
