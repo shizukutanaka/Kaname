@@ -2226,6 +2226,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2928 | X-MS-TNEF-Correlator 系の非base64値 (相関子欄の値異形) | 経路ずれ |
 | D2929 | X-MS-Exchange 遅延欄の非時刻値 (遅延欄の値異形) | 経路ずれ |
 | D2930 | X-Mailer/User-Agent 系の制御文字・非ascii (送信器欄の値異形) | 経路ずれ |
+| D2983 | X-Originating-IP: の非 [IP] 値 (起源識別欄の値異形) | 発信特定ずれ |
+| D2984 | X-Complaints/Report-Abuse 系の非宛名/URI値 (虐待窓口欄の値異形) | 通報先ずれ |
+| D2985 | Auto-Submitted: の語彙外値 (自動応答欄の値異形) | 応答分類ずれ |
+| D2986 | X-Authenticated-Sender 系の非宛名値 (認証送信人欄の値異形) | 送信認証ずれ |
 | D2979 | Precedence 系の非単一トークン値 (優先順位欄の値異形) | 優先判定ずれ |
 | D2980 | X-Loop: の非宛名値 (巡回欄の値異形) | 巡回防止ずれ |
 | D2981 | UIDL 系の空白入り/非印字値 (一意識別欄の値異形) | 受信管理ずれ |
