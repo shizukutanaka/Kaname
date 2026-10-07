@@ -3271,6 +3271,12 @@ pub struct Envelope {
     pub env_from_backtick_local: bool,
     /// `Errors-To:` の値がローカル部反転符宛名 (D2790 — 返送先ずれ)。
     pub errors_to_backtick_local: bool,
+    /// `Envelope-To:`/`Delivered-To:`/`X-Envelope-To:` 系の値が途中クオート宛名形か (D2873)。
+    pub env_to_mid_quote: bool,
+    /// `X-Envelope-From:`/`X-MailFrom:`/`X-Mail-From:` 系の値が途中クオート宛名形か (D2874)。
+    pub env_from_mid_quote: bool,
+    /// `Errors-To:` の値が途中クオート宛名形か (D2875)。
+    pub errors_to_mid_quote: bool,
     /// `X-Envelope-To:` の値がローカル部ハット宛名 (D2785 — 封書宛先ずれ)。
     pub env_to_caret_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部ハット宛名 (D2786 — 封書差出人ずれ)。
@@ -7018,6 +7024,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
+    let env_to_mid_quote = has_env_to_mid_quote(bytes);
+    let env_from_mid_quote = has_env_from_mid_quote(bytes);
+    let errors_to_mid_quote = has_errors_to_mid_quote(bytes);
     let env_to_caret_local = has_env_to_caret_local(bytes);
     let env_from_caret_local = has_env_from_caret_local(bytes);
     let errors_to_caret_local = has_errors_to_caret_local(bytes);
@@ -8561,6 +8570,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
+        env_to_mid_quote,
+        env_from_mid_quote,
+        errors_to_mid_quote,
         env_to_caret_local,
         env_from_caret_local,
         errors_to_caret_local,
@@ -47804,6 +47816,165 @@ pub fn has_x_orig_rcpt_to_dollar_local(raw: &[u8]) -> bool {
             && !v.starts_with('@')
             && !v.ends_with('@')
             && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Envelope-To:`/`Delivered-To:`/`X-Envelope-To:` 系 の値が途中クオートの宛名形か判定する (D2873)。
+///
+/// 封書宛を記す欄なのに `a"b@y` のように裸トークン途中に鉤括弧を持つ宛名
+/// — トークン内鉤括弧を字として残す実装と引用開始と読む実装で封書宛がずれる (アドレス欄側は `mid_token_quote` 済み)。
+#[must_use]
+pub fn has_env_to_mid_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "envelope-to" || n == "delivered-to" || n == "x-envelope-to")
+            && v.is_ascii()
+            && v.contains('@')
+            && !v.starts_with('"')
+            && v.contains('"')
+            && !v.contains(" \"")
+            && !v.contains('\t')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:`/`X-Mail-From:` 系 の値が途中クオートの宛名形か判定する (D2874)。
+///
+/// 封書差出人を記す欄なのに `a"b@y` のように裸トークン途中に鉤括弧を持つ宛名
+/// — トークン内鉤括弧を字として残す実装と引用開始と読む実装で封書差出人がずれる (アドレス欄側は `mid_token_quote` 済み)。
+#[must_use]
+pub fn has_env_from_mid_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-envelope-from" || n == "x-mailfrom" || n == "x-mail-from")
+            && v.is_ascii()
+            && v.contains('@')
+            && !v.starts_with('"')
+            && v.contains('"')
+            && !v.contains(" \"")
+            && !v.contains('\t')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `Errors-To:` の値が途中クオートの宛名形か判定する (D2875)。
+///
+/// 返送先を記す欄なのに `a"b@y` のように裸トークン途中に鉤括弧を持つ宛名
+/// — トークン内鉤括弧を字として残す実装と引用開始と読む実装で返送先がずれる (アドレス欄側は `mid_token_quote` 済み)。
+#[must_use]
+pub fn has_errors_to_mid_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "errors-to")
+            && v.is_ascii()
+            && v.contains('@')
+            && !v.starts_with('"')
+            && v.contains('"')
+            && !v.contains(" \"")
+            && !v.contains('\t')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
     })
 }
 
@@ -108818,6 +108989,36 @@ mod tests {
         ));
         assert!(!has_x_orig_rcpt_to_dollar_local(
             b"From: a@x\r\nX-Original-Rcpt-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書宛が途中クオートなら発火() {
+        assert!(has_env_to_mid_quote(
+            b"From: a@x\r\nEnvelope-To: a\"b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_mid_quote(
+            b"From: a@x\r\nEnvelope-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人が途中クオートなら発火() {
+        assert!(has_env_from_mid_quote(
+            b"From: a@x\r\nX-Envelope-From: a\"b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_mid_quote(
+            b"From: a@x\r\nX-Envelope-From: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先が途中クオートなら発火() {
+        assert!(has_errors_to_mid_quote(
+            b"From: a@x\r\nErrors-To: a\"b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_mid_quote(
+            b"From: a@x\r\nErrors-To: a@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
