@@ -210,6 +210,9 @@
 ### Security — D2871: `Apparently-Resent-*:` 系欄の未閉塞クオート宛名値を再送宛ずれとして検出 — `Envelope` に `apparently_resent_unclosed` を追加。
 ### Security — D2872: `X-Original-Rcpt-To:` 系欄の未閉塞クオート宛名値を元受取人ずれとして検出 — `Envelope` に `x_orig_rcpt_to_unclosed` を追加。
 
+### Security — D2791: `X-Envelope-To:` 欄のローカル部ドル符宛名値 (`a$b@y` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_dollar_local` を追加 (`Envelope-To:`/`Delivered-To:` 本命は `addr_dollar_local` が網羅)。
+### Security — D2792: `X-Envelope-From:`/`X-MailFrom:` 等欄のローカル部ドル符宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_dollar_local` を追加。
+### Security — D2793: `Errors-To:` 欄のローカル部ドル符宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_dollar_local` を追加。
 - D2814: `X-Confirm-Reading-To:` のローカル部ハット宛名値 — 閲覧確認先記録のローカル部ハット異形
 - D2815: `Resent-Reply-To:` のローカル部ハット宛名値 — 再送返信口記録のローカル部ハット異形
 - D2816: `Apparently-Resent-*:` 系 のローカル部ハット宛名値 — 再送残渣記録のローカル部ハット異形
