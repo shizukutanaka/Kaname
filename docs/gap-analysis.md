@@ -2226,4 +2226,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2928 | X-MS-TNEF-Correlator 系の非base64値 (相関子欄の値異形) | 経路ずれ |
 | D2929 | X-MS-Exchange 遅延欄の非時刻値 (遅延欄の値異形) | 経路ずれ |
 | D2930 | X-Mailer/User-Agent 系の制御文字・非ascii (送信器欄の値異形) | 経路ずれ |
+| D2959 | Control: の非 動詞 引数 値 (制御欄の値異形) | 制御処理ずれ |
+| D2960 | Supersedes:/Also-Control: の非 msgid 値 (置換欄の値異形) | 記事同定ずれ |
+| D2961 | Cancel-Lock:/Cancel-Key: の非 方式:データ 値 (解除錠欄の値異形) | 取消照合ずれ |
+| D2962 | NNTP-Posting-Host: の非単一トークン値 (投稿機欄の値異形) | 投稿元ずれ |
 devin/1791332973-unclosed-cell1

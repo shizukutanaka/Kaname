@@ -3298,6 +3298,14 @@ pub struct Envelope {
     pub ms_latency_bad: bool,
     /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
     pub mailer_bad: bool,
+    /// Control: が `動詞 引数` 形でない (D2959)。
+    pub control_bad: bool,
+    /// Supersedes:/Also-Control: が msgid を含まない (D2960)。
+    pub supersedes_bad: bool,
+    /// Cancel-Lock:/Cancel-Key: の各要素が `方式:データ` 形でない (D2961)。
+    pub cancel_lock_bad: bool,
+    /// NNTP-Posting-Host: が単一トークン形でない (D2962)。
+    pub posting_host_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7077,6 +7085,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
     let ms_latency_bad = has_ms_latency_bad(bytes);
     let mailer_bad = has_mailer_bad(bytes);
+    let control_bad = has_control_bad(bytes);
+    let supersedes_bad = has_supersedes_bad(bytes);
+    let cancel_lock_bad = has_cancel_lock_bad(bytes);
+    let posting_host_bad = has_posting_host_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8642,6 +8654,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         tnef_correlator_bad,
         ms_latency_bad,
         mailer_bad,
+        control_bad,
+        supersedes_bad,
+        cancel_lock_bad,
+        posting_host_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48477,6 +48493,111 @@ pub fn has_mailer_bad(raw: &[u8]) -> bool {
         v.is_empty()
             || v.chars().any(|c| !c.is_ascii() || (c.is_ascii_control() && c != '\t'))
     })
+}
+
+fn nntp_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2959)。
+fn has_control_bad(bytes: &[u8]) -> bool {
+    let logical = nntp_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("control:") {
+            let v = v.trim();
+            // 制御動詞 空白 引数 の形
+            let mut it = v.splitn(2, |c: char| c == ' ' || c == '\t');
+            let verb = it.next().unwrap_or("");
+            let args = it.next().map(str::trim).unwrap_or("");
+            let verb_ok = !verb.is_empty()
+                && verb.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+            if !verb_ok || args.is_empty() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2960)。
+fn has_supersedes_bad(bytes: &[u8]) -> bool {
+    let logical = nntp_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("supersedes:")
+            .or_else(|| low.strip_prefix("also-control:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // msgid 一つ以上を含むこと
+            let ok = v.starts_with('<')
+                && v.ends_with('>')
+                && v.len() > 2
+                && v.contains('@');
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2961)。
+fn has_cancel_lock_bad(bytes: &[u8]) -> bool {
+    let logical = nntp_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("cancel-lock:")
+            .or_else(|| low.strip_prefix("cancel-key:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            let toks: Vec<&str> = v.split(|c: char| c == ' ' || c == '\t')
+                .filter(|t| !t.is_empty()).collect();
+            if toks.is_empty() {
+                return true;
+            }
+            for t in toks {
+                // 方式:データ の形
+                let Some(p) = t.find(':') else { return true; };
+                if p == 0 || p + 1 >= t.len() {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// (D2962)。
+fn has_posting_host_bad(bytes: &[u8]) -> bool {
+    let logical = nntp_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("nntp-posting-host:") {
+            let v = v.trim();
+            if v.is_empty()
+                || v.contains('@')
+                || v.chars().any(|c| c.is_whitespace() || c.is_control())
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// (D2635)。
@@ -127563,3 +127684,32 @@ body";
         assert!(!has_mailer_bad(b"User-Agent: Thunderbird/115.0\r\n\r\nbody"));
         assert!(!has_mailer_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+#[test]
+fn 制御欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nControl: cancel\r\n\r\nx").unwrap();
+    assert!(e.control_bad);
+    let e = parse(b"From: a@x.com\r\nControl: cancel <abc@x.com>\r\n\r\nx").unwrap();
+    assert!(!e.control_bad);
+}
+#[test]
+fn 置換欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nSupersedes: abc\r\n\r\nx").unwrap();
+    assert!(e.supersedes_bad);
+    let e = parse(b"From: a@x.com\r\nSupersedes: <abc@x.com>\r\n\r\nx").unwrap();
+    assert!(!e.supersedes_bad);
+}
+#[test]
+fn 解除錠欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nCancel-Lock: sha256\r\n\r\nx").unwrap();
+    assert!(e.cancel_lock_bad);
+    let e = parse(b"From: a@x.com\r\nCancel-Lock: sha256:abcdef\r\n\r\nx").unwrap();
+    assert!(!e.cancel_lock_bad);
+}
+#[test]
+fn 投稿機欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nNNTP-Posting-Host: a@b.com\r\n\r\nx").unwrap();
+    assert!(e.posting_host_bad);
+    let e = parse(b"From: a@x.com\r\nNNTP-Posting-Host: news.example.com\r\n\r\nx").unwrap();
+    assert!(!e.posting_host_bad);
+}
