@@ -8135,6 +8135,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.errors_to_quoted_local {
         render_risks.push("返送先記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで返送先がずれます".to_string());
     }
+    if env.confirm_reading_mid_quote {
+        render_risks.push("閲覧先記録の宛名が途中の鉤括弧です—トークン内鉤括弧の扱いで閲覧先がずれます".to_string());
+    }
+    if env.resent_reply_to_mid_quote {
+        render_risks.push("再送返信口記録の宛名が途中の鉤括弧です—トークン内鉤括弧の扱いで再送返信口がずれます".to_string());
+    }
+    if env.apparently_resent_mid_quote {
+        render_risks.push("再送残渣記録の宛名が途中の鉤括弧です—トークン内鉤括弧の扱いで再送残渣がずれます".to_string());
+    }
+    if env.x_orig_rcpt_to_mid_quote {
+        render_risks.push("元受取人記録の宛名が途中の鉤括弧です—トークン内鉤括弧の扱いで元受取人がずれます".to_string());
+    }
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }
