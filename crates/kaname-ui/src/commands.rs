@@ -8147,6 +8147,19 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.mailer_bad {
         render_risks.push("送信器欄の値が異形です—送信器値の扱いで経路がずれます".to_string());
     }
+    if env.precedence_bad {
+        render_risks.push("優先順位欄の値が異形です—優先順位値の扱いで優先判定がずれます".to_string());
+    }
+    if env.x_loop_bad {
+        render_risks.push("巡回欄の値が異形です—巡回値の扱いで巡回防止がずれます".to_string());
+    }
+    if env.uidl_bad {
+        render_risks.push("一意識別欄の値が異形です—一意識別値の扱いで受信管理がずれます".to_string());
+    }
+    if env.x_received_bad {
+        render_risks.push("副受信欄の値が異形です—副受信値の扱いで経路把握がずれます".to_string());
+    }
+
     if env.list_uri_bad {
         render_risks.push("一覧操作欄の値が異形です—操作値の扱いで一覧処理がずれます".to_string());
     }

@@ -4534,3 +4534,8 @@ X-MS-Has-Attach の語彙は yes/no のみ、TNEF-Correlator は base64 相関�
 
 - **問**: 通知オプションと ARF 報告欄は存在検出で足りるか。**答**: 否 — DNT-Options の `名=required|optional`、VBR-Info の `名=値`、Feedback-Type の語彙、Feedback-ID の4要素連接はいずれも値を握る実装で解釈がずれる。
 - **棄却**: 動詞・欄名の閉集合化 (拡張余地を潰すため形のみ要求)。
+
+## ラウンド463 — 経路管理欄の値形 (D2979–D2982)
+
+- **問**: リスト経路の運用欄 (Precedence/X-Loop/UIDL/X-Received) は非標準だから検出不要か。**答**: 否 — いずれも配送系が値を握る欄であり、形を欠く値は優先判定・巡回防止・UID 管理・経路把握をずらす。
+- **棄却**: 語彙閉集合化 (Precedence は拡張名が流通するため形のみ要求)。
