@@ -333,6 +333,11 @@ devin/1791331333-quoted-local-cell2
 ### Security — D2897: `Subject:` 欄のタグ文字 (U+E0000–U+E007F) を件名ずれとして検出 — `Envelope` に `subject_tag_chars` を追加。
 ### Security — D2898: `Subject:` 欄の制御文字 (C0/C1) を件名ずれとして検出 — `Envelope` に `subject_ctrl` を追加。
 
+### Security — D2899: `Subject:` 欄の値が空の件名空欄異形を件名ずれとして検出 — `Envelope` に `subject_empty` を追加。
+### Security — D2900: `Subject:` 欄が複数出る件名二重化異形を件名ずれとして検出 — `Envelope` に `subject_multi` を追加。
+### Security — D2901: `Subject:` 欄が三段以上の返信・転送接頭語を持つ深い返信連鎖異形を件名ずれとして検出 — `Envelope` に `subject_reply_chain` を追加。
+### Security — D2902: `Subject:` 欄にHTMLタグ片やエンティティを含むHTML混入異形を件名ずれとして検出 — `Envelope` に `subject_html` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。

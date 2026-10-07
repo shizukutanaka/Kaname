@@ -8347,6 +8347,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.subject_ctrl {
         render_risks.push("件名が制御文字を含みます—制御文字の扱いで件名がずれます".to_string());
     }
+    if env.subject_empty {
+        render_risks.push("件名が空です—空件名の扱いで件名がずれます".to_string());
+    }
+    if env.subject_multi {
+        render_risks.push("件名が複数あります—複数件名の扱いで件名がずれます".to_string());
+    }
+    if env.subject_reply_chain {
+        render_risks.push("件名が深い返信連鎖です—返信連鎖の扱いで件名がずれます".to_string());
+    }
+    if env.subject_html {
+        render_risks.push("件名がHTML片を含みます—HTML片の扱いで件名がずれます".to_string());
+    }
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }
