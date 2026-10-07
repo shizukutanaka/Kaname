@@ -4625,3 +4625,8 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 
 問: `Autocrypt:`/`OpenPGP:`/`Content-Return:`/`Mail-Followup-To:`/`Mail-Reply-To:` の値の形は検査済みか。
 答: 未検出だった — 鍵素材・返却方針・追従先を送信側が自称する欄は値の文法が绿地だった。`名=値` 連接・`addr=` 宛名・`allowed|prohibited` 語彙・宛名/poster 形の外れを異形として D2991–D2994 を追加。交渉の体裁だけを真似る擬態へ面を広げた。
+
+## ラウンド 469 — 「越境の証明書」の自問自答
+
+問: `X-MS-Exchange-CrossTenant-*` の欄があれば組織をまたいだ正規の到着を示すか。
+答: 越境記録はテナントID (GUID)・接続IP (`[IP]` リテラル)・認証主体 (Internal/Anonymous/External)・認証元ホスト (FQDN) の4つの形で刻まれる — いずれも形が閉じており、形を欠く値は「正当な越境を演出する擬態」。`x-ms-exchange-crosstenant` の存在検出だけでは語彙外・形を欠く値を見逃すため、値文法として D3003–D3006 を追加した。権威の刻む欄は「値が権威の形をしているか」で問うという同じ原則を、組織内欄 (D2999–D3002) に続き越境欄にも展開した。

@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3003: `X-MS-Exchange-CrossTenant-Id:` 欄の非GUID値を越境識別ずれとして検出 — `Envelope` に `ms_ct_id_bad` を追加。
+### Security — D3004: `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の非 `[IP]` 値を越境接続ずれとして検出 — `Envelope` に `ms_ct_ip_bad` を追加。
+### Security — D3005: `X-MS-Exchange-CrossTenant-AuthAs:` 欄の語彙外値 (`Internal`/`Anonymous`/`External` 以外) を越境認証主体ずれとして検出 — `Envelope` に `ms_ct_authas_bad` を追加。
+### Security — D3006: `X-MS-Exchange-CrossTenant-AuthSource:` 欄の非ホスト名値を越境認証元ずれとして検出 — `Envelope` に `ms_ct_asrc_bad` を追加。
+
 ### Fixed — Devin Review (#678): `received_*` 節異字検出群 (138 検出器) がヘッダ区画ではなくメッセージ全体を走査しており、本文中の `Received:` 風行で誤発火していた問題を修正。全検出器を `header_end` (最初の空行) 区画へ統一。
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。

@@ -2326,3 +2326,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2992 | OpenPGP: の非 名=値/鍵要素値 (鍵識別欄の値異形) | 鍵識別ずれ |
 | D2993 | Content-Return: の語彙外値 (本文返却欄の値異形) | 返却ずれ |
 | D2994 | Mail-Followup-To:/Mail-Reply-To: の非宛名値 (追従先欄の値異形) | 追従ずれ |
+| D3003 | X-MS-Exchange-CrossTenant-Id: の非GUID値 (越境識別欄の値異形) | 識別ずれ |
+| D3004 | X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: の非[IP]値 (越境接続欄の値異形) | 接続ずれ |
+| D3005 | X-MS-Exchange-CrossTenant-AuthAs: の語彙外値 (越境認証主体欄の値異形) | 主体ずれ |
+| D3006 | X-MS-Exchange-CrossTenant-AuthSource: の非ホスト名値 (越境認証元欄の値異形) | 認証元ずれ |
