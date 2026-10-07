@@ -210,6 +210,12 @@
 ### Security — D2871: `Apparently-Resent-*:` 系欄の未閉塞クオート宛名値を再送宛ずれとして検出 — `Envelope` に `apparently_resent_unclosed` を追加。
 ### Security — D2872: `X-Original-Rcpt-To:` 系欄の未閉塞クオート宛名値を元受取人ずれとして検出 — `Envelope` に `x_orig_rcpt_to_unclosed` を追加。
 
+### Security — D2865: `X-Original-Cc:` 欄の未閉塞クオート宛名値 (`"a@y` 形) を元副宛ずれとして検出 — `Envelope` に `x_orig_cc_unclosed` を追加。
+### Security — D2866: `X-Original-Reply-To:` 欄の未閉塞クオート宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_unclosed` を追加。
+### Security — D2867: `Disposition-Notification-To:` 欄の未閉塞クオート宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_unclosed` を追加。
+### Security — D2868: `Return-Receipt-To:` 欄の未閉塞クオート宛名値を受領先ずれとして検出 — `Envelope` に `return_receipt_unclosed` を追加。
+
+devin/1791334357-unclosed-cell3
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
