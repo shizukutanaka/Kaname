@@ -3298,6 +3298,14 @@ pub struct Envelope {
     pub ms_latency_bad: bool,
     /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
     pub mailer_bad: bool,
+    /// X-Spam-Report: 系が報告構造を欠く (D2987)。
+    pub spam_report_bad: bool,
+    /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
+    pub spam_ver_bad: bool,
+    /// X-BeenThere: が宛名形でない (D2989)。
+    pub beenthere_bad: bool,
+    /// X-No-Archive:/X-Archive: が語彙外 (D2990)。
+    pub no_archive_bad: bool,
     /// X-Originating-IP: が [IP] 形でない (D2983)。
     pub origin_ip_bad: bool,
     /// X-Complaints-To:/X-Report-Abuse: 系が宛名/URI 形でない (D2984)。
@@ -7101,6 +7109,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
     let ms_latency_bad = has_ms_latency_bad(bytes);
     let mailer_bad = has_mailer_bad(bytes);
+    let spam_report_bad = has_spam_report_bad(bytes);
+    let spam_ver_bad = has_spam_ver_bad(bytes);
+    let beenthere_bad = has_beenthere_bad(bytes);
+    let no_archive_bad = has_no_archive_bad(bytes);
     let origin_ip_bad = has_origin_ip_bad(bytes);
     let abuse_uri_bad = has_abuse_uri_bad(bytes);
     let auto_sub_bad = has_auto_sub_bad(bytes);
@@ -8678,6 +8690,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         tnef_correlator_bad,
         ms_latency_bad,
         mailer_bad,
+        spam_report_bad,
+        spam_ver_bad,
+        beenthere_bad,
+        no_archive_bad,
         origin_ip_bad,
         abuse_uri_bad,
         auto_sub_bad,
@@ -48809,6 +48825,99 @@ fn has_auth_sender_bad(bytes: &[u8]) -> bool {
             let v = v.trim();
             // 宛名形 (@ を持つ)
             if v.is_empty() || !v.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn filt_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2987)。
+fn has_spam_report_bad(bytes: &[u8]) -> bool {
+    let logical = filt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-spam-report:")
+            .or_else(|| low.strip_prefix("x-spam-check-results:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 報告値は `* 点 規則 説明` 行か `名=値` を持つ
+            if v.is_empty() || !(v.contains('*') || v.contains('=')) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2988)。
+fn has_spam_ver_bad(bytes: &[u8]) -> bool {
+    let logical = filt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-spam-checker-version:") {
+            let v = v.trim();
+            // `製品 x.y` 形 — 数字.数字 を含む
+            let mut ver = false;
+            let bb = v.as_bytes();
+            for i in 1..bb.len().saturating_sub(1) {
+                if bb[i] == b'.' && bb[i - 1].is_ascii_digit() && bb[i + 1].is_ascii_digit() {
+                    ver = true;
+                }
+            }
+            if !ver {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2989)。
+fn has_beenthere_bad(bytes: &[u8]) -> bool {
+    let logical = filt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-beenthere:") {
+            let v = v.trim();
+            // 宛名形 (@ を持つ)
+            if v.is_empty() || !v.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2990)。
+fn has_no_archive_bad(bytes: &[u8]) -> bool {
+    let logical = filt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-no-archive:")
+            .or_else(|| low.strip_prefix("x-archive:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // `yes`/`no` 語彙
+            if v != "yes" && v != "no" {
                 return true;
             }
         }
@@ -127986,4 +128095,33 @@ fn 認証送信人欄が異形なら発火() {
     assert!(e.auth_sender_bad);
     let e = parse(b"From: a@x.com\r\nX-Authenticated-Sender: u@x.com\r\n\r\nx").unwrap();
     assert!(!e.auth_sender_bad);
+}
+
+#[test]
+fn 迷惑報告欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Report: x\r\n\r\nx").unwrap();
+    assert!(e.spam_report_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Report: * 0.1 RULE desc\r\n\r\nx").unwrap();
+    assert!(!e.spam_report_bad);
+}
+#[test]
+fn 検査版欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Checker-Version: x\r\n\r\nx").unwrap();
+    assert!(e.spam_ver_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Checker-Version: SpamAssassin 3.4.6 on h\r\n\r\nx").unwrap();
+    assert!(!e.spam_ver_bad);
+}
+#[test]
+fn 巡回跡欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-BeenThere: x\r\n\r\nx").unwrap();
+    assert!(e.beenthere_bad);
+    let e = parse(b"From: a@x.com\r\nX-BeenThere: list@x.com\r\n\r\nx").unwrap();
+    assert!(!e.beenthere_bad);
+}
+#[test]
+fn 保存抑止欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-No-Archive: x\r\n\r\nx").unwrap();
+    assert!(e.no_archive_bad);
+    let e = parse(b"From: a@x.com\r\nX-No-Archive: yes\r\n\r\nx").unwrap();
+    assert!(!e.no_archive_bad);
 }
