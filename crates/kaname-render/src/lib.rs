@@ -3208,6 +3208,15 @@ pub struct Envelope {
     pub env_from_hash_local: bool,
     /// `Errors-To:` の値がローカル部井桁宛名 (D2784 — 返送先ずれ)。
     pub errors_to_hash_local: bool,
+
+    /// アドレス欄・配達記録欄の値が鉤括弧ローカル宛名形か (D2842)。
+    pub addr_quoted_local: bool,
+    /// `X-Envelope-To:` の値が鉤括弧ローカル宛名形か (D2843)。
+    pub env_to_quoted_local: bool,
+    /// `X-Envelope-From:`/`X-MailFrom:` 等の値が鉤括弧ローカル宛名形か (D2844)。
+    pub env_from_quoted_local: bool,
+    /// `Errors-To:` の値が鉤括弧ローカル宛名形か (D2845)。
+    pub errors_to_quoted_local: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5972,6 +5981,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let received_for_pct = has_received_for_pct(bytes);
     let cte_lt = has_cte_lt(bytes);
     let addr_dollar_local = has_addr_dollar_local(bytes);
+    let addr_quoted_local = has_addr_quoted_local(bytes);
     let msgid_slash_lead = has_msgid_slash_lead(bytes);
     let ct_at_type = has_ct_at_type(bytes);
     let received_via_pct = has_received_via_pct(bytes);
@@ -6918,6 +6928,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let env_to_hash_local = has_env_to_hash_local(bytes);
     let env_from_hash_local = has_env_from_hash_local(bytes);
     let errors_to_hash_local = has_errors_to_hash_local(bytes);
+    let env_to_quoted_local = has_env_to_quoted_local(bytes);
+    let env_from_quoted_local = has_env_from_quoted_local(bytes);
+    let errors_to_quoted_local = has_errors_to_quoted_local(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -7482,6 +7495,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_for_pct,
         cte_lt,
         addr_dollar_local,
+        addr_quoted_local,
         msgid_slash_lead,
         ct_at_type,
         received_via_pct,
@@ -8427,6 +8441,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         env_to_hash_local,
         env_from_hash_local,
         errors_to_hash_local,
+        env_to_quoted_local,
+        env_from_quoted_local,
+        errors_to_quoted_local,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -34132,6 +34149,78 @@ pub fn has_addr_dollar_local(raw: &[u8]) -> bool {
                     return true;
                 }
             }
+        }
+    }
+    false
+}
+
+/// アドレス欄・配達記録欄の値が鉤括弧ローカル部の宛名形か判定する (D2842)。
+///
+/// `Envelope-To: "a b"@y` のようにローカル部が鉤括弧 (`"…"`) 囲みの宛名
+/// — 引用局所部 (quoted-string) として受理する実装と構文違反として拒否
+/// する実装で宛名がずれる (msgid 側の引用局所部は D2035 系・宛名欄は未検出)。
+#[must_use]
+pub fn has_addr_quoted_local(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else {
+            continue;
+        };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let hit = v.split([',', ';']).any(|s| {
+            let s = s.trim();
+            if !s.is_ascii() || !s.starts_with('"') {
+                return false;
+            }
+            if s.contains('<')
+                || s.contains('>')
+                || s.contains('(')
+                || s.contains(')')
+                || s.contains('\\')
+            {
+                return false;
+            }
+            s[1..].find('"').map_or(false, |i| s[i + 2..].starts_with('@'))
+        });
+        if hit {
+            return true;
         }
     }
     false
@@ -66170,6 +66259,165 @@ pub fn has_errors_to_backtick(raw: &[u8]) -> bool {
             && v.split_whitespace().count() == 1
     })
 }
+/// `X-Envelope-To:` の値が鉤括弧ローカル部の宛名形か判
+/// 定する (D2843)。
+///
+/// 封書宛先を記す欄なのに `"a b"@y` のようにローカル部が鉤括弧囲みの宛名
+/// — 引用局所部として受理する実装と構文違反として拒否する実装で封書宛先がずれる (`addr_quoted_local` で封書宛先の本命欄を検出・X-変種側は未検出)。
+#[must_use]
+pub fn has_env_to_quoted_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-envelope-to"
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..]
+                .find('"')
+                .map_or(false, |i| v[i + 2..].starts_with('@'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:` 等 の値が鉤括弧ローカル部の宛名形か判
+/// 定する (D2844)。
+///
+/// 封書差出人を記す欄なのに `"a b"@y` のようにローカル部が鉤括弧囲みの宛名
+/// — 引用局所部として受理する実装と構文違反として拒否する実装で封書差出人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_from_quoted_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-envelope-from" || n == "x-mailfrom" || n == "x-mail-from")
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..]
+                .find('"')
+                .map_or(false, |i| v[i + 2..].starts_with('@'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `Errors-To:` の値が鉤括弧ローカル部の宛名形か判
+/// 定する (D2845)。
+///
+/// 返送先を記す欄なのに `"a b"@y` のようにローカル部が鉤括弧囲みの宛名
+/// — 引用局所部として受理する実装と構文違反として拒否する実装で返送先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_errors_to_quoted_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "errors-to"
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..]
+                .find('"')
+                .map_or(false, |i| v[i + 2..].starts_with('@'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` の値が斜線をローカル部に含む宛名形か判
 /// 定する (D2735)。
 ///
@@ -103481,6 +103729,55 @@ mod tests {
         ));
         assert!(!has_errors_to_star_local(
             b"From: a@x\r\nErrors-To: a@xample*.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 宛名が鉤括弧ローカル宛名なら発火() {
+        assert!(has_addr_quoted_local(
+            b"From: a@x\r\nEnvelope-To: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(has_addr_quoted_local(
+            b"From: a@x\r\nTo: a@x, \"b c\"@y\r\n\r\nx"
+        ));
+        assert!(!has_addr_quoted_local(
+            b"From: a@x\r\nEnvelope-To: a@\"b c\"\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_addr_quoted_local(
+            b"From: a@x\r\nEnvelope-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書宛先が鉤括弧ローカル宛名なら発火() {
+        assert!(has_env_to_quoted_local(
+            b"From: a@x\r\nX-Envelope-To: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_quoted_local(
+            b"From: a@x\r\nX-Envelope-To: a@\"b c\"\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_quoted_local(
+            b"From: a@x\r\nX-Envelope-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人が鉤括弧ローカル宛名なら発火() {
+        assert!(has_env_from_quoted_local(
+            b"From: a@x\r\nX-MailFrom: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_quoted_local(
+            b"From: a@x\r\nX-MailFrom: a@\"b c\"\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先が鉤括弧ローカル宛名なら発火() {
+        assert!(has_errors_to_quoted_local(
+            b"From: a@x\r\nErrors-To: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_quoted_local(
+            b"From: a@x\r\nErrors-To: a@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
