@@ -8160,6 +8160,19 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("副受信欄の値が異形です—副受信値の扱いで経路把握がずれます".to_string());
     }
 
+    if env.list_uri_bad {
+        render_risks.push("一覧操作欄の値が異形です—操作値の扱いで一覧処理がずれます".to_string());
+    }
+    if env.unsub_post_bad {
+        render_risks.push("解除投稿欄の値が異形です—解除投稿値の扱いで解除処理がずれます".to_string());
+    }
+    if env.archived_at_bad {
+        render_risks.push("保管先欄の値が異形です—保管先値の扱いで保管参照がずれます".to_string());
+    }
+    if env.injection_info_bad {
+        render_risks.push("注入情報欄の値が異形です—注入情報値の扱いで投稿記録がずれます".to_string());
+    }
+
     if env.dnt_opt_bad {
         render_risks.push("通知選択欄の値が異形です—通知選択値の扱いで通知要求がずれます".to_string());
     }
