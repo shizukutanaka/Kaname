@@ -2556,6 +2556,14 @@ pub struct Envelope {
     pub apparently_resent_star_local: bool,
     /// `X-Original-Rcpt-To: 系` の値がローカル部星宛名 (D2781 — 元受取人ずれ)。
     pub x_orig_rcpt_to_star_local: bool,
+    /// `X-Confirm-Reading-To:` の値がローカル部井桁宛名 (D2802 — 閲覧確認先ずれ)。
+    pub confirm_reading_hash_local: bool,
+    /// `Resent-Reply-To:` の値がローカル部井桁宛名 (D2803 — 再送返信口ずれ)。
+    pub resent_reply_to_hash_local: bool,
+    /// `Apparently-Resent-*:` 系 の値がローカル部井桁宛名 (D2804 — 再送残渣ずれ)。
+    pub apparently_resent_hash_local: bool,
+    /// `X-Original-Rcpt-To:` 系 の値がローカル部井桁宛名 (D2805 — 元受取人ずれ)。
+    pub x_orig_rcpt_to_hash_local: bool,
     /// `X-Confirm-Reading-To:` の値が開き波括弧宛名 (D2539 — 閲覧確認先ずれ)。
     pub confirm_reading_lbrace: bool,
     /// `Resent-Reply-To:` の値が開き波括弧宛名 (D2540 — 再送返信口ずれ)。
@@ -2828,6 +2836,22 @@ pub struct Envelope {
     pub x_orig_to_dollar_local: bool,
     /// `X-Original-From:` の値がローカル部ドル符宛名 (D2833 — 元差出人ずれ)。
     pub x_orig_from_dollar_local: bool,
+    /// `Apparently-To:`/`X-Apparently-To:` 系 の値がローカル部井桁宛名 (D2794 — 見せ宛ずれ)。
+    pub apparently_to_hash_local: bool,
+    /// `Apparently-From:`/`Apparently-Sender:` 系 の値がローカル部井桁宛名 (D2795 — 表差出人ずれ)。
+    pub apparently_from_hash_local: bool,
+    /// `X-Original-To:` の値がローカル部井桁宛名 (D2796 — 元宛先ずれ)。
+    pub x_orig_to_hash_local: bool,
+    /// `X-Original-From:` の値がローカル部井桁宛名 (D2797 — 元差出人ずれ)。
+    pub x_orig_from_hash_local: bool,
+    /// `Apparently-To:`/`X-Apparently-To:` 系 の値がローカル部反転符宛名 (D2818 — 見せ宛ずれ)。
+    pub apparently_to_backtick_local: bool,
+    /// `Apparently-From:`/`Apparently-Sender:` 系 の値がローカル部反転符宛名 (D2819 — 表差出人ずれ)。
+    pub apparently_from_backtick_local: bool,
+    /// `X-Original-To:` の値がローカル部反転符宛名 (D2820 — 元宛先ずれ)。
+    pub x_orig_to_backtick_local: bool,
+    /// `X-Original-From:` の値がローカル部反転符宛名 (D2821 — 元差出人ずれ)。
+    pub x_orig_from_backtick_local: bool,
     /// `X-Original-Cc:` 系の値が逆斜線宛名 (D2391 — 元副宛ずれ)。
     pub x_orig_cc_bslash: bool,
     /// `X-Original-Reply-To:` の値が逆斜線宛名 (D2392 — 元返信口ずれ)。
@@ -3004,6 +3028,14 @@ pub struct Envelope {
     pub disposition_to_star_local: bool,
     /// `Return-Receipt-To:` の値がローカル部星宛名 (D2777 — 受領通知先ずれ)。
     pub return_receipt_star_local: bool,
+    /// `X-Original-Cc:` 系 の値がローカル部ドル符宛名 (D2834 — 元副宛ずれ)。
+    pub x_orig_cc_dollar_local: bool,
+    /// `X-Original-Reply-To:` の値がローカル部ドル符宛名 (D2835 — 元返信口ずれ)。
+    pub x_orig_reply_to_dollar_local: bool,
+    /// `Disposition-Notification-To:` の値がローカル部ドル符宛名 (D2836 — 開封通知先ずれ)。
+    pub disposition_to_dollar_local: bool,
+    /// `Return-Receipt-To:` の値がローカル部ドル符宛名 (D2837 — 受領通知先ずれ)。
+    pub return_receipt_dollar_local: bool,
     /// `Envelope-To:`/`X-Envelope-To:` 系の値が逆斜線宛名 (D2395 — 封書宛先ずれ)。
     pub env_to_bslash: bool,
     /// `Delivered-To:` の値が逆斜線宛名 (D2396 — 配達履歴ずれ)。
@@ -3184,6 +3216,15 @@ pub struct Envelope {
     pub env_from_hash_local: bool,
     /// `Errors-To:` の値がローカル部井桁宛名 (D2784 — 返送先ずれ)。
     pub errors_to_hash_local: bool,
+
+    /// アドレス欄・配達記録欄の値が鉤括弧ローカル宛名形か (D2842)。
+    pub addr_quoted_local: bool,
+    /// `X-Envelope-To:` の値が鉤括弧ローカル宛名形か (D2843)。
+    pub env_to_quoted_local: bool,
+    /// `X-Envelope-From:`/`X-MailFrom:` 等の値が鉤括弧ローカル宛名形か (D2844)。
+    pub env_from_quoted_local: bool,
+    /// `Errors-To:` の値が鉤括弧ローカル宛名形か (D2845)。
+    pub errors_to_quoted_local: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -5948,6 +5989,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let received_for_pct = has_received_for_pct(bytes);
     let cte_lt = has_cte_lt(bytes);
     let addr_dollar_local = has_addr_dollar_local(bytes);
+    let addr_quoted_local = has_addr_quoted_local(bytes);
     let msgid_slash_lead = has_msgid_slash_lead(bytes);
     let ct_at_type = has_ct_at_type(bytes);
     let received_via_pct = has_received_via_pct(bytes);
@@ -6567,6 +6609,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let resent_reply_to_star_local = has_resent_reply_to_star_local(bytes);
     let apparently_resent_star_local = has_apparently_resent_star_local(bytes);
     let x_orig_rcpt_to_star_local = has_x_orig_rcpt_to_star_local(bytes);
+    let confirm_reading_hash_local = has_confirm_reading_hash_local(bytes);
+    let resent_reply_to_hash_local = has_resent_reply_to_hash_local(bytes);
+    let apparently_resent_hash_local = has_apparently_resent_hash_local(bytes);
+    let x_orig_rcpt_to_hash_local = has_x_orig_rcpt_to_hash_local(bytes);
     let confirm_reading_lbrace = has_confirm_reading_lbrace(bytes);
     let resent_reply_to_lbrace = has_resent_reply_to_lbrace(bytes);
     let apparently_resent_lbrace = has_apparently_resent_lbrace(bytes);
@@ -6703,6 +6749,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_dollar_local = has_apparently_from_dollar_local(bytes);
     let x_orig_to_dollar_local = has_x_orig_to_dollar_local(bytes);
     let x_orig_from_dollar_local = has_x_orig_from_dollar_local(bytes);
+    let apparently_to_hash_local = has_apparently_to_hash_local(bytes);
+    let apparently_from_hash_local = has_apparently_from_hash_local(bytes);
+    let x_orig_to_hash_local = has_x_orig_to_hash_local(bytes);
+    let x_orig_from_hash_local = has_x_orig_from_hash_local(bytes);
+    let apparently_to_backtick_local = has_apparently_to_backtick_local(bytes);
+    let apparently_from_backtick_local = has_apparently_from_backtick_local(bytes);
+    let x_orig_to_backtick_local = has_x_orig_to_backtick_local(bytes);
+    let x_orig_from_backtick_local = has_x_orig_from_backtick_local(bytes);
     let x_orig_cc_bslash = has_x_orig_cc_bslash(bytes);
     let x_orig_reply_to_bslash = has_x_orig_reply_to_bslash(bytes);
     let disposition_to_bslash = has_disposition_to_bslash(bytes);
@@ -6791,6 +6845,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_star_local = has_x_orig_reply_to_star_local(bytes);
     let disposition_to_star_local = has_disposition_to_star_local(bytes);
     let return_receipt_star_local = has_return_receipt_star_local(bytes);
+    let x_orig_cc_dollar_local = has_x_orig_cc_dollar_local(bytes);
+    let x_orig_reply_to_dollar_local = has_x_orig_reply_to_dollar_local(bytes);
+    let disposition_to_dollar_local = has_disposition_to_dollar_local(bytes);
+    let return_receipt_dollar_local = has_return_receipt_dollar_local(bytes);
     let env_to_bslash = has_env_to_bslash(bytes);
     let delivered_to_bslash = has_delivered_to_bslash(bytes);
     let env_from_bslash = has_env_from_bslash(bytes);
@@ -6882,6 +6940,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let env_to_hash_local = has_env_to_hash_local(bytes);
     let env_from_hash_local = has_env_from_hash_local(bytes);
     let errors_to_hash_local = has_errors_to_hash_local(bytes);
+    let env_to_quoted_local = has_env_to_quoted_local(bytes);
+    let env_from_quoted_local = has_env_from_quoted_local(bytes);
+    let errors_to_quoted_local = has_errors_to_quoted_local(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -7446,6 +7507,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_for_pct,
         cte_lt,
         addr_dollar_local,
+        addr_quoted_local,
         msgid_slash_lead,
         ct_at_type,
         received_via_pct,
@@ -8065,6 +8127,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_reply_to_star_local,
         apparently_resent_star_local,
         x_orig_rcpt_to_star_local,
+        confirm_reading_hash_local,
+        resent_reply_to_hash_local,
+        apparently_resent_hash_local,
+        x_orig_rcpt_to_hash_local,
         confirm_reading_lbrace,
         resent_reply_to_lbrace,
         apparently_resent_lbrace,
@@ -8201,6 +8267,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_dollar_local,
         x_orig_to_dollar_local,
         x_orig_from_dollar_local,
+        apparently_to_hash_local,
+        apparently_from_hash_local,
+        x_orig_to_hash_local,
+        x_orig_from_hash_local,
+        apparently_to_backtick_local,
+        apparently_from_backtick_local,
+        x_orig_to_backtick_local,
+        x_orig_from_backtick_local,
         x_orig_cc_bslash,
         x_orig_reply_to_bslash,
         disposition_to_bslash,
@@ -8289,6 +8363,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_star_local,
         disposition_to_star_local,
         return_receipt_star_local,
+        x_orig_cc_dollar_local,
+        x_orig_reply_to_dollar_local,
+        disposition_to_dollar_local,
+        return_receipt_dollar_local,
         env_to_bslash,
         delivered_to_bslash,
         env_from_bslash,
@@ -8379,6 +8457,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         env_to_hash_local,
         env_from_hash_local,
         errors_to_hash_local,
+        env_to_quoted_local,
+        env_from_quoted_local,
+        errors_to_quoted_local,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -34089,6 +34170,78 @@ pub fn has_addr_dollar_local(raw: &[u8]) -> bool {
     false
 }
 
+/// アドレス欄・配達記録欄の値が鉤括弧ローカル部の宛名形か判定する (D2842)。
+///
+/// `Envelope-To: "a b"@y` のようにローカル部が鉤括弧 (`"…"`) 囲みの宛名
+/// — 引用局所部 (quoted-string) として受理する実装と構文違反として拒否
+/// する実装で宛名がずれる (msgid 側の引用局所部は D2035 系・宛名欄は未検出)。
+#[must_use]
+pub fn has_addr_quoted_local(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else {
+            continue;
+        };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let hit = v.split([',', ';']).any(|s| {
+            let s = s.trim();
+            if !s.is_ascii() || !s.starts_with('"') {
+                return false;
+            }
+            if s.contains('<')
+                || s.contains('>')
+                || s.contains('(')
+                || s.contains(')')
+                || s.contains('\\')
+            {
+                return false;
+            }
+            s[1..].find('"').map_or(false, |i| s[i + 2..].starts_with('@'))
+        });
+        if hit {
+            return true;
+        }
+    }
+    false
+}
+
 /// msgid 系欄の値が `/` 先立ちか判定する (D1807)。
 ///
 /// `Message-ID: /<a@b>` — `/` 先立ちを読み飛ばす実装と欄ごと捨てる
@@ -46782,6 +46935,262 @@ pub fn has_x_orig_rcpt_to_star_local(raw: &[u8]) -> bool {
 /// (D2574)。
 ///
 /// 元受取人を記す欄なのにドメイン側に孤立 `|` を含む宛名 — 縦線の扱いを
+/// `X-Confirm-Reading-To:` の値が井桁をローカル部に含む宛名形か判
+/// 定する (D2802)。
+///
+/// 閲覧確認先を記す欄なのに `a#b@y` のようにローカル部に井桁を含む宛名
+/// — 井桁付きアドレスとして受理する実装と構文違反として拒否する実装で閲覧確認先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_confirm_reading_hash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            logical.push_str(l);
+        }
+        first = false;
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-confirm-reading-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('#'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Resent-Reply-To:` の値が井桁をローカル部に含む宛名形か判
+/// 定する (D2803)。
+///
+/// 再送返信口を記す欄なのに `a#b@y` のようにローカル部に井桁を含む宛名
+/// — 井桁付きアドレスとして受理する実装と構文違反として拒否する実装で再送返信口がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_resent_reply_to_hash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            logical.push_str(l);
+        }
+        first = false;
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "resent-reply-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('#'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-Resent-*:` 系 の値が井桁をローカル部に含む宛名形か判
+/// 定する (D2804)。
+///
+/// 再送残渣を記す欄なのに `a#b@y` のようにローカル部に井桁を含む宛名
+/// — 井桁付きアドレスとして受理する実装と構文違反として拒否する実装で再送残渣がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_resent_hash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            logical.push_str(l);
+        }
+        first = false;
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-resent-to"
+            || n == "apparently-resent-from"
+            || n == "apparently-resent-sender"
+            || n == "x-apparently-resent-to"
+            || n == "x-apparently-resent-from"
+            || n == "x-apparently-resent-sender")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('#'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系 の値が井桁をローカル部に含む宛名形か判
+/// 定する (D2805)。
+///
+/// 元受取人を記す欄なのに `a#b@y` のようにローカル部に井桁を含む宛名
+/// — 井桁付きアドレスとして受理する実装と構文違反として拒否する実装で元受取人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_hash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            logical.push_str(l);
+        }
+        first = false;
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-original-rcpt-to"
+            || n == "x-orig-rcpt-to"
+            || n == "x-rcpt-to"
+            || n == "x-envelope-rcpt-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('#'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `X-Confirm-Reading-To:` の値がドル符宛名形か判定する
 /// (D2635)。
 ///
@@ -51835,6 +52244,254 @@ pub fn has_return_receipt_star_local(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Original-Cc:` の値がドル符をローカル部に含む宛名形か判
+/// 定する (D2834)。
+///
+/// 元副宛を記す欄なのに `a$b@y` のようにローカル部にドル符を含む宛名
+/// — ドル符付きアドレスとして受理する実装と構文違反として拒否する実装で元
+/// 副宛がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_cc_dollar_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-original-cc")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `X-Original-Reply-To:` の値がドル符をローカル部に含む宛名形か判
+/// 定する (D2835)。
+///
+/// 元返信口を記す欄なのに `a$b@y` のようにローカル部にドル符を含む宛名
+/// — ドル符付きアドレスとして受理する実装と構文違反として拒否する実装で元
+/// 返信口がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_reply_to_dollar_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-reply-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `Disposition-Notification-To:` の値がドル符をローカル部に含む宛名形か判
+/// 定する (D2836)。
+///
+/// 開封通知先を記す欄なのに `a$b@y` のようにローカル部にドル符を含む宛名
+/// — ドル符付きアドレスとして受理する実装と構文違反として拒否する実装で開
+/// 封通知先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_disposition_to_dollar_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "disposition-notification-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `Return-Receipt-To:` の値がドル符をローカル部に含む宛名形か判
+/// 定する (D2837)。
+///
+/// 受領通知先を記す欄なのに `a$b@y` のようにローカル部にドル符を含む宛名
+/// — ドル符付きアドレスとして受理する実装と構文違反として拒否する実装で受
+/// 領通知先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_return_receipt_dollar_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "return-receipt-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
 /// D1560)。
 #[must_use]
 pub fn has_x_orig_rcpt_to_hyph(raw: &[u8]) -> bool {
@@ -60940,6 +61597,504 @@ pub fn has_x_orig_from_dollar_local(raw: &[u8]) -> bool {
     })
 }
 
+/// `Apparently-To:`/`X-Apparently-To:` の値が井桁をローカル部に含む宛名形か判
+/// 定する (D2794)。
+///
+/// 見せ宛を記す欄なのに `a#b@y` のようにローカル部に井桁を含む宛名
+/// — 井桁付きアドレスとして受理する実装と構文違反として拒否する実装で見
+/// せ宛がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_to_hash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-to" || n == "x-apparently-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('#'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `Apparently-From:`/`Apparently-Sender:` 系 の値が井桁をローカル部に含む宛名形か判
+/// 定する (D2795)。
+///
+/// 表差出人を記す欄なのに `a#b@y` のようにローカル部に井桁を含む宛名
+/// — 井桁付きアドレスとして受理する実装と構文違反として拒否する実装で表
+/// 差出人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_from_hash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-from" || n == "x-apparently-from"
+            || n == "apparently-sender" || n == "x-apparently-sender")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('#'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `X-Original-To:` の値が井桁をローカル部に含む宛名形か判
+/// 定する (D2796)。
+///
+/// 元宛先を記す欄なのに `a#b@y` のようにローカル部に井桁を含む宛名
+/// — 井桁付きアドレスとして受理する実装と構文違反として拒否する実装で元
+/// 宛先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_to_hash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-original-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('#'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `X-Original-From:` の値が井桁をローカル部に含む宛名形か判
+/// 定する (D2797)。
+///
+/// 元差出人を記す欄なのに `a#b@y` のようにローカル部に井桁を含む宛名
+/// — 井桁付きアドレスとして受理する実装と構文違反として拒否する実装で元
+/// 差出人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_from_hash_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-from"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('#'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `Apparently-To:`/`X-Apparently-To:` 系 の値が反転符をローカル部に含む宛名形か判
+/// 定する (D2818)。
+///
+/// 見せ宛を記す欄なのに `a`b@y` のようにローカル部に反転符を含む宛名
+/// — 反転符付きアドレスとして受理する実装と構文違反として拒否する実装で見せ宛がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_to_backtick_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            logical.push_str(l);
+        }
+        first = false;
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-to" || n == "x-apparently-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('`'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系 の値が反転符をローカル部に含む宛名形か判
+/// 定する (D2819)。
+///
+/// 表差出人を記す欄なのに `a`b@y` のようにローカル部に反転符を含む宛名
+/// — 反転符付きアドレスとして受理する実装と構文違反として拒否する実装で表差出人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_from_backtick_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            logical.push_str(l);
+        }
+        first = false;
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-from" || n == "x-apparently-from"
+            || n == "apparently-sender" || n == "x-apparently-sender")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('`'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-To:` の値が反転符をローカル部に含む宛名形か判
+/// 定する (D2820)。
+///
+/// 元宛先を記す欄なのに `a`b@y` のようにローカル部に反転符を含む宛名
+/// — 反転符付きアドレスとして受理する実装と構文違反として拒否する実装で元宛先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_to_backtick_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            logical.push_str(l);
+        }
+        first = false;
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-original-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('`'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Original-From:` の値が反転符をローカル部に含む宛名形か判
+/// 定する (D2821)。
+///
+/// 元差出人を記す欄なのに `a`b@y` のようにローカル部に反転符を含む宛名
+/// — 反転符付きアドレスとして受理する実装と構文違反として拒否する実装で元差出人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_from_backtick_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            logical.push_str(l);
+        }
+        first = false;
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-from"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('`'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+
 /// `Apparently-To:`/`X-Apparently-To:` 系の値がプラス宛名
 /// 形か判定する (D2499)。
 ///
@@ -65369,6 +66524,165 @@ pub fn has_errors_to_backtick(raw: &[u8]) -> bool {
             && v.split_whitespace().count() == 1
     })
 }
+/// `X-Envelope-To:` の値が鉤括弧ローカル部の宛名形か判
+/// 定する (D2843)。
+///
+/// 封書宛先を記す欄なのに `"a b"@y` のようにローカル部が鉤括弧囲みの宛名
+/// — 引用局所部として受理する実装と構文違反として拒否する実装で封書宛先がずれる (`addr_quoted_local` で封書宛先の本命欄を検出・X-変種側は未検出)。
+#[must_use]
+pub fn has_env_to_quoted_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-envelope-to"
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..]
+                .find('"')
+                .map_or(false, |i| v[i + 2..].starts_with('@'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `X-Envelope-From:`/`X-MailFrom:` 等 の値が鉤括弧ローカル部の宛名形か判
+/// 定する (D2844)。
+///
+/// 封書差出人を記す欄なのに `"a b"@y` のようにローカル部が鉤括弧囲みの宛名
+/// — 引用局所部として受理する実装と構文違反として拒否する実装で封書差出人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_from_quoted_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-envelope-from" || n == "x-mailfrom" || n == "x-mail-from")
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..]
+                .find('"')
+                .map_or(false, |i| v[i + 2..].starts_with('@'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `Errors-To:` の値が鉤括弧ローカル部の宛名形か判
+/// 定する (D2845)。
+///
+/// 返送先を記す欄なのに `"a b"@y` のようにローカル部が鉤括弧囲みの宛名
+/// — 引用局所部として受理する実装と構文違反として拒否する実装で返送先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_errors_to_quoted_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "errors-to"
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..]
+                .find('"')
+                .map_or(false, |i| v[i + 2..].starts_with('@'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
 /// `Envelope-To:`/`X-Envelope-To:` の値が斜線をローカル部に含む宛名形か判
 /// 定する (D2735)。
 ///
@@ -102684,6 +103998,55 @@ mod tests {
     }
 
     #[test]
+    fn 宛名が鉤括弧ローカル宛名なら発火() {
+        assert!(has_addr_quoted_local(
+            b"From: a@x\r\nEnvelope-To: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(has_addr_quoted_local(
+            b"From: a@x\r\nTo: a@x, \"b c\"@y\r\n\r\nx"
+        ));
+        assert!(!has_addr_quoted_local(
+            b"From: a@x\r\nEnvelope-To: a@\"b c\"\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_addr_quoted_local(
+            b"From: a@x\r\nEnvelope-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書宛先が鉤括弧ローカル宛名なら発火() {
+        assert!(has_env_to_quoted_local(
+            b"From: a@x\r\nX-Envelope-To: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_quoted_local(
+            b"From: a@x\r\nX-Envelope-To: a@\"b c\"\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_quoted_local(
+            b"From: a@x\r\nX-Envelope-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人が鉤括弧ローカル宛名なら発火() {
+        assert!(has_env_from_quoted_local(
+            b"From: a@x\r\nX-MailFrom: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_quoted_local(
+            b"From: a@x\r\nX-MailFrom: a@\"b c\"\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先が鉤括弧ローカル宛名なら発火() {
+        assert!(has_errors_to_quoted_local(
+            b"From: a@x\r\nErrors-To: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_quoted_local(
+            b"From: a@x\r\nErrors-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
     fn 封書宛先が井桁ローカル宛名なら発火() {
         assert!(has_env_to_hash_local(
             b"From: a@x\r\nX-Envelope-To: a#b@y\r\nTo: b@y\r\n\r\nx"
@@ -103603,6 +104966,58 @@ mod tests {
     }
 
     #[test]
+    fn 元副宛がドル符ローカル宛名なら発火() {
+        assert!(has_x_orig_cc_dollar_local(
+            b"From: a@x\r\nX-Original-Cc: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_dollar_local(
+            b"From: a@x\r\nX-Original-Cc: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_dollar_local(
+            b"From: a@x\r\nX-Original-Cc: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口がドル符ローカル宛名なら発火() {
+        assert!(has_x_orig_reply_to_dollar_local(
+            b"From: a@x\r\nX-Original-Reply-To: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_dollar_local(
+            b"From: a@x\r\nX-Original-Reply-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_dollar_local(
+            b"From: a@x\r\nX-Original-Reply-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 開封通知先がドル符ローカル宛名なら発火() {
+        assert!(has_disposition_to_dollar_local(
+            b"From: a@x\r\nDisposition-Notification-To: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_dollar_local(
+            b"From: a@x\r\nDisposition-Notification-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_dollar_local(
+            b"From: a@x\r\nDisposition-Notification-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領通知先がドル符ローカル宛名なら発火() {
+        assert!(has_return_receipt_dollar_local(
+            b"From: a@x\r\nReturn-Receipt-To: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_dollar_local(
+            b"From: a@x\r\nReturn-Receipt-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_dollar_local(
+            b"From: a@x\r\nReturn-Receipt-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
     fn 元副宛が縦線宛名なら発火() {
         assert!(has_x_orig_cc_pipe(
             b"From: a@x\r\nX-Original-Cc: a@xample|.com\r\nTo: b@y\r\n\r\nx"
@@ -104455,6 +105870,110 @@ mod tests {
     }
 
     #[test]
+    fn 見せ宛が井桁ローカル宛名なら発火() {
+        assert!(has_apparently_to_hash_local(
+            b"From: a@x\r\nApparently-To: a#b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_hash_local(
+            b"From: a@x\r\nApparently-To: a@xample#.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_hash_local(
+            b"From: a@x\r\nApparently-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表差出人が井桁ローカル宛名なら発火() {
+        assert!(has_apparently_from_hash_local(
+            b"From: a@x\r\nApparently-From: a#b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_hash_local(
+            b"From: a@x\r\nApparently-From: a@xample#.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_hash_local(
+            b"From: a@x\r\nApparently-From: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛先が井桁ローカル宛名なら発火() {
+        assert!(has_x_orig_to_hash_local(
+            b"From: a@x\r\nX-Original-To: a#b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_hash_local(
+            b"From: a@x\r\nX-Original-To: a@xample#.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_hash_local(
+            b"From: a@x\r\nX-Original-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人が井桁ローカル宛名なら発火() {
+        assert!(has_x_orig_from_hash_local(
+            b"From: a@x\r\nX-Original-From: a#b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_hash_local(
+            b"From: a@x\r\nX-Original-From: a@xample#.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_hash_local(
+            b"From: a@x\r\nX-Original-From: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 見せ宛が反転符ローカル宛名なら発火() {
+        assert!(has_apparently_to_backtick_local(
+            b"From: a@x\r\nApparently-To: a`b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_backtick_local(
+            b"From: a@x\r\nApparently-To: a@xample`.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_backtick_local(
+            b"From: a@x\r\nApparently-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表差出人が反転符ローカル宛名なら発火() {
+        assert!(has_apparently_from_backtick_local(
+            b"From: a@x\r\nApparently-From: a`b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_backtick_local(
+            b"From: a@x\r\nApparently-From: a@xample`.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_backtick_local(
+            b"From: a@x\r\nApparently-From: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛先が反転符ローカル宛名なら発火() {
+        assert!(has_x_orig_to_backtick_local(
+            b"From: a@x\r\nX-Original-To: a`b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_backtick_local(
+            b"From: a@x\r\nX-Original-To: a@xample`.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_backtick_local(
+            b"From: a@x\r\nX-Original-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人が反転符ローカル宛名なら発火() {
+        assert!(has_x_orig_from_backtick_local(
+            b"From: a@x\r\nX-Original-From: a`b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_backtick_local(
+            b"From: a@x\r\nX-Original-From: a@xample`.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_backtick_local(
+            b"From: a@x\r\nX-Original-From: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
     fn 見せ宛が縦線宛名なら発火() {
         assert!(has_apparently_to_pipe(
             b"From: a@x\r\nApparently-To: a@xample|.com\r\nTo: b@y\r\n\r\nx"
@@ -105182,6 +106701,58 @@ mod tests {
             b"From: a@x\r\nX-Original-Rcpt-To: a@xample*.com\r\nTo: b@y\r\n\r\nx"
         ));
         assert!(!has_x_orig_rcpt_to_star_local(
+            b"From: a@x\r\nX-Original-Rcpt-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 閲覧確認先が井桁ローカル宛名なら発火() {
+        assert!(has_confirm_reading_hash_local(
+            b"From: a@x\r\nX-Confirm-Reading-To: a#b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_hash_local(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@xample#.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_hash_local(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口が井桁ローカル宛名なら発火() {
+        assert!(has_resent_reply_to_hash_local(
+            b"From: a@x\r\nResent-Reply-To: a#b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_hash_local(
+            b"From: a@x\r\nResent-Reply-To: a@xample#.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_hash_local(
+            b"From: a@x\r\nResent-Reply-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送残渣が井桁ローカル宛名なら発火() {
+        assert!(has_apparently_resent_hash_local(
+            b"From: a@x\r\nApparently-Resent-To: a#b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_hash_local(
+            b"From: a@x\r\nApparently-Resent-To: a@xample#.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_hash_local(
+            b"From: a@x\r\nApparently-Resent-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人が井桁ローカル宛名なら発火() {
+        assert!(has_x_orig_rcpt_to_hash_local(
+            b"From: a@x\r\nX-Original-Rcpt-To: a#b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_hash_local(
+            b"From: a@x\r\nX-Original-Rcpt-To: a@xample#.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_hash_local(
             b"From: a@x\r\nX-Original-Rcpt-To: a@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
