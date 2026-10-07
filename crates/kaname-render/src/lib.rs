@@ -2556,6 +2556,15 @@ pub struct Envelope {
     pub apparently_resent_star_local: bool,
     /// `X-Original-Rcpt-To: 系` の値がローカル部星宛名 (D2781 — 元受取人ずれ)。
     pub x_orig_rcpt_to_star_local: bool,
+
+    /// `X-Confirm-Reading-To:` の値が未閉塞クオート宛名形か (D2869)。
+    pub confirm_reading_unclosed: bool,
+    /// `Resent-Reply-To:` の値が未閉塞クオート宛名形か (D2870)。
+    pub resent_reply_to_unclosed: bool,
+    /// `Apparently-Resent-*:` 系の値が未閉塞クオート宛名形か (D2871)。
+    pub apparently_resent_unclosed: bool,
+    /// `X-Original-Rcpt-To:` 系の値が未閉塞クオート宛名形か (D2872)。
+    pub x_orig_rcpt_to_unclosed: bool,
     /// `X-Confirm-Reading-To:` の値がローカル部井桁宛名 (D2802 — 閲覧確認先ずれ)。
     pub confirm_reading_hash_local: bool,
     /// `Resent-Reply-To:` の値がローカル部井桁宛名 (D2803 — 再送返信口ずれ)。
@@ -6661,6 +6670,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let resent_reply_to_star_local = has_resent_reply_to_star_local(bytes);
     let apparently_resent_star_local = has_apparently_resent_star_local(bytes);
     let x_orig_rcpt_to_star_local = has_x_orig_rcpt_to_star_local(bytes);
+    let confirm_reading_unclosed = has_confirm_reading_unclosed(bytes);
+    let resent_reply_to_unclosed = has_resent_reply_to_unclosed(bytes);
+    let apparently_resent_unclosed = has_apparently_resent_unclosed(bytes);
+    let x_orig_rcpt_to_unclosed = has_x_orig_rcpt_to_unclosed(bytes);
     let confirm_reading_hash_local = has_confirm_reading_hash_local(bytes);
     let resent_reply_to_hash_local = has_resent_reply_to_hash_local(bytes);
     let apparently_resent_hash_local = has_apparently_resent_hash_local(bytes);
@@ -8205,6 +8218,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_reply_to_star_local,
         apparently_resent_star_local,
         x_orig_rcpt_to_star_local,
+        confirm_reading_unclosed,
+        resent_reply_to_unclosed,
+        apparently_resent_unclosed,
+        x_orig_rcpt_to_unclosed,
         confirm_reading_hash_local,
         resent_reply_to_hash_local,
         apparently_resent_hash_local,
@@ -47804,6 +47821,210 @@ pub fn has_x_orig_rcpt_to_dollar_local(raw: &[u8]) -> bool {
             && !v.starts_with('@')
             && !v.ends_with('@')
             && v.split_whitespace().count() == 1
+    })
+}
+
+/// `X-Confirm-Reading-To:` の値が未閉塞クオートの宛名形か判定する (D2869)。
+///
+/// 閲覧確認先を記す欄なのに "a@y` のように鉤括弧が始まって閉じない宛名
+/// — 行末まで引用と読む実装とクオートを捨てる実装で閲覧確認先がずれる (アドレス欄側は `unclosed_addr_quote` 済み)。
+#[must_use]
+pub fn has_confirm_reading_unclosed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-confirm-reading-to"
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..].contains('@')
+            && !v[1..].contains('"')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `Resent-Reply-To:` の値が未閉塞クオートの宛名形か判定する (D2870)。
+///
+/// 再送返信口を記す欄なのに "a@y` のように鉤括弧が始まって閉じない宛名
+/// — 行末まで引用と読む実装とクオートを捨てる実装で再送返信口がずれる (アドレス欄側は `unclosed_addr_quote` 済み)。
+#[must_use]
+pub fn has_resent_reply_to_unclosed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "resent-reply-to"
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..].contains('@')
+            && !v[1..].contains('"')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `Apparently-Resent-To:` 系 の値が未閉塞クオートの宛名形か判定する (D2871)。
+///
+/// 再送宛を記す欄なのに "a@y` のように鉤括弧が始まって閉じない宛名
+/// — 行末まで引用と読む実装とクオートを捨てる実装で再送宛がずれる (アドレス欄側は `unclosed_addr_quote` 済み)。
+#[must_use]
+pub fn has_apparently_resent_unclosed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(n, "apparently-resent-to" | "apparently-resent-from" | "apparently-resent-sender" | "x-apparently-resent-to" | "x-apparently-resent-from" | "x-apparently-resent-sender")
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..].contains('@')
+            && !v[1..].contains('"')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `X-Original-Rcpt-To:` 系 の値が未閉塞クオートの宛名形か判定する (D2872)。
+///
+/// 元受取人を記す欄なのに "a@y` のように鉤括弧が始まって閉じない宛名
+/// — 行末まで引用と読む実装とクオートを捨てる実装で元受取人がずれる (アドレス欄側は `unclosed_addr_quote` 済み)。
+#[must_use]
+pub fn has_x_orig_rcpt_to_unclosed(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        matches!(n, "x-original-rcpt-to" | "x-orig-rcpt-to" | "x-rcpt-to" | "x-envelope-rcpt-to")
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..].contains('@')
+            && !v[1..].contains('"')
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
     })
 }
 
@@ -108817,6 +109038,46 @@ mod tests {
             b"From: a@x\r\nX-Original-Rcpt-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
         ));
         assert!(!has_x_orig_rcpt_to_dollar_local(
+            b"From: a@x\r\nX-Original-Rcpt-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 閲覧確認先が未閉塞クオートなら発火() {
+        assert!(has_confirm_reading_unclosed(
+            b"From: a@x\r\nX-Confirm-Reading-To: \"a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_confirm_reading_unclosed(
+            b"From: a@x\r\nX-Confirm-Reading-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送返信口が未閉塞クオートなら発火() {
+        assert!(has_resent_reply_to_unclosed(
+            b"From: a@x\r\nResent-Reply-To: \"a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_resent_reply_to_unclosed(
+            b"From: a@x\r\nResent-Reply-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 再送宛が未閉塞クオートなら発火() {
+        assert!(has_apparently_resent_unclosed(
+            b"From: a@x\r\nApparently-Resent-To: \"a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_resent_unclosed(
+            b"From: a@x\r\nApparently-Resent-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元受取人が未閉塞クオートなら発火() {
+        assert!(has_x_orig_rcpt_to_unclosed(
+            b"From: a@x\r\nX-Original-Rcpt-To: \"a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_rcpt_to_unclosed(
             b"From: a@x\r\nX-Original-Rcpt-To: a@y\r\nTo: b@y\r\n\r\nx"
         ));
     }

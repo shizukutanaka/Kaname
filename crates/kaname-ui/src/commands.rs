@@ -8861,6 +8861,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_rcpt_to_star_local {
         render_risks.push("元受取人記録の宛名ローカル部に星です—星の扱いで元受取人がずれます".to_string());
     }
+    if env.confirm_reading_unclosed {
+        render_risks.push("閲覧確認先記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで閲覧確認先がずれます".to_string());
+    }
+    if env.resent_reply_to_unclosed {
+        render_risks.push("再送返信口記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで再送返信口がずれます".to_string());
+    }
+    if env.apparently_resent_unclosed {
+        render_risks.push("再送宛記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで再送宛がずれます".to_string());
+    }
+    if env.x_orig_rcpt_to_unclosed {
+        render_risks.push("元受取人記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで元受取人がずれます".to_string());
+    }
     if env.confirm_reading_hash_local {
         render_risks.push("閲覧確認先記録の宛名ローカル部に井桁です—井桁の扱いで閲覧確認先がずれます".to_string());
     }
