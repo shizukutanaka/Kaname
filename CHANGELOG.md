@@ -179,6 +179,10 @@
 - D2819: Apparently-From:`/`Apparently-Sender:` 系 のローカル部反転符宛名値 — 表差出人記録のローカル部反転符異形
 - D2820: X-Original-To: のローカル部反転符宛名値 — 元宛先記録のローカル部反転符異形
 - D2821: X-Original-From: のローカル部反転符宛名値 — 元差出人記録のローカル部反転符異形
+- D2838: `X-Confirm-Reading-To:` のローカル部ドル符宛名値 — 閲覧確認先記録のローカル部ドル符異形
+- D2839: `Resent-Reply-To:` のローカル部ドル符宛名値 — 再送返信口記録のローカル部ドル符異形
+- D2840: `Apparently-Resent-*:` 系 のローカル部ドル符宛名値 — 再送残渣記録のローカル部ドル符異形
+- D2841: `X-Original-Rcpt-To:` 系 のローカル部ドル符宛名値 — 元受取人記録のローカル部ドル符異形
 ### Security — D2810: `X-Original-Cc:` 系欄のローカル部ハット宛名値 (`a^b@y` 形) を元副宛ずれとして検出 — `Envelope` に `x_orig_cc_caret_local` を追加。
 ### Security — D2811: `X-Original-Reply-To:` 欄のローカル部ハット宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_caret_local` を追加。
 ### Security — D2812: `Disposition-Notification-To:` 欄のローカル部ハット宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_caret_local` を追加。
