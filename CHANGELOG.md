@@ -234,6 +234,18 @@ devin/1791332973-unclosed-cell1
 
 ### Security — D2930: `X-Mailer:`/`User-Agent:`/`X-MimeOLE:` 系欄の制御文字・非ascii混入を送信器記録異形として検出 — `Envelope` に `mailer_bad` を追加。
 
+### Security — D2963: `List-Post:` 等の操作欄が `<URI>` 形でない値を検出 (`list_uri_bad`)
+### Security — D2964: `List-Unsubscribe-Post:` が `List-Unsubscribe=One-Click` 語彙でない値を検出 (`unsub_post_bad`)
+### Security — D2965: `Archived-At:`/`X-Archived-At:` が URI 形でない値を検出 (`archived_at_bad`)
+### Security — D2966: `Injection-Info:` の各要素が `名=値` 形でない値を検出 (`injection_info_bad`)
+### Security — D2975: `Disposition-Notification-Options:` の各要素が `名=required|optional` 形でない値を検出 (`dnt_opt_bad`)
+### Security — D2976: `VBR-Info:` の各要素が `名=値` 形でない値を検出 (`vbr_info_bad`)
+### Security — D2977: `Feedback-Type:`/`X-Feedback-Type:` が語彙外の値を検出 (`feedback_type_bad`)
+### Security — D2978: `Feedback-ID:`/`X-Feedback-ID:` が4要素の連接でない値を検出 (`feedback_id_bad`)
+### Security — D2979: `Precedence:`/`X-Precedence:` が単一トークンでない値を検出 (`precedence_bad`)
+### Security — D2980: `X-Loop:` が宛名形 (`@` を持つ) でない値を検出 (`x_loop_bad`)
+### Security — D2981: `X-UIDL:`/`UIDL:`/`X-UID:` が空白なし印字トークンでない値を検出 (`uidl_bad`)
+### Security — D2982: `X-Received:` が `by`/(`with`|`id`) 構造を欠く値を検出 (`x_received_bad`)
 ### Security — D2967: `X-Spam-Flag:`/`X-Spam-Flagged:` が YES/NO 語彙でない値を検出 (`spam_flag_bad`)
 ### Security — D2968: `X-Spam-Status:` が `Yes|No … score=…` 形でない値を検出 (`spam_status_bad`)
 ### Security — D2969: `X-Spam-Level:` が星のみでない値を検出 (`spam_level_bad`)
