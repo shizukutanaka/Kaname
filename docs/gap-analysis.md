@@ -2238,8 +2238,32 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2980 | X-Loop: の非宛名値 (巡回欄の値異形) | 巡回防止ずれ |
 | D2981 | UIDL 系の空白入り/非印字値 (一意識別欄の値異形) | 受信管理ずれ |
 | D2982 | X-Received: の by/with/id 構造欠落 (副受信欄の値異形) | 経路把握ずれ |
+| D2963 | List-Post 等の非 <URI> 値 (一覧操作欄の値異形) | 一覧処理ずれ |
+| D2964 | List-Unsubscribe-Post: の非 One-Click 値 (解除投稿欄の値異形) | 解除処理ずれ |
+| D2965 | Archived-At: の非 URI 値 (保管先欄の値異形) | 保管参照ずれ |
+| D2966 | Injection-Info: の非 名=値 値 (注入情報欄の値異形) | 投稿記録ずれ |
 | D2975 | Disposition-Notification-Options: の非 名=required|optional 値 (通知選択欄の値異形) | 通知要求ずれ |
 | D2976 | VBR-Info: の非 名=値 値 (信託情報欄の値異形) | 信託照合ずれ |
 | D2977 | Feedback-Type 系の語彙外値 (反応種別欄の値異形) | 報告種別ずれ |
 | D2978 | Feedback-ID 系の非4要素値 (反応識別欄の値異形) | 報告照合ずれ |
+| D2967 | X-Spam-Flag 系の非 YES/NO 値 (迷惑旗欄の値異形) | 迷惑判定ずれ |
+| D2968 | X-Spam-Status: の非 Yes|No+score 値 (迷惑状態欄の値異形) | 迷惑判定ずれ |
+| D2969 | X-Spam-Level: の非星値 (迷惑度欄の値異形) | 迷惑判定ずれ |
+| D2970 | X-Spam-Score 系の非数値 (迷惑点欄の値異形) | 迷惑判定ずれ |
+| D2943 | Newsgroups 欄の非群連接値 (値形異形) | 経路ずれ |
+| D2944 | Path 欄の非 bang-path 値 (値形異形) | 経路ずれ |
+| D2945 | Xref 欄の非参照番号値 (値形異形) | 既読ずれ |
+| D2946 | Followup-To 欄の非群連接値 (値形異形) | 返信先ずれ |
+| D2947 | Original-Recipient 欄の非 型;宛名 値 (値形異形) | 経路ずれ |
+| D2948 | Final-Recipient 欄の非 型;宛名 値 (値形異形) | 経路ずれ |
+| D2949 | Reporting-MTA 欄の非 型;名 値 (値形異形) | 報告経路ずれ |
+| D2950 | MDN-Gateway 欄の非 型;名 値 (値形異形) | 通知経路ずれ |
+| D2951 | Remote-MTA 欄の非 型;名 値 (値形異形) | 配達経路ずれ |
+| D2952 | Status 欄の非三段数字値 (値形異形) | 不達区分ずれ |
+| D2953 | Original-Envelope-Id 欄の非識別子値 (値形異形) | 封書同定ずれ |
+| D2954 | Diagnostic-Code 欄の非 型;診断文 値 (値形異形) | 不達診断ずれ |
+| D2955 | Original-Message-ID 欄の非 msgid 値 (値形異形) | 元メール同定ずれ |
+| D2956 | Disposition 欄の非 方式/種別 値 (値形異形) | 開封扱いずれ |
+| D2957 | Reporting-UA 欄の非 UA名 値 (値形異形) | 報告元ずれ |
+| D2958 | Message-Context 欄の語彙外値 (値形異形) | 種別判定ずれ |
 devin/1791332973-unclosed-cell1
