@@ -4526,3 +4526,7 @@ devin/1791332973-unclosed-cell1
 
 X-MS-Has-Attach の語彙は yes/no のみ、TNEF-Correlator は base64 相関子、EndToEndLatency は `HH:MM:SS.mmm`、X-Mailer は印字可能ASCII — いずれも「書く権限が運輸側にある」欄で、値の形が規定を外れるなら運輸記録の擬態となる。攻撃者は「MS経路が刻んだように見せる」欄を任意に置けるが、形が外れれば確実な異形として切れる — 値の語彙・形両方を閉じた欄は検出に最適。
 
+## ラウンド 457 — 「開封の返事は誰が書くか」の自問自答
+
+MDN 残欄 (Original-Message-ID・Disposition・Reporting-UA・Message-Context) は開封報告の内側記録。ヘッダ層に直置きされれば本文が「開封済みの体裁」を自己主張する。msgid 角括弧・方式/種別・UA 名・文脈語彙の各文法を値検査として追加した。
+
