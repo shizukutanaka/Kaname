@@ -8153,6 +8153,24 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.errors_to_caret_local {
         render_risks.push("返送先記録の宛名ローカル部にハットです—ハットの扱いで返送先がずれます".to_string());
     }
+    if env.env_to_dollar_local {
+        render_risks.push("封書宛先記録の宛名ローカル部にドル符です—ドル符の扱いで封書宛先がずれます".to_string());
+    }
+    if env.env_from_dollar_local {
+        render_risks.push("封書差出人記録の宛名ローカル部にドル符です—ドル符の扱いで封書差出人がずれます".to_string());
+    }
+    if env.errors_to_dollar_local {
+        render_risks.push("返送先記録の宛名ローカル部にドル符です—ドル符の扱いで返送先がずれます".to_string());
+    }
+    if env.env_to_unclosed {
+        render_risks.push("封書宛記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで封書宛がずれます".to_string());
+    }
+    if env.env_from_unclosed {
+        render_risks.push("封書差出人記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで封書差出人がずれます".to_string());
+    }
+    if env.errors_to_unclosed {
+        render_risks.push("返送先記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで返送先がずれます".to_string());
+    }
     if env.apparently_to_rbracket {
         render_risks.push("見せ宛記録の宛名に逆角括弧です—角括弧閉じの扱いで見せ宛がずれます".to_string());
     }
@@ -8920,6 +8938,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     if env.x_orig_rcpt_to_dollar_local {
         render_risks.push("元受取人記録の宛名ローカル部にドル符です—ドル符の扱いで元受取人がずれます".to_string());
+    }
+    if env.confirm_reading_caret_local {
+        render_risks.push("閲覧確認先記録の宛名ローカル部にハットです—ハットの扱いで閲覧確認先がずれます".to_string());
+    }
+    if env.resent_reply_to_caret_local {
+        render_risks.push("再送返信口記録の宛名ローカル部にハットです—ハットの扱いで再送返信口がずれます".to_string());
+    }
+    if env.apparently_resent_caret_local {
+        render_risks.push("再送残渣記録の宛名ローカル部にハットです—ハットの扱いで再送残渣がずれます".to_string());
+    }
+    if env.x_orig_rcpt_to_caret_local {
+        render_risks.push("元受取人記録の宛名ローカル部にハットです—ハットの扱いで元受取人がずれます".to_string());
     }
     if env.confirm_reading_pipe {
         render_risks.push("閲覧確認先記録の宛名ドメインに縦線です—縦線の扱いで閲覧確認先がずれます".to_string());
