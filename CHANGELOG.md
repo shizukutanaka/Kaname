@@ -226,6 +226,14 @@
 ### Security — D2860: `Errors-To:` 欄の未閉塞クオート宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_unclosed` を追加。
 
 devin/1791332973-unclosed-cell1
+### Security — D2911: `DKIM-Signature:`/`DomainKey-Signature:` 系欄の `s=` 選択子タグ欠落を署名欄異形として検出 — `Envelope` に `dkim_sig_no_s` を追加。
+
+### Security — D2912: `DKIM-Signature:`/`DomainKey-Signature:` 系欄の `b=` 署名値タグ欠落を署名欄異形として検出 — `Envelope` に `dkim_sig_no_b` を追加。
+
+### Security — D2913: `ARC-Seal:`/`X-ARC-Seal:` 系欄の `i=` 連鎖番号欠落・非数値・i>1でのcv=noneをARC連鎖異形として検出 — `Envelope` に `arc_seal_bad_i` を追加。
+
+### Security — D2914: `ARC-Seal:` 系欄が存在するのに `ARC-Authentication-Results:`/`ARC-Message-Signature:` が欠けるARC記録組欠落を検出 — `Envelope` に `arc_chain_incomplete` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。

@@ -8135,6 +8135,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.errors_to_quoted_local {
         render_risks.push("返送先記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで返送先がずれます".to_string());
     }
+    if env.dkim_sig_no_s {
+        render_risks.push("署名欄に選択子がありません—選択子欠落の扱いで認証がずれます".to_string());
+    }
+    if env.dkim_sig_no_b {
+        render_risks.push("署名欄に署名値がありません—署名値欠落の扱いで認証がずれます".to_string());
+    }
+    if env.arc_seal_bad_i {
+        render_risks.push("ARC封印の番号値が異形です—連鎖番号の扱いで認証がずれます".to_string());
+    }
+    if env.arc_chain_incomplete {
+        render_risks.push("ARC記録の組が揃っていません—記録組欠落の扱いで認証がずれます".to_string());
+    }
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }

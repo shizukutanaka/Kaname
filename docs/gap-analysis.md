@@ -2222,4 +2222,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2858 | Envelope-To:/Delivered-To:/X-Envelope-To: 系の未閉塞クオート宛名値 (封書宛記録のクオート未閉塞異形) | 封書宛ずれ |
 | D2859 | X-Envelope-From:/X-MailFrom:/X-Mail-From: 系の未閉塞クオート宛名値 (封書差出人記録のクオート未閉塞異形) | 封書差出人ずれ |
 | D2860 | Errors-To: の未閉塞クオート宛名値 (返送先記録のクオート未閉塞異形) | 返送先ずれ |
+| D2911 | DKIM-Signature: 系の `s=` 選択子タグ欠落 (署名欄の選択子欠落異形) | 認証ずれ |
+| D2912 | DKIM-Signature: 系の `b=` 署名値タグ欠落 (署名欄の署名値欠落異形) | 認証ずれ |
+| D2913 | ARC-Seal: 系の `i=` 連鎖番号異形 (ARC記録の番号異形) | 認証ずれ |
+| D2914 | ARC-Seal: 単独で ARC-Authentication-Results/ARC-Message-Signature 欠落 (ARC記録組欠落異形) | 認証ずれ |
 devin/1791332973-unclosed-cell1
