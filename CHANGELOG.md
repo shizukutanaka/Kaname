@@ -210,6 +210,11 @@
 ### Security — D2871: `Apparently-Resent-*:` 系欄の未閉塞クオート宛名値を再送宛ずれとして検出 — `Envelope` に `apparently_resent_unclosed` を追加。
 ### Security — D2872: `X-Original-Rcpt-To:` 系欄の未閉塞クオート宛名値を元受取人ずれとして検出 — `Envelope` に `x_orig_rcpt_to_unclosed` を追加。
 
+- D2806: Apparently-To:`/`X-Apparently-To:` 系 のローカル部ハット宛名値 — 見せ宛記録のローカル部ハット異形
+- D2807: Apparently-From:`/`Apparently-Sender:` 系 のローカル部ハット宛名値 — 表差出人記録のローカル部ハット異形
+- D2808: X-Original-To: のローカル部ハット宛名値 — 元宛先記録のローカル部ハット異形
+- D2809: X-Original-From: のローカル部ハット宛名値 — 元差出人記録のローカル部ハット異形
+devin/1791325728-round419-caretlocal2
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
