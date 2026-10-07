@@ -3477,7 +3477,6 @@ pub struct Envelope {
     /// X-Forefront/X-Microsoft Antispam 系欄の値が対連接形でない
     pub ms_as_report_bad: bool,
     /// Feedback-ID 系欄の値が4区分形でない
-    pub feedback_id_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7351,7 +7350,6 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_scl_bad = has_ms_scl_bad(bytes);
     let ms_nmi_bad = has_ms_nmi_bad(bytes);
     let ms_as_report_bad = has_ms_as_report_bad(bytes);
-    let feedback_id_bad = has_feedback_id_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -9011,7 +9009,6 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_scl_bad,
         ms_nmi_bad,
         ms_as_report_bad,
-        feedback_id_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -51654,40 +51651,6 @@ pub fn has_ms_as_report_bad(raw: &[u8]) -> bool {
                     }
                 }
             })
-    })
-}
-
-/// `Feedback-ID:` 系欄の値がコロン区切りの4区分形でなければ報酬系識別の異形として検出する (D2926)。
-pub fn has_feedback_id_bad(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
-    let header_end = text.find("\n\n").unwrap_or(text.len());
-    let mut logical = String::with_capacity(header_end + 1);
-    let mut first = true;
-    for l in text[..header_end].lines() {
-        if l.starts_with(' ') || l.starts_with('\t') {
-            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
-        } else {
-            if !first { logical.push('\n'); }
-            first = false;
-            logical.push_str(l);
-        }
-    }
-    let lower = logical.to_ascii_lowercase();
-    lower.lines().any(|l| {
-        if !(l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:")) {
-            return false;
-        }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
-        let parts: Vec<&str> = v.split(':').collect();
-        !(parts.len() == 4
-            && parts
-                .iter()
-                .all(|p| {
-                    !p.is_empty()
-                        && p.chars()
-                            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
-                }))
     })
 }
 
@@ -131922,17 +131885,4 @@ fn 投稿機欄が異形なら発火() {
             b"X-Microsoft-Antispam: BCL:0\r\n\r\nbody"
         ));
         assert!(!has_ms_as_report_bad(b"From: a@b\r\n\r\nbody"));
-    }
-
-    #[test]
-    fn 報酬識別欄が異形なら発火() {
-        assert!(has_feedback_id_bad(b"Feedback-ID: justword\r\n\r\nbody"));
-        assert!(has_feedback_id_bad(b"Feedback-ID: a:b:c\r\n\r\nbody"));
-        assert!(!has_feedback_id_bad(
-            b"Feedback-ID: i1:dfdg:campaign:example.com\r\n\r\nbody"
-        ));
-        assert!(!has_feedback_id_bad(
-            b"X-Feedback-Id: 1.0.0:camp:aign:brand-1\r\n\r\nbody"
-        ));
-        assert!(!has_feedback_id_bad(b"From: a@b\r\n\r\nbody"));
     }

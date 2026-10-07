@@ -8425,9 +8425,6 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.ms_as_report_bad {
         render_risks.push("判定記録欄の値が異形です—判定値の扱いで経路がずれます".to_string());
     }
-    if env.feedback_id_bad {
-        render_risks.push("報酬識別欄の値が異形です—識別値の扱いで経路がずれます".to_string());
-    }
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }
