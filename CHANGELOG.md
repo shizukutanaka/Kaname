@@ -154,6 +154,10 @@
 ### Security — D2782: `X-Envelope-To:` 欄のローカル部井桁宛名値 (`a#b@y` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_hash_local` を追加 (`Envelope-To:`/`Delivered-To:` 本命は `addr_hash_local` が網羅)。
 ### Security — D2783: `X-Envelope-From:`/`X-MailFrom:` 等欄のローカル部井桁宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_hash_local` を追加。
 ### Security — D2784: `Errors-To:` 欄のローカル部井桁宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_hash_local` を追加。
+### Security — D2794: `Apparently-To:`/`X-Apparently-To:` 系欄のローカル部井桁宛名値 (`a#b@y` 形) を見せ宛ずれとして検出 — `Envelope` に `apparently_to_hash_local` を追加。
+### Security — D2795: `Apparently-From:`/`Apparently-Sender:` 系欄のローカル部井桁宛名値を表差出人ずれとして検出 — `Envelope` に `apparently_from_hash_local` を追加。
+### Security — D2796: `X-Original-To:` 欄のローカル部井桁宛名値を元宛先ずれとして検出 — `Envelope` に `x_orig_to_hash_local` を追加。
+### Security — D2797: `X-Original-From:` 欄のローカル部井桁宛名値を元差出人ずれとして検出 — `Envelope` に `x_orig_from_hash_local` を追加。
 ### Security — D2834: `X-Original-Cc:` 系欄のローカル部ドル符宛名値 (`a$b@y` 形) を元副宛ずれとして検出 — `Envelope` に `x_orig_cc_dollar_local` を追加。
 ### Security — D2835: `X-Original-Reply-To:` 欄のローカル部ドル符宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_dollar_local` を追加。
 ### Security — D2836: `Disposition-Notification-To:` 欄のローカル部ドル符宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_dollar_local` を追加。
