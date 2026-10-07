@@ -8154,7 +8154,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("言語欄の値が異形です—言語値の扱いで翻訳判定がずれます".to_string());
     }
     if env.content_digest_bad {
-        render_risks.push("内容要約欄の値が異形です—要約値の扱いで検証結果がずれます".to_string());
+        render_risks.push("内容要約記録欄の値が異形です—要約記録値の扱いで検証結果がずれます".to_string());
     }
     if env.content_features_bad {
         render_risks.push("内容特徴欄の値が異形です—特徴値の扱いで特徴判定がずれます".to_string());
