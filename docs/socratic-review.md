@@ -4520,7 +4520,6 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 
 問: 封書宛・封書差出人・返送先を記す欄で `"a@y` のように鉤括弧が始まって閉じない宛名は検出済みか。
 答: 標準アドレス欄は `unclosed_addr_quote` 済みだが配達・封書・返送の記録欄は未検出だった — 行末まで引用と読む実装とクオートを捨てる実装で記録がずれるため D2858–D2860 を追加。45つ目の値形を開拓。
-devin/1791332973-unclosed-cell1
 
 ## ラウンド 450 — 「標旗欄の値は何を語るか」の自問自答
 
@@ -4588,7 +4587,6 @@ Content-MD5・Content-Digest・Content-Features・Content-Language は送信側�
 
 問: 見せ宛・表差出人・元宛・元差出人を記す欄で `"a b"@y` のようにローカル部が鉤括弧囲みの宛名は検出済みか。
 答: 未検出だった — `Apparently-To:`/`X-Apparently-To:` 系、`Apparently-From:`/`Apparently-Sender:` 系、`X-Original-To:`、`X-Original-From:` の鉤括弧ローカル部宛名は引用局所部の受理/拒否でずれるため D2846–D2849 を追加。セル1 (`addr_quoted_local` 等) と同じ判定形。
-devin/1791331333-quoted-local-cell2
 
 ## ラウンド 442 — 「件名の不可視文字」の自問自答
 
@@ -4622,3 +4620,8 @@ devin/1791331333-quoted-local-cell2
 ## ラウンド 449 — 「ヘッダが自称する判定」の自問自答
 
 SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID、Antispam-Report は `KEY=value` の連接、Feedback-ID は4区分のコロン区切り — これらは Microsoft 経路が刻む判定・追跡の記録で、値の形が決まっている。「この欄がある」ことは不審の証拠になりにくいが「値が形を外れる」ことは確実な異形だ — 判定点を「権威が書いたと見せかける値」を擬態する隙間へ切った。欄名の正当性と値の正当性は別の問題であり、値側の形検査を追加した。
+
+## ラウンド 466 — 「内容が自称する鍵」の自問自答
+
+問: `Autocrypt:`/`OpenPGP:`/`Content-Return:`/`Mail-Followup-To:`/`Mail-Reply-To:` の値の形は検査済みか。
+答: 未検出だった — 鍵素材・返却方針・追従先を送信側が自称する欄は値の文法が绿地だった。`名=値` 連接・`addr=` 宛名・`allowed|prohibited` 語彙・宛名/poster 形の外れを異形として D2991–D2994 を追加。交渉の体裁だけを真似る擬態へ面を広げた。

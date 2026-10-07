@@ -225,7 +225,6 @@
 ### Security — D2859: `X-Envelope-From:`/`X-MailFrom:`/`X-Mail-From:` 系欄の未閉塞クオート宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_unclosed` を追加。
 ### Security — D2860: `Errors-To:` 欄の未閉塞クオート宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_unclosed` を追加。
 
-devin/1791332973-unclosed-cell1
 ### Security — D2927: `X-MS-Has-Attach:`/`X-Has-Attach:` 系欄の yes/no 語彙外れを添付標旗記録異形として検出 — `Envelope` に `ms_has_attach_bad` を追加。
 
 ### Security — D2928: `X-MS-TNEF-Correlator:`/`X-TNEFCorrelator:` 系欄の base64 相関子形外れを添付相関記録異形として検出 — `Envelope` に `tnef_correlator_bad` を追加。
@@ -327,7 +326,6 @@ devin/1791332973-unclosed-cell1
 ### Security — D2848: `X-Original-To:` 欄のローカル部鉤括弧宛名値を元宛ずれとして検出 — `Envelope` に `x_orig_to_quoted_local` を追加。
 ### Security — D2849: `X-Original-From:` 欄のローカル部鉤括弧宛名値を元差出人ずれとして検出 — `Envelope` に `x_orig_from_quoted_local` を追加。
 
-devin/1791331333-quoted-local-cell2
 ### Security — D2895: `Subject:` 欄のゼロ幅文字 (U+200B–U+200D, U+FEFF) を件名ずれとして検出 — `Envelope` に `subject_zero_width` を追加。
 ### Security — D2896: `Subject:` 欄の双方向制御文字 (U+202A–U+202E, U+2066–U+2069) を件名ずれとして検出 — `Envelope` に `subject_bidi` を追加。
 ### Security — D2897: `Subject:` 欄のタグ文字 (U+E0000–U+E007F) を件名ずれとして検出 — `Envelope` に `subject_tag_chars` を追加。
@@ -380,6 +378,10 @@ devin/1791331333-quoted-local-cell2
 
 ### Security — D2926: `Feedback-ID:`/`X-Feedback-ID:` 系欄の4区分形外れを報酬系識別異形として検出 — `Envelope` に `feedback_id_bad` を追加。
 
+### Security — D2991: `Autocrypt:` 欄の `名=値` 連接/`addr=` 宛名形外れを暗号交渉記録異形として検出 — `Envelope` に `autocrypt_bad` を追加。
+### Security — D2992: `OpenPGP:` 欄の `名=値` 連接/鍵要素形外れを鍵識別記録異形として検出 — `Envelope` に `openpgp_bad` を追加。
+### Security — D2993: `Content-Return:` 欄の allowed/prohibited 語彙外れを本文返却記録異形として検出 — `Envelope` に `content_return_bad` を追加。
+### Security — D2994: `Mail-Followup-To:`/`Mail-Reply-To:` 系欄の宛名/poster 形外れを追従先記録異形として検出 — `Envelope` に `list_followup_bad` を追加。
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。

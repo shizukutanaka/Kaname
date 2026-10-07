@@ -9385,6 +9385,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_orig_rcpt_to_colon {
         render_risks.push("元受取人記録の宛名にコロンです—接頭辞の扱いで元受取人がずれます".to_string());
     }
+    if env.autocrypt_bad {
+        render_risks.push("暗号交渉欄の値が異形です—交渉値の扱いで鍵提示がずれます".to_string());
+    }
+    if env.openpgp_bad {
+        render_risks.push("鍵識別欄の値が異形です—鍵識別値の扱いで鍵照合がずれます".to_string());
+    }
+    if env.content_return_bad {
+        render_risks.push("本文返却欄の値が異形です—返却値の扱いで返送方針がずれます".to_string());
+    }
+    if env.list_followup_bad {
+        render_risks.push("追従先欄の値が異形です—追従値の扱いで返信経路がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
