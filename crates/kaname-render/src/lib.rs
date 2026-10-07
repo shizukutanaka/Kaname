@@ -48313,7 +48313,6 @@ pub fn has_x_orig_rcpt_to_caret_local(raw: &[u8]) -> bool {
     })
 }
 
-devin/1791326612-round421-caretlocal4
 /// `X-Confirm-Reading-To:` の値がドル符宛名形か判定する
 /// (D2635)。
 ///
@@ -109619,7 +109618,6 @@ mod tests {
     }
 
     #[test]
-devin/1791326612-round421-caretlocal4
     fn 閲覧確認先が縦線宛名なら発火() {
         assert!(has_confirm_reading_pipe(
             b"From: a@x\r\nX-Confirm-Reading-To: a@xample|.com\r\nTo: b@y\r\n\r\nx"

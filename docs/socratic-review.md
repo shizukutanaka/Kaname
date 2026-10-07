@@ -4505,7 +4505,6 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 
 問: 閲覧確認・再送返信口・再送残渣・元受取人の各記録欄で、ローカル部に `#` を含む宛名形は検出済みか。
 答: 未検出だった — `X-Confirm-Reading-To:` / `Resent-Reply-To:` / `Apparently-Resent-*:` 系 / `X-Original-Rcpt-To:` 系のローカル部ハット宛名は `a^b@y` 形の受理/拒否でずれるため D2814–D2817 を追加。`Envelope-To:`/`Delivered-To:` 本命は `addr_caret_local` が網羅済みのため重複検出は追加しない。
-devin/1791326612-round421-caretlocal4
 
 ## ラウンド 432 — 「閉じない引用符の記録欄」の自問自答
 
