@@ -8371,6 +8371,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.subject_long_ew {
         render_risks.push("件名に過長な符号化語があります—符号化語の扱いで件名がずれます".to_string());
     }
+    if env.authres_fail {
+        render_risks.push("認証結果に失敗判定があります—失敗判定の扱いで認証がずれます".to_string());
+    }
+    if env.authres_bad_verdict {
+        render_risks.push("認証結果に未規定の判定値があります—判定値の扱いで認証がずれます".to_string());
+    }
+    if env.arc_cv_bad {
+        render_risks.push("ARC封印の合否値が異形です—合否値の扱いで認証がずれます".to_string());
+    }
+    if env.dkim_sig_no_d {
+        render_risks.push("署名欄に署名者がありません—署名者欠落の扱いで認証がずれます".to_string());
+    }
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }

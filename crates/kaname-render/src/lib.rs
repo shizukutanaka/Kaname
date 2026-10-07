@@ -3443,6 +3443,10 @@ pub struct Envelope {
     pub subject_url: bool,
     pub subject_unclosed_comment: bool,
     pub subject_long_ew: bool,
+    pub authres_fail: bool,
+    pub authres_bad_verdict: bool,
+    pub arc_cv_bad: bool,
+    pub dkim_sig_no_d: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7298,6 +7302,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let subject_url = has_subject_url(bytes);
     let subject_unclosed_comment = has_subject_unclosed_comment(bytes);
     let subject_long_ew = has_subject_long_ew(bytes);
+    let authres_fail = has_authres_fail(bytes);
+    let authres_bad_verdict = has_authres_bad_verdict(bytes);
+    let arc_cv_bad = has_arc_cv_bad(bytes);
+    let dkim_sig_no_d = has_dkim_sig_no_d(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8939,6 +8947,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         subject_url,
         subject_unclosed_comment,
         subject_long_ew,
+        authres_fail,
+        authres_bad_verdict,
+        arc_cv_bad,
+        dkim_sig_no_d,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -50995,6 +51007,142 @@ pub fn has_subject_long_ew(raw: &[u8]) -> bool {
             }
         }
         over
+    })
+}
+
+/// 認証結果記録欄に失敗判定を含む認証失敗判定異形を示すかどうか。 (D2907)。
+pub fn has_authres_fail(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        ["authentication-results:", "x-authentication-results:", "received-spf:", "x-received-spf:"].iter().any(|p| l.starts_with(p))
+            && ["=fail", "=softfail", "=permerror", "=temperror", "=reject", "=discard"]
+                .iter()
+                .any(|s| l.contains(s))
+    })
+}
+
+/// 認証結果記録欄に未規定の判定値を含む認証判定値異形を示すかどうか。 (D2908)。
+pub fn has_authres_bad_verdict(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !["authentication-results:", "x-authentication-results:", "received-spf:", "x-received-spf:"].iter().any(|p| l.starts_with(p)) {
+            return false;
+        }
+        l.split(';').skip(1).any(|part| {
+            let Some(eq) = part.find('=') else { return false };
+            let m = part[..eq].trim();
+            if !matches!(m, "spf" | "dkim" | "dmarc" | "iprev" | "arc" | "sender-id" | "domainkeys" | "bodyhash" | "auth") {
+                return false;
+            }
+            let v = part[eq + 1..].split(|c: char| c.is_whitespace() || c == '(').next().unwrap_or("");
+            !matches!(
+                v,
+                "pass" | "fail" | "softfail" | "none" | "neutral" | "temperror"
+                    | "permerror" | "policy" | "quarantine" | "reject" | "discard"
+            )
+        })
+    })
+}
+
+/// ARC封印欄の合否値が規定外のARC合否異形を示すかどうか。 (D2909)。
+pub fn has_arc_cv_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("arc-seal:") || l.starts_with("x-arc-seal:")) {
+            return false;
+        }
+        l.split(';').any(|part| {
+            let p = part.trim();
+            p.starts_with("cv=")
+                && !matches!(&p[3..], "none" | "pass" | "fail" | "none;" | "pass;" | "fail;")
+        })
+    })
+}
+
+/// DKIM署名欄に署名者タグが無い署名者欠落異形を示すかどうか。 (D2910)。
+pub fn has_dkim_sig_no_d(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("dkim-signature:") || l.starts_with("domainkey-signature:")) {
+            return false;
+        }
+        !l.split(';').any(|part| part.trim().starts_with("d="))
     })
 }
 /// (D2635)。
@@ -113207,6 +113355,46 @@ mod tests {
         ));
         assert!(!has_subject_long_ew(
             b"From: a@x\r\nSubject: =?utf-8?q?abc?=\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 認証結果が失敗判定なら発火() {
+        assert!(has_authres_fail(
+            b"Authentication-Results: mx.y; spf=fail smtp.mailfrom=x\r\nFrom: a@x\r\n\r\nx"
+        ));
+        assert!(!has_authres_fail(
+            b"Authentication-Results: mx.y; spf=pass\r\nFrom: a@x\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 認証結果が未規定判定値なら発火() {
+        assert!(has_authres_bad_verdict(
+            b"Authentication-Results: mx.y; spf=wut smtp.mailfrom=x\r\nFrom: a@x\r\n\r\nx"
+        ));
+        assert!(!has_authres_bad_verdict(
+            b"Authentication-Results: mx.y; dkim=pass header.d=y\r\nFrom: a@x\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn アーク封印の合否値が異形なら発火() {
+        assert!(has_arc_cv_bad(
+            b"ARC-Seal: i=1; cv=maybe; d=y\r\nFrom: a@x\r\n\r\nx"
+        ));
+        assert!(!has_arc_cv_bad(
+            b"ARC-Seal: i=1; cv=fail; d=y\r\nFrom: a@x\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 署名欄に署名者がなければ発火() {
+        assert!(has_dkim_sig_no_d(
+            b"DKIM-Signature: v=1; s=s1; bh=x\r\nFrom: a@x\r\n\r\nx"
+        ));
+        assert!(!has_dkim_sig_no_d(
+            b"DKIM-Signature: v=1; s=s1; d=y\r\nFrom: a@x\r\n\r\nx"
         ));
     }
 

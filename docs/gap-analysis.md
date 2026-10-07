@@ -2294,6 +2294,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2904 | Subject: 欄の誘導URL混入異形 (http://・https://・www. 含み) | 件名ずれ |
 | D2905 | Subject: 欄の未閉塞括弧異形 (閉じない括弧含み) | 件名ずれ |
 | D2906 | Subject: 欄の過長符号化語異形 (75バイト超のエンコードドワード) | 件名ずれ |
+| D2907 | Authentication-Results:/Received-SPF: 系欄の認証失敗判定異形 | 認証ずれ |
+| D2908 | Authentication-Results:/Received-SPF: 系欄の未規定判定値異形 | 認証ずれ |
+| D2909 | ARC-Seal: 欄の合否値異形 (cv= が none/pass/fail 外) | 認証ずれ |
+| D2910 | DKIM-Signature: 系欄の署名者欠落異形 (d= タグ欠落) | 認証ずれ |
 devin/1791332973-unclosed-cell1
 | D2846 | Apparently-To:/X-Apparently-To: 系のローカル部鉤括弧宛名値 (見せ宛記録のローカル部鉤括弧異形) | 見せ宛ずれ |
 | D2847 | Apparently-From:/Apparently-Sender: 系のローカル部鉤括弧宛名値 (表差出人記録のローカル部鉤括弧異形) | 表差出人ずれ |
