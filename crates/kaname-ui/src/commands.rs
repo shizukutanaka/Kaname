@@ -8147,6 +8147,58 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.mailer_bad {
         render_risks.push("送信器欄の値が異形です—送信器値の扱いで経路がずれます".to_string());
     }
+    if env.precedence_bad {
+        render_risks.push("優先順位欄の値が異形です—優先順位値の扱いで優先判定がずれます".to_string());
+    }
+    if env.x_loop_bad {
+        render_risks.push("巡回欄の値が異形です—巡回値の扱いで巡回防止がずれます".to_string());
+    }
+    if env.uidl_bad {
+        render_risks.push("一意識別欄の値が異形です—一意識別値の扱いで受信管理がずれます".to_string());
+    }
+    if env.x_received_bad {
+        render_risks.push("副受信欄の値が異形です—副受信値の扱いで経路把握がずれます".to_string());
+    }
+
+    if env.list_uri_bad {
+        render_risks.push("一覧操作欄の値が異形です—操作値の扱いで一覧処理がずれます".to_string());
+    }
+    if env.unsub_post_bad {
+        render_risks.push("解除投稿欄の値が異形です—解除投稿値の扱いで解除処理がずれます".to_string());
+    }
+    if env.archived_at_bad {
+        render_risks.push("保管先欄の値が異形です—保管先値の扱いで保管参照がずれます".to_string());
+    }
+    if env.injection_info_bad {
+        render_risks.push("注入情報欄の値が異形です—注入情報値の扱いで投稿記録がずれます".to_string());
+    }
+
+    if env.dnt_opt_bad {
+        render_risks.push("通知選択欄の値が異形です—通知選択値の扱いで通知要求がずれます".to_string());
+    }
+    if env.vbr_info_bad {
+        render_risks.push("信託情報欄の値が異形です—信託情報値の扱いで信託照合がずれます".to_string());
+    }
+    if env.feedback_type_bad {
+        render_risks.push("反応種別欄の値が異形です—反応種別値の扱いで報告種別がずれます".to_string());
+    }
+    if env.feedback_id_bad {
+        render_risks.push("反応識別欄の値が異形です—反応識別値の扱いで報告照合がずれます".to_string());
+    }
+
+    if env.spam_flag_bad {
+        render_risks.push("迷惑旗欄の値が異形です—迷惑旗値の扱いで迷惑判定がずれます".to_string());
+    }
+    if env.spam_status_bad {
+        render_risks.push("迷惑状態欄の値が異形です—迷惑状態値の扱いで迷惑判定がずれます".to_string());
+    }
+    if env.spam_level_bad {
+        render_risks.push("迷惑度欄の値が異形です—迷惑度値の扱いで迷惑判定がずれます".to_string());
+    }
+    if env.spam_score_bad {
+        render_risks.push("迷惑点欄の値が異形です—迷惑点値の扱いで迷惑判定がずれます".to_string());
+    }
+
     if env.newsgroups_bad {
         render_risks.push("ニュース群欄の値が異形です—群名の扱いで経路がずれます".to_string());
     }
