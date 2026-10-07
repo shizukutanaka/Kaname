@@ -3447,6 +3447,14 @@ pub struct Envelope {
     pub authres_bad_verdict: bool,
     pub arc_cv_bad: bool,
     pub dkim_sig_no_d: bool,
+    /// DKIM-Signature 系欄に `s=` 選択子タグが無い
+    pub dkim_sig_no_s: bool,
+    /// DKIM-Signature 系欄に `b=` 署名値タグが無い
+    pub dkim_sig_no_b: bool,
+    /// ARC-Seal 系欄の `i=` 連鎖番号が異形
+    pub arc_seal_bad_i: bool,
+    /// ARC-Seal が単独で ARC-Authentication-Results/ARC-Message-Signature が無い
+    pub arc_chain_incomplete: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7306,6 +7314,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let authres_bad_verdict = has_authres_bad_verdict(bytes);
     let arc_cv_bad = has_arc_cv_bad(bytes);
     let dkim_sig_no_d = has_dkim_sig_no_d(bytes);
+    let dkim_sig_no_s = has_dkim_sig_no_s(bytes);
+    let dkim_sig_no_b = has_dkim_sig_no_b(bytes);
+    let arc_seal_bad_i = has_arc_seal_bad_i(bytes);
+    let arc_chain_incomplete = has_arc_chain_incomplete(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8951,6 +8963,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         authres_bad_verdict,
         arc_cv_bad,
         dkim_sig_no_d,
+        dkim_sig_no_s,
+        dkim_sig_no_b,
+        arc_seal_bad_i,
+        arc_chain_incomplete,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -51145,6 +51161,125 @@ pub fn has_dkim_sig_no_d(raw: &[u8]) -> bool {
         !l.split(';').any(|part| part.trim().starts_with("d="))
     })
 }
+/// DKIM-Signature 系欄に `s=` 選択子タグが無ければ署名者欠落系の異形として検出する (D2911)。
+pub fn has_dkim_sig_no_s(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("dkim-signature:") || l.starts_with("domainkey-signature:")) {
+            return false;
+        }
+        let rest = l.splitn(2, ':').nth(1).unwrap_or("");
+        !rest.split(';').any(|p| { let mut kv = p.trim_start().splitn(2, '='); kv.next().map(|k| k.trim() == "s").unwrap_or(false) && kv.next().is_some() })
+    })
+}
+
+/// DKIM-Signature 系欄に `b=` 署名値タグが無ければ署名値欠落の異形として検出する (D2912)。
+pub fn has_dkim_sig_no_b(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("dkim-signature:") || l.starts_with("domainkey-signature:")) {
+            return false;
+        }
+        let rest = l.splitn(2, ':').nth(1).unwrap_or("");
+        !rest.split(';').any(|p| { let mut kv = p.trim_start().splitn(2, '='); kv.next().map(|k| k.trim() == "b").unwrap_or(false) && kv.next().is_some() })
+    })
+}
+
+/// ARC-Seal 系欄の `i=` 連鎖番号が欠落・非数値・または i>1 で cv=none なら異形として検出する (D2913)。
+pub fn has_arc_seal_bad_i(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("arc-seal:") || l.starts_with("x-arc-seal:")) {
+            return false;
+        }
+        let rest = l.splitn(2, ':').nth(1).unwrap_or("");
+        let get = |tag: &str| -> Option<String> {
+            rest.split(';').find_map(|p| {
+                let mut kv = p.trim_start().splitn(2, '=');
+                if kv.next().map(|k| k.trim() == tag).unwrap_or(false) {
+                    kv.next().map(|v| v.trim().to_string())
+                } else {
+                    None
+                }
+            })
+        };
+        match get("i") {
+            None => true,
+            Some(iv) => !iv.chars().all(|c| c.is_ascii_digit())
+                || (iv.parse::<u32>().map(|n| n > 1).unwrap_or(false)
+                    && get("cv").map(|cv| cv == "none").unwrap_or(false)),
+        }
+    })
+}
+
+/// ARC-Seal が存在するのに ARC-Authentication-Results または ARC-Message-Signature が欠ける組欠落を検出する (D2914)。
+pub fn has_arc_chain_incomplete(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let seal = lower.lines().any(|l| l.starts_with("arc-seal:") || l.starts_with("x-arc-seal:"));
+    if !seal {
+        return false;
+    }
+    let aar = lower.lines().any(|l| l.starts_with("arc-authentication-results:"));
+    let ams = lower.lines().any(|l| l.starts_with("arc-message-signature:"));
+    !aar || !ams
+}
+
 /// (D2635)。
 ///
 /// 閲覧確認先を記す欄なのに `a@x$` のようにドメイン側に孤立 `$` を
@@ -131165,4 +131300,63 @@ fn 投稿機欄が異形なら発火() {
         assert!(!has_display_ws_only(b"From: \"\" <x@y>\r\n\r\nbody"));
         assert!(!has_display_ws_only(b"From: \"N\" <x@y>\r\n\r\nbody"));
         assert!(!has_display_ws_only(b"From: x@y\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 認証記録が選択子欠落なら発火() {
+        assert!(has_dkim_sig_no_s(
+            b"DKIM-Signature: v=1; a=rsa; d=y; b=x\r\n\r\nbody"
+        ));
+        assert!(has_dkim_sig_no_s(
+            b"DomainKey-Signature: v=1; a=rsa; d=y\r\n\r\nbody"
+        ));
+        assert!(!has_dkim_sig_no_s(
+            b"DKIM-Signature: v=1; a=rsa; d=y; s=s1; b=x\r\n\r\nbody"
+        ));
+        assert!(!has_dkim_sig_no_s(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 認証記録が署名値欠落なら発火() {
+        assert!(has_dkim_sig_no_b(
+            b"DKIM-Signature: v=1; a=rsa; d=y; s=s1; bh=x\r\n\r\nbody"
+        ));
+        assert!(!has_dkim_sig_no_b(
+            b"DKIM-Signature: v=1; a=rsa; d=y; s=s1; b=x; bh=h\r\n\r\nbody"
+        ));
+        assert!(!has_dkim_sig_no_b(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 認証記録が連鎖番号異形なら発火() {
+        assert!(has_arc_seal_bad_i(
+            b"ARC-Seal: a=rsa; cv=none; d=y\r\n\r\nbody"
+        ));
+        assert!(has_arc_seal_bad_i(
+            b"ARC-Seal: i=x; cv=none; d=y\r\n\r\nbody"
+        ));
+        assert!(has_arc_seal_bad_i(
+            b"ARC-Seal: i=2; cv=none; d=y\r\n\r\nbody"
+        ));
+        assert!(!has_arc_seal_bad_i(
+            b"ARC-Seal: i=1; cv=none; d=y\r\n\r\nbody"
+        ));
+        assert!(!has_arc_seal_bad_i(
+            b"ARC-Seal: i=2; cv=pass; d=y\r\n\r\nbody"
+        ));
+        assert!(!has_arc_seal_bad_i(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 認証記録が連鎖組欠落なら発火() {
+        assert!(has_arc_chain_incomplete(
+            b"ARC-Seal: i=1; cv=none; d=y\r\n\r\nbody"
+        ));
+        assert!(has_arc_chain_incomplete(
+            b"ARC-Seal: i=1; cv=none; d=y\r\nARC-Authentication-Results: i=1; x\r\n\r\nbody"
+        ));
+        assert!(!has_arc_chain_incomplete(
+            b"ARC-Seal: i=1; cv=none; d=y\r\nARC-Authentication-Results: i=1; x\r\nARC-Message-Signature: i=1; x\r\n\r\nbody"
+        ));
+        assert!(!has_arc_chain_incomplete(b"From: a@b\r\n\r\nbody"));
     }

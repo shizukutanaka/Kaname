@@ -2298,6 +2298,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2908 | Authentication-Results:/Received-SPF: 系欄の未規定判定値異形 | 認証ずれ |
 | D2909 | ARC-Seal: 欄の合否値異形 (cv= が none/pass/fail 外) | 認証ずれ |
 | D2910 | DKIM-Signature: 系欄の署名者欠落異形 (d= タグ欠落) | 認証ずれ |
+| D2911 | DKIM-Signature: 系の `s=` 選択子タグ欠落 (署名欄の選択子欠落異形) | 認証ずれ |
+| D2912 | DKIM-Signature: 系の `b=` 署名値タグ欠落 (署名欄の署名値欠落異形) | 認証ずれ |
+| D2913 | ARC-Seal: 系の `i=` 連鎖番号異形 (ARC記録の番号異形) | 認証ずれ |
+| D2914 | ARC-Seal: 単独で ARC-Authentication-Results/ARC-Message-Signature 欠落 (ARC記録組欠落異形) | 認証ずれ |
 devin/1791332973-unclosed-cell1
 | D2846 | Apparently-To:/X-Apparently-To: 系のローカル部鉤括弧宛名値 (見せ宛記録のローカル部鉤括弧異形) | 見せ宛ずれ |
 | D2847 | Apparently-From:/Apparently-Sender: 系のローカル部鉤括弧宛名値 (表差出人記録のローカル部鉤括弧異形) | 表差出人ずれ |
