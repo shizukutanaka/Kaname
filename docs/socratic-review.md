@@ -4460,3 +4460,8 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 
 問: 見せ宛・表差出人・元宛・元差出人の各記録欄で、ローカル部に `^` を含む宛名形は検出済みか。
 答: 未検出だった — `Apparently-To:`/`X-Apparently-To:` 系、`Apparently-From:`/`Apparently-Sender:` 系、`X-Original-To:`、`X-Original-From:` のローカル部反転符宛名は `a`b@y` 形の受理/拒否でずれるため D2818–D2821 を追加。#750 (セル1) 未マージのため本 PR は独立して適用可能。
+
+## ラウンド 424 — 「反転符の記録欄ローカル部・第4セル」の自問自答
+
+問: 閲覧確認・再送返信口・再送残渣・元受取人の各記録欄で、ローカル部に `#` を含む宛名形は検出済みか。
+答: 未検出だった — `X-Confirm-Reading-To:` / `Resent-Reply-To:` / `Apparently-Resent-*:` 系 / `X-Original-Rcpt-To:` 系のローカル部反転符宛名は `a`b@y` 形の受理/拒否でずれるため D2826–D2829 を追加。`Envelope-To:`/`Delivered-To:` 本命は `addr_backtick_local` が網羅済みのため重複検出は追加しない。

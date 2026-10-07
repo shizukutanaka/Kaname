@@ -179,6 +179,10 @@
 - D2819: Apparently-From:`/`Apparently-Sender:` 系 のローカル部反転符宛名値 — 表差出人記録のローカル部反転符異形
 - D2820: X-Original-To: のローカル部反転符宛名値 — 元宛先記録のローカル部反転符異形
 - D2821: X-Original-From: のローカル部反転符宛名値 — 元差出人記録のローカル部反転符異形
+- D2826: `X-Confirm-Reading-To:` のローカル部反転符宛名値 — 閲覧確認先記録のローカル部反転符異形
+- D2827: `Resent-Reply-To:` のローカル部反転符宛名値 — 再送返信口記録のローカル部反転符異形
+- D2828: `Apparently-Resent-*:` 系 のローカル部反転符宛名値 — 再送残渣記録のローカル部反転符異形
+- D2829: `X-Original-Rcpt-To:` 系 のローカル部反転符宛名値 — 元受取人記録のローカル部反転符異形
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
