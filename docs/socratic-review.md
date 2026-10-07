@@ -4500,3 +4500,9 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 
 問: 閲覧確認先・再送返信口・再送残渣・元受取人を記す欄で `"a@y` のように鉤括弧が始まって閉じない宛名は検出済みか。
 答: 未検出だった — `X-Confirm-Reading-To:`、`Resent-Reply-To:`、`Apparently-Resent-*:` 系、`X-Original-Rcpt-To:` 系の未閉塞クオート宛名は行末まで引用と読む実装とクオートを捨てる実装でずれるため D2869–D2872 を追加。これで記録欄の未閉塞クオート格子は完遂。
+
+## ラウンド 429 — 「鉤括弧の記録欄ローカル部・第2セル」の自問自答
+
+問: 見せ宛・表差出人・元宛・元差出人を記す欄で `"a b"@y` のようにローカル部が鉤括弧囲みの宛名は検出済みか。
+答: 未検出だった — `Apparently-To:`/`X-Apparently-To:` 系、`Apparently-From:`/`Apparently-Sender:` 系、`X-Original-To:`、`X-Original-From:` の鉤括弧ローカル部宛名は引用局所部の受理/拒否でずれるため D2846–D2849 を追加。セル1 (`addr_quoted_local` 等) と同じ判定形。
+devin/1791331333-quoted-local-cell2
