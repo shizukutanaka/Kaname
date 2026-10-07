@@ -4526,3 +4526,7 @@ devin/1791332973-unclosed-cell1
 
 X-MS-Has-Attach の語彙は yes/no のみ、TNEF-Correlator は base64 相関子、EndToEndLatency は `HH:MM:SS.mmm`、X-Mailer は印字可能ASCII — いずれも「書く権限が運輸側にある」欄で、値の形が規定を外れるなら運輸記録の擬態となる。攻撃者は「MS経路が刻んだように見せる」欄を任意に置けるが、形が外れれば確実な異形として切れる — 値の語彙・形両方を閉じた欄は検出に最適。
 
+## ラウンド 453 — 「自己申告は誰が検証するか」の自問自答
+
+Content-MD5・Content-Digest・Content-Features・Content-Language は送信側が「照合済み・規格どおり」を自称する欄。既存は存在検出 (`integrity_claim` がプレゼンスのみ) で、値の形を見ていなかった。形すら守らない自称値は「検証はどこにもない」ことを示す — 値の文法を検査すれば、体裁だけの自称と規格どおりの記録を区別できる。
+

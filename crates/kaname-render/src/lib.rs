@@ -3298,6 +3298,14 @@ pub struct Envelope {
     pub ms_latency_bad: bool,
     /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
     pub mailer_bad: bool,
+    /// Content-MD5 欄の値が base64 の16バイト語形でない
+    pub content_md5_bad: bool,
+    /// Content-Language 欄の値が言語タグ形でない
+    pub content_lang_bad: bool,
+    /// Content-Digest 欄の値が アルゴ=値 形でない
+    pub content_digest_bad: bool,
+    /// Content-Features 欄の値が 名[=値] の連接形でない
+    pub content_features_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7077,6 +7085,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
     let ms_latency_bad = has_ms_latency_bad(bytes);
     let mailer_bad = has_mailer_bad(bytes);
+    let content_md5_bad = has_content_md5_bad(bytes);
+    let content_lang_bad = has_content_lang_bad(bytes);
+    let content_digest_bad = has_content_digest_bad(bytes);
+    let content_features_bad = has_content_features_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8642,6 +8654,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         tnef_correlator_bad,
         ms_latency_bad,
         mailer_bad,
+        content_md5_bad,
+        content_lang_bad,
+        content_digest_bad,
+        content_features_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48476,6 +48492,154 @@ pub fn has_mailer_bad(raw: &[u8]) -> bool {
         let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
         v.is_empty()
             || v.chars().any(|c| !c.is_ascii() || (c.is_ascii_control() && c != '\t'))
+    })
+}
+
+/// `Content-MD5:` の値が base64 の16バイト語 (24文字・末尾 `==`) でなければ値形異形として検出する (D2939)。
+///
+/// RFC 1864 の値は `MD5 digest` を base64 した24文字 `…==` — 形を
+/// 検査しない実装は「照合済み」体裁の値を検証なしに受理する。
+pub fn has_content_md5_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-md5:") else {
+            return false;
+        };
+        let v = v.trim();
+        !(v.len() == 24
+            && v.ends_with("==")
+            && v[..22]
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/'))
+    })
+}
+
+/// `Content-Language:` の値が言語タグ形でなければ値形異形として検出する (D2940)。
+///
+/// RFC 3282 は `tag(-sub)*` のカンマ区切り — `日本語` や `x` 単字のみを
+/// 受理しない実装と受理する実装で言語判定がずれる。
+pub fn has_content_lang_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-language:") else {
+            return false;
+        };
+        let v = v.trim();
+        let tag_ok = |t: &str| -> bool {
+            let mut it = t.split('-');
+            let Some(first) = it.next() else { return false };
+            !first.is_empty()
+                && first.len() <= 8
+                && first.chars().all(|c| c.is_ascii_alphabetic())
+                && it.all(|s| !s.is_empty() && s.len() <= 8 && s.chars().all(|c| c.is_ascii_alphanumeric()))
+        };
+        v.is_empty() || !v.split(',').all(|t| tag_ok(t.trim()))
+    })
+}
+
+/// `Content-Digest:` の値が `アルゴ=値` 形でなければ値形異形として検出する (D2941)。
+///
+/// RFC 3230 は `SHA=base64` 形 — `=` のない値・空値は要検証の体裁を欠く。
+pub fn has_content_digest_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-digest:") else {
+            return false;
+        };
+        let v = v.trim();
+        let Some(eq) = v.find('=') else { return true };
+        let algo = &v[..eq];
+        let val = &v[eq + 1..];
+        algo.is_empty()
+            || !algo
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            || val.is_empty()
+    })
+}
+
+/// `Content-Features:` の値が `名[=値]` の `;` 連接形でなければ値形異形として検出する (D2942)。
+///
+/// RFC 2912 は feature tag の `;` 連接 — 名が token でない・空要素を
+/// 含む値は受理実装で特徴記録がずれる。
+pub fn has_content_features_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-features:") else {
+            return false;
+        };
+        let v = v.trim();
+        let token_ok = |t: &str| -> bool {
+            !t.is_empty()
+                && t.chars().all(|c| {
+                    c.is_ascii_alphanumeric()
+                        || "!#$%&'*+-.^_`|~".contains(c)
+                })
+        };
+        v.is_empty()
+            || !v.split(';').all(|p| {
+                let p = p.trim();
+                match p.find('=') {
+                    Some(eq) => token_ok(&p[..eq]) && !p[eq + 1..].is_empty(),
+                    None => token_ok(p),
+                }
+            })
     })
 }
 
@@ -127562,4 +127726,44 @@ body";
         assert!(!has_mailer_bad(b"X-Mailer: Outlook 16.0\r\n\r\nbody"));
         assert!(!has_mailer_bad(b"User-Agent: Thunderbird/115.0\r\n\r\nbody"));
         assert!(!has_mailer_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn md5欄が異形なら発火() {
+        assert!(has_content_md5_bad(b"Content-MD5: xyz\r\n\r\nbody"));
+        assert!(has_content_md5_bad(b"Content-MD5: \r\n\r\nbody"));
+        assert!(!has_content_md5_bad(
+            b"Content-MD5: MDEyMzQ1Njc4OWFiY2RlZg==\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 言語欄が異形なら発火() {
+        assert!(has_content_lang_bad(
+            "Content-Language: 日本語\r\n\r\nbody".as_bytes()
+        ));
+        assert!(has_content_lang_bad(b"Content-Language: x!\r\n\r\nbody"));
+        assert!(!has_content_lang_bad(
+            b"Content-Language: en-US, ja\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 要約欄が異形なら発火() {
+        assert!(has_content_digest_bad(b"Content-Digest: sha\r\n\r\nbody"));
+        assert!(has_content_digest_bad(b"Content-Digest: =abc\r\n\r\nbody"));
+        assert!(!has_content_digest_bad(
+            b"Content-Digest: SHA=thvDyvhfIqlvFe+A9MYgxAfm1q5=\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 特徴欄が異形なら発火() {
+        assert!(has_content_features_bad(b"Content-Features: ;;\r\n\r\nbody"));
+        assert!(has_content_features_bad(
+            b"Content-Features: foo bar\r\n\r\nbody"
+        ));
+        assert!(!has_content_features_bad(
+            b"Content-Features: font-size=12; font-type=serif\r\n\r\nbody"
+        ));
     }

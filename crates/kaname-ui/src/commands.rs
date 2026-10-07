@@ -8147,6 +8147,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.mailer_bad {
         render_risks.push("送信器欄の値が異形です—送信器値の扱いで経路がずれます".to_string());
     }
+    if env.content_md5_bad {
+        render_risks.push("内容要約欄の値が異形です—要約値の扱いで検証結果がずれます".to_string());
+    }
+    if env.content_lang_bad {
+        render_risks.push("言語欄の値が異形です—言語値の扱いで翻訳判定がずれます".to_string());
+    }
+    if env.content_digest_bad {
+        render_risks.push("内容要約欄の値が異形です—要約値の扱いで検証結果がずれます".to_string());
+    }
+    if env.content_features_bad {
+        render_risks.push("内容特徴欄の値が異形です—特徴値の扱いで特徴判定がずれます".to_string());
+    }
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }

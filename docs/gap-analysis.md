@@ -2226,4 +2226,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2928 | X-MS-TNEF-Correlator 系の非base64値 (相関子欄の値異形) | 経路ずれ |
 | D2929 | X-MS-Exchange 遅延欄の非時刻値 (遅延欄の値異形) | 経路ずれ |
 | D2930 | X-Mailer/User-Agent 系の制御文字・非ascii (送信器欄の値異形) | 経路ずれ |
+| D2939 | Content-MD5 欄の非24文字base64値 (値形異形) | 検証ずれ |
+| D2940 | Content-Language 欄の非言語タグ値 (値形異形) | 言語ずれ |
+| D2941 | Content-Digest 欄の非アルゴ=値 (値形異形) | 検証ずれ |
+| D2942 | Content-Features 欄の非連接値 (値形異形) | 特徴ずれ |
 devin/1791332973-unclosed-cell1
