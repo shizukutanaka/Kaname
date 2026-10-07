@@ -51564,9 +51564,7 @@ pub fn has_ms_scl_bad(raw: &[u8]) -> bool {
     }
     let lower = logical.to_ascii_lowercase();
     lower.lines().any(|l| {
-        if !(l.starts_with("x-ms-exchange-organization-scl:")
-            || l.starts_with("x-microsoft-antispam-mailbox-delivery:"))
-        {
+        if !l.starts_with("x-ms-exchange-organization-scl:") {
             return false;
         }
         let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
@@ -131854,6 +131852,9 @@ fn 投稿機欄が異形なら発火() {
             b"X-MS-Exchange-Organization-SCL: 5\r\n\r\nbody"
         ));
         assert!(!has_ms_scl_bad(b"From: a@b\r\n\r\nbody"));
+        assert!(!has_ms_scl_bad(
+            b"X-Microsoft-Antispam-Mailbox-Delivery: ucf:0;jmr:0;auth:0;dest:I\r\n\r\nbody"
+        ));
     }
 
     #[test]
