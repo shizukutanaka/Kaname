@@ -234,6 +234,14 @@ devin/1791332973-unclosed-cell1
 
 ### Security — D2930: `X-Mailer:`/`User-Agent:`/`X-MimeOLE:` 系欄の制御文字・非ascii混入を送信器記録異形として検出 — `Envelope` に `mailer_bad` を追加。
 
+### Security — D2931: アドレス欄の表示名 (phrase) に混入した制御文字・双方向制御・ゼロ幅文字を表示名異形として検出 — `Envelope` に `display_ctrl_bad` を追加。
+
+### Security — D2932: アドレス欄の表示名が裸ドメイン形 (`label.tld`、スキームなし) であることを表示名異形として検出 — `Envelope` に `display_domain_bad` を追加。
+
+### Security — D2933: アドレス欄の表示名に英字がない (句読点・数字のみ) ことを表示名異形として検出 — `Envelope` に `display_punct_bad` を追加。
+
+### Security — D2934: アドレス欄の表示名が100文字を超えることを表示名異形として検出 — `Envelope` に `display_long_bad` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
