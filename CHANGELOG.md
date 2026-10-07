@@ -214,7 +214,6 @@
 - D2807: Apparently-From:`/`Apparently-Sender:` 系 のローカル部ハット宛名値 — 表差出人記録のローカル部ハット異形
 - D2808: X-Original-To: のローカル部ハット宛名値 — 元宛先記録のローカル部ハット異形
 - D2809: X-Original-From: のローカル部ハット宛名値 — 元差出人記録のローカル部ハット異形
-devin/1791325728-round419-caretlocal2
 ### Security — D2791: `X-Envelope-To:` 欄のローカル部ドル符宛名値 (`a$b@y` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_dollar_local` を追加 (`Envelope-To:`/`Delivered-To:` 本命は `addr_dollar_local` が網羅)。
 ### Security — D2792: `X-Envelope-From:`/`X-MailFrom:` 等欄のローカル部ドル符宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_dollar_local` を追加。
 ### Security — D2793: `Errors-To:` 欄のローカル部ドル符宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_dollar_local` を追加。
