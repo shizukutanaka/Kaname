@@ -3286,6 +3286,12 @@ pub struct Envelope {
     pub env_from_caret_local: bool,
     /// `Errors-To:` の値がローカル部ハット宛名 (D2787 — 返送先ずれ)。
     pub errors_to_caret_local: bool,
+    /// `X-Envelope-To:` の値がローカル部ドル符宛名 (D2791 — 封書宛先ずれ)。
+    pub env_to_dollar_local: bool,
+    /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部ドル符宛名 (D2792 — 封書差出人ずれ)。
+    pub env_from_dollar_local: bool,
+    /// `Errors-To:` の値がローカル部ドル符宛名 (D2793 — 返送先ずれ)。
+    pub errors_to_dollar_local: bool,
     /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
     pub msgid_bang_lead: bool,
     /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
@@ -7034,6 +7040,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let env_to_caret_local = has_env_to_caret_local(bytes);
     let env_from_caret_local = has_env_from_caret_local(bytes);
     let errors_to_caret_local = has_errors_to_caret_local(bytes);
+    let env_to_dollar_local = has_env_to_dollar_local(bytes);
+    let env_from_dollar_local = has_env_from_dollar_local(bytes);
+    let errors_to_dollar_local = has_errors_to_dollar_local(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -8581,6 +8590,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         env_to_caret_local,
         env_from_caret_local,
         errors_to_caret_local,
+        env_to_dollar_local,
+        env_from_dollar_local,
+        errors_to_dollar_local,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -69072,6 +69084,189 @@ pub fn has_errors_to_caret_local(raw: &[u8]) -> bool {
             && v.split_whitespace().count() == 1
     })
 }
+/// `X-Envelope-To:` の値がドル符をローカル部に含む宛名形か判
+/// 定する (D2791)。
+///
+/// 封書宛先を記す欄なのに `a$b@y` のようにローカル部にドル符を含む宛名
+/// — ドル符付きアドレスとして受理する実装と構文違反として拒否する実装で封書宛先がずれる (``addr_dollar_local`` で検出済み・記録欄側は未検出)。
+#[must_use]
+pub fn has_env_to_dollar_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-envelope-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `X-Envelope-From:/X-MailFrom: 等` の値がドル符をローカル部に含む宛名形か判
+/// 定する (D2792)。
+///
+/// 封書差出人を記す欄なのに `a$b@y` のようにローカル部にドル符を含む宛名
+/// — ドル符付きアドレスとして受理する実装と構文違反として拒否する実装で封書差出人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_env_from_dollar_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-envelope-from" || n == "x-mailfrom" || n == "x-mail-from")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `Errors-To:` の値がドル符をローカル部に含む宛名形か判
+/// 定する (D2793)。
+///
+/// 返送先を記す欄なのに `a$b@y` のようにローカル部にドル符を含む宛名
+/// — ドル符付きアドレスとして受理する実装と構文違反として拒否する実装で返送先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_errors_to_dollar_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "errors-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
 /// `X-Envelope-To:` の値が井桁をローカル部に含む宛名形か判
 /// 定する (D2782)。
 ///
@@ -106106,6 +106301,45 @@ mod tests {
             b"From: a@x\r\nErrors-To: a@xample^.com\r\nTo: b@y\r\n\r\nx"
         ));
         assert!(!has_errors_to_caret_local(
+            b"From: a@x\r\nErrors-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書宛先がドル符ローカル宛名なら発火() {
+        assert!(has_env_to_dollar_local(
+            b"From: a@x\r\nX-Envelope-To: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_dollar_local(
+            b"From: a@x\r\nX-Envelope-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_to_dollar_local(
+            b"From: a@x\r\nX-Envelope-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 封書差出人がドル符ローカル宛名なら発火() {
+        assert!(has_env_from_dollar_local(
+            b"From: a@x\r\nX-Envelope-From: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_dollar_local(
+            b"From: a@x\r\nX-Envelope-From: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_env_from_dollar_local(
+            b"From: a@x\r\nX-Envelope-From: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 返送先がドル符ローカル宛名なら発火() {
+        assert!(has_errors_to_dollar_local(
+            b"From: a@x\r\nErrors-To: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_dollar_local(
+            b"From: a@x\r\nErrors-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_errors_to_dollar_local(
             b"From: a@x\r\nErrors-To: a@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
