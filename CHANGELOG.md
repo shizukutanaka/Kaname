@@ -158,6 +158,18 @@
 ### Security — D2795: `Apparently-From:`/`Apparently-Sender:` 系欄のローカル部井桁宛名値を表差出人ずれとして検出 — `Envelope` に `apparently_from_hash_local` を追加。
 ### Security — D2796: `X-Original-To:` 欄のローカル部井桁宛名値を元宛先ずれとして検出 — `Envelope` に `x_orig_to_hash_local` を追加。
 ### Security — D2797: `X-Original-From:` 欄のローカル部井桁宛名値を元差出人ずれとして検出 — `Envelope` に `x_orig_from_hash_local` を追加。
+### Security — D2834: `X-Original-Cc:` 系欄のローカル部ドル符宛名値 (`a$b@y` 形) を元副宛ずれとして検出 — `Envelope` に `x_orig_cc_dollar_local` を追加。
+### Security — D2835: `X-Original-Reply-To:` 欄のローカル部ドル符宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_dollar_local` を追加。
+### Security — D2836: `Disposition-Notification-To:` 欄のローカル部ドル符宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_dollar_local` を追加。
+### Security — D2837: `Return-Receipt-To:` 欄のローカル部ドル符宛名値を受領通知先ずれとして検出 — `Envelope` に `return_receipt_dollar_local` を追加。
+- D2802: `X-Confirm-Reading-To:` のローカル部井桁宛名値 — 閲覧確認先記録のローカル部井桁異形
+- D2803: `Resent-Reply-To:` のローカル部井桁宛名値 — 再送返信口記録のローカル部井桁異形
+- D2804: `Apparently-Resent-*:` 系 のローカル部井桁宛名値 — 再送残渣記録のローカル部井桁異形
+- D2805: `X-Original-Rcpt-To:` 系 のローカル部井桁宛名値 — 元受取人記録のローカル部井桁異形
+- D2818: Apparently-To:`/`X-Apparently-To:` 系 のローカル部反転符宛名値 — 見せ宛記録のローカル部反転符異形
+- D2819: Apparently-From:`/`Apparently-Sender:` 系 のローカル部反転符宛名値 — 表差出人記録のローカル部反転符異形
+- D2820: X-Original-To: のローカル部反転符宛名値 — 元宛先記録のローカル部反転符異形
+- D2821: X-Original-From: のローカル部反転符宛名値 — 元差出人記録のローカル部反転符異形
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
