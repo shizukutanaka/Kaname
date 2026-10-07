@@ -3298,6 +3298,14 @@ pub struct Envelope {
     pub ms_latency_bad: bool,
     /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
     pub mailer_bad: bool,
+    /// X-Originating-IP: が [IP] 形でない (D2983)。
+    pub origin_ip_bad: bool,
+    /// X-Complaints-To:/X-Report-Abuse: 系が宛名/URI 形でない (D2984)。
+    pub abuse_uri_bad: bool,
+    /// Auto-Submitted: が語彙外 (D2985)。
+    pub auto_sub_bad: bool,
+    /// X-Authenticated-Sender: 系が宛名形でない (D2986)。
+    pub auth_sender_bad: bool,
     /// Precedence: 系が単一トークンでない (D2979)。
     pub precedence_bad: bool,
     /// X-Loop: が宛名形でない (D2980)。
@@ -7141,6 +7149,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
     let ms_latency_bad = has_ms_latency_bad(bytes);
     let mailer_bad = has_mailer_bad(bytes);
+    let origin_ip_bad = has_origin_ip_bad(bytes);
+    let abuse_uri_bad = has_abuse_uri_bad(bytes);
+    let auto_sub_bad = has_auto_sub_bad(bytes);
+    let auth_sender_bad = has_auth_sender_bad(bytes);
     let precedence_bad = has_precedence_bad(bytes);
     let x_loop_bad = has_x_loop_bad(bytes);
     let uidl_bad = has_uidl_bad(bytes);
@@ -8738,6 +8750,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         tnef_correlator_bad,
         ms_latency_bad,
         mailer_bad,
+        origin_ip_bad,
+        abuse_uri_bad,
+        auto_sub_bad,
+        auth_sender_bad,
         precedence_bad,
         x_loop_bad,
         uidl_bad,
@@ -48906,6 +48922,99 @@ fn has_x_received_bad(bytes: &[u8]) -> bool {
                 return true;
             }
             if !v.contains(" with ") && !v.contains(" id ") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn trace_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2983)。
+fn has_origin_ip_bad(bytes: &[u8]) -> bool {
+    let logical = trace_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-originating-ip:") {
+            let v = v.trim().trim_matches(|c| c == '[' || c == ']');
+            // `[v4]`/`[v6]` の括弧内IP
+            if v.is_empty() || v.split_whitespace().count() != 1
+                || !v.bytes().all(|b| b.is_ascii_digit() || b == b'.' || b == b':')
+                || !(v.contains('.') || v.contains(':'))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2984)。
+fn has_abuse_uri_bad(bytes: &[u8]) -> bool {
+    let logical = trace_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-complaints-to:")
+            .or_else(|| low.strip_prefix("x-report-abuse:"))
+            .or_else(|| low.strip_prefix("x-report-spam:"))
+            .or_else(|| low.strip_prefix("x-complaints-info:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 宛名または URI (`@`/`:` のいずれか)
+            if v.is_empty() || !(v.contains('@') || v.contains(':')) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2985)。
+fn has_auto_sub_bad(bytes: &[u8]) -> bool {
+    let logical = trace_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("auto-submitted:") {
+            let v = v.trim();
+            // `no`/`auto-*` 語彙 (単一トークン)
+            if v.is_empty() || v.split_whitespace().count() != 1
+                || !(v == "no" || v.starts_with("auto-"))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2986)。
+fn has_auth_sender_bad(bytes: &[u8]) -> bool {
+    let logical = trace_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-authenticated-sender:")
+            .or_else(|| low.strip_prefix("x-get-message-sender-via:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 宛名形 (@ を持つ)
+            if v.is_empty() || !v.contains('@') {
                 return true;
             }
         }
@@ -128703,6 +128812,35 @@ fn 副受信欄が異形なら発火() {
     assert!(e.x_received_bad);
     let e = parse(b"From: a@x.com\r\nX-Received: by mail.x.com with SMTP id abc.123\r\n\r\nx").unwrap();
     assert!(!e.x_received_bad);
+}
+
+#[test]
+fn 起源識別欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Originating-IP: notanip\r\n\r\nx").unwrap();
+    assert!(e.origin_ip_bad);
+    let e = parse(b"From: a@x.com\r\nX-Originating-IP: [192.0.2.1]\r\n\r\nx").unwrap();
+    assert!(!e.origin_ip_bad);
+}
+#[test]
+fn 虐待窓口欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Complaints-To: x\r\n\r\nx").unwrap();
+    assert!(e.abuse_uri_bad);
+    let e = parse(b"From: a@x.com\r\nX-Complaints-To: abuse@x.com\r\n\r\nx").unwrap();
+    assert!(!e.abuse_uri_bad);
+}
+#[test]
+fn 自動応答欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nAuto-Submitted: x y\r\n\r\nx").unwrap();
+    assert!(e.auto_sub_bad);
+    let e = parse(b"From: a@x.com\r\nAuto-Submitted: auto-replied\r\n\r\nx").unwrap();
+    assert!(!e.auto_sub_bad);
+}
+#[test]
+fn 認証送信人欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Authenticated-Sender: x\r\n\r\nx").unwrap();
+    assert!(e.auth_sender_bad);
+    let e = parse(b"From: a@x.com\r\nX-Authenticated-Sender: u@x.com\r\n\r\nx").unwrap();
+    assert!(!e.auth_sender_bad);
 }
 
 #[test]
