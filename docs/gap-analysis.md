@@ -2326,3 +2326,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2992 | OpenPGP: の非 名=値/鍵要素値 (鍵識別欄の値異形) | 鍵識別ずれ |
 | D2993 | Content-Return: の語彙外値 (本文返却欄の値異形) | 返却ずれ |
 | D2994 | Mail-Followup-To:/Mail-Reply-To: の非宛名値 (追従先欄の値異形) | 追従ずれ |
+| D2999 | X-MS-Exchange-Organization-MessageDirectionality: の語彙外値 (輸送方向欄の値異形) | 方向ずれ |
+| D3000 | X-MS-Exchange-Organization-AuthMechanism: の非方式番号値 (認証方式欄の値異形) | 方式ずれ |
+| D3001 | X-MS-Office365-Filtering-Correlation-Id: の非GUID値 (関連識別欄の値異形) | 識別ずれ |
+| D3002 | X-MS-Exchange-Organization-ExpirationStartTime: の非日時形値 (失効開始欄の値異形) | 失効ずれ |

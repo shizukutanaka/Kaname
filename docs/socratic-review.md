@@ -4625,3 +4625,8 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 
 問: `Autocrypt:`/`OpenPGP:`/`Content-Return:`/`Mail-Followup-To:`/`Mail-Reply-To:` の値の形は検査済みか。
 答: 未検出だった — 鍵素材・返却方針・追従先を送信側が自称する欄は値の文法が绿地だった。`名=値` 連接・`addr=` 宛名・`allowed|prohibited` 語彙・宛名/poster 形の外れを異形として D2991–D2994 を追加。交渉の体裁だけを真似る擬態へ面を広げた。
+
+## ラウンド 468 — 「権威が刻む語彙と番号」の自問自答
+
+問: `X-MS-Exchange-Organization-*`/`X-MS-Office365-Filtering-*` の欄があれば輸送記録として足りるか。
+答: 欄名の存在と値の正当性は別の問題だった — `MessageDirectionality:` は Originating/Incoming の2語彙、`AuthMechanism:` は 00–10 の番号語彙、`Filtering-Correlation-Id:` は GUID、`ExpirationStartTime:` は日時形と、Exchange の輸送が刻む値はすべて形が閉じている。存在検出 (`has_exchange_org_claim`) だけでは語彙外の値を置く擬態を見逃すため、値文法として D2999–D3002 を追加した。体裁は「欄があること」ではなく「値が権威の刻む形をしていること」で問う — 同じ問いを前ラウンドの暗号・交渉欄 (必須部品の有無) にも当てはめ、指摘された3件のすり抜けを修正した。
