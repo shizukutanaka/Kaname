@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3015: `Content-Translation-Type:` 欄の語彙外値 (`8BIT`/`7BIT`/`BINARY` 以外) を翻訳ずれとして検出 — `Envelope` に `content_ttype_bad` を追加。
+### Security — D3016: `Content-Duration:` 欄の非数値を長尺ずれとして検出 — `Envelope` に `content_dur_bad` を追加。
+### Security — D3017: `Content-Script-Type:`/`Content-Style-Type:` 欄の非 `型/下位型` 値を媒型ずれとして検出 — `Envelope` に `content_styp_bad` を追加。
+### Security — D3018: `X-SES-Outgoing:` 欄の非 `YYYY.MM.DD-NN.NN` 版号印値を送出ずれとして検出 — `Envelope` に `x_ses_bad` を追加。
+
 ### Fixed — Devin Review (#678): `received_*` 節異字検出群 (138 検出器) がヘッダ区画ではなくメッセージ全体を走査しており、本文中の `Received:` 風行で誤発火していた問題を修正。全検出器を `header_end` (最初の空行) 区画へ統一。
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。

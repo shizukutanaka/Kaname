@@ -4625,3 +4625,8 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 
 問: `Autocrypt:`/`OpenPGP:`/`Content-Return:`/`Mail-Followup-To:`/`Mail-Reply-To:` の値の形は検査済みか。
 答: 未検出だった — 鍵素材・返却方針・追従先を送信側が自称する欄は値の文法が绿地だった。`名=値` 連接・`addr=` 宛名・`allowed|prohibited` 語彙・宛名/poster 形の外れを異形として D2991–D2994 を追加。交渉の体裁だけを真似る擬態へ面を広げた。
+
+## ラウンド 472 — 「媒型の属性帳」の自問自答
+
+問: `Content-Translation-Type:`/`Content-Duration:`/`Content-Script-Type:`/`Content-Style-Type:`/`X-SES-Outgoing:` の欄があれば仕様どおりのメタ記録を示すか。
+答: これらは MIME の属性帳 — 翻訳種別は `8BIT`/`7BIT`/`BINARY` の閉語彙 (RFC 1893)、長尺は数値、既定媒型は `型/下位型` の媒体型、SES 送出印は `YYYY.MM.DD-NN.NN` の固定印で、いずれも形が決まっている。どの検出器にも触れられていない绿地だったため、形を欠く値を「属性を記録した体裁」の擬態として D3015–D3018 を追加した。`Content-Length:` は D1344 が HTTP 由来として、`Content-Alternative:` は D1382 が自称印として既に捕捉するため対象外 — 権威の刻印は「値が権威の形をしているか」で問う原原則の継続適用。
