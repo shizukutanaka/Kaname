@@ -3274,6 +3274,10 @@ pub struct Envelope {
     pub env_from_quoted_local: bool,
     /// `Errors-To:` の値が鉤括弧ローカル宛名形か (D2845)。
     pub errors_to_quoted_local: bool,
+    pub subject_empty: bool,
+    pub subject_multi: bool,
+    pub subject_reply_chain: bool,
+    pub subject_html: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7035,6 +7039,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let env_to_quoted_local = has_env_to_quoted_local(bytes);
     let env_from_quoted_local = has_env_from_quoted_local(bytes);
     let errors_to_quoted_local = has_errors_to_quoted_local(bytes);
+    let subject_empty = has_subject_empty(bytes);
+    let subject_multi = has_subject_multi(bytes);
+    let subject_reply_chain = has_subject_reply_chain(bytes);
+    let subject_html = has_subject_html(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8585,6 +8593,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         env_to_quoted_local,
         env_from_quoted_local,
         errors_to_quoted_local,
+        subject_empty,
+        subject_multi,
+        subject_reply_chain,
+        subject_html,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48042,6 +48054,149 @@ pub fn has_x_orig_rcpt_to_unclosed(raw: &[u8]) -> bool {
 }
 
 /// `X-Confirm-Reading-To:` の値がドル符宛名形か判定する
+
+/// 件名欄が存在するのに値が空の件名空欄異形を示すかどうか。 (D2899)。
+pub fn has_subject_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let lower = l.to_ascii_lowercase();
+        lower
+            .strip_prefix("subject:")
+            .is_some_and(|v| v.trim().is_empty())
+    })
+}
+
+/// 件名欄が複数出る件名二重化異形を示すかどうか。 (D2900)。
+pub fn has_subject_multi(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+        .lines()
+        .filter(|l| l.to_ascii_lowercase().starts_with("subject:"))
+        .take(2)
+        .count()
+        >= 2
+}
+
+/// 件名が三段以上の返信・転送接頭語を持つ深い返信連鎖異形を示すかどうか。 (D2901)。
+pub fn has_subject_reply_chain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("subject:") else {
+            return false;
+        };
+        let mut t = v.trim_start();
+        let mut depth = 0usize;
+        loop {
+            for p in ["re:", "fw:", "fwd:"] {
+                if let Some(r) = t.strip_prefix(p) {
+                    t = r.trim_start();
+                    depth += 1;
+                    break;
+                }
+            }
+            if !t.starts_with("re:") && !t.starts_with("fw:") && !t.starts_with("fwd:") {
+                break;
+            }
+        }
+        depth >= 3
+    })
+}
+
+/// 件名にHTMLタグ片やエンティティを含むHTML混入異形を示すかどうか。 (D2902)。
+pub fn has_subject_html(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("subject:") else {
+            return false;
+        };
+        let v = v.trim_start();
+        let tagish = v
+            .find('<')
+            .is_some_and(|i| v[i + 1..].chars().next().is_some_and(|c| c.is_ascii_alphabetic()));
+        let entish = v
+            .find('&')
+            .is_some_and(|i| {
+                let r = &v[i + 1..];
+                let n = r.chars().take_while(|c| c.is_ascii_alphabetic()).count();
+                n >= 2 && r.chars().nth(n) == Some(';')
+            });
+        tagish || entish
+    })
+}
 /// (D2635)。
 ///
 /// 閲覧確認先を記す欄なのに `a@x$` のようにドメイン側に孤立 `$` を
@@ -109300,6 +109455,46 @@ mod tests {
         ));
         assert!(!has_confirm_reading_pipe(
             b"From: a@x\r\nX-Confirm-Reading-To: a|b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が空なら発火() {
+        assert!(has_subject_empty(
+            b"From: a@x\r\nSubject:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_empty(
+            b"From: a@x\r\nSubject: hi\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が複数なら発火() {
+        assert!(has_subject_multi(
+            b"From: a@x\r\nSubject: a\r\nSubject: b\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_multi(
+            b"From: a@x\r\nSubject: a\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が深い返信連鎖なら発火() {
+        assert!(has_subject_reply_chain(
+            b"From: a@x\r\nSubject: Re: Re: Re: hi\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_reply_chain(
+            b"From: a@x\r\nSubject: Re: hi\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名がマークアップ混入なら発火() {
+        assert!(has_subject_html(
+            b"From: a@x\r\nSubject: a <b>x</b> c\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_html(
+            b"From: a@x\r\nSubject: a < b\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
