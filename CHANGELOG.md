@@ -215,6 +215,11 @@
 - D2816: `Apparently-Resent-*:` 系 のローカル部ハット宛名値 — 再送残渣記録のローカル部ハット異形
 - D2817: `X-Original-Rcpt-To:` 系 のローカル部ハット宛名値 — 元受取人記録のローカル部ハット異形
 devin/1791326612-round421-caretlocal4
+### Security — D2858: `Envelope-To:`/`Delivered-To:`/`X-Envelope-To:` 系欄の未閉塞クオート宛名値 (`"a@y` 形) を封書宛ずれとして検出 — `Envelope` に `env_to_unclosed` を追加。
+### Security — D2859: `X-Envelope-From:`/`X-MailFrom:`/`X-Mail-From:` 系欄の未閉塞クオート宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_unclosed` を追加。
+### Security — D2860: `Errors-To:` 欄の未閉塞クオート宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_unclosed` を追加。
+
+devin/1791332973-unclosed-cell1
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
