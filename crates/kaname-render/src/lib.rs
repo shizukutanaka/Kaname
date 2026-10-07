@@ -2893,6 +2893,15 @@ pub struct Envelope {
     pub x_orig_to_caret_local: bool,
     /// `X-Original-From:` の値がローカル部ハット宛名 (D2809 — 元差出人ずれ)。
     pub x_orig_from_caret_local: bool,
+
+    /// `Apparently-To:`/`X-Apparently-To:` 系の値が鉤括弧ローカル宛名形か (D2846)。
+    pub apparently_to_quoted_local: bool,
+    /// `Apparently-From:`/`Apparently-Sender:` 系の値が鉤括弧ローカル宛名形か (D2847)。
+    pub apparently_from_quoted_local: bool,
+    /// `X-Original-To:` の値が鉤括弧ローカル宛名形か (D2848)。
+    pub x_orig_to_quoted_local: bool,
+    /// `X-Original-From:` の値が鉤括弧ローカル宛名形か (D2849)。
+    pub x_orig_from_quoted_local: bool,
     /// `X-Original-Cc:` 系の値が逆斜線宛名 (D2391 — 元副宛ずれ)。
     pub x_orig_cc_bslash: bool,
     /// `X-Original-Reply-To:` の値が逆斜線宛名 (D2392 — 元返信口ずれ)。
@@ -3290,6 +3299,169 @@ pub struct Envelope {
     pub env_from_quoted_local: bool,
     /// `Errors-To:` の値が鉤括弧ローカル宛名形か (D2845)。
     pub errors_to_quoted_local: bool,
+    /// X-MS-Has-Attach 系欄の値が yes/no 語彙外
+    pub ms_has_attach_bad: bool,
+    /// X-MS-TNEF-Correlator 系欄の値が相関子形でない
+    pub tnef_correlator_bad: bool,
+    /// X-MS-Exchange 運輸遅延欄の値が経過時刻形でない
+    pub ms_latency_bad: bool,
+    /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
+    pub mailer_bad: bool,
+    /// X-Spam-Report: 系が報告構造を欠く (D2987)。
+    pub spam_report_bad: bool,
+    /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
+    pub spam_ver_bad: bool,
+    /// X-BeenThere: が宛名形でない (D2989)。
+    pub beenthere_bad: bool,
+    /// X-No-Archive:/X-Archive: が語彙外 (D2990)。
+    pub no_archive_bad: bool,
+    /// X-Originating-IP: が [IP] 形でない (D2983)。
+    pub origin_ip_bad: bool,
+    /// X-Complaints-To:/X-Report-Abuse: 系が宛名/URI 形でない (D2984)。
+    pub abuse_uri_bad: bool,
+    /// Auto-Submitted: が語彙外 (D2985)。
+    pub auto_sub_bad: bool,
+    /// X-Authenticated-Sender: 系が宛名形でない (D2986)。
+    pub auth_sender_bad: bool,
+    /// Precedence: 系が単一トークンでない (D2979)。
+    pub precedence_bad: bool,
+    /// X-Loop: が宛名形でない (D2980)。
+    pub x_loop_bad: bool,
+    /// UIDL 系が空白なし印字トークンでない (D2981)。
+    pub uidl_bad: bool,
+    /// X-Received: が by/with/id 構造を欠く (D2982)。
+    pub x_received_bad: bool,
+    /// List-Post 等の操作欄が `<URI>` 形でない (D2963)。
+    pub list_uri_bad: bool,
+    /// List-Unsubscribe-Post: の値が One-Click 語彙でない (D2964)。
+    pub unsub_post_bad: bool,
+    /// Archived-At: が URI 形でない (D2965)。
+    pub archived_at_bad: bool,
+    /// Injection-Info: の各要素が 名=値 形でない (D2966)。
+    pub injection_info_bad: bool,
+    /// Disposition-Notification-Options: の各要素が 名=required|optional 形でない (D2975)。
+    pub dnt_opt_bad: bool,
+    /// VBR-Info: の各要素が 名=値 形でない (D2976)。
+    pub vbr_info_bad: bool,
+    /// Feedback-Type: が語彙外 (D2977)。
+    pub feedback_type_bad: bool,
+    /// Feedback-ID: が4要素の連接でない (D2978)。
+    pub feedback_id_bad: bool,
+    /// X-Spam-Flag: が YES/NO 語彙でない (D2967)。
+    pub spam_flag_bad: bool,
+    /// X-Spam-Status: が `Yes|No … score=…` 形でない (D2968)。
+    pub spam_status_bad: bool,
+    /// X-Spam-Level: が星のみでない (D2969)。
+    pub spam_level_bad: bool,
+    /// X-Spam-Score:/X-Spam-Rating: が数値でない (D2970)。
+    pub spam_score_bad: bool,
+    /// Newsgroups 欄の値が群カンマ連接形でない
+    pub newsgroups_bad: bool,
+    /// Path 欄の値が bang-path 形でない
+    pub path_bang_bad: bool,
+    /// Xref 欄の値が ホスト 群:番号 形でない
+    pub xref_bad: bool,
+    /// Followup-To 欄の値が群連接形 (poster 以外) でない
+    pub followup_bad: bool,
+    /// Original-Recipient 欄の値が 型;宛名 形でない
+    pub orig_recipient_bad: bool,
+    /// Final-Recipient 欄の値が 型;宛名 形でない
+    pub final_recipient_bad: bool,
+    /// Reporting-MTA 欄の値が 型;名 形でない
+    pub reporting_mta_bad: bool,
+    /// MDN-Gateway 欄の値が 型;名 形でない
+    pub mdn_gateway_bad: bool,
+    /// Remote-MTA 欄の値が 型;名 形でない
+    pub remote_mta_bad: bool,
+    /// Status 欄の値が三段数字形でない
+    pub dsn_status_bad: bool,
+    /// Original-Envelope-Id 欄の値が識別子形でない
+    pub orig_envid_bad: bool,
+    /// Diagnostic-Code 欄の値が 型;診断文 形でない
+    pub diag_code_bad: bool,
+    /// Original-Message-ID 欄の値が msgid 角括弧形でない
+    pub orig_msgid_bad: bool,
+    /// Disposition 欄の値が 方式/種別;修飾 形でない
+    pub mdn_disposition_bad: bool,
+    /// Reporting-UA 欄の値が UA 名形でない
+    pub reporting_ua_bad: bool,
+    /// Message-Context 欄の値が規定語彙でない
+    pub msg_context_bad: bool,
+    /// Content-MD5 欄の値が base64 の16バイト語形でない
+    pub content_md5_bad: bool,
+    /// Content-Language 欄の値が言語タグ形でない
+    pub content_lang_bad: bool,
+    /// Content-Digest 欄の値が アルゴ=値 形でない
+    pub content_digest_bad: bool,
+    /// Content-Features 欄の値が 名[=値] の連接形でない
+    pub content_features_bad: bool,
+    /// アドレス欄の表示名に制御文字・双方向制御・ゼロ幅文字がある
+    pub display_ctrl_bad: bool,
+    /// アドレス欄の表示名が裸ドメイン形
+    pub display_domain_bad: bool,
+    /// アドレス欄の表示名に英字がない
+    pub display_punct_bad: bool,
+    /// アドレス欄の表示名が100文字超
+    pub display_long_bad: bool,
+    /// Received-SPF: の判定語彙が外れている (D2971)。
+    pub recv_spf_bad: bool,
+    /// TLS-Required: が `No` でない (D2972)。
+    pub tls_required_bad: bool,
+    /// Require-Recipient-Valid-Since: が `宛名; 日時` 形でない (D2973)。
+    pub req_rcpt_bad: bool,
+    /// BIMI-Location:/BIMI-Indicator: が既定形でない (D2974)。
+    pub bimi_mark_bad: bool,
+    /// Control: が `動詞 引数` 形でない (D2959)。
+    pub control_bad: bool,
+    /// Supersedes:/Also-Control: が msgid を含まない (D2960)。
+    pub supersedes_bad: bool,
+    /// Cancel-Lock:/Cancel-Key: の各要素が `方式:データ` 形でない (D2961)。
+    pub cancel_lock_bad: bool,
+    /// NNTP-Posting-Host: が単一トークン形でない (D2962)。
+    pub posting_host_bad: bool,
+    /// アドレス欄の表示名に生の非ascii文字がある
+    pub display_raw_nonascii: bool,
+    /// アドレス欄の表示名の encoded-word が構造文字に復号される
+    pub display_ew_danger: bool,
+    /// アドレス欄の表示名にエスケープなし鉤括弧が混在する
+    pub display_inner_quote: bool,
+    /// アドレス欄の表示名が空白のみ
+    pub display_ws_only: bool,
+    /// `Subject:` の値にゼロ幅文字を含むか (D2895)。
+    pub subject_zero_width: bool,
+    /// `Subject:` の値に双方向制御文字を含むか (D2896)。
+    pub subject_bidi: bool,
+    /// `Subject:` の値にタグ文字を含むか (D2897)。
+    pub subject_tag_chars: bool,
+    /// `Subject:` の値に制御文字を含むか (D2898)。
+    pub subject_ctrl: bool,
+    pub subject_empty: bool,
+    pub subject_multi: bool,
+    pub subject_reply_chain: bool,
+    pub subject_html: bool,
+    pub subject_raw_nonascii: bool,
+    pub subject_url: bool,
+    pub subject_unclosed_comment: bool,
+    pub subject_long_ew: bool,
+    pub authres_fail: bool,
+    pub authres_bad_verdict: bool,
+    pub arc_cv_bad: bool,
+    pub dkim_sig_no_d: bool,
+    /// DKIM-Signature 系欄に `s=` 選択子タグが無い
+    pub dkim_sig_no_s: bool,
+    /// DKIM-Signature 系欄に `b=` 署名値タグが無い
+    pub dkim_sig_no_b: bool,
+    /// ARC-Seal 系欄の `i=` 連鎖番号が異形
+    pub arc_seal_bad_i: bool,
+    /// ARC-Seal が単独で ARC-Authentication-Results/ARC-Message-Signature が無い
+    pub arc_chain_incomplete: bool,
+    /// Auto-Submitted 欄の値が規定語彙外
+    pub auto_submitted_bad: bool,
+    /// Precedence 欄の値が規定語彙外
+    /// X-Originating-IP 欄の値が角括弧付きIP表記でない
+    pub x_orig_ip_bad: bool,
+    /// X-Auto-Response-Suppress 欄のトークンが規定語彙外
+    pub x_auto_suppress_bad: bool,
     /// X-OriginalArrivalTime 系欄の値が日時形でない
     pub arrival_time_bad: bool,
     /// Thread-Index 欄の値が base64 索引値の形でない
@@ -6875,6 +7047,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let apparently_from_caret_local = has_apparently_from_caret_local(bytes);
     let x_orig_to_caret_local = has_x_orig_to_caret_local(bytes);
     let x_orig_from_caret_local = has_x_orig_from_caret_local(bytes);
+    let apparently_to_quoted_local = has_apparently_to_quoted_local(bytes);
+    let apparently_from_quoted_local = has_apparently_from_quoted_local(bytes);
+    let x_orig_to_quoted_local = has_x_orig_to_quoted_local(bytes);
+    let x_orig_from_quoted_local = has_x_orig_from_quoted_local(bytes);
     let x_orig_cc_bslash = has_x_orig_cc_bslash(bytes);
     let x_orig_reply_to_bslash = has_x_orig_reply_to_bslash(bytes);
     let disposition_to_bslash = has_disposition_to_bslash(bytes);
@@ -7073,6 +7249,93 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let env_to_quoted_local = has_env_to_quoted_local(bytes);
     let env_from_quoted_local = has_env_from_quoted_local(bytes);
     let errors_to_quoted_local = has_errors_to_quoted_local(bytes);
+    let ms_has_attach_bad = has_ms_has_attach_bad(bytes);
+    let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
+    let ms_latency_bad = has_ms_latency_bad(bytes);
+    let mailer_bad = has_mailer_bad(bytes);
+    let spam_report_bad = has_spam_report_bad(bytes);
+    let spam_ver_bad = has_spam_ver_bad(bytes);
+    let beenthere_bad = has_beenthere_bad(bytes);
+    let no_archive_bad = has_no_archive_bad(bytes);
+    let origin_ip_bad = has_origin_ip_bad(bytes);
+    let abuse_uri_bad = has_abuse_uri_bad(bytes);
+    let auto_sub_bad = has_auto_sub_bad(bytes);
+    let auth_sender_bad = has_auth_sender_bad(bytes);
+    let precedence_bad = has_precedence_bad(bytes);
+    let x_loop_bad = has_x_loop_bad(bytes);
+    let uidl_bad = has_uidl_bad(bytes);
+    let x_received_bad = has_x_received_bad(bytes);
+    let list_uri_bad = has_list_uri_bad(bytes);
+    let unsub_post_bad = has_unsub_post_bad(bytes);
+    let archived_at_bad = has_archived_at_bad(bytes);
+    let injection_info_bad = has_injection_info_bad(bytes);
+    let dnt_opt_bad = has_dnt_opt_bad(bytes);
+    let vbr_info_bad = has_vbr_info_bad(bytes);
+    let feedback_type_bad = has_feedback_type_bad(bytes);
+    let feedback_id_bad = has_feedback_id_bad(bytes);
+    let spam_flag_bad = has_spam_flag_bad(bytes);
+    let spam_status_bad = has_spam_status_bad(bytes);
+    let spam_level_bad = has_spam_level_bad(bytes);
+    let spam_score_bad = has_spam_score_bad(bytes);
+    let newsgroups_bad = has_newsgroups_bad(bytes);
+    let path_bang_bad = has_path_bang_bad(bytes);
+    let xref_bad = has_xref_bad(bytes);
+    let followup_bad = has_followup_bad(bytes);
+    let orig_recipient_bad = has_orig_recipient_bad(bytes);
+    let final_recipient_bad = has_final_recipient_bad(bytes);
+    let reporting_mta_bad = has_reporting_mta_bad(bytes);
+    let mdn_gateway_bad = has_mdn_gateway_bad(bytes);
+    let remote_mta_bad = has_remote_mta_bad(bytes);
+    let dsn_status_bad = has_dsn_status_bad(bytes);
+    let orig_envid_bad = has_orig_envid_bad(bytes);
+    let diag_code_bad = has_diag_code_bad(bytes);
+    let orig_msgid_bad = has_orig_msgid_bad(bytes);
+    let mdn_disposition_bad = has_mdn_disposition_bad(bytes);
+    let reporting_ua_bad = has_reporting_ua_bad(bytes);
+    let msg_context_bad = has_msg_context_bad(bytes);
+    let content_md5_bad = has_content_md5_bad(bytes);
+    let content_lang_bad = has_content_lang_bad(bytes);
+    let content_digest_bad = has_content_digest_bad(bytes);
+    let content_features_bad = has_content_features_bad(bytes);
+    let display_ctrl_bad = has_display_ctrl_bad(bytes);
+    let display_domain_bad = has_display_domain_bad(bytes);
+    let display_punct_bad = has_display_punct_bad(bytes);
+    let display_long_bad = has_display_long_bad(bytes);
+    let recv_spf_bad = has_recv_spf_bad(bytes);
+    let tls_required_bad = has_tls_required_bad(bytes);
+    let req_rcpt_bad = has_req_rcpt_bad(bytes);
+    let bimi_mark_bad = has_bimi_mark_bad(bytes);
+    let control_bad = has_control_bad(bytes);
+    let supersedes_bad = has_supersedes_bad(bytes);
+    let cancel_lock_bad = has_cancel_lock_bad(bytes);
+    let posting_host_bad = has_posting_host_bad(bytes);
+    let display_raw_nonascii = has_display_raw_nonascii(bytes);
+    let display_ew_danger = has_display_ew_danger(bytes);
+    let display_inner_quote = has_display_inner_quote(bytes);
+    let display_ws_only = has_display_ws_only(bytes);
+    let subject_zero_width = has_subject_zero_width(bytes);
+    let subject_bidi = has_subject_bidi(bytes);
+    let subject_tag_chars = has_subject_tag_chars(bytes);
+    let subject_ctrl = has_subject_ctrl(bytes);
+    let subject_empty = has_subject_empty(bytes);
+    let subject_multi = has_subject_multi(bytes);
+    let subject_reply_chain = has_subject_reply_chain(bytes);
+    let subject_html = has_subject_html(bytes);
+    let subject_raw_nonascii = has_subject_raw_nonascii(bytes);
+    let subject_url = has_subject_url(bytes);
+    let subject_unclosed_comment = has_subject_unclosed_comment(bytes);
+    let subject_long_ew = has_subject_long_ew(bytes);
+    let authres_fail = has_authres_fail(bytes);
+    let authres_bad_verdict = has_authres_bad_verdict(bytes);
+    let arc_cv_bad = has_arc_cv_bad(bytes);
+    let dkim_sig_no_d = has_dkim_sig_no_d(bytes);
+    let dkim_sig_no_s = has_dkim_sig_no_s(bytes);
+    let dkim_sig_no_b = has_dkim_sig_no_b(bytes);
+    let arc_seal_bad_i = has_arc_seal_bad_i(bytes);
+    let arc_chain_incomplete = has_arc_chain_incomplete(bytes);
+    let auto_submitted_bad = has_auto_submitted_bad(bytes);
+    let x_orig_ip_bad = has_x_orig_ip_bad(bytes);
+    let x_auto_suppress_bad = has_x_auto_suppress_bad(bytes);
     let arrival_time_bad = has_arrival_time_bad(bytes);
     let thread_index_bad = has_thread_index_bad(bytes);
     let content_class_bad = has_content_class_bad(bytes);
@@ -8441,6 +8704,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         apparently_from_caret_local,
         x_orig_to_caret_local,
         x_orig_from_caret_local,
+        apparently_to_quoted_local,
+        apparently_from_quoted_local,
+        x_orig_to_quoted_local,
+        x_orig_from_quoted_local,
         x_orig_cc_bslash,
         x_orig_reply_to_bslash,
         disposition_to_bslash,
@@ -8638,6 +8905,93 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         env_to_quoted_local,
         env_from_quoted_local,
         errors_to_quoted_local,
+        ms_has_attach_bad,
+        tnef_correlator_bad,
+        ms_latency_bad,
+        mailer_bad,
+        spam_report_bad,
+        spam_ver_bad,
+        beenthere_bad,
+        no_archive_bad,
+        origin_ip_bad,
+        abuse_uri_bad,
+        auto_sub_bad,
+        auth_sender_bad,
+        precedence_bad,
+        x_loop_bad,
+        uidl_bad,
+        x_received_bad,
+        list_uri_bad,
+        unsub_post_bad,
+        archived_at_bad,
+        injection_info_bad,
+        dnt_opt_bad,
+        vbr_info_bad,
+        feedback_type_bad,
+        feedback_id_bad,
+        spam_flag_bad,
+        spam_status_bad,
+        spam_level_bad,
+        spam_score_bad,
+        newsgroups_bad,
+        path_bang_bad,
+        xref_bad,
+        followup_bad,
+        orig_recipient_bad,
+        final_recipient_bad,
+        reporting_mta_bad,
+        mdn_gateway_bad,
+        remote_mta_bad,
+        dsn_status_bad,
+        orig_envid_bad,
+        diag_code_bad,
+        orig_msgid_bad,
+        mdn_disposition_bad,
+        reporting_ua_bad,
+        msg_context_bad,
+        content_md5_bad,
+        content_lang_bad,
+        content_digest_bad,
+        content_features_bad,
+        display_ctrl_bad,
+        display_domain_bad,
+        display_punct_bad,
+        display_long_bad,
+        recv_spf_bad,
+        tls_required_bad,
+        req_rcpt_bad,
+        bimi_mark_bad,
+        control_bad,
+        supersedes_bad,
+        cancel_lock_bad,
+        posting_host_bad,
+        display_raw_nonascii,
+        display_ew_danger,
+        display_inner_quote,
+        display_ws_only,
+        subject_zero_width,
+        subject_bidi,
+        subject_tag_chars,
+        subject_ctrl,
+        subject_empty,
+        subject_multi,
+        subject_reply_chain,
+        subject_html,
+        subject_raw_nonascii,
+        subject_url,
+        subject_unclosed_comment,
+        subject_long_ew,
+        authres_fail,
+        authres_bad_verdict,
+        arc_cv_bad,
+        dkim_sig_no_d,
+        dkim_sig_no_s,
+        dkim_sig_no_b,
+        arc_seal_bad_i,
+        arc_chain_incomplete,
+        auto_submitted_bad,
+        x_orig_ip_bad,
+        x_auto_suppress_bad,
         arrival_time_bad,
         thread_index_bad,
         content_class_bad,
@@ -48358,6 +48712,2696 @@ pub fn has_x_orig_rcpt_to_caret_local(raw: &[u8]) -> bool {
 }
 
 /// `X-Confirm-Reading-To:` の値がドル符宛名形か判定する
+/// `X-MS-Has-Attach:`/`X-Has-Attach:` 系欄の値が yes/no の語彙外なら添付標旗記録の異形として検出する (D2927)。
+pub fn has_ms_has_attach_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-ms-has-attach:") || l.starts_with("x-has-attach:")) {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        !(v == "yes" || v == "no")
+    })
+}
+
+/// `X-MS-TNEF-Correlator:`/`X-TNEFCorrelator:` 系欄の値が base64 相関子形でなければ添付相関記録の異形として検出する (D2928)。
+pub fn has_tnef_correlator_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-ms-tnef-correlator:") || l.starts_with("x-tnefcorrelator:")) {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        v.is_empty()
+            || v.len() < 8
+            || !v.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+    })
+}
+
+/// `X-MS-Exchange-Transport-EndToEndLatency:` 系欄の値が `HH:MM:SS.mmm` の経過時刻形でなければ運輸遅延記録の異形として検出する (D2929)。
+pub fn has_ms_latency_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-ms-exchange-transport-endtoendlatency:")
+            || l.starts_with("x-ms-exchange-transport-end2endlatency:"))
+        {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let t: Vec<&str> = v.split(':').collect();
+        let ok = t.len() == 3
+            && t.iter().take(2).all(|p| p.len() == 2 && p.chars().all(|c| c.is_ascii_digit()))
+            && {
+                let s: Vec<&str> = t[2].split('.').collect();
+                s.len() == 2
+                    && s[0].len() == 2
+                    && s[0].chars().all(|c| c.is_ascii_digit())
+                    && s[1].len() == 3
+                    && s[1].chars().all(|c| c.is_ascii_digit())
+            };
+        !ok
+    })
+}
+
+/// `X-Mailer:`/`User-Agent:` 系欄の値が制御文字や非asciiを含むなら送信器記録の異形として検出する (D2930)。
+pub fn has_mailer_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-mailer:") || l.starts_with("user-agent:") || l.starts_with("x-mimeole:")) {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        v.is_empty()
+            || v.chars().any(|c| !c.is_ascii() || (c.is_ascii_control() && c != '\t'))
+    })
+}
+
+fn list_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2963)。
+fn has_list_uri_bad(bytes: &[u8]) -> bool {
+    let logical = list_hdr_text(bytes);
+    const KEYS: [&str; 7] = [
+        "list-post:", "list-subscribe:", "list-unsubscribe:",
+        "list-help:", "list-archive:", "list-owner:", "list-url:",
+    ];
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        for k in KEYS {
+            if let Some(v) = low.strip_prefix(k) {
+                let v = v.trim();
+                // 各要素 `<URI>` — 角括弧と内部の `:` が要る
+                let ok = v.find('<').is_some_and(|open| {
+                    v.rfind('>').is_some_and(|close| {
+                        close > open + 1 && v[open + 1..close].contains(':')
+                    })
+                });
+                if !ok {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// (D2964)。
+fn has_unsub_post_bad(bytes: &[u8]) -> bool {
+    let logical = list_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("list-unsubscribe-post:") {
+            let v = v.trim();
+            if v != "list-unsubscribe=one-click" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2965)。
+fn has_archived_at_bad(bytes: &[u8]) -> bool {
+    let logical = list_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("archived-at:")
+            .or_else(|| low.strip_prefix("x-archived-at:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // `<URI>` または URI 直接 — 何らかの `名:` を含むこと
+            let ok = if v.starts_with('<') && v.ends_with('>') {
+                v[1..v.len() - 1].contains(':') && v.len() > 3
+            } else {
+                v.split(':').next().is_some_and(|s| {
+                    !s.is_empty()
+                        && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+                }) && v.contains(':')
+            };
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2966)。
+fn has_injection_info_bad(bytes: &[u8]) -> bool {
+    let logical = list_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("injection-info:") {
+            let v = v.trim();
+            let parts: Vec<&str> = v.split(';').map(str::trim).filter(|p| !p.is_empty()).collect();
+            if parts.is_empty() {
+                return true;
+            }
+            for p in parts {
+                // 名=値 の形
+                let Some(eq) = p.find('=') else { return true; };
+                let (k, val) = (p[..eq].trim(), p[eq + 1..].trim());
+                if k.is_empty() || val.is_empty() {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn report_opt_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2975)。
+fn has_dnt_opt_bad(bytes: &[u8]) -> bool {
+    let logical = report_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("disposition-notification-options:") {
+            let v = v.trim();
+            let parts: Vec<&str> = v.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
+            if parts.is_empty() {
+                return true;
+            }
+            for p in parts {
+                // 名=required|optional の形
+                let Some(eq) = p.find('=') else { return true; };
+                let (k, val) = (p[..eq].trim(), p[eq + 1..].trim());
+                if k.is_empty() || (val != "required" && val != "optional") {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// (D2976)。
+fn has_vbr_info_bad(bytes: &[u8]) -> bool {
+    let logical = report_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("vbr-info:") {
+            let v = v.trim();
+            let parts: Vec<&str> = v.split(';').map(str::trim).filter(|p| !p.is_empty()).collect();
+            if parts.is_empty() {
+                return true;
+            }
+            for p in parts {
+                // 名=値 の形
+                let Some(eq) = p.find('=') else { return true; };
+                if p[..eq].trim().is_empty() || p[eq + 1..].trim().is_empty() {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// (D2977)。
+fn has_feedback_type_bad(bytes: &[u8]) -> bool {
+    let logical = report_opt_hdr_text(bytes);
+    const VOCAB: [&str; 7] = [
+        "abuse", "auth-failure", "fraud", "miscategorized",
+        "not-spam", "other", "virus",
+    ];
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("feedback-type:")
+            .or_else(|| low.strip_prefix("x-feedback-type:"));
+        if let Some(v) = hit {
+            if !VOCAB.contains(&v.trim()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2978)。
+fn has_feedback_id_bad(bytes: &[u8]) -> bool {
+    let logical = report_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("feedback-id:")
+            .or_else(|| low.strip_prefix("x-feedback-id:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // `名1:名2:名3:名4` の4要素
+            let parts: Vec<&str> = v.split(':').collect();
+            if parts.len() != 4 || parts.iter().any(|p| p.trim().is_empty()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn route_opt_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2979)。
+fn has_precedence_bad(bytes: &[u8]) -> bool {
+    let logical = route_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("precedence:")
+            .or_else(|| low.strip_prefix("x-precedence:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 単一の印字可能トークン
+            if v.is_empty() || v.split_whitespace().count() != 1
+                || !v.bytes().all(|b| (0x21..=0x7e).contains(&b))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2980)。
+fn has_x_loop_bad(bytes: &[u8]) -> bool {
+    let logical = route_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-loop:") {
+            let v = v.trim();
+            // 宛名形 (@ を持つ)
+            if v.is_empty() || !v.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2981)。
+fn has_uidl_bad(bytes: &[u8]) -> bool {
+    let logical = route_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-uidl:")
+            .or_else(|| low.strip_prefix("uidl:"))
+            .or_else(|| low.strip_prefix("x-uid:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 空白なしの印字可能トークン
+            if v.is_empty() || !v.bytes().all(|b| (0x21..=0x7e).contains(&b)) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2982)。
+fn has_x_received_bad(bytes: &[u8]) -> bool {
+    let logical = route_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-received:") {
+            let v = v.trim();
+            // `by 名 with 方式 id 識別` 構造
+            if !v.contains(" by ") && !v.starts_with("by ") {
+                return true;
+            }
+            if !v.contains(" with ") && !v.contains(" id ") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn trace_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2983)。
+fn has_origin_ip_bad(bytes: &[u8]) -> bool {
+    let logical = trace_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-originating-ip:") {
+            let v = v.trim().trim_matches(|c| c == '[' || c == ']');
+            // `[v4]`/`[v6]` の括弧内IP
+            if v.is_empty() || v.split_whitespace().count() != 1
+                || !v.bytes().all(|b| b.is_ascii_digit() || b == b'.' || b == b':')
+                || !(v.contains('.') || v.contains(':'))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2984)。
+fn has_abuse_uri_bad(bytes: &[u8]) -> bool {
+    let logical = trace_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-complaints-to:")
+            .or_else(|| low.strip_prefix("x-report-abuse:"))
+            .or_else(|| low.strip_prefix("x-report-spam:"))
+            .or_else(|| low.strip_prefix("x-complaints-info:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 宛名または URI (`@`/`:` のいずれか)
+            if v.is_empty() || !(v.contains('@') || v.contains(':')) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2985)。
+fn has_auto_sub_bad(bytes: &[u8]) -> bool {
+    let logical = trace_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("auto-submitted:") {
+            let v = v.trim();
+            // `no`/`auto-*` 語彙 (単一トークン)
+            if v.is_empty() || v.split_whitespace().count() != 1
+                || !(v == "no" || v.starts_with("auto-"))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2986)。
+fn has_auth_sender_bad(bytes: &[u8]) -> bool {
+    let logical = trace_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-authenticated-sender:")
+            .or_else(|| low.strip_prefix("x-get-message-sender-via:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 宛名形 (@ を持つ)
+            if v.is_empty() || !v.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn filt_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2987)。
+fn has_spam_report_bad(bytes: &[u8]) -> bool {
+    let logical = filt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-spam-report:")
+            .or_else(|| low.strip_prefix("x-spam-check-results:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 報告値は `* 点 規則 説明` 行か `名=値` を持つ
+            if v.is_empty() || !(v.contains('*') || v.contains('=')) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2988)。
+fn has_spam_ver_bad(bytes: &[u8]) -> bool {
+    let logical = filt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-spam-checker-version:") {
+            let v = v.trim();
+            // `製品 x.y` 形 — 数字.数字 を含む
+            let mut ver = false;
+            let bb = v.as_bytes();
+            for i in 1..bb.len().saturating_sub(1) {
+                if bb[i] == b'.' && bb[i - 1].is_ascii_digit() && bb[i + 1].is_ascii_digit() {
+                    ver = true;
+                }
+            }
+            if !ver {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2989)。
+fn has_beenthere_bad(bytes: &[u8]) -> bool {
+    let logical = filt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-beenthere:") {
+            let v = v.trim();
+            // 宛名形 (@ を持つ)
+            if v.is_empty() || !v.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2990)。
+fn has_no_archive_bad(bytes: &[u8]) -> bool {
+    let logical = filt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-no-archive:")
+            .or_else(|| low.strip_prefix("x-archive:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // `yes`/`no` 語彙
+            if v != "yes" && v != "no" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn spam_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2967)。
+fn has_spam_flag_bad(bytes: &[u8]) -> bool {
+    let logical = spam_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-spam-flag:")
+            .or_else(|| low.strip_prefix("x-spam-flagged:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            if v != "yes" && v != "no" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2968)。
+fn has_spam_status_bad(bytes: &[u8]) -> bool {
+    let logical = spam_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-spam-status:") {
+            let v = v.trim();
+            // `Yes|No` で始まり score=… を含む体裁
+            let ok = (v.starts_with("yes") || v.starts_with("no"))
+                && v.contains("score=");
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2969)。
+fn has_spam_level_bad(bytes: &[u8]) -> bool {
+    let logical = spam_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-spam-level:") {
+            let v = v.trim();
+            // 星のみ (空を含む)
+            if !v.bytes().all(|b| b == b'*') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2970)。
+fn has_spam_score_bad(bytes: &[u8]) -> bool {
+    let logical = spam_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("x-spam-score:")
+            .or_else(|| low.strip_prefix("x-spam-rating:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // 数値 (小数点あり/なし)
+            let ok = v.parse::<f64>().is_ok() && !v.is_empty();
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Newsgroups:` の値がニュース群のカンマ連接形でなければ値形異形として検出する (D2943)。
+///
+/// RFC 5536 は `group.name` のカンマ連接 — 空要素・空白・`@`・ドット
+/// なし名を含む値は受理実装で経路判定がずれる。
+pub fn has_newsgroups_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("newsgroups:") else { return false };
+        let v = v.trim();
+        let group_ok = |t: &str| -> bool {
+            !t.is_empty()
+                && t.contains('.')
+                && t.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
+                && t.split('.').all(|seg| !seg.is_empty())
+        };
+        v.is_empty() || !v.split(',').all(|t| group_ok(t.trim()))
+    })
+}
+
+/// `Path:` の値が bang-path 形 (`a!b!c`) でなければ値形異形として検出する (D2944)。
+///
+/// 各経路名は atom — 空区切り (`a!!b`)・`@@`・空白混入の値は
+/// 受理実装で転送経路の解釈がずれる。
+pub fn has_path_bang_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("path:") else { return false };
+        let v = v.trim();
+        let node_ok = |t: &str| -> bool {
+            !t.is_empty()
+                && t.chars().all(|c| {
+                    c.is_ascii_alphanumeric()
+                        || ".-_".contains(c)
+                })
+        };
+        v.is_empty()
+            || v.contains('@')
+            || !v.split('!').all(|t| node_ok(t))
+    })
+}
+
+/// `Xref:` の値が `ホスト 群:番号 …` 形でなければ値形異形として検出する (D2945)。
+///
+/// 先頭はホスト名、以後は `group:number` — 番号が数字でない・
+/// 対が欠ける値は受理実装で既読記録の対応付けがずれる。
+pub fn has_xref_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("xref:") else { return false };
+        let v = v.trim();
+        let mut it = v.split_whitespace();
+        let Some(host) = it.next() else { return true };
+        if host.is_empty()
+            || !host
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        {
+            return true;
+        }
+        let mut saw_pair = false;
+        for t in it {
+            let Some(c) = t.rfind(':') else { return true };
+            let (grp, num) = t.split_at(c);
+            let num = &num[1..];
+            if grp.is_empty()
+                || num.is_empty()
+                || !num.chars().all(|c| c.is_ascii_digit())
+            {
+                return true;
+            }
+            saw_pair = true;
+        }
+        !saw_pair
+    })
+}
+
+/// `Followup-To:` の値がニュース群連接形 (または `poster`) でなければ値形異形として検出する (D2946)。
+///
+/// RFC 5536 は Newsgroups 同形 + `poster` 語彙 — 空要素・空白・`@` を
+/// 含む値は受理実装で返信先群の解釈がずれる。
+pub fn has_followup_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("followup-to:") else { return false };
+        let v = v.trim();
+        if v == "poster" {
+            return false;
+        }
+        let group_ok = |t: &str| -> bool {
+            !t.is_empty()
+                && t.contains('.')
+                && t.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
+                && t.split('.').all(|seg| !seg.is_empty())
+        };
+        v.is_empty() || !v.split(',').all(|t| group_ok(t.trim()))
+    })
+}
+
+/// `type;address` 形の報告記録欄の値が `型名 ; 値` の構造を守るか判定する補助。
+///
+/// RFC 3464/3798 は `address-type ";" addr-spec` 形 — 型名は atom、
+/// 値は非空で `@` または `.` を含む。
+fn report_field_ok(v: &str) -> bool {
+    let Some(c) = v.find(';') else { return false };
+    let (ty, addr) = v.split_at(c);
+    let addr = &addr[1..];
+    let ty_ok = !ty.trim().is_empty()
+        && ty.trim()
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.');
+    let a = addr.trim();
+    ty_ok && !a.is_empty() && (a.contains('@') || a.contains('.'))
+}
+
+/// `Original-Recipient:` の値が `型;宛名` 形でなければ値形異形として検出する (D2947)。
+///
+/// RFC 3464 の DSN 記録欄 — `rfc822;user@x` 形を欠く値は
+/// 受理実装で元宛先記録の解釈がずれる。
+pub fn has_orig_recipient_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("original-recipient:") else { return false };
+        !report_field_ok(v.trim())
+    })
+}
+
+/// `Final-Recipient:` の値が `型;宛名` 形でなければ値形異形として検出する (D2948)。
+///
+/// 開封・不達報告の最終宛先記録欄 — 型;値の構造を欠く値は
+/// 受理実装で受取人同定がずれる。
+pub fn has_final_recipient_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("final-recipient:") else { return false };
+        !report_field_ok(v.trim())
+    })
+}
+
+/// `Reporting-MTA:` の値が `型;名` 形でなければ値形異形として検出する (D2949)。
+///
+/// DSN の報告 MTA 記録欄 — `dns;mail.x` 形を欠く値は
+/// 受理実装で報告元の解釈がずれる。
+pub fn has_reporting_mta_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("reporting-mta:") else { return false };
+        !report_field_ok(v.trim())
+    })
+}
+
+/// `MDN-Gateway:` の値が `型;名` 形でなければ値形異形として検出する (D2950)。
+///
+/// RFC 3798 の開封報告ゲートウェイ欄 — 型;名の構造を欠く値は
+/// 受理実装で変換経路の解釈がずれる。
+pub fn has_mdn_gateway_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("mdn-gateway:") else { return false };
+        !report_field_ok(v.trim())
+    })
+}
+
+/// `型;値` 形の DSN 記録欄の値が構造を守るか判定する補助。
+///
+/// RFC 3464 は `mta-name-type ";" mta-name` — 型名は atom、
+/// 値は非空で `@` または `.` を含む。
+fn dsn_field_ok(v: &str) -> bool {
+    let Some(c) = v.find(';') else { return false };
+    let (ty, val) = v.split_at(c);
+    let val = &val[1..];
+    let ty_ok = !ty.trim().is_empty()
+        && ty.trim()
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.');
+    let a = val.trim();
+    ty_ok && !a.is_empty() && (a.contains('@') || a.contains('.'))
+}
+
+/// `Remote-MTA:` の値が `型;名` 形でなければ値形異形として検出する (D2951)。
+///
+/// RFC 3464 の宛先側 MTA 記録欄 — `dns;mail.x` 形を欠く値は
+/// 受理実装で配達経路の解釈がずれる。
+pub fn has_remote_mta_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("remote-mta:") else { return false };
+        !dsn_field_ok(v.trim())
+    })
+}
+
+/// `Status:` の値が `区分.細部.項目` の三段数字形でなければ値形異形として検出する (D2952)。
+///
+/// RFC 3464 の DSN 状態欄 — `5.1.1` 形 (三段とも数字・先頭区分は
+/// 2/4/5) を欠く値は受理実装で不達区分の解釈がずれる。
+pub fn has_dsn_status_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("status:") else { return false };
+        let v = v.trim();
+        let parts: Vec<&str> = v.split('.').collect();
+        !(parts.len() == 3
+            && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+            && matches!(parts[0], "2" | "4" | "5"))
+    })
+}
+
+/// `Original-Envelope-Id:` の値が印字可能な識別子形でなければ値形異形として検出する (D2953)。
+///
+/// RFC 3464 の ENVID 記録欄 — 空・空白・制御文字を含む値は
+/// 受理実装で元封書識別の解釈がずれる。
+pub fn has_orig_envid_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("original-envelope-id:") else { return false };
+        let v = v.trim();
+        v.is_empty() || v.chars().any(|c| c.is_control() || c.is_whitespace())
+    })
+}
+
+/// `Diagnostic-Code:` の値が `型;診断文` 形でなければ値形異形として検出する (D2954)。
+///
+/// RFC 3464 の診断記録欄 — `smtp; 550 ...` 形を欠く値は
+/// 受理実装で不達診断の解釈がずれる。
+pub fn has_diag_code_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("diagnostic-code:") else { return false };
+        let v = v.trim();
+        let Some(c) = v.find(';') else { return true };
+        let (ty, rest) = v.split_at(c);
+        ty.trim().is_empty()
+            || !ty
+                .trim()
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+            || rest[1..].trim().is_empty()
+    })
+}
+
+/// `Original-Message-ID:` の値が `<…>` の msgid 形でなければ値形異形として検出する (D2955)。
+///
+/// RFC 3798 の MDN 元メッセージ識別欄 — 角括弧で括らない値は
+/// 受理実装で元メッセージ同定がずれる。
+pub fn has_orig_msgid_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("original-message-id:") else { return false };
+        let v = v.trim();
+        !(v.starts_with('<') && v.ends_with('>') && v.len() > 2 && v.contains('@'))
+    })
+}
+
+/// `Disposition:` の値が `方式/種別; 修飾` 形でなければ値形異形として検出する (D2956)。
+///
+/// RFC 3798 の MDN 処理結果欄 — `manual-action/MDN-sent-manually;
+/// displayed` 形を欠く値は受理実装で開封扱いの解釈がずれる。
+pub fn has_mdn_disposition_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("disposition:") else { return false };
+        let v = v.trim();
+        let Some(sl) = v.find('/') else { return true };
+        let (mode, rest) = v.split_at(sl);
+        let rest = &rest[1..];
+        let mode_ok = matches!(mode.trim(), "manual-action" | "automatic-action");
+        let ty = rest.split(';').next().unwrap_or("").trim();
+        !mode_ok
+            || !(ty.starts_with("mdn-sent-") || ty == "deleted")
+            || !rest.contains(';')
+    })
+}
+
+/// `Reporting-UA:` の値が UA 名形 (アドレス形でない) でなければ値形異形として検出する (D2957)。
+///
+/// RFC 3798 の開封報告 UA 欄は製品名を載せる欄 — `@` や `<>` の
+/// 宛名形は受理実装で報告元の解釈がずれる。
+pub fn has_reporting_ua_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("reporting-ua:") else { return false };
+        let v = v.trim();
+        v.is_empty() || v.contains('@') || v.contains('<') || v.contains('>')
+    })
+}
+
+/// `Message-Context:` の値が規定語彙でなければ値形異形として検出する (D2958)。
+///
+/// RFC 3458 の文脈欄は `voice-message`/`fax-message`/`pager-message`/
+/// `multimedia-message`/`text-message`/`none` の閉語彙 — 語彙外の値は
+/// 受理実装で文脈判定がずれる。
+pub fn has_msg_context_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("message-context:") else { return false };
+        !matches!(
+            v.trim(),
+            "voice-message"
+                | "fax-message"
+                | "pager-message"
+                | "multimedia-message"
+                | "text-message"
+                | "none"
+        )
+    })
+}
+
+/// `Content-MD5:` の値が base64 の16バイト語 (24文字・末尾 `==`) でなければ値形異形として検出する (D2939)。
+///
+/// RFC 1864 の値は `MD5 digest` を base64 した24文字 `…==` — 形を
+/// 検査しない実装は「照合済み」体裁の値を検証なしに受理する。
+pub fn has_content_md5_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-md5:") else {
+            return false;
+        };
+        let v = v.trim();
+        !(v.len() == 24
+            && v.ends_with("==")
+            && v[..22]
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/'))
+    })
+}
+
+/// `Content-Language:` の値が言語タグ形でなければ値形異形として検出する (D2940)。
+///
+/// RFC 3282 は `tag(-sub)*` のカンマ区切り — `日本語` や `x` 単字のみを
+/// 受理しない実装と受理する実装で言語判定がずれる。
+pub fn has_content_lang_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-language:") else {
+            return false;
+        };
+        let v = v.trim();
+        let tag_ok = |t: &str| -> bool {
+            let mut it = t.split('-');
+            let Some(first) = it.next() else { return false };
+            !first.is_empty()
+                && first.len() <= 8
+                && first.chars().all(|c| c.is_ascii_alphabetic())
+                && it.all(|s| !s.is_empty() && s.len() <= 8 && s.chars().all(|c| c.is_ascii_alphanumeric()))
+        };
+        v.is_empty() || !v.split(',').all(|t| tag_ok(t.trim()))
+    })
+}
+
+/// `Content-Digest:` の値が `アルゴ=値` 形でなければ値形異形として検出する (D2941)。
+///
+/// RFC 3230 は `SHA=base64` 形 — `=` のない値・空値は要検証の体裁を欠く。
+pub fn has_content_digest_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-digest:") else {
+            return false;
+        };
+        let v = v.trim();
+        let Some(eq) = v.find('=') else { return true };
+        let algo = &v[..eq];
+        let val = &v[eq + 1..];
+        algo.is_empty()
+            || !algo
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            || val.is_empty()
+    })
+}
+
+/// `Content-Features:` の値が `名[=値]` の `;` 連接形でなければ値形異形として検出する (D2942)。
+///
+/// RFC 2912 は feature tag の `;` 連接 — 名が token でない・空要素を
+/// 含む値は受理実装で特徴記録がずれる。
+pub fn has_content_features_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-features:") else {
+            return false;
+        };
+        let v = v.trim();
+        let token_ok = |t: &str| -> bool {
+            !t.is_empty()
+                && t.chars().all(|c| {
+                    c.is_ascii_alphanumeric()
+                        || "!#$%&'*+-.^_`|~".contains(c)
+                })
+        };
+        v.is_empty()
+            || !v.split(';').all(|p| {
+                let p = p.trim();
+                match p.find('=') {
+                    Some(eq) => token_ok(&p[..eq]) && !p[eq + 1..].is_empty(),
+                    None => token_ok(p),
+                }
+            })
+    })
+}
+
+/// アドレス欄の行から表示名 (phrase) 部分を取り出す。
+///
+/// `<addr>` があればその前を切り出し、外側の鉤括弧を外した値を返す。
+/// `<addr>` がない行は表示名を持たない (値全体が addr か phrase-only
+/// の判定は別検出器の領分) ので None。
+fn display_phrase(val: &str) -> Option<&str> {
+    let lt = val.find('<')?;
+    let mut p = val[..lt].trim();
+    if p.starts_with('"') && p.ends_with('"') && p.len() >= 2 {
+        p = &p[1..p.len() - 1];
+    }
+    if p.is_empty() {
+        return None;
+    }
+    Some(p)
+}
+
+/// アドレス欄の表示名に制御文字・双方向制御・ゼロ幅文字が混入していれば表示名異形として検出する (D2931)。
+///
+/// phrase 部はヘッダ行に制御文字を含まないのが規格で、双方向制御
+/// (U+202A–E・U+2066–9) やゼロ幅 (U+200B–F・U+FEFF) は名の見え方を
+/// 変える擬装になる。
+pub fn has_display_ctrl_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let bad = |p: &str| -> bool {
+        p.chars().any(|c| {
+            (c.is_control() && c != '\t')
+                || ('\u{202a}'..='\u{202e}').contains(&c)
+                || ('\u{2066}'..='\u{2069}').contains(&c)
+                || ('\u{200b}'..='\u{200f}').contains(&c)
+                || c == '\u{feff}'
+        })
+    };
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        display_phrase(&l[colon + 1..]).map(|p| bad(p)).unwrap_or(false)
+    })
+}
+
+/// アドレス欄の表示名が裸ドメイン形 (`label.tld`、スキームなし) なら表示名異形として検出する (D2932)。
+///
+/// 組織ドメインを名に据える擬装 — スキーム付き/`www.` は D1481 が見る。
+pub fn has_display_domain_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        let Some(p) = display_phrase(&l[colon + 1..]) else { return false };
+        let p = p.to_ascii_lowercase();
+        p.contains('.')
+            && !p.contains(' ')
+            && p.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+            && p.split('.').all(|t| !t.is_empty())
+            && !p.contains('@')
+    })
+}
+
+/// アドレス欄の表示名に文字 (英字) が1つもなければ表示名異形として検出する (D2933)。
+///
+/// 句読点・数字のみの送信名 (`"!!!"`・`"123"` 等) は名として機能しない擬装値。
+pub fn has_display_punct_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        let Some(p) = display_phrase(&l[colon + 1..]) else { return false };
+        !p.chars().any(|c| c.is_ascii_alphabetic())
+    })
+}
+
+/// アドレス欄の表示名が100文字を超えれば表示名異形として検出する (D2934)。
+pub fn has_display_long_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        display_phrase(&l[colon + 1..])
+            .map(|p| p.chars().count() > 100)
+            .unwrap_or(false)
+    })
+}
+
+fn auth_resid_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2971)。
+fn has_recv_spf_bad(bytes: &[u8]) -> bool {
+    let logical = auth_resid_hdr_text(bytes);
+    const VOCAB: [&str; 7] = [
+        "pass", "fail", "softfail", "neutral", "none", "temperror", "permerror",
+    ];
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("received-spf:")
+            .or_else(|| low.strip_prefix("x-received-spf:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            let first = v.split(|c: char| c == ' ' || c == '\t').next().unwrap_or("");
+            if !VOCAB.contains(&first) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2972)。
+fn has_tls_required_bad(bytes: &[u8]) -> bool {
+    let logical = auth_resid_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("tls-required:") {
+            if v.trim() != "no" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2973)。
+fn has_req_rcpt_bad(bytes: &[u8]) -> bool {
+    let logical = auth_resid_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("require-recipient-valid-since:") {
+            let v = v.trim();
+            // `宛名; 日時` の形
+            let Some(s) = v.find(';') else { return true; };
+            let (addr, date) = (v[..s].trim(), v[s + 1..].trim());
+            let addr_ok = addr.contains('@') || (addr.starts_with('<') && addr.ends_with('>'));
+            let date_ok = date.bytes().any(|b| b.is_ascii_digit()) && date.contains(':');
+            if !addr_ok || !date_ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2974)。
+fn has_bimi_mark_bad(bytes: &[u8]) -> bool {
+    let logical = auth_resid_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("bimi-location:") {
+            // 場所欄は https URL
+            if !v.trim_start().starts_with("https://") {
+                return true;
+            }
+        } else if let Some(v) = low.strip_prefix("bimi-indicator:") {
+            let v = v.trim();
+            // 本体欄は base64 の単一トークン
+            if v.is_empty()
+                || !v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn nntp_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2959)。
+fn has_control_bad(bytes: &[u8]) -> bool {
+    let logical = nntp_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("control:") {
+            let v = v.trim();
+            // 制御動詞 空白 引数 の形
+            let mut it = v.splitn(2, |c: char| c == ' ' || c == '\t');
+            let verb = it.next().unwrap_or("");
+            let args = it.next().map(str::trim).unwrap_or("");
+            let verb_ok = !verb.is_empty()
+                && verb.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+            if !verb_ok || args.is_empty() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2960)。
+fn has_supersedes_bad(bytes: &[u8]) -> bool {
+    let logical = nntp_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("supersedes:")
+            .or_else(|| low.strip_prefix("also-control:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // msgid 一つ以上を含むこと
+            let ok = v.starts_with('<')
+                && v.ends_with('>')
+                && v.len() > 2
+                && v.contains('@');
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2961)。
+fn has_cancel_lock_bad(bytes: &[u8]) -> bool {
+    let logical = nntp_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("cancel-lock:")
+            .or_else(|| low.strip_prefix("cancel-key:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            let toks: Vec<&str> = v.split(|c: char| c == ' ' || c == '\t')
+                .filter(|t| !t.is_empty()).collect();
+            if toks.is_empty() {
+                return true;
+            }
+            for t in toks {
+                // 方式:データ の形
+                let Some(p) = t.find(':') else { return true; };
+                if p == 0 || p + 1 >= t.len() {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// (D2962)。
+fn has_posting_host_bad(bytes: &[u8]) -> bool {
+    let logical = nntp_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("nntp-posting-host:") {
+            let v = v.trim();
+            if v.is_empty()
+                || v.contains('@')
+                || v.chars().any(|c| c.is_whitespace() || c.is_control())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄の値から表示名 (phrase) 部分を取り出す。
+///
+/// `<addr>` があればその前を切り出し、外側の鉤括弧を外した値を返す。
+/// `<addr>` がない行は表示名を持たない (phrase-only の判定は別検出器の領分)。
+fn phrase_head(val: &str) -> Option<&str> {
+    let lt = val.find('<')?;
+    let mut p = val[..lt].trim();
+    if p.starts_with('"') && p.ends_with('"') && p.len() >= 2 {
+        p = &p[1..p.len() - 1];
+    }
+    if p.is_empty() {
+        return None;
+    }
+    Some(p)
+}
+
+/// アドレス欄の表示名に符号化なしの生非ascii文字が混ざっていれば表示名異形として検出する (D2935)。
+///
+/// phrase 部は印字ASCIIが規格 — 生の8bitは「encoded-wordで受ける
+/// 実装」と「生のまま表示する実装」で名の読みがずれる。
+pub fn has_display_raw_nonascii(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        phrase_head(&l[colon + 1..])
+            .map(|p| p.chars().any(|c| !c.is_ascii()))
+            .unwrap_or(false)
+    })
+}
+
+/// アドレス欄の表示名の encoded-word が構造文字に復号されれば表示名異形として検出する (D2936)。
+///
+/// 復号後に `<`・`>`・`"`・`,`・`;`・`@` 等を生む encoded-word は、
+/// 復号する実装としない実装で「名とアドレスの境界」がずれる擬装。
+pub fn has_display_ew_danger(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let danger = |bytes: &[u8]| -> bool {
+        bytes
+            .iter()
+            .any(|b| matches!(b, b'<' | b'>' | b'"' | b'(' | b')' | b',' | b';' | b'@' | b':'))
+    };
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        let Some(p) = phrase_head(&l[colon + 1..]) else { return false };
+        let mut rest = p;
+        while let Some(a) = rest.find("=?") {
+            let after = &rest[a + 2..];
+            let Some(q) = after.find("?=") else { break };
+            let ew = &after[..q];
+            let parts: Vec<&str> = ew.splitn(3, '?').collect();
+            if parts.len() == 3 {
+                let decoded = if parts[1].eq_ignore_ascii_case("b") {
+                    decode_b64_simple(parts[2])
+                } else if parts[1].eq_ignore_ascii_case("q") {
+                    decode_qp_body(&parts[2].replace('_', " "))
+                } else {
+                    Vec::new()
+                };
+                if danger(&decoded) {
+                    return true;
+                }
+            }
+            rest = &rest[a + 2 + q + 2..];
+        }
+        false
+    })
+}
+
+/// アドレス欄の表示名の鉤括弧内にエスケープなしの鉤括弧が混在すれば表示名異形として検出する (D2937)。
+///
+/// `"a"b"c"` 形 — 鉤括弧の内側を別解釈する実装で名の切れ目がずれる。
+pub fn has_display_inner_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        let v = l[colon + 1..].trim_start();
+        let Some(lt) = v.find('<') else { return false };
+        let before = v[..lt].trim();
+        if before.len() < 4 || !before.starts_with('"') || !before.ends_with('"') {
+            return false;
+        }
+        let inner = &before[1..before.len() - 1];
+        let b = inner.as_bytes();
+        (0..b.len()).any(|i| b[i] == b'"' && (i == 0 || b[i - 1] != b'\\'))
+    })
+}
+
+/// アドレス欄の表示名が空白のみで構成されていれば表示名異形として検出する (D2938)。
+///
+/// `"   "` 形 — 名が欠落しているのに括弧構造だけ残る値。
+pub fn has_display_ws_only(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        let v = l[colon + 1..].trim_start();
+        let Some(lt) = v.find('<') else { return false };
+        let before = v[..lt].trim();
+        before.starts_with('"')
+            && before.ends_with('"')
+            && before.len() >= 3
+            && before[1..before.len() - 1].chars().all(|c| c.is_whitespace())
+    })
+}
+
+/// `Subject:` の値にゼロ幅文字 (U+200B–U+200D, U+FEFF)を含むか判定する (D2895)。
+///
+/// `Subject: a\u{200B}b` のように件名にゼロ幅文字 (U+200B–U+200D, U+FEFF)を埋める手口
+/// — フィルタは接続語を見るが読み手には無印 — ゼロ幅を潰す実装と残す実装で件名照合がずれる。
+#[must_use]
+pub fn has_subject_zero_width(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim().eq_ignore_ascii_case("subject") && (l[c + 1..].chars().any(|ch| ('\u{200B}'..='\u{200D}').contains(&ch) || ch == '\u{FEFF}'))
+    })
+}
+
+/// `Subject:` の値に双方向制御文字 (U+202A–U+202E, U+2066–U+2069)を含むか判定する (D2896)。
+///
+/// `Subject: a\u{200B}b` のように件名に双方向制御文字 (U+202A–U+202E, U+2066–U+2069)を埋める手口
+/// — 表示順を反転させて件名を読み違えさせる — 制御を描く実装と捨てる実装で件名がずれる。
+#[must_use]
+pub fn has_subject_bidi(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim().eq_ignore_ascii_case("subject") && (l[c + 1..].chars().any(|ch| ('\u{202A}'..='\u{202E}').contains(&ch) || ('\u{2066}'..='\u{2069}').contains(&ch)))
+    })
+}
+
+/// `Subject:` の値にタグ文字 (U+E0000–U+E007F)を含むか判定する (D2897)。
+///
+/// `Subject: a\u{200B}b` のように件名にタグ文字 (U+E0000–U+E007F)を埋める手口
+/// — 不可視タグ文字で語彙を埋め込む — 本文側は `unicode_tag_chars` で見ているが件名は绿地。
+#[must_use]
+pub fn has_subject_tag_chars(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim().eq_ignore_ascii_case("subject") && (l[c + 1..].chars().any(|ch| ('\u{E0000}'..='\u{E007F}').contains(&ch)))
+    })
+}
+
+/// `Subject:` の値に制御文字 (C0/C1、タブ除く)を含むか判定する (D2898)。
+///
+/// `Subject: a\u{200B}b` のように件名に制御文字 (C0/C1、タブ除く)を埋める手口
+/// — 生の制御文字は RFC 的に不正 — 落とす実装と残す実装で件名がずれる。
+#[must_use]
+pub fn has_subject_ctrl(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim().eq_ignore_ascii_case("subject") && (l[c + 1..].chars().any(|ch| (ch < ' ' && ch != '\t') || ('\u{7F}'..='\u{9F}').contains(&ch)))
+    })
+}
+
+
+/// 件名欄が存在するのに値が空の件名空欄異形を示すかどうか。 (D2899)。
+pub fn has_subject_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let lower = l.to_ascii_lowercase();
+        lower
+            .strip_prefix("subject:")
+            .is_some_and(|v| v.trim().is_empty())
+    })
+}
+
+/// 件名欄が複数出る件名二重化異形を示すかどうか。 (D2900)。
+pub fn has_subject_multi(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+        .lines()
+        .filter(|l| l.to_ascii_lowercase().starts_with("subject:"))
+        .take(2)
+        .count()
+        >= 2
+}
+
+/// 件名が三段以上の返信・転送接頭語を持つ深い返信連鎖異形を示すかどうか。 (D2901)。
+pub fn has_subject_reply_chain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("subject:") else {
+            return false;
+        };
+        let mut t = v.trim_start();
+        let mut depth = 0usize;
+        loop {
+            for p in ["re:", "fw:", "fwd:"] {
+                if let Some(r) = t.strip_prefix(p) {
+                    t = r.trim_start();
+                    depth += 1;
+                    break;
+                }
+            }
+            if !t.starts_with("re:") && !t.starts_with("fw:") && !t.starts_with("fwd:") {
+                break;
+            }
+        }
+        depth >= 3
+    })
+}
+
+/// 件名にHTMLタグ片やエンティティを含むHTML混入異形を示すかどうか。 (D2902)。
+pub fn has_subject_html(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("subject:") else {
+            return false;
+        };
+        let v = v.trim_start();
+        let tagish = v
+            .find('<')
+            .is_some_and(|i| v[i + 1..].chars().next().is_some_and(|c| c.is_ascii_alphabetic()));
+        let entish = v
+            .find('&')
+            .is_some_and(|i| {
+                let r = &v[i + 1..];
+                let n = r.chars().take_while(|c| c.is_ascii_alphabetic()).count();
+                n >= 2 && r.chars().nth(n) == Some(';')
+            });
+        tagish || entish
+    })
+}
+
+/// 件名に符号化されない生の非ASCII文字を含む生非ASCII混入異形を示すかどうか。 (D2903)。
+pub fn has_subject_raw_nonascii(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        if !l.to_ascii_lowercase().starts_with("subject:") {
+            return false;
+        }
+        let v = l[8..].trim_start();
+        v.chars().any(|c| !c.is_ascii())
+    })
+}
+
+/// 件名にURL形文字列を含む誘導URL混入異形を示すかどうか。 (D2904)。
+pub fn has_subject_url(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        if !l.to_ascii_lowercase().starts_with("subject:") {
+            return false;
+        }
+        let v = l[8..].trim_start();
+        ["http://", "https://", "www."]
+            .iter()
+            .any(|s| v.to_ascii_lowercase().contains(s))
+    })
+}
+
+/// 件名に閉じない括弧を含む未閉塞括弧異形を示すかどうか。 (D2905)。
+pub fn has_subject_unclosed_comment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        if !l.to_ascii_lowercase().starts_with("subject:") {
+            return false;
+        }
+        let v = l[8..].trim_start();
+        let mut depth = 0usize;
+        let mut neg = false;
+        for c in v.chars() {
+            match c {
+                '(' => depth += 1,
+                ')' => {
+                    if depth == 0 {
+                        neg = true;
+                    } else {
+                        depth -= 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        depth > 0 || neg
+    })
+}
+
+/// 件名のエンコードドワードが75バイト超の過長符号化語異形を示すかどうか。 (D2906)。
+pub fn has_subject_long_ew(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        if !l.to_ascii_lowercase().starts_with("subject:") {
+            return false;
+        }
+        let v = l[8..].trim_start();
+        let mut i = 0;
+        let b = v.as_bytes();
+        let mut over = false;
+        while i + 1 < b.len() {
+            if b[i] == b'=' && b[i + 1] == b'?' {
+                let start = i;
+                let mut j = i + 2;
+                let mut end = None;
+                while j + 1 < b.len() {
+                    if b[j] == b'?' && b[j + 1] == b'=' {
+                        end = Some(j + 2);
+                        break;
+                    }
+                    j += 1;
+                }
+                match end {
+                    Some(e) => {
+                        if e - start > 75 {
+                            over = true;
+                        }
+                        i = e;
+                    }
+                    None => break,
+                }
+            } else {
+                i += 1;
+            }
+        }
+        over
+    })
+}
+
+/// 認証結果記録欄に失敗判定を含む認証失敗判定異形を示すかどうか。 (D2907)。
+pub fn has_authres_fail(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        ["authentication-results:", "x-authentication-results:", "received-spf:", "x-received-spf:"].iter().any(|p| l.starts_with(p))
+            && ["=fail", "=softfail", "=permerror", "=temperror", "=reject", "=discard"]
+                .iter()
+                .any(|s| l.contains(s))
+    })
+}
+
+/// 認証結果記録欄に未規定の判定値を含む認証判定値異形を示すかどうか。 (D2908)。
+pub fn has_authres_bad_verdict(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !["authentication-results:", "x-authentication-results:", "received-spf:", "x-received-spf:"].iter().any(|p| l.starts_with(p)) {
+            return false;
+        }
+        l.split(';').skip(1).any(|part| {
+            let Some(eq) = part.find('=') else { return false };
+            let m = part[..eq].trim();
+            if !matches!(m, "spf" | "dkim" | "dmarc" | "iprev" | "arc" | "sender-id" | "domainkeys" | "bodyhash" | "auth") {
+                return false;
+            }
+            let v = part[eq + 1..].split(|c: char| c.is_whitespace() || c == '(').next().unwrap_or("");
+            !matches!(
+                v,
+                "pass" | "fail" | "softfail" | "none" | "neutral" | "temperror"
+                    | "permerror" | "policy" | "quarantine" | "reject" | "discard"
+            )
+        })
+    })
+}
+
+/// ARC封印欄の合否値が規定外のARC合否異形を示すかどうか。 (D2909)。
+pub fn has_arc_cv_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("arc-seal:") || l.starts_with("x-arc-seal:")) {
+            return false;
+        }
+        l.split(';').any(|part| {
+            let p = part.trim();
+            p.starts_with("cv=")
+                && !matches!(&p[3..], "none" | "pass" | "fail" | "none;" | "pass;" | "fail;")
+        })
+    })
+}
+
+/// DKIM署名欄に署名者タグが無い署名者欠落異形を示すかどうか。 (D2910)。
+pub fn has_dkim_sig_no_d(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("dkim-signature:") || l.starts_with("domainkey-signature:")) {
+            return false;
+        }
+        !l.split(';').any(|part| part.trim().starts_with("d="))
+    })
+}
+/// DKIM-Signature 系欄に `s=` 選択子タグが無ければ署名者欠落系の異形として検出する (D2911)。
+pub fn has_dkim_sig_no_s(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("dkim-signature:") || l.starts_with("domainkey-signature:")) {
+            return false;
+        }
+        let rest = l.splitn(2, ':').nth(1).unwrap_or("");
+        !rest.split(';').any(|p| { let mut kv = p.trim_start().splitn(2, '='); kv.next().map(|k| k.trim() == "s").unwrap_or(false) && kv.next().is_some() })
+    })
+}
+
+/// DKIM-Signature 系欄に `b=` 署名値タグが無ければ署名値欠落の異形として検出する (D2912)。
+pub fn has_dkim_sig_no_b(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("dkim-signature:") || l.starts_with("domainkey-signature:")) {
+            return false;
+        }
+        let rest = l.splitn(2, ':').nth(1).unwrap_or("");
+        !rest.split(';').any(|p| { let mut kv = p.trim_start().splitn(2, '='); kv.next().map(|k| k.trim() == "b").unwrap_or(false) && kv.next().is_some() })
+    })
+}
+
+/// ARC-Seal 系欄の `i=` 連鎖番号が欠落・非数値・または i>1 で cv=none なら異形として検出する (D2913)。
+pub fn has_arc_seal_bad_i(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("arc-seal:") || l.starts_with("x-arc-seal:")) {
+            return false;
+        }
+        let rest = l.splitn(2, ':').nth(1).unwrap_or("");
+        let get = |tag: &str| -> Option<String> {
+            rest.split(';').find_map(|p| {
+                let mut kv = p.trim_start().splitn(2, '=');
+                if kv.next().map(|k| k.trim() == tag).unwrap_or(false) {
+                    kv.next().map(|v| v.trim().to_string())
+                } else {
+                    None
+                }
+            })
+        };
+        match get("i") {
+            None => true,
+            Some(iv) => !iv.chars().all(|c| c.is_ascii_digit())
+                || (iv.parse::<u32>().map(|n| n > 1).unwrap_or(false)
+                    && get("cv").map(|cv| cv == "none").unwrap_or(false)),
+        }
+    })
+}
+
+/// ARC-Seal が存在するのに ARC-Authentication-Results または ARC-Message-Signature が欠ける組欠落を検出する (D2914)。
+pub fn has_arc_chain_incomplete(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let seal = lower.lines().any(|l| l.starts_with("arc-seal:") || l.starts_with("x-arc-seal:"));
+    if !seal {
+        return false;
+    }
+    let aar = lower.lines().any(|l| l.starts_with("arc-authentication-results:"));
+    let ams = lower.lines().any(|l| l.starts_with("arc-message-signature:"));
+    !aar || !ams
+}
+
+/// Auto-Submitted 欄の値が RFC 3834 の規定語彙外なら異形として検出する (D2915)。
+pub fn has_auto_submitted_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !l.starts_with("auto-submitted:") {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        !["auto-generated", "auto-replied", "auto-forwarded", "no"]
+            .iter()
+            .any(|k| v == *k)
+    })
+}
+
+/// X-Originating-IP 欄の値が角括弧付き IP 表記でなければ送信元偽装候補として検出する (D2917)。
+pub fn has_x_orig_ip_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !l.starts_with("x-originating-ip:") {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let bracketed = v.starts_with('[') && v.ends_with(']');
+        let ipv4 = bracketed
+            && v[1..v.len() - 1].split('.').count() == 4
+            && v[1..v.len() - 1]
+                .split('.')
+                .all(|o| !o.is_empty() && o.chars().all(|c| c.is_ascii_digit()));
+        let ipv6 = bracketed && v[1..v.len() - 1].to_ascii_lowercase().starts_with("ipv6:");
+        !(ipv4 || ipv6)
+    })
+}
+
+/// X-Auto-Response-Suppress 欄のトークンが Exchange の規定語彙外なら抑制指定の異形として検出する (D2918)。
+pub fn has_x_auto_suppress_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !l.starts_with("x-auto-response-suppress:") {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        v.split(',').any(|t| {
+            let t = t.trim();
+            t.is_empty()
+                || !["oof", "autoreply", "rn", "nrn", "dr", "ndr", "all", "none"]
+                    .iter()
+                    .any(|k| t == *k)
+        })
+    })
+}
+
 /// X-OriginalArrivalTime 系欄の値が `DD Mon YYYY HH:MM:SS` の日時形でなければ異形として検出する (D2919)。
 pub fn has_arrival_time_bad(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
@@ -64382,6 +67426,218 @@ pub fn has_x_orig_from_caret_local(raw: &[u8]) -> bool {
             && !v.starts_with('@')
             && !v.ends_with('@')
             && v.split_whitespace().count() == 1
+    })
+}
+
+/// `Apparently-To:`/`X-Apparently-To:` 系 の値が鉤括弧ローカル部の宛名形か判
+/// 定する (D2846)。
+///
+/// 見せ宛を記す欄なのに `"a b"@y` のようにローカル部が鉤括弧囲みの宛名
+/// — 引用局所部として受理する実装と構文違反として拒否する実装で見せ宛がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_to_quoted_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-to" || n == "x-apparently-to")
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..]
+                .find('"')
+                .map_or(false, |i| v[i + 2..].starts_with('@'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系 の値が鉤括弧ローカル部の宛名形か判
+/// 定する (D2847)。
+///
+/// 表差出人を記す欄なのに `"a b"@y` のようにローカル部が鉤括弧囲みの宛名
+/// — 引用局所部として受理する実装と構文違反として拒否する実装で表差出人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_apparently_from_quoted_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "apparently-from" || n == "x-apparently-from" || n == "apparently-sender" || n == "x-apparently-sender")
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..]
+                .find('"')
+                .map_or(false, |i| v[i + 2..].starts_with('@'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `X-Original-To:` の値が鉤括弧ローカル部の宛名形か判
+/// 定する (D2848)。
+///
+/// 元宛を記す欄なのに `"a b"@y` のようにローカル部が鉤括弧囲みの宛名
+/// — 引用局所部として受理する実装と構文違反として拒否する実装で元宛がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_to_quoted_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-to"
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..]
+                .find('"')
+                .map_or(false, |i| v[i + 2..].starts_with('@'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
+    })
+}
+
+/// `X-Original-From:` の値が鉤括弧ローカル部の宛名形か判
+/// 定する (D2849)。
+///
+/// 元差出人を記す欄なのに `"a b"@y` のようにローカル部が鉤括弧囲みの宛名
+/// — 引用局所部として受理する実装と構文違反として拒否する実装で元差出人がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_from_quoted_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-from"
+            && v.is_ascii()
+            && v.starts_with('"')
+            && v[1..]
+                .find('"')
+                .map_or(false, |i| v[i + 2..].starts_with('@'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains('(')
     })
 }
 
@@ -99358,7 +102614,7 @@ mod tests {
     fn duplicate_identity_headers_は一意ヘッダ重複を検出する() {
         // D1292 — Subject 二重 / From 二重 / Message-ID 二重
         assert!(has_duplicate_identity_headers(
-            b"From: a@x\r\nSubject: hello\r\nSubject: goodbye\r\n\r\nb"
+            "From: a@x\r\nSubject: hello\r\nSubject: goodbye\r\n\r\nb".as_bytes()
         ));
         assert!(has_duplicate_identity_headers(
             b"From: a@x\r\nFrom: b@y\r\nSubject: s\r\n\r\nb"
@@ -99368,7 +102624,7 @@ mod tests {
         ));
         // 継続行は別ヘッダとして数えない
         assert!(!has_duplicate_identity_headers(
-            b"From: a@x\r\nSubject: very long\r\n folded\r\n\r\nb"
+            "From: a@x\r\nSubject: very long\r\n folded\r\n\r\nb".as_bytes()
         ));
         // X-From: 等の X- 系は from: にマッチしない
         assert!(!has_duplicate_identity_headers(
@@ -99508,18 +102764,18 @@ mod tests {
     fn mixed_line_endings_は改行混在を検出する() {
         // D1298 — ヘッダ部の CRLF + 裸 LF
         assert!(has_mixed_line_endings(
-            b"From: a@x\r\nSubject: hi\nTo: b@y\r\n\r\nbody"
+            "From: a@x\r\nSubject: hi\nTo: b@y\r\n\r\nbody".as_bytes()
         ));
         // 全 CRLF / 全 LF は不発火
         assert!(!has_mixed_line_endings(
-            b"From: a@x\r\nSubject: hi\r\n\r\nbody"
+            "From: a@x\r\nSubject: hi\r\n\r\nbody".as_bytes()
         ));
         assert!(!has_mixed_line_endings(
             b"From: a@x\nSubject: hi\n\nbody"
         ));
         // 本文中の混在は対象外 (ヘッダ部のみ)
         assert!(!has_mixed_line_endings(
-            b"From: a@x\r\nSubject: hi\r\n\r\nline1\nline2\r\n"
+            "From: a@x\r\nSubject: hi\r\n\r\nline1\nline2\r\n".as_bytes()
         ));
     }
 
@@ -100292,7 +103548,7 @@ mod tests {
     #[test]
     fn no_recipient_headers_は宛先欄の不在を検出する() {
         assert!(has_no_recipient_headers(
-            b"From: a@x\r\nSubject: x\r\n\r\nx"
+            "From: a@x\r\nSubject: x\r\n\r\nx".as_bytes()
         ));
         // 欄はあるが値が空
         assert!(has_no_recipient_headers(b"To:\r\nSubject: x\r\n\r\nx"));
@@ -109336,6 +112592,49 @@ mod tests {
     }
 
     #[test]
+    fn 見せ宛が鉤括弧ローカル宛名なら発火() {
+        assert!(has_apparently_to_quoted_local(
+            b"From: a@x\r\nApparently-To: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_quoted_local(
+            b"From: a@x\r\nApparently-To: a@\"b c\"\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_quoted_local(
+            b"From: a@x\r\nApparently-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表差出人が鉤括弧ローカル宛名なら発火() {
+        assert!(has_apparently_from_quoted_local(
+            b"From: a@x\r\nApparently-From: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_quoted_local(
+            b"From: a@x\r\nApparently-From: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛が鉤括弧ローカル宛名なら発火() {
+        assert!(has_x_orig_to_quoted_local(
+            b"From: a@x\r\nX-Original-To: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_to_quoted_local(
+            b"From: a@x\r\nX-Original-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人が鉤括弧ローカル宛名なら発火() {
+        assert!(has_x_orig_from_quoted_local(
+            b"From: a@x\r\nX-Original-From: \"a b\"@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_from_quoted_local(
+            b"From: a@x\r\nX-Original-From: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
     fn 見せ宛が縦線宛名なら発火() {
         assert!(has_apparently_to_pipe(
             b"From: a@x\r\nApparently-To: a@xample|.com\r\nTo: b@y\r\n\r\nx"
@@ -110322,6 +113621,168 @@ mod tests {
         ));
         assert!(!has_confirm_reading_pipe(
             b"From: a@x\r\nX-Confirm-Reading-To: a|b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名がゼロ幅なら発火() {
+        assert!(has_subject_zero_width(
+            "From: a@x\r\nSubject: a\u{200B}b\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_subject_zero_width(
+            "From: a@x\r\nSubject: hello\r\n\r\nx".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn 件名が双方向制御なら発火() {
+        assert!(has_subject_bidi(
+            "From: a@x\r\nSubject: a\u{202E}b\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_subject_bidi(
+            "From: a@x\r\nSubject: hello\r\n\r\nx".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn 件名がタグ文字なら発火() {
+        assert!(has_subject_tag_chars(
+            "From: a@x\r\nSubject: a\u{E0020}b\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_subject_tag_chars(
+            "From: a@x\r\nSubject: hello\r\n\r\nx".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn 件名が制御文字なら発火() {
+        assert!(has_subject_ctrl(
+            "From: a@x\r\nSubject: a\u{000B}b\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_subject_ctrl(
+            "From: a@x\r\nSubject: hello\r\n\r\nx".as_bytes()
+        ));
+    }
+
+
+
+    #[test]
+    fn 件名が空なら発火() {
+        assert!(has_subject_empty(
+            b"From: a@x\r\nSubject:\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_empty(
+            b"From: a@x\r\nSubject: hi\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が複数なら発火() {
+        assert!(has_subject_multi(
+            b"From: a@x\r\nSubject: a\r\nSubject: b\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_multi(
+            b"From: a@x\r\nSubject: a\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が深い返信連鎖なら発火() {
+        assert!(has_subject_reply_chain(
+            b"From: a@x\r\nSubject: Re: Re: Re: hi\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_reply_chain(
+            b"From: a@x\r\nSubject: Re: hi\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名がマークアップ混入なら発火() {
+        assert!(has_subject_html(
+            b"From: a@x\r\nSubject: a <b>x</b> c\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_html(
+            b"From: a@x\r\nSubject: a < b\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が生非asciiなら発火() {
+        assert!(has_subject_raw_nonascii(
+            "From: a@x\r\nSubject: こんにちは\r\nTo: b@y\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_subject_raw_nonascii(
+            b"From: a@x\r\nSubject: hello\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が誘導列混入なら発火() {
+        assert!(has_subject_url(
+            b"From: a@x\r\nSubject: visit https://x.example now\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_url(
+            b"From: a@x\r\nSubject: visit us now\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が未閉塞括弧なら発火() {
+        assert!(has_subject_unclosed_comment(
+            b"From: a@x\r\nSubject: a (b\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_unclosed_comment(
+            b"From: a@x\r\nSubject: a (b)\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が過長符号化語なら発火() {
+        assert!(has_subject_long_ew(
+            b"From: a@x\r\nSubject: =?utf-8?q?aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?=\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_long_ew(
+            b"From: a@x\r\nSubject: =?utf-8?q?abc?=\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 認証結果が失敗判定なら発火() {
+        assert!(has_authres_fail(
+            b"Authentication-Results: mx.y; spf=fail smtp.mailfrom=x\r\nFrom: a@x\r\n\r\nx"
+        ));
+        assert!(!has_authres_fail(
+            b"Authentication-Results: mx.y; spf=pass\r\nFrom: a@x\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 認証結果が未規定判定値なら発火() {
+        assert!(has_authres_bad_verdict(
+            b"Authentication-Results: mx.y; spf=wut smtp.mailfrom=x\r\nFrom: a@x\r\n\r\nx"
+        ));
+        assert!(!has_authres_bad_verdict(
+            b"Authentication-Results: mx.y; dkim=pass header.d=y\r\nFrom: a@x\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn アーク封印の合否値が異形なら発火() {
+        assert!(has_arc_cv_bad(
+            b"ARC-Seal: i=1; cv=maybe; d=y\r\nFrom: a@x\r\n\r\nx"
+        ));
+        assert!(!has_arc_cv_bad(
+            b"ARC-Seal: i=1; cv=fail; d=y\r\nFrom: a@x\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 署名欄に署名者がなければ発火() {
+        assert!(has_dkim_sig_no_d(
+            b"DKIM-Signature: v=1; s=s1; bh=x\r\nFrom: a@x\r\n\r\nx"
+        ));
+        assert!(!has_dkim_sig_no_d(
+            b"DKIM-Signature: v=1; s=s1; d=y\r\nFrom: a@x\r\n\r\nx"
         ));
     }
 
@@ -113717,10 +117178,10 @@ mod tests {
     #[test]
     fn 元の件名記録が件名と一致すれば発火() {
         assert!(has_x_orig_subject_same_as_subject(
-            b"From: a@x\r\nSubject: hello\r\nX-Original-Subject: hello\r\nTo: b@y\r\n\r\nx"
+            "From: a@x\r\nSubject: hello\r\nX-Original-Subject: hello\r\nTo: b@y\r\n\r\nx".as_bytes()
         ));
         assert!(!has_x_orig_subject_same_as_subject(
-            b"From: a@x\r\nSubject: hello\r\nX-Original-Subject: other\r\nTo: b@y\r\n\r\nx"
+            "From: a@x\r\nSubject: hello\r\nX-Original-Subject: other\r\nTo: b@y\r\n\r\nx".as_bytes()
         ));
     }
 
@@ -127522,6 +130983,680 @@ body";
             b"From: \"Taro Tanaka\" <a@b>\r\n\r\nbody"
         ));
         assert!(!has_url_display_name(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 添付標旗欄が異形なら発火() {
+        assert!(has_ms_has_attach_bad(b"X-MS-Has-Attach: maybe\r\n\r\nbody"));
+        assert!(has_ms_has_attach_bad(b"X-Has-Attach: 1\r\n\r\nbody"));
+        assert!(!has_ms_has_attach_bad(b"X-MS-Has-Attach: yes\r\n\r\nbody"));
+        assert!(!has_ms_has_attach_bad(b"X-MS-Has-Attach: no\r\n\r\nbody"));
+        assert!(!has_ms_has_attach_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 相関子欄が異形なら発火() {
+        assert!(has_tnef_correlator_bad(
+            b"X-MS-TNEF-Correlator: abc!!\r\n\r\nbody"
+        ));
+        assert!(has_tnef_correlator_bad(
+            b"X-MS-TNEF-Correlator: ab\r\n\r\nbody"
+        ));
+        assert!(!has_tnef_correlator_bad(
+            b"X-MS-TNEF-Correlator: AQHRMzVhYzEyMzQ=\r\n\r\nbody"
+        ));
+        assert!(!has_tnef_correlator_bad(
+            b"X-TNEFCorrelator: aGVsbG93b3JsZA==\r\n\r\nbody"
+        ));
+        assert!(!has_tnef_correlator_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 遅延欄が異形なら発火() {
+        assert!(has_ms_latency_bad(
+            b"X-MS-Exchange-Transport-EndToEndLatency: fast\r\n\r\nbody"
+        ));
+        assert!(has_ms_latency_bad(
+            b"X-MS-Exchange-Transport-EndToEndLatency: 1:2:3\r\n\r\nbody"
+        ));
+        assert!(!has_ms_latency_bad(
+            b"X-MS-Exchange-Transport-EndToEndLatency: 00:00:01.234\r\n\r\nbody"
+        ));
+        assert!(!has_ms_latency_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 送信器欄が異形なら発火() {
+        assert!(has_mailer_bad(b"X-Mailer:\r\n\r\nbody"));
+        assert!(has_mailer_bad(b"X-Mailer: tool\x7fbad\r\n\r\nbody"));
+        assert!(has_mailer_bad(b"User-Agent: tool\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\r\n\r\nbody"));
+        assert!(!has_mailer_bad(b"X-Mailer: Outlook 16.0\r\n\r\nbody"));
+        assert!(!has_mailer_bad(b"User-Agent: Thunderbird/115.0\r\n\r\nbody"));
+        assert!(!has_mailer_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+#[test]
+fn 一覧操作欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nList-Unsubscribe: mailto:a@x.com\r\n\r\nx").unwrap();
+    assert!(e.list_uri_bad);
+    let e = parse(b"From: a@x.com\r\nList-Unsubscribe: <mailto:a@x.com>\r\n\r\nx").unwrap();
+    assert!(!e.list_uri_bad);
+}
+#[test]
+fn 解除投稿欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nList-Unsubscribe-Post: x\r\n\r\nx").unwrap();
+    assert!(e.unsub_post_bad);
+    let e = parse(b"From: a@x.com\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n\r\nx").unwrap();
+    assert!(!e.unsub_post_bad);
+}
+#[test]
+fn 保管先欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nArchived-At: \r\n\r\nx").unwrap();
+    assert!(e.archived_at_bad);
+    let e = parse(b"From: a@x.com\r\nArchived-At: <https://ex.com/a>\r\n\r\nx").unwrap();
+    assert!(!e.archived_at_bad);
+}
+#[test]
+fn 注入情報欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nInjection-Info: x\r\n\r\nx").unwrap();
+    assert!(e.injection_info_bad);
+    let e = parse(b"From: a@x.com\r\nInjection-Info: mailng-host=mx; logging-id=1\r\n\r\nx").unwrap();
+    assert!(!e.injection_info_bad);
+}
+
+#[test]
+fn 通知選択欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nDisposition-Notification-Options: x\r\n\r\nx").unwrap();
+    assert!(e.dnt_opt_bad);
+    let e = parse(b"From: a@x.com\r\nDisposition-Notification-Options: x=required\r\n\r\nx").unwrap();
+    assert!(!e.dnt_opt_bad);
+}
+#[test]
+fn 信託情報欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nVBR-Info: x\r\n\r\nx").unwrap();
+    assert!(e.vbr_info_bad);
+    let e = parse(b"From: a@x.com\r\nVBR-Info: md=ex.com; mc=all; mv=https://ex.com\r\n\r\nx").unwrap();
+    assert!(!e.vbr_info_bad);
+}
+#[test]
+fn 反応種別欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nFeedback-Type: x\r\n\r\nx").unwrap();
+    assert!(e.feedback_type_bad);
+    let e = parse(b"From: a@x.com\r\nFeedback-Type: abuse\r\n\r\nx").unwrap();
+    assert!(!e.feedback_type_bad);
+}
+#[test]
+fn 反応識別欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nFeedback-ID: a:b\r\n\r\nx").unwrap();
+    assert!(e.feedback_id_bad);
+    let e = parse(b"From: a@x.com\r\nFeedback-ID: a:b:c:d\r\n\r\nx").unwrap();
+    assert!(!e.feedback_id_bad);
+}
+
+#[test]
+fn 優先順位欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nPrecedence: \r\n\r\nx").unwrap();
+    assert!(e.precedence_bad);
+    let e = parse(b"From: a@x.com\r\nPrecedence: bulk\r\n\r\nx").unwrap();
+    assert!(!e.precedence_bad);
+}
+#[test]
+fn 巡回欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Loop: notanaddr\r\n\r\nx").unwrap();
+    assert!(e.x_loop_bad);
+    let e = parse(b"From: a@x.com\r\nX-Loop: list@x.com\r\n\r\nx").unwrap();
+    assert!(!e.x_loop_bad);
+}
+#[test]
+fn 一意識別欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-UIDL: has space\r\n\r\nx").unwrap();
+    assert!(e.uidl_bad);
+    let e = parse(b"From: a@x.com\r\nX-UIDL: ABCdef123==\r\n\r\nx").unwrap();
+    assert!(!e.uidl_bad);
+}
+#[test]
+fn 副受信欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Received: garbage\r\n\r\nx").unwrap();
+    assert!(e.x_received_bad);
+    let e = parse(b"From: a@x.com\r\nX-Received: by mail.x.com with SMTP id abc.123\r\n\r\nx").unwrap();
+    assert!(!e.x_received_bad);
+}
+
+#[test]
+fn 起源識別欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Originating-IP: notanip\r\n\r\nx").unwrap();
+    assert!(e.origin_ip_bad);
+    let e = parse(b"From: a@x.com\r\nX-Originating-IP: [192.0.2.1]\r\n\r\nx").unwrap();
+    assert!(!e.origin_ip_bad);
+}
+#[test]
+fn 虐待窓口欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Complaints-To: x\r\n\r\nx").unwrap();
+    assert!(e.abuse_uri_bad);
+    let e = parse(b"From: a@x.com\r\nX-Complaints-To: abuse@x.com\r\n\r\nx").unwrap();
+    assert!(!e.abuse_uri_bad);
+}
+#[test]
+fn 自動応答欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nAuto-Submitted: x y\r\n\r\nx").unwrap();
+    assert!(e.auto_sub_bad);
+    let e = parse(b"From: a@x.com\r\nAuto-Submitted: auto-replied\r\n\r\nx").unwrap();
+    assert!(!e.auto_sub_bad);
+}
+#[test]
+fn 認証送信人欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Authenticated-Sender: x\r\n\r\nx").unwrap();
+    assert!(e.auth_sender_bad);
+    let e = parse(b"From: a@x.com\r\nX-Authenticated-Sender: u@x.com\r\n\r\nx").unwrap();
+    assert!(!e.auth_sender_bad);
+}
+
+#[test]
+fn 迷惑報告欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Report: x\r\n\r\nx").unwrap();
+    assert!(e.spam_report_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Report: * 0.1 RULE desc\r\n\r\nx").unwrap();
+    assert!(!e.spam_report_bad);
+}
+#[test]
+fn 検査版欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Checker-Version: x\r\n\r\nx").unwrap();
+    assert!(e.spam_ver_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Checker-Version: SpamAssassin 3.4.6 on h\r\n\r\nx").unwrap();
+    assert!(!e.spam_ver_bad);
+}
+#[test]
+fn 巡回跡欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-BeenThere: x\r\n\r\nx").unwrap();
+    assert!(e.beenthere_bad);
+    let e = parse(b"From: a@x.com\r\nX-BeenThere: list@x.com\r\n\r\nx").unwrap();
+    assert!(!e.beenthere_bad);
+}
+#[test]
+fn 保存抑止欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-No-Archive: x\r\n\r\nx").unwrap();
+    assert!(e.no_archive_bad);
+    let e = parse(b"From: a@x.com\r\nX-No-Archive: yes\r\n\r\nx").unwrap();
+    assert!(!e.no_archive_bad);
+}
+
+#[test]
+fn 迷惑旗欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Flag: x\r\n\r\nx").unwrap();
+    assert!(e.spam_flag_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Flag: YES\r\n\r\nx").unwrap();
+    assert!(!e.spam_flag_bad);
+}
+#[test]
+fn 迷惑状態欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Status: x\r\n\r\nx").unwrap();
+    assert!(e.spam_status_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Status: No, score=0.1 required=5\r\n\r\nx").unwrap();
+    assert!(!e.spam_status_bad);
+}
+#[test]
+fn 迷惑度欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Level: x\r\n\r\nx").unwrap();
+    assert!(e.spam_level_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Level: *****\r\n\r\nx").unwrap();
+    assert!(!e.spam_level_bad);
+}
+#[test]
+fn 迷惑点欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nX-Spam-Score: x\r\n\r\nx").unwrap();
+    assert!(e.spam_score_bad);
+    let e = parse(b"From: a@x.com\r\nX-Spam-Score: 1.5\r\n\r\nx").unwrap();
+    assert!(!e.spam_score_bad);
+}
+
+    #[test]
+    fn 群連接欄が異形なら発火() {
+        assert!(has_newsgroups_bad(b"Newsgroups: x\r\n\r\nbody"));
+        assert!(has_newsgroups_bad(b"Newsgroups: a@b.c\r\n\r\nbody"));
+        assert!(has_newsgroups_bad(b"Newsgroups: a..b\r\n\r\nbody"));
+        assert!(!has_newsgroups_bad(
+            b"Newsgroups: news.announce, misc.test\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 経路欄が異形なら発火() {
+        assert!(has_path_bang_bad(b"Path: a!!b\r\n\r\nbody"));
+        assert!(has_path_bang_bad(b"Path: a!b@x\r\n\r\nbody"));
+        assert!(!has_path_bang_bad(b"Path: a!b!c\r\n\r\nbody"));
+        assert!(!has_path_bang_bad(b"Path: not-for-mail\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 参照番号欄が異形なら発火() {
+        assert!(has_xref_bad(b"Xref: h news.test:x\r\n\r\nbody"));
+        assert!(has_xref_bad(b"Xref: h\r\n\r\nbody"));
+        assert!(!has_xref_bad(
+            b"Xref: host.example news.test:123 misc.a:4\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 追討欄が異形なら発火() {
+        assert!(has_followup_bad(b"Followup-To: x\r\n\r\nbody"));
+        assert!(!has_followup_bad(b"Followup-To: poster\r\n\r\nbody"));
+        assert!(!has_followup_bad(
+            b"Followup-To: misc.test, news.announce\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 元受取人欄が異形なら発火() {
+        assert!(has_orig_recipient_bad(
+            b"Original-Recipient: user@x.com\r\n\r\nbody"
+        ));
+        assert!(has_orig_recipient_bad(b"Original-Recipient: ;a@b\r\n\r\nbody"));
+        assert!(!has_orig_recipient_bad(
+            b"Original-Recipient: rfc822;user@x.com\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 最終受取人欄が異形なら発火() {
+        assert!(has_final_recipient_bad(b"Final-Recipient: x\r\n\r\nbody"));
+        assert!(has_final_recipient_bad(
+            b"Final-Recipient: rfc822;\r\n\r\nbody"
+        ));
+        assert!(!has_final_recipient_bad(
+            b"Final-Recipient: rfc822;u@x.y\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 報告転送欄が異形なら発火() {
+        assert!(has_reporting_mta_bad(b"Reporting-MTA: dns\r\n\r\nbody"));
+        assert!(!has_reporting_mta_bad(
+            b"Reporting-MTA: dns;mail.example.com\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 通知窓欄が異形なら発火() {
+        assert!(has_mdn_gateway_bad(b"MDN-Gateway: smtp\r\n\r\nbody"));
+        assert!(!has_mdn_gateway_bad(
+            b"MDN-Gateway: smtp;gw.example.com\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 遠隔転送欄が異形なら発火() {
+        assert!(has_remote_mta_bad(b"Remote-MTA: dns\r\n\r\nbody"));
+        assert!(!has_remote_mta_bad(
+            b"Remote-MTA: dns;mail.example.com\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 状態欄が異形なら発火() {
+        assert!(has_dsn_status_bad(b"Status: 5.1\r\n\r\nbody"));
+        assert!(has_dsn_status_bad(b"Status: x.y.z\r\n\r\nbody"));
+        assert!(has_dsn_status_bad(b"Status: 9.9.9\r\n\r\nbody"));
+        assert!(!has_dsn_status_bad(b"Status: 5.1.1\r\n\r\nbody"));
+        assert!(!has_dsn_status_bad(b"Status: 2.0.0\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 元封書識別欄が異形なら発火() {
+        assert!(has_orig_envid_bad(b"Original-Envelope-Id:\r\n\r\nbody"));
+        assert!(has_orig_envid_bad(
+            b"Original-Envelope-Id: a b\r\n\r\nbody"
+        ));
+        assert!(!has_orig_envid_bad(
+            b"Original-Envelope-Id: abc123def\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 診断欄が異形なら発火() {
+        assert!(has_diag_code_bad(
+            b"Diagnostic-Code: 550 5.1.1\r\n\r\nbody"
+        ));
+        assert!(has_diag_code_bad(b"Diagnostic-Code: smtp;\r\n\r\nbody"));
+        assert!(!has_diag_code_bad(
+            b"Diagnostic-Code: smtp; 550 5.1.1 user unknown\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 元識別欄が異形なら発火() {
+        assert!(has_orig_msgid_bad(b"Original-Message-ID: abc\r\n\r\nbody"));
+        assert!(has_orig_msgid_bad(
+            b"Original-Message-ID: <abc\r\n\r\nbody"
+        ));
+        assert!(!has_orig_msgid_bad(
+            b"Original-Message-ID: <abc@x.com>\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 処理結果欄が異形なら発火() {
+        assert!(has_mdn_disposition_bad(
+            b"Disposition: displayed\r\n\r\nbody"
+        ));
+        assert!(has_mdn_disposition_bad(
+            b"Disposition: manual-action/MDN-sent-manually\r\n\r\nbody"
+        ));
+        assert!(!has_mdn_disposition_bad(
+            b"Disposition: manual-action/MDN-sent-manually; displayed\r\n\r\nbody"
+        ));
+        assert!(!has_mdn_disposition_bad(
+            b"Disposition: automatic-action/MDN-sent-automatically; deleted\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 報告機欄が異形なら発火() {
+        assert!(has_reporting_ua_bad(b"Reporting-UA: a@b.com\r\n\r\nbody"));
+        assert!(has_reporting_ua_bad(b"Reporting-UA:\r\n\r\nbody"));
+        assert!(!has_reporting_ua_bad(
+            b"Reporting-UA: Kaname/0.7\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 文脈欄が異形なら発火() {
+        assert!(has_msg_context_bad(b"Message-Context: x\r\n\r\nbody"));
+        assert!(!has_msg_context_bad(
+            b"Message-Context: voice-message\r\n\r\nbody"
+        ));
+        assert!(!has_msg_context_bad(b"Message-Context: none\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn md5欄が異形なら発火() {
+        assert!(has_content_md5_bad(b"Content-MD5: xyz\r\n\r\nbody"));
+        assert!(has_content_md5_bad(b"Content-MD5: \r\n\r\nbody"));
+        assert!(!has_content_md5_bad(
+            b"Content-MD5: MDEyMzQ1Njc4OWFiY2RlZg==\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 言語欄が異形なら発火() {
+        assert!(has_content_lang_bad(
+            "Content-Language: 日本語\r\n\r\nbody".as_bytes()
+        ));
+        assert!(has_content_lang_bad(b"Content-Language: x!\r\n\r\nbody"));
+        assert!(!has_content_lang_bad(
+            b"Content-Language: en-US, ja\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 要約欄が異形なら発火() {
+        assert!(has_content_digest_bad(b"Content-Digest: sha\r\n\r\nbody"));
+        assert!(has_content_digest_bad(b"Content-Digest: =abc\r\n\r\nbody"));
+        assert!(!has_content_digest_bad(
+            b"Content-Digest: SHA=thvDyvhfIqlvFe+A9MYgxAfm1q5=\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 特徴欄が異形なら発火() {
+        assert!(has_content_features_bad(b"Content-Features: ;;\r\n\r\nbody"));
+        assert!(has_content_features_bad(
+            b"Content-Features: foo bar\r\n\r\nbody"
+        ));
+        assert!(!has_content_features_bad(
+            b"Content-Features: font-size=12; font-type=serif\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 表示名に制御文字があれば発火() {
+        assert!(has_display_ctrl_bad(
+            b"From: \"Bad\x7fName\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(has_display_ctrl_bad(
+            b"From: \"Bad\xe2\x80\x8bName\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(!has_display_ctrl_bad(b"From: \"Good Name\" <a@b>\r\n\r\nbody"));
+        assert!(!has_display_ctrl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名が裸ドメインなら発火() {
+        assert!(has_display_domain_bad(
+            b"From: \"support.apple.com\" <spam@x>\r\n\r\nbody"
+        ));
+        assert!(has_display_domain_bad(
+            b"From: \"secure-bank.co.jp\" <spam@x>\r\n\r\nbody"
+        ));
+        assert!(!has_display_domain_bad(
+            b"From: \"Support Team\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(!has_display_domain_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名に英字がなければ発火() {
+        assert!(has_display_punct_bad(b"From: \"!!!\" <a@b>\r\n\r\nbody"));
+        assert!(has_display_punct_bad(b"From: \"123\" <a@b>\r\n\r\nbody"));
+        assert!(!has_display_punct_bad(b"From: \"A\" <a@b>\r\n\r\nbody"));
+        assert!(!has_display_punct_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名が長すぎれば発火() {
+        let long = format!(
+            "From: \"{}\" <a@b>\r\n\r\nbody",
+            "a".repeat(120)
+        );
+        assert!(has_display_long_bad(long.as_bytes()));
+        let ok = format!("From: \"{}\" <a@b>\r\n\r\nbody", "a".repeat(60));
+        assert!(!has_display_long_bad(ok.as_bytes()));
+        assert!(!has_display_long_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+#[test]
+fn 受信素朴判定欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nReceived-SPF: x\r\n\r\nx").unwrap();
+    assert!(e.recv_spf_bad);
+    let e = parse(b"From: a@x.com\r\nReceived-SPF: pass (x) receiver=y\r\n\r\nx").unwrap();
+    assert!(!e.recv_spf_bad);
+}
+#[test]
+fn 暗号必須欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nTLS-Required: x\r\n\r\nx").unwrap();
+    assert!(e.tls_required_bad);
+    let e = parse(b"From: a@x.com\r\nTLS-Required: No\r\n\r\nx").unwrap();
+    assert!(!e.tls_required_bad);
+}
+#[test]
+fn 受取人時限欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nRequire-Recipient-Valid-Since: x\r\n\r\nx").unwrap();
+    assert!(e.req_rcpt_bad);
+    let e = parse(b"From: a@x.com\r\nRequire-Recipient-Valid-Since: a@x.com; Sun, 15 Mar 2020 08:59:42 -0700\r\n\r\nx").unwrap();
+    assert!(!e.req_rcpt_bad);
+}
+#[test]
+fn 印章欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nBIMI-Location: http://x.com/a.svg\r\n\r\nx").unwrap();
+    assert!(e.bimi_mark_bad);
+    let e = parse(b"From: a@x.com\r\nBIMI-Location: https://x.com/a.svg\r\n\r\nx").unwrap();
+    assert!(!e.bimi_mark_bad);
+}
+
+#[test]
+fn 制御欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nControl: cancel\r\n\r\nx").unwrap();
+    assert!(e.control_bad);
+    let e = parse(b"From: a@x.com\r\nControl: cancel <abc@x.com>\r\n\r\nx").unwrap();
+    assert!(!e.control_bad);
+}
+#[test]
+fn 置換欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nSupersedes: abc\r\n\r\nx").unwrap();
+    assert!(e.supersedes_bad);
+    let e = parse(b"From: a@x.com\r\nSupersedes: <abc@x.com>\r\n\r\nx").unwrap();
+    assert!(!e.supersedes_bad);
+}
+#[test]
+fn 解除錠欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nCancel-Lock: sha256\r\n\r\nx").unwrap();
+    assert!(e.cancel_lock_bad);
+    let e = parse(b"From: a@x.com\r\nCancel-Lock: sha256:abcdef\r\n\r\nx").unwrap();
+    assert!(!e.cancel_lock_bad);
+}
+#[test]
+fn 投稿機欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nNNTP-Posting-Host: a@b.com\r\n\r\nx").unwrap();
+    assert!(e.posting_host_bad);
+    let e = parse(b"From: a@x.com\r\nNNTP-Posting-Host: news.example.com\r\n\r\nx").unwrap();
+    assert!(!e.posting_host_bad);
+}
+
+    #[test]
+    fn 表示名に生非asciiがあれば発火() {
+        assert!(has_display_raw_nonascii(
+            "From: \"名前です\" <a@b>\r\n\r\nbody".as_bytes()
+        ));
+        assert!(!has_display_raw_nonascii(
+            b"From: \"Name San\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(!has_display_raw_nonascii(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名のencoded_wordが構造文字に復号されれば発火() {
+        assert!(has_display_ew_danger(
+            b"From: \"=?utf-8?B?PGV2aWw+?=\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(has_display_ew_danger(
+            b"From: \"=?utf-8?B?PGFAYj4=?=\" <c@d>\r\n\r\nbody"
+        ));
+        assert!(!has_display_ew_danger(
+            b"From: \"=?utf-8?B?TmFtZQ==?=\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(!has_display_ew_danger(b"From: \"Name\" <a@b>\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名に内側鉤括弧があれば発火() {
+        assert!(has_display_inner_quote(
+            b"From: \"a\"b\"c\" <x@y>\r\n\r\nbody"
+        ));
+        assert!(!has_display_inner_quote(
+            b"From: \"Name\" <x@y>\r\n\r\nbody"
+        ));
+        assert!(!has_display_inner_quote(b"From: x@y\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名が空白のみなら発火() {
+        assert!(has_display_ws_only(b"From: \"   \" <x@y>\r\n\r\nbody"));
+        assert!(!has_display_ws_only(b"From: \"\" <x@y>\r\n\r\nbody"));
+        assert!(!has_display_ws_only(b"From: \"N\" <x@y>\r\n\r\nbody"));
+        assert!(!has_display_ws_only(b"From: x@y\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 認証記録が選択子欠落なら発火() {
+        assert!(has_dkim_sig_no_s(
+            b"DKIM-Signature: v=1; a=rsa; d=y; b=x\r\n\r\nbody"
+        ));
+        assert!(has_dkim_sig_no_s(
+            b"DomainKey-Signature: v=1; a=rsa; d=y\r\n\r\nbody"
+        ));
+        assert!(!has_dkim_sig_no_s(
+            b"DKIM-Signature: v=1; a=rsa; d=y; s=s1; b=x\r\n\r\nbody"
+        ));
+        assert!(!has_dkim_sig_no_s(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 認証記録が署名値欠落なら発火() {
+        assert!(has_dkim_sig_no_b(
+            b"DKIM-Signature: v=1; a=rsa; d=y; s=s1; bh=x\r\n\r\nbody"
+        ));
+        assert!(!has_dkim_sig_no_b(
+            b"DKIM-Signature: v=1; a=rsa; d=y; s=s1; b=x; bh=h\r\n\r\nbody"
+        ));
+        assert!(!has_dkim_sig_no_b(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 認証記録が連鎖番号異形なら発火() {
+        assert!(has_arc_seal_bad_i(
+            b"ARC-Seal: a=rsa; cv=none; d=y\r\n\r\nbody"
+        ));
+        assert!(has_arc_seal_bad_i(
+            b"ARC-Seal: i=x; cv=none; d=y\r\n\r\nbody"
+        ));
+        assert!(has_arc_seal_bad_i(
+            b"ARC-Seal: i=2; cv=none; d=y\r\n\r\nbody"
+        ));
+        assert!(!has_arc_seal_bad_i(
+            b"ARC-Seal: i=1; cv=none; d=y\r\n\r\nbody"
+        ));
+        assert!(!has_arc_seal_bad_i(
+            b"ARC-Seal: i=2; cv=pass; d=y\r\n\r\nbody"
+        ));
+        assert!(!has_arc_seal_bad_i(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 認証記録が連鎖組欠落なら発火() {
+        assert!(has_arc_chain_incomplete(
+            b"ARC-Seal: i=1; cv=none; d=y\r\n\r\nbody"
+        ));
+        assert!(has_arc_chain_incomplete(
+            b"ARC-Seal: i=1; cv=none; d=y\r\nARC-Authentication-Results: i=1; x\r\n\r\nbody"
+        ));
+        assert!(!has_arc_chain_incomplete(
+            b"ARC-Seal: i=1; cv=none; d=y\r\nARC-Authentication-Results: i=1; x\r\nARC-Message-Signature: i=1; x\r\n\r\nbody"
+        ));
+        assert!(!has_arc_chain_incomplete(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 自動応答欄が未規定値なら発火() {
+        assert!(has_auto_submitted_bad(
+            b"Auto-Submitted: maybe\r\n\r\nbody"
+        ));
+        assert!(has_auto_submitted_bad(b"Auto-Submitted: \r\n\r\nbody"));
+        assert!(!has_auto_submitted_bad(
+            b"Auto-Submitted: auto-generated\r\n\r\nbody"
+        ));
+        assert!(!has_auto_submitted_bad(b"Auto-Submitted: no\r\n\r\nbody"));
+        assert!(!has_auto_submitted_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 送信元経路欄が異形なら発火() {
+        assert!(has_x_orig_ip_bad(b"X-Originating-IP: 10.0.0.1\r\n\r\nbody"));
+        assert!(has_x_orig_ip_bad(
+            b"X-Originating-IP: [not-an-ip]\r\n\r\nbody"
+        ));
+        assert!(!has_x_orig_ip_bad(
+            b"X-Originating-IP: [10.0.0.1]\r\n\r\nbody"
+        ));
+        assert!(!has_x_orig_ip_bad(
+            b"X-Originating-IP: [IPv6:::1]\r\n\r\nbody"
+        ));
+        assert!(!has_x_orig_ip_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 応答抑制欄が異形なら発火() {
+        assert!(has_x_auto_suppress_bad(
+            b"X-Auto-Response-Suppress: OOF, secret\r\n\r\nbody"
+        ));
+        assert!(has_x_auto_suppress_bad(
+            b"X-Auto-Response-Suppress: OOF,\r\n\r\nbody"
+        ));
+        assert!(!has_x_auto_suppress_bad(
+            b"X-Auto-Response-Suppress: OOF, AutoReply\r\n\r\nbody"
+        ));
+        assert!(!has_x_auto_suppress_bad(
+            b"X-Auto-Response-Suppress: All\r\n\r\nbody"
+        ));
+        assert!(!has_x_auto_suppress_bad(b"From: a@b\r\n\r\nbody"));
     }
 
     #[test]
