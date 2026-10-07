@@ -2222,4 +2222,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2858 | Envelope-To:/Delivered-To:/X-Envelope-To: 系の未閉塞クオート宛名値 (封書宛記録のクオート未閉塞異形) | 封書宛ずれ |
 | D2859 | X-Envelope-From:/X-MailFrom:/X-Mail-From: 系の未閉塞クオート宛名値 (封書差出人記録のクオート未閉塞異形) | 封書差出人ずれ |
 | D2860 | Errors-To: の未閉塞クオート宛名値 (返送先記録のクオート未閉塞異形) | 返送先ずれ |
+| D2927 | X-MS-Has-Attach 系の yes/no 語彙外れ (添付標旗欄の値異形) | 経路ずれ |
+| D2928 | X-MS-TNEF-Correlator 系の非base64値 (相関子欄の値異形) | 経路ずれ |
+| D2929 | X-MS-Exchange 遅延欄の非時刻値 (遅延欄の値異形) | 経路ずれ |
+| D2930 | X-Mailer/User-Agent 系の制御文字・非ascii (送信器欄の値異形) | 経路ずれ |
 devin/1791332973-unclosed-cell1
