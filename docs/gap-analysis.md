@@ -2226,6 +2226,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2928 | X-MS-TNEF-Correlator 系の非base64値 (相関子欄の値異形) | 経路ずれ |
 | D2929 | X-MS-Exchange 遅延欄の非時刻値 (遅延欄の値異形) | 経路ずれ |
 | D2930 | X-Mailer/User-Agent 系の制御文字・非ascii (送信器欄の値異形) | 経路ずれ |
+| D2963 | List-Post 等の非 <URI> 値 (一覧操作欄の値異形) | 一覧処理ずれ |
+| D2964 | List-Unsubscribe-Post: の非 One-Click 値 (解除投稿欄の値異形) | 解除処理ずれ |
+| D2965 | Archived-At: の非 URI 値 (保管先欄の値異形) | 保管参照ずれ |
+| D2966 | Injection-Info: の非 名=値 値 (注入情報欄の値異形) | 投稿記録ずれ |
 | D2975 | Disposition-Notification-Options: の非 名=required|optional 値 (通知選択欄の値異形) | 通知要求ずれ |
 | D2976 | VBR-Info: の非 名=値 値 (信託情報欄の値異形) | 信託照合ずれ |
 | D2977 | Feedback-Type 系の語彙外値 (反応種別欄の値異形) | 報告種別ずれ |
