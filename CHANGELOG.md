@@ -183,6 +183,16 @@
 ### Security — D2811: `X-Original-Reply-To:` 欄のローカル部ハット宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_caret_local` を追加。
 ### Security — D2812: `Disposition-Notification-To:` 欄のローカル部ハット宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_caret_local` を追加。
 ### Security — D2813: `Return-Receipt-To:` 欄のローカル部ハット宛名値を受領通知先ずれとして検出 — `Envelope` に `return_receipt_caret_local` を追加。
+### Security — D2788: `X-Envelope-To:` 欄のローカル部反転符宛名値 (`` ` `` 含む `a`b@y` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_backtick_local` を追加 (`Envelope-To:`/`Delivered-To:` 本命は `addr_backtick_local` が網羅)。
+### Security — D2789: `X-Envelope-From:`/`X-MailFrom:` 等欄のローカル部反転符宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_backtick_local` を追加。
+### Security — D2790: `Errors-To:` 欄のローカル部反転符宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_backtick_local` を追加。
+### Security — D2798: `X-Original-Cc:` 系欄のローカル部井桁宛名値 (`a#b@y` 形) を元副宛ずれとして検出 — `Envelope` に `x_orig_cc_hash_local` を追加。
+### Security — D2799: `X-Original-Reply-To:` 欄のローカル部井桁宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_hash_local` を追加。
+### Security — D2800: `Disposition-Notification-To:` 欄のローカル部井桁宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_hash_local` を追加。
+### Security — D2801: `Return-Receipt-To:` 欄のローカル部井桁宛名値を受領通知先ずれとして検出 — `Envelope` に `return_receipt_hash_local` を追加。
+### Security — D2785: `X-Envelope-To:` 欄のローカル部ハット宛名値 (`a^b@y` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_caret_local` を追加 (`Envelope-To:`/`Delivered-To:` 本命は `addr_caret_local` が網羅)。
+### Security — D2786: `X-Envelope-From:`/`X-MailFrom:` 等欄のローカル部ハット宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_caret_local` を追加。
+### Security — D2787: `Errors-To:` 欄のローカル部ハット宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_caret_local` を追加。
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
