@@ -226,6 +226,14 @@
 ### Security — D2860: `Errors-To:` 欄の未閉塞クオート宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_unclosed` を追加。
 
 devin/1791332973-unclosed-cell1
+### Security — D2923: `X-MS-Exchange-Organization-SCL:`/`X-Microsoft-Antispam-Mailbox-Delivery:` 系欄の -1 〜 9 整数範囲外れをスパム信頼度記録異形として検出 — `Envelope` に `ms_scl_bad` を追加。
+
+### Security — D2924: `X-MS-Exchange-*-Network-Message-Id:` 系欄の GUID 形外れを配送追跡記録異形として検出 — `Envelope` に `ms_nmi_bad` を追加。
+
+### Security — D2925: `X-Forefront-Antispam-Report:`/`X-Microsoft-Antispam:` 系欄の `KEY=value` 連接形外れを判定記録異形として検出 — `Envelope` に `ms_as_report_bad` を追加。
+
+### Security — D2926: `Feedback-ID:`/`X-Feedback-ID:` 系欄の4区分形外れを報酬系識別異形として検出 — `Envelope` に `feedback_id_bad` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。

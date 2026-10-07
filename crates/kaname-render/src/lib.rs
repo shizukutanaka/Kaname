@@ -3290,6 +3290,14 @@ pub struct Envelope {
     pub env_from_quoted_local: bool,
     /// `Errors-To:` の値が鉤括弧ローカル宛名形か (D2845)。
     pub errors_to_quoted_local: bool,
+    /// X-MS-Exchange SCL 系欄の値が整数範囲でない
+    pub ms_scl_bad: bool,
+    /// X-MS-Exchange 配送追跡欄の値が GUID 形でない
+    pub ms_nmi_bad: bool,
+    /// X-Forefront/X-Microsoft Antispam 系欄の値が対連接形でない
+    pub ms_as_report_bad: bool,
+    /// Feedback-ID 系欄の値が4区分形でない
+    pub feedback_id_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7065,6 +7073,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let env_to_quoted_local = has_env_to_quoted_local(bytes);
     let env_from_quoted_local = has_env_from_quoted_local(bytes);
     let errors_to_quoted_local = has_errors_to_quoted_local(bytes);
+    let ms_scl_bad = has_ms_scl_bad(bytes);
+    let ms_nmi_bad = has_ms_nmi_bad(bytes);
+    let ms_as_report_bad = has_ms_as_report_bad(bytes);
+    let feedback_id_bad = has_feedback_id_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8626,6 +8638,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         env_to_quoted_local,
         env_from_quoted_local,
         errors_to_quoted_local,
+        ms_scl_bad,
+        ms_nmi_bad,
+        ms_as_report_bad,
+        feedback_id_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48342,6 +48358,148 @@ pub fn has_x_orig_rcpt_to_caret_local(raw: &[u8]) -> bool {
 }
 
 /// `X-Confirm-Reading-To:` の値がドル符宛名形か判定する
+/// `X-MS-Exchange-Organization-SCL:` 系欄の値が -1 から 9 の整数範囲でなければスパム信頼度記録の異形として検出する (D2923)。
+pub fn has_ms_scl_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-ms-exchange-organization-scl:")
+            || l.starts_with("x-microsoft-antispam-mailbox-delivery:"))
+        {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        match v.parse::<i32>() {
+            Ok(n) => !(-1..=9).contains(&n),
+            Err(_) => true,
+        }
+    })
+}
+
+/// `X-MS-Exchange-Organization-Network-Message-Id:` 系欄の値が GUID 形でなければ配送追跡記録の異形として検出する (D2924)。
+pub fn has_ms_nmi_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-ms-exchange-organization-network-message-id:")
+            || l.starts_with("x-ms-exchange-crosstenant-network-message-id:"))
+        {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let parts: Vec<&str> = v.split('-').collect();
+        let lens = [8usize, 4, 4, 4, 12];
+        !(parts.len() == 5
+            && parts
+                .iter()
+                .zip(lens.iter())
+                .all(|(p, n)| p.len() == *n && p.chars().all(|c| c.is_ascii_hexdigit())))
+    })
+}
+
+/// `X-Forefront-Antispam-Report:`/`X-Microsoft-Antispam:` 系欄の値が `KEY=value` 対の連接でなければ判定記録の異形として検出する (D2925)。
+pub fn has_ms_as_report_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-forefront-antispam-report:")
+            || l.starts_with("x-microsoft-antispam:"))
+        {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        v.is_empty()
+            || v.split(';').any(|p| {
+                let p = p.trim();
+                if p.is_empty() {
+                    return true;
+                }
+                let sep = p.find(['=', ':']);
+                match sep {
+                    None => true,
+                    Some(i) => {
+                        let k = &p[..i];
+                        k.is_empty()
+                            || !k.chars().all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '-')
+                    }
+                }
+            })
+    })
+}
+
+/// `Feedback-ID:` 系欄の値がコロン区切りの4区分形でなければ報酬系識別の異形として検出する (D2926)。
+pub fn has_feedback_id_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:")) {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let parts: Vec<&str> = v.split(':').collect();
+        !(parts.len() == 4
+            && parts
+                .iter()
+                .all(|p| {
+                    !p.is_empty()
+                        && p.chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+                }))
+    })
+}
+
 /// (D2635)。
 ///
 /// 閲覧確認先を記す欄なのに `a@x$` のようにドメイン側に孤立 `$` を
@@ -127375,4 +127533,65 @@ body";
             b"From: \"Taro Tanaka\" <a@b>\r\n\r\nbody"
         ));
         assert!(!has_url_display_name(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 信頼度欄が異形なら発火() {
+        assert!(has_ms_scl_bad(
+            b"X-MS-Exchange-Organization-SCL: 99\r\n\r\nbody"
+        ));
+        assert!(has_ms_scl_bad(
+            b"X-MS-Exchange-Organization-SCL: not-a-number\r\n\r\nbody"
+        ));
+        assert!(!has_ms_scl_bad(
+            b"X-MS-Exchange-Organization-SCL: -1\r\n\r\nbody"
+        ));
+        assert!(!has_ms_scl_bad(
+            b"X-MS-Exchange-Organization-SCL: 5\r\n\r\nbody"
+        ));
+        assert!(!has_ms_scl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 追跡欄が異形なら発火() {
+        assert!(has_ms_nmi_bad(
+            b"X-MS-Exchange-Organization-Network-Message-Id: not-a-guid\r\n\r\nbody"
+        ));
+        assert!(has_ms_nmi_bad(
+            b"X-MS-Exchange-Organization-Network-Message-Id: 1234\r\n\r\nbody"
+        ));
+        assert!(!has_ms_nmi_bad(
+            b"X-MS-Exchange-Organization-Network-Message-Id: 4eb7f84c-c2a6-4bc0-9e7f-1a2b3c4d5e6f\r\n\r\nbody"
+        ));
+        assert!(!has_ms_nmi_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 判定記録欄が異形なら発火() {
+        assert!(has_ms_as_report_bad(
+            b"X-Forefront-Antispam-Report: just-words\r\n\r\nbody"
+        ));
+        assert!(has_ms_as_report_bad(
+            b"X-Forefront-Antispam-Report: CIP=1;;SRV=2\r\n\r\nbody"
+        ));
+        assert!(!has_ms_as_report_bad(
+            b"X-Forefront-Antispam-Report: CIP:1.2.3.4;CTRY=JP;SRV=a1\r\n\r\nbody"
+        ));
+        assert!(!has_ms_as_report_bad(
+            b"X-Microsoft-Antispam: BCL:0\r\n\r\nbody"
+        ));
+        assert!(!has_ms_as_report_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 報酬識別欄が異形なら発火() {
+        assert!(has_feedback_id_bad(b"Feedback-ID: justword\r\n\r\nbody"));
+        assert!(has_feedback_id_bad(b"Feedback-ID: a:b:c\r\n\r\nbody"));
+        assert!(!has_feedback_id_bad(
+            b"Feedback-ID: i1:dfdg:campaign:example.com\r\n\r\nbody"
+        ));
+        assert!(!has_feedback_id_bad(
+            b"X-Feedback-Id: 1.0.0:camp:aign:brand-1\r\n\r\nbody"
+        ));
+        assert!(!has_feedback_id_bad(b"From: a@b\r\n\r\nbody"));
     }
