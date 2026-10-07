@@ -234,6 +234,10 @@ devin/1791332973-unclosed-cell1
 
 ### Security — D2930: `X-Mailer:`/`User-Agent:`/`X-MimeOLE:` 系欄の制御文字・非ascii混入を送信器記録異形として検出 — `Envelope` に `mailer_bad` を追加。
 
+### Security — D2971: `Received-SPF:`/`X-Received-SPF:` の先頭が判定語彙でない値を検出 (`recv_spf_bad`)
+### Security — D2972: `TLS-Required:` が `No` でない値を検出 (`tls_required_bad`)
+### Security — D2973: `Require-Recipient-Valid-Since:` が `宛名; 日時` 形でない値を検出 (`req_rcpt_bad`)
+### Security — D2974: `BIMI-Location:` が https でない / `BIMI-Indicator:` が単一トークンでない値を検出 (`bimi_mark_bad`)
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。

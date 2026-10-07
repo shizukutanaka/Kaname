@@ -2226,4 +2226,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2928 | X-MS-TNEF-Correlator 系の非base64値 (相関子欄の値異形) | 経路ずれ |
 | D2929 | X-MS-Exchange 遅延欄の非時刻値 (遅延欄の値異形) | 経路ずれ |
 | D2930 | X-Mailer/User-Agent 系の制御文字・非ascii (送信器欄の値異形) | 経路ずれ |
+| D2971 | Received-SPF 系の非判定語彙値 (素朴判定欄の値異形) | 送信域判定ずれ |
+| D2972 | TLS-Required: の非 No 値 (暗号必須欄の値異形) | 暗号経路ずれ |
+| D2973 | Require-Recipient-Valid-Since: の非 宛名;日時 値 (受取人時限欄の値異形) | 宛先検証ずれ |
+| D2974 | BIMI-Location/Indicator: の非既定値 (印章欄の値異形) | 印章表示ずれ |
 devin/1791332973-unclosed-cell1
