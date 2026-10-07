@@ -3462,6 +3462,14 @@ pub struct Envelope {
     pub x_orig_ip_bad: bool,
     /// X-Auto-Response-Suppress 欄のトークンが規定語彙外
     pub x_auto_suppress_bad: bool,
+    /// X-OriginalArrivalTime 系欄の値が日時形でない
+    pub arrival_time_bad: bool,
+    /// Thread-Index 欄の値が base64 索引値の形でない
+    pub thread_index_bad: bool,
+    /// Content-Class 欄の値が urn 形でない
+    pub content_class_bad: bool,
+    /// X-OriginatorOrg 系欄の値がドメイン形でない
+    pub originator_org_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7328,6 +7336,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auto_submitted_bad = has_auto_submitted_bad(bytes);
     let x_orig_ip_bad = has_x_orig_ip_bad(bytes);
     let x_auto_suppress_bad = has_x_auto_suppress_bad(bytes);
+    let arrival_time_bad = has_arrival_time_bad(bytes);
+    let thread_index_bad = has_thread_index_bad(bytes);
+    let content_class_bad = has_content_class_bad(bytes);
+    let originator_org_bad = has_originator_org_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8980,6 +8992,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         auto_submitted_bad,
         x_orig_ip_bad,
         x_auto_suppress_bad,
+        arrival_time_bad,
+        thread_index_bad,
+        content_class_bad,
+        originator_org_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -51383,6 +51399,137 @@ pub fn has_x_auto_suppress_bad(raw: &[u8]) -> bool {
                     .iter()
                     .any(|k| t == *k)
         })
+    })
+}
+
+/// X-OriginalArrivalTime 系欄の値が `DD Mon YYYY HH:MM:SS` の日時形でなければ異形として検出する (D2919)。
+pub fn has_arrival_time_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-originalarrivaltime:")
+            || l.starts_with("x-original-arrival-time:")
+            || l.starts_with("x-orig-arrival-time:"))
+        {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let w: Vec<&str> = v.split_whitespace().collect();
+        let ok = w.len() >= 4
+            && w[0].len() == 2
+            && w[0].chars().all(|c| c.is_ascii_digit())
+            && months.iter().any(|m| w[1] == *m)
+            && w[2].len() == 4
+            && w[2].chars().all(|c| c.is_ascii_digit())
+            && {
+                let t: Vec<&str> = w[3].split(':').collect();
+                t.len() == 3
+                    && t.iter().all(|p| {
+                        let p = p.split('.').next().unwrap_or(p);
+                        p.len() == 2 && p.chars().all(|c| c.is_ascii_digit())
+                    })
+            };
+        !ok
+    })
+}
+
+/// Thread-Index 欄の値が base64 索引値の形でなければスレッド索引の異形として検出する (D2920)。
+pub fn has_thread_index_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !l.starts_with("thread-index:") {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        v.len() < 24
+            || !v.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+    })
+}
+
+/// Content-Class 欄の値が `urn:content-classes:` の urn 形でなければメッセージ種別の異形として検出する (D2921)。
+pub fn has_content_class_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("content-class:") || l.starts_with("x-content-class:")) {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        !(v.starts_with("urn:content-classes:") && v.len() > "urn:content-classes:".len())
+    })
+}
+
+/// X-OriginatorOrg 系欄の値がドメイン形でなければ発信組織記録の異形として検出する (D2922)。
+pub fn has_originator_org_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-originatororg:") || l.starts_with("x-originator-org:")) {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        v.is_empty()
+            || v.contains(' ')
+            || v.contains('@')
+            || !v.contains('.')
+            || !v.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+            || v.split('.').any(|t| t.is_empty())
     })
 }
 
@@ -131510,4 +131657,63 @@ fn 投稿機欄が異形なら発火() {
             b"X-Auto-Response-Suppress: All\r\n\r\nbody"
         ));
         assert!(!has_x_auto_suppress_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 到着日時欄が異形なら発火() {
+        assert!(has_arrival_time_bad(
+            b"X-OriginalArrivalTime: not-a-time\r\n\r\nbody"
+        ));
+        assert!(has_arrival_time_bad(
+            b"X-OriginalArrivalTime: 01 Foo 2025 10:00:00\r\n\r\nbody"
+        ));
+        assert!(!has_arrival_time_bad(
+            b"X-OriginalArrivalTime: 01 Jan 2025 10:00:00.123 (UTC)\r\n\r\nbody"
+        ));
+        assert!(!has_arrival_time_bad(
+            b"X-Original-Arrival-Time: 01 Jan 2025 10:00:00\r\n\r\nbody"
+        ));
+        assert!(!has_arrival_time_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 索引欄が異形なら発火() {
+        assert!(has_thread_index_bad(b"Thread-Index: abc\r\n\r\nbody"));
+        assert!(has_thread_index_bad(
+            b"Thread-Index: AQHRMzVhYz!!invalid!!\r\n\r\nbody"
+        ));
+        assert!(!has_thread_index_bad(
+            b"Thread-Index: AQHRMzVhYzEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3OA==\r\n\r\nbody"
+        ));
+        assert!(!has_thread_index_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 種別欄が異形なら発火() {
+        assert!(has_content_class_bad(b"Content-Class: freeform\r\n\r\nbody"));
+        assert!(has_content_class_bad(
+            b"Content-Class: urn:content-classes:\r\n\r\nbody"
+        ));
+        assert!(!has_content_class_bad(
+            b"Content-Class: urn:content-classes:message\r\n\r\nbody"
+        ));
+        assert!(!has_content_class_bad(
+            b"Content-Class: urn:content-classes:dsn\r\n\r\nbody"
+        ));
+        assert!(!has_content_class_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 発信組織欄が異形なら発火() {
+        assert!(has_originator_org_bad(
+            b"X-OriginatorOrg: not a domain\r\n\r\nbody"
+        ));
+        assert!(has_originator_org_bad(b"X-OriginatorOrg: nodot\r\n\r\nbody"));
+        assert!(has_originator_org_bad(
+            b"X-OriginatorOrg: has@at.com\r\n\r\nbody"
+        ));
+        assert!(!has_originator_org_bad(
+            b"X-OriginatorOrg: example.com\r\n\r\nbody"
+        ));
+        assert!(!has_originator_org_bad(b"From: a@b\r\n\r\nbody"));
     }

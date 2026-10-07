@@ -4614,3 +4614,7 @@ devin/1791331333-quoted-local-cell2
 ## ラウンド 447 — 「自動の自称」の自問自答
 
 「Auto-Submitted がある = 自動メールだから無害」に疑いを。RFC 3834 の語彙は auto-generated/auto-replied/auto-forwarded/no の四つだけ — それ以外の値を名乗る欄は機械判定をすり抜けるために置かれた擬態かもしれない。Precedence も同じ構造: bulk/junk/list などの語彙を外れた値は配送優先度を読む側の解釈を揺らす。X-Originating-IP は「送信元を証明します」と言いながら IP 表記でない値を置ける自称欄、X-Auto-Response-Suppress は Exchange の応答抑制語彙を外れたトークンで抑制を偽装できる。語彙が閉じている欄ほど、語彙外の値は異形として確実に切れる。
+
+## ラウンド 448 — 「欄の値の形」の自問自答
+
+「ヘッダ名が正しい = 値も正しい」に疑いを。X-OriginalArrivalTime は Exchange が刻む到着日時で `DD Mon YYYY HH:MM:SS` の形 — 形を外れた値を置く欄は経路履歴の信憑性を装う。Thread-Index は base64 の索引値、Content-Class は `urn:content-classes:` の urn、X-OriginatorOrg はドメイン名 — 各欄に「値が従うべき形」があり、形を外れる値は読む側の解釈を揺らす材料になる。語彙の閉じた欄 (前ラウンド) の次は、形が定まった欄 — 欄名が存在するだけでは安全にならない層を切った。

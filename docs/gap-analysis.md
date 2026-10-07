@@ -2306,6 +2306,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2916 | Precedence: の未規定値 (配送優先欄の語彙外値異形) | 経路ずれ |
 | D2917 | X-Originating-IP: の非IP表記値 (送信元欄の値異形) | 経路ずれ |
 | D2918 | X-Auto-Response-Suppress: の語彙外トークン (応答抑制欄の値異形) | 経路ずれ |
+| D2919 | X-OriginalArrivalTime: 系の日時形外れ (到着日時欄の値異形) | 経路ずれ |
+| D2920 | Thread-Index: の非base64値 (スレッド索引欄の値異形) | 経路ずれ |
+| D2921 | Content-Class: の非urn値 (種別欄の値異形) | 経路ずれ |
+| D2922 | X-OriginatorOrg: 系の非ドメイン値 (発信組織欄の値異形) | 経路ずれ |
 devin/1791332973-unclosed-cell1
 | D2846 | Apparently-To:/X-Apparently-To: 系のローカル部鉤括弧宛名値 (見せ宛記録のローカル部鉤括弧異形) | 見せ宛ずれ |
 | D2847 | Apparently-From:/Apparently-Sender: 系のローカル部鉤括弧宛名値 (表差出人記録のローカル部鉤括弧異形) | 表差出人ずれ |
