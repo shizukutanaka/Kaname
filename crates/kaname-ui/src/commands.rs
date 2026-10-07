@@ -8147,6 +8147,156 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.mailer_bad {
         render_risks.push("送信器欄の値が異形です—送信器値の扱いで経路がずれます".to_string());
     }
+    if env.spam_report_bad {
+        render_risks.push("迷惑報告欄の値が異形です—迷惑報告値の扱いで判定経緯がずれます".to_string());
+    }
+    if env.spam_ver_bad {
+        render_risks.push("検査版欄の値が異形です—検査版値の扱いで検査把握がずれます".to_string());
+    }
+    if env.beenthere_bad {
+        render_risks.push("巡回跡欄の値が異形です—巡回跡値の扱いで巡回特定がずれます".to_string());
+    }
+    if env.no_archive_bad {
+        render_risks.push("保存抑止欄の値が異形です—保存抑止値の扱いで保存方針がずれます".to_string());
+    }
+
+    if env.origin_ip_bad {
+        render_risks.push("起源識別欄の値が異形です—起源識別値の扱いで発信特定がずれます".to_string());
+    }
+    if env.abuse_uri_bad {
+        render_risks.push("虐待窓口欄の値が異形です—虐待窓口値の扱いで通報先がずれます".to_string());
+    }
+    if env.auto_sub_bad {
+        render_risks.push("自動応答欄の値が異形です—自動応答値の扱いで応答分類がずれます".to_string());
+    }
+    if env.auth_sender_bad {
+        render_risks.push("認証送信人欄の値が異形です—認証送信人値の扱いで送信認証がずれます".to_string());
+    }
+
+    if env.precedence_bad {
+        render_risks.push("優先順位欄の値が異形です—優先順位値の扱いで優先判定がずれます".to_string());
+    }
+    if env.x_loop_bad {
+        render_risks.push("巡回欄の値が異形です—巡回値の扱いで巡回防止がずれます".to_string());
+    }
+    if env.uidl_bad {
+        render_risks.push("一意識別欄の値が異形です—一意識別値の扱いで受信管理がずれます".to_string());
+    }
+    if env.x_received_bad {
+        render_risks.push("副受信欄の値が異形です—副受信値の扱いで経路把握がずれます".to_string());
+    }
+
+    if env.list_uri_bad {
+        render_risks.push("一覧操作欄の値が異形です—操作値の扱いで一覧処理がずれます".to_string());
+    }
+    if env.unsub_post_bad {
+        render_risks.push("解除投稿欄の値が異形です—解除投稿値の扱いで解除処理がずれます".to_string());
+    }
+    if env.archived_at_bad {
+        render_risks.push("保管先欄の値が異形です—保管先値の扱いで保管参照がずれます".to_string());
+    }
+    if env.injection_info_bad {
+        render_risks.push("注入情報欄の値が異形です—注入情報値の扱いで投稿記録がずれます".to_string());
+    }
+
+    if env.dnt_opt_bad {
+        render_risks.push("通知選択欄の値が異形です—通知選択値の扱いで通知要求がずれます".to_string());
+    }
+    if env.vbr_info_bad {
+        render_risks.push("信託情報欄の値が異形です—信託情報値の扱いで信託照合がずれます".to_string());
+    }
+    if env.feedback_type_bad {
+        render_risks.push("反応種別欄の値が異形です—反応種別値の扱いで報告種別がずれます".to_string());
+    }
+    if env.feedback_id_bad {
+        render_risks.push("反応識別欄の値が異形です—反応識別値の扱いで報告照合がずれます".to_string());
+    }
+
+    if env.spam_flag_bad {
+        render_risks.push("迷惑旗欄の値が異形です—迷惑旗値の扱いで迷惑判定がずれます".to_string());
+    }
+    if env.spam_status_bad {
+        render_risks.push("迷惑状態欄の値が異形です—迷惑状態値の扱いで迷惑判定がずれます".to_string());
+    }
+    if env.spam_level_bad {
+        render_risks.push("迷惑度欄の値が異形です—迷惑度値の扱いで迷惑判定がずれます".to_string());
+    }
+    if env.spam_score_bad {
+        render_risks.push("迷惑点欄の値が異形です—迷惑点値の扱いで迷惑判定がずれます".to_string());
+    }
+
+    if env.newsgroups_bad {
+        render_risks.push("ニュース群欄の値が異形です—群名の扱いで経路がずれます".to_string());
+    }
+    if env.path_bang_bad {
+        render_risks.push("転送経路欄の値が異形です—経路値の扱いで経路がずれます".to_string());
+    }
+    if env.xref_bad {
+        render_risks.push("既読参照欄の値が異形です—参照値の扱いで既読記録がずれます".to_string());
+    }
+    if env.followup_bad {
+        render_risks.push("追討先欄の値が異形です—追討先値の扱いで返信先がずれます".to_string());
+    }
+    if env.orig_recipient_bad {
+        render_risks.push("元受取人記録欄の値が異形です—受取人記録の扱いで経路がずれます".to_string());
+    }
+    if env.final_recipient_bad {
+        render_risks.push("最終受取人記録欄の値が異形です—最終受取人記録の扱いで経路がずれます".to_string());
+    }
+    if env.reporting_mta_bad {
+        render_risks.push("報告元欄の値が異形です—報告元値の扱いで報告経路がずれます".to_string());
+    }
+    if env.mdn_gateway_bad {
+        render_risks.push("通知窓欄の値が異形です—通知窓値の扱いで通知経路がずれます".to_string());
+    }
+    if env.remote_mta_bad {
+        render_risks.push("遠隔転送欄の値が異形です—遠隔転送値の扱いで配達経路がずれます".to_string());
+    }
+    if env.dsn_status_bad {
+        render_risks.push("配送状態欄の値が異形です—状態値の扱いで不達区分がずれます".to_string());
+    }
+    if env.orig_envid_bad {
+        render_risks.push("元封書識別欄の値が異形です—識別値の扱いで封書同定がずれます".to_string());
+    }
+    if env.diag_code_bad {
+        render_risks.push("診断記録欄の値が異形です—診断値の扱いで不達診断がずれます".to_string());
+    }
+    if env.orig_msgid_bad {
+        render_risks.push("元識別欄の値が異形です—識別値の扱いで元メール同定がずれます".to_string());
+    }
+    if env.mdn_disposition_bad {
+        render_risks.push("処理結果欄の値が異形です—処理値の扱いで開封扱いがずれます".to_string());
+    }
+    if env.reporting_ua_bad {
+        render_risks.push("報告機欄の値が異形です—報告機値の扱いで報告元がずれます".to_string());
+    }
+    if env.msg_context_bad {
+        render_risks.push("文脈欄の値が異形です—文脈値の扱いで種別判定がずれます".to_string());
+    }
+    if env.content_md5_bad {
+        render_risks.push("内容要約欄の値が異形です—要約値の扱いで検証結果がずれます".to_string());
+    }
+    if env.content_lang_bad {
+        render_risks.push("言語欄の値が異形です—言語値の扱いで翻訳判定がずれます".to_string());
+    }
+    if env.content_digest_bad {
+        render_risks.push("内容要約記録欄の値が異形です—要約記録値の扱いで検証結果がずれます".to_string());
+    }
+    if env.content_features_bad {
+        render_risks.push("内容特徴欄の値が異形です—特徴値の扱いで特徴判定がずれます".to_string());
+    }
+    if env.display_ctrl_bad {
+        render_risks.push("表示名に制御文字・不可視文字が混ざっています—名の見え方がずれます".to_string());
+    }
+    if env.display_domain_bad {
+        render_risks.push("表示名がドメイン形です—名の扱いで送信者がずれます".to_string());
+    }
+    if env.display_punct_bad {
+        render_risks.push("表示名に英字がありません—名の扱いで送信者がずれます".to_string());
+    }
+    if env.display_long_bad {
+        render_risks.push("表示名が長すぎます—名の扱いで送信者がずれます".to_string());
+    }
     if env.recv_spf_bad {
         render_risks.push("素朴判定欄の値が異形です—素朴判定値の扱いで送信域判定がずれます".to_string());
     }
