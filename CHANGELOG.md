@@ -179,6 +179,10 @@
 - D2819: Apparently-From:`/`Apparently-Sender:` 系 のローカル部反転符宛名値 — 表差出人記録のローカル部反転符異形
 - D2820: X-Original-To: のローカル部反転符宛名値 — 元宛先記録のローカル部反転符異形
 - D2821: X-Original-From: のローカル部反転符宛名値 — 元差出人記録のローカル部反転符異形
+### Security — D2798: `X-Original-Cc:` 系欄のローカル部井桁宛名値 (`a#b@y` 形) を元副宛ずれとして検出 — `Envelope` に `x_orig_cc_hash_local` を追加。
+### Security — D2799: `X-Original-Reply-To:` 欄のローカル部井桁宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_hash_local` を追加。
+### Security — D2800: `Disposition-Notification-To:` 欄のローカル部井桁宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_hash_local` を追加。
+### Security — D2801: `Return-Receipt-To:` 欄のローカル部井桁宛名値を受領通知先ずれとして検出 — `Envelope` に `return_receipt_hash_local` を追加。
 ### Security — D2785: `X-Envelope-To:` 欄のローカル部ハット宛名値 (`a^b@y` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_caret_local` を追加 (`Envelope-To:`/`Delivered-To:` 本命は `addr_caret_local` が網羅)。
 ### Security — D2786: `X-Envelope-From:`/`X-MailFrom:` 等欄のローカル部ハット宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_caret_local` を追加。
 ### Security — D2787: `Errors-To:` 欄のローカル部ハット宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_caret_local` を追加。
