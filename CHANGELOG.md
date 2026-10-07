@@ -205,6 +205,11 @@
 ### Security — D2823: `X-Original-Reply-To:` 欄のローカル部反転符宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_backtick_local` を追加。
 ### Security — D2824: `Disposition-Notification-To:` 欄のローカル部反転符宛名値を開封通知先ずれとして検出 — `Envelope` に `disposition_to_backtick_local` を追加。
 ### Security — D2825: `Return-Receipt-To:` 欄のローカル部反転符宛名値を受領通知先ずれとして検出 — `Envelope` に `return_receipt_backtick_local` を追加。
+### Security — D2880: `X-Original-Cc:` 欄の途中クオート宛名値 (`a"b@y` 形) を元副宛ずれとして検出 — `Envelope` に `x_orig_cc_mid_quote` を追加。
+### Security — D2881: `X-Original-Reply-To:` 欄の途中クオート宛名値を元返信口ずれとして検出 — `Envelope` に `x_orig_reply_to_mid_quote` を追加。
+### Security — D2882: `Disposition-Notification-To:` 欄の途中クオート宛名値を開封先ずれとして検出 — `Envelope` に `disposition_to_mid_quote` を追加。
+### Security — D2883: `Return-Receipt-To:` 欄の途中クオート宛名値を受領先ずれとして検出 — `Envelope` に `return_receipt_mid_quote` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
