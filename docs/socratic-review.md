@@ -4526,3 +4526,7 @@ devin/1791332973-unclosed-cell1
 
 X-MS-Has-Attach の語彙は yes/no のみ、TNEF-Correlator は base64 相関子、EndToEndLatency は `HH:MM:SS.mmm`、X-Mailer は印字可能ASCII — いずれも「書く権限が運輸側にある」欄で、値の形が規定を外れるなら運輸記録の擬態となる。攻撃者は「MS経路が刻んだように見せる」欄を任意に置けるが、形が外れれば確実な異形として切れる — 値の語彙・形両方を閉じた欄は検出に最適。
 
+## ラウンド462 — 報告オプション欄の値形 (D2975–D2978)
+
+- **問**: 通知オプションと ARF 報告欄は存在検出で足りるか。**答**: 否 — DNT-Options の `名=required|optional`、VBR-Info の `名=値`、Feedback-Type の語彙、Feedback-ID の4要素連接はいずれも値を握る実装で解釈がずれる。
+- **棄却**: 動詞・欄名の閉集合化 (拡張余地を潰すため形のみ要求)。

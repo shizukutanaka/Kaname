@@ -3298,6 +3298,14 @@ pub struct Envelope {
     pub ms_latency_bad: bool,
     /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
     pub mailer_bad: bool,
+    /// Disposition-Notification-Options: の各要素が 名=required|optional 形でない (D2975)。
+    pub dnt_opt_bad: bool,
+    /// VBR-Info: の各要素が 名=値 形でない (D2976)。
+    pub vbr_info_bad: bool,
+    /// Feedback-Type: が語彙外 (D2977)。
+    pub feedback_type_bad: bool,
+    /// Feedback-ID: が4要素の連接でない (D2978)。
+    pub feedback_id_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7077,6 +7085,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
     let ms_latency_bad = has_ms_latency_bad(bytes);
     let mailer_bad = has_mailer_bad(bytes);
+    let dnt_opt_bad = has_dnt_opt_bad(bytes);
+    let vbr_info_bad = has_vbr_info_bad(bytes);
+    let feedback_type_bad = has_feedback_type_bad(bytes);
+    let feedback_id_bad = has_feedback_id_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8642,6 +8654,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         tnef_correlator_bad,
         ms_latency_bad,
         mailer_bad,
+        dnt_opt_bad,
+        vbr_info_bad,
+        feedback_type_bad,
+        feedback_id_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48477,6 +48493,110 @@ pub fn has_mailer_bad(raw: &[u8]) -> bool {
         v.is_empty()
             || v.chars().any(|c| !c.is_ascii() || (c.is_ascii_control() && c != '\t'))
     })
+}
+
+fn report_opt_hdr_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// (D2975)。
+fn has_dnt_opt_bad(bytes: &[u8]) -> bool {
+    let logical = report_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("disposition-notification-options:") {
+            let v = v.trim();
+            let parts: Vec<&str> = v.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
+            if parts.is_empty() {
+                return true;
+            }
+            for p in parts {
+                // 名=required|optional の形
+                let Some(eq) = p.find('=') else { return true; };
+                let (k, val) = (p[..eq].trim(), p[eq + 1..].trim());
+                if k.is_empty() || (val != "required" && val != "optional") {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// (D2976)。
+fn has_vbr_info_bad(bytes: &[u8]) -> bool {
+    let logical = report_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("vbr-info:") {
+            let v = v.trim();
+            let parts: Vec<&str> = v.split(';').map(str::trim).filter(|p| !p.is_empty()).collect();
+            if parts.is_empty() {
+                return true;
+            }
+            for p in parts {
+                // 名=値 の形
+                let Some(eq) = p.find('=') else { return true; };
+                if p[..eq].trim().is_empty() || p[eq + 1..].trim().is_empty() {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// (D2977)。
+fn has_feedback_type_bad(bytes: &[u8]) -> bool {
+    let logical = report_opt_hdr_text(bytes);
+    const VOCAB: [&str; 7] = [
+        "abuse", "auth-failure", "fraud", "miscategorized",
+        "not-spam", "other", "virus",
+    ];
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("feedback-type:")
+            .or_else(|| low.strip_prefix("x-feedback-type:"));
+        if let Some(v) = hit {
+            if !VOCAB.contains(&v.trim()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// (D2978)。
+fn has_feedback_id_bad(bytes: &[u8]) -> bool {
+    let logical = report_opt_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let hit = low.strip_prefix("feedback-id:")
+            .or_else(|| low.strip_prefix("x-feedback-id:"));
+        if let Some(v) = hit {
+            let v = v.trim();
+            // `名1:名2:名3:名4` の4要素
+            let parts: Vec<&str> = v.split(':').collect();
+            if parts.len() != 4 || parts.iter().any(|p| p.trim().is_empty()) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// (D2635)。
@@ -127563,3 +127683,32 @@ body";
         assert!(!has_mailer_bad(b"User-Agent: Thunderbird/115.0\r\n\r\nbody"));
         assert!(!has_mailer_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+#[test]
+fn 通知選択欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nDisposition-Notification-Options: x\r\n\r\nx").unwrap();
+    assert!(e.dnt_opt_bad);
+    let e = parse(b"From: a@x.com\r\nDisposition-Notification-Options: x=required\r\n\r\nx").unwrap();
+    assert!(!e.dnt_opt_bad);
+}
+#[test]
+fn 信託情報欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nVBR-Info: x\r\n\r\nx").unwrap();
+    assert!(e.vbr_info_bad);
+    let e = parse(b"From: a@x.com\r\nVBR-Info: md=ex.com; mc=all; mv=https://ex.com\r\n\r\nx").unwrap();
+    assert!(!e.vbr_info_bad);
+}
+#[test]
+fn 反応種別欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nFeedback-Type: x\r\n\r\nx").unwrap();
+    assert!(e.feedback_type_bad);
+    let e = parse(b"From: a@x.com\r\nFeedback-Type: abuse\r\n\r\nx").unwrap();
+    assert!(!e.feedback_type_bad);
+}
+#[test]
+fn 反応識別欄が異形なら発火() {
+    let e = parse(b"From: a@x.com\r\nFeedback-ID: a:b\r\n\r\nx").unwrap();
+    assert!(e.feedback_id_bad);
+    let e = parse(b"From: a@x.com\r\nFeedback-ID: a:b:c:d\r\n\r\nx").unwrap();
+    assert!(!e.feedback_id_bad);
+}
