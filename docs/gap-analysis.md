@@ -2211,4 +2211,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2858 | Envelope-To:/Delivered-To:/X-Envelope-To: 系の未閉塞クオート宛名値 (封書宛記録のクオート未閉塞異形) | 封書宛ずれ |
 | D2859 | X-Envelope-From:/X-MailFrom:/X-Mail-From: 系の未閉塞クオート宛名値 (封書差出人記録のクオート未閉塞異形) | 封書差出人ずれ |
 | D2860 | Errors-To: の未閉塞クオート宛名値 (返送先記録のクオート未閉塞異形) | 返送先ずれ |
+| D2903 | Subject: 欄の生非ASCII混入異形 (符号化されない非ASCII文字含み) | 件名ずれ |
+| D2904 | Subject: 欄の誘導URL混入異形 (http://・https://・www. 含み) | 件名ずれ |
+| D2905 | Subject: 欄の未閉塞括弧異形 (閉じない括弧含み) | 件名ずれ |
+| D2906 | Subject: 欄の過長符号化語異形 (75バイト超のエンコードドワード) | 件名ずれ |
 devin/1791332973-unclosed-cell1

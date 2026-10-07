@@ -3274,6 +3274,10 @@ pub struct Envelope {
     pub env_from_quoted_local: bool,
     /// `Errors-To:` の値が鉤括弧ローカル宛名形か (D2845)。
     pub errors_to_quoted_local: bool,
+    pub subject_raw_nonascii: bool,
+    pub subject_url: bool,
+    pub subject_unclosed_comment: bool,
+    pub subject_long_ew: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7035,6 +7039,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let env_to_quoted_local = has_env_to_quoted_local(bytes);
     let env_from_quoted_local = has_env_from_quoted_local(bytes);
     let errors_to_quoted_local = has_errors_to_quoted_local(bytes);
+    let subject_raw_nonascii = has_subject_raw_nonascii(bytes);
+    let subject_url = has_subject_url(bytes);
+    let subject_unclosed_comment = has_subject_unclosed_comment(bytes);
+    let subject_long_ew = has_subject_long_ew(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8585,6 +8593,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         env_to_quoted_local,
         env_from_quoted_local,
         errors_to_quoted_local,
+        subject_raw_nonascii,
+        subject_url,
+        subject_unclosed_comment,
+        subject_long_ew,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48042,6 +48054,171 @@ pub fn has_x_orig_rcpt_to_unclosed(raw: &[u8]) -> bool {
 }
 
 /// `X-Confirm-Reading-To:` の値がドル符宛名形か判定する
+
+/// 件名に符号化されない生の非ASCII文字を含む生非ASCII混入異形を示すかどうか。 (D2903)。
+pub fn has_subject_raw_nonascii(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        if !l.to_ascii_lowercase().starts_with("subject:") {
+            return false;
+        }
+        let v = l[8..].trim_start();
+        v.chars().any(|c| !c.is_ascii())
+    })
+}
+
+/// 件名にURL形文字列を含む誘導URL混入異形を示すかどうか。 (D2904)。
+pub fn has_subject_url(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        if !l.to_ascii_lowercase().starts_with("subject:") {
+            return false;
+        }
+        let v = l[8..].trim_start();
+        ["http://", "https://", "www."]
+            .iter()
+            .any(|s| v.to_ascii_lowercase().contains(s))
+    })
+}
+
+/// 件名に閉じない括弧を含む未閉塞括弧異形を示すかどうか。 (D2905)。
+pub fn has_subject_unclosed_comment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        if !l.to_ascii_lowercase().starts_with("subject:") {
+            return false;
+        }
+        let v = l[8..].trim_start();
+        let mut depth = 0usize;
+        let mut neg = false;
+        for c in v.chars() {
+            match c {
+                '(' => depth += 1,
+                ')' => {
+                    if depth == 0 {
+                        neg = true;
+                    } else {
+                        depth -= 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        depth > 0 || neg
+    })
+}
+
+/// 件名のエンコードドワードが75バイト超の過長符号化語異形を示すかどうか。 (D2906)。
+pub fn has_subject_long_ew(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        if !l.to_ascii_lowercase().starts_with("subject:") {
+            return false;
+        }
+        let v = l[8..].trim_start();
+        let mut i = 0;
+        let b = v.as_bytes();
+        let mut over = false;
+        while i + 1 < b.len() {
+            if b[i] == b'=' && b[i + 1] == b'?' {
+                let start = i;
+                let mut j = i + 2;
+                let mut end = None;
+                while j + 1 < b.len() {
+                    if b[j] == b'?' && b[j + 1] == b'=' {
+                        end = Some(j + 2);
+                        break;
+                    }
+                    j += 1;
+                }
+                match end {
+                    Some(e) => {
+                        if e - start > 75 {
+                            over = true;
+                        }
+                        i = e;
+                    }
+                    None => break,
+                }
+            } else {
+                i += 1;
+            }
+        }
+        over
+    })
+}
 /// (D2635)。
 ///
 /// 閲覧確認先を記す欄なのに `a@x$` のようにドメイン側に孤立 `$` を
@@ -109300,6 +109477,46 @@ mod tests {
         ));
         assert!(!has_confirm_reading_pipe(
             b"From: a@x\r\nX-Confirm-Reading-To: a|b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が生非asciiなら発火() {
+        assert!(has_subject_raw_nonascii(
+            "From: a@x\r\nSubject: こんにちは\r\nTo: b@y\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_subject_raw_nonascii(
+            b"From: a@x\r\nSubject: hello\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が誘導列混入なら発火() {
+        assert!(has_subject_url(
+            b"From: a@x\r\nSubject: visit https://x.example now\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_url(
+            b"From: a@x\r\nSubject: visit us now\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が未閉塞括弧なら発火() {
+        assert!(has_subject_unclosed_comment(
+            b"From: a@x\r\nSubject: a (b\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_unclosed_comment(
+            b"From: a@x\r\nSubject: a (b)\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 件名が過長符号化語なら発火() {
+        assert!(has_subject_long_ew(
+            b"From: a@x\r\nSubject: =?utf-8?q?aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?=\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_subject_long_ew(
+            b"From: a@x\r\nSubject: =?utf-8?q?abc?=\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
