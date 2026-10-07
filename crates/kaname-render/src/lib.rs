@@ -3012,6 +3012,14 @@ pub struct Envelope {
     pub disposition_to_star_local: bool,
     /// `Return-Receipt-To:` の値がローカル部星宛名 (D2777 — 受領通知先ずれ)。
     pub return_receipt_star_local: bool,
+    /// `X-Original-Cc:` 系 の値がローカル部ドル符宛名 (D2834 — 元副宛ずれ)。
+    pub x_orig_cc_dollar_local: bool,
+    /// `X-Original-Reply-To:` の値がローカル部ドル符宛名 (D2835 — 元返信口ずれ)。
+    pub x_orig_reply_to_dollar_local: bool,
+    /// `Disposition-Notification-To:` の値がローカル部ドル符宛名 (D2836 — 開封通知先ずれ)。
+    pub disposition_to_dollar_local: bool,
+    /// `Return-Receipt-To:` の値がローカル部ドル符宛名 (D2837 — 受領通知先ずれ)。
+    pub return_receipt_dollar_local: bool,
     /// `Envelope-To:`/`X-Envelope-To:` 系の値が逆斜線宛名 (D2395 — 封書宛先ずれ)。
     pub env_to_bslash: bool,
     /// `Delivered-To:` の値が逆斜線宛名 (D2396 — 配達履歴ずれ)。
@@ -6803,6 +6811,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_orig_reply_to_star_local = has_x_orig_reply_to_star_local(bytes);
     let disposition_to_star_local = has_disposition_to_star_local(bytes);
     let return_receipt_star_local = has_return_receipt_star_local(bytes);
+    let x_orig_cc_dollar_local = has_x_orig_cc_dollar_local(bytes);
+    let x_orig_reply_to_dollar_local = has_x_orig_reply_to_dollar_local(bytes);
+    let disposition_to_dollar_local = has_disposition_to_dollar_local(bytes);
+    let return_receipt_dollar_local = has_return_receipt_dollar_local(bytes);
     let env_to_bslash = has_env_to_bslash(bytes);
     let delivered_to_bslash = has_delivered_to_bslash(bytes);
     let env_from_bslash = has_env_from_bslash(bytes);
@@ -8305,6 +8317,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_orig_reply_to_star_local,
         disposition_to_star_local,
         return_receipt_star_local,
+        x_orig_cc_dollar_local,
+        x_orig_reply_to_dollar_local,
+        disposition_to_dollar_local,
+        return_receipt_dollar_local,
         env_to_bslash,
         delivered_to_bslash,
         env_from_bslash,
@@ -52107,6 +52123,254 @@ pub fn has_return_receipt_star_local(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Original-Cc:` の値がドル符をローカル部に含む宛名形か判
+/// 定する (D2834)。
+///
+/// 元副宛を記す欄なのに `a$b@y` のようにローカル部にドル符を含む宛名
+/// — ドル符付きアドレスとして受理する実装と構文違反として拒否する実装で元
+/// 副宛がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_cc_dollar_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "x-original-cc")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `X-Original-Reply-To:` の値がドル符をローカル部に含む宛名形か判
+/// 定する (D2835)。
+///
+/// 元返信口を記す欄なのに `a$b@y` のようにローカル部にドル符を含む宛名
+/// — ドル符付きアドレスとして受理する実装と構文違反として拒否する実装で元
+/// 返信口がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_x_orig_reply_to_dollar_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "x-original-reply-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `Disposition-Notification-To:` の値がドル符をローカル部に含む宛名形か判
+/// 定する (D2836)。
+///
+/// 開封通知先を記す欄なのに `a$b@y` のようにローカル部にドル符を含む宛名
+/// — ドル符付きアドレスとして受理する実装と構文違反として拒否する実装で開
+/// 封通知先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_disposition_to_dollar_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        (n == "disposition-notification-to")
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
+/// `Return-Receipt-To:` の値がドル符をローカル部に含む宛名形か判
+/// 定する (D2837)。
+///
+/// 受領通知先を記す欄なのに `a$b@y` のようにローカル部にドル符を含む宛名
+/// — ドル符付きアドレスとして受理する実装と構文違反として拒否する実装で受
+/// 領通知先がずれる (アドレス欄側も未検出)。
+#[must_use]
+pub fn has_return_receipt_dollar_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = l[c + 1..].trim();
+        let n = l[..c].trim();
+        n == "return-receipt-to"
+            && v.matches('@').count() == 1
+            && v.is_ascii()
+            && v
+                .split('@')
+                .next()
+                .map_or(false, |l0| l0.contains('$'))
+            && !v.contains('\\')
+            && !v.contains(':')
+            && !v.contains(')')
+            && !v.contains(',')
+            && !v.contains('<')
+            && !v.contains('>')
+            && !v.contains('"')
+            && !v.contains(']')
+            && !v.contains(';')
+            && !v.contains('!')
+            && !v.contains('%')
+            && !v.contains('[')
+            && !v.contains("..")
+            && !v.contains(".@")
+            && !v.contains("@.")
+            && !v.starts_with('.')
+            && !v.ends_with('.')
+            && !v.starts_with('@')
+            && !v.ends_with('@')
+            && v.split_whitespace().count() == 1
+    })
+}
 /// D1560)。
 #[must_use]
 pub fn has_x_orig_rcpt_to_hyph(raw: &[u8]) -> bool {
@@ -103871,6 +104135,58 @@ mod tests {
         ));
         assert!(!has_return_receipt_star_local(
             b"From: a@x\r\nReturn-Receipt-To: a@xample*.com\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元副宛がドル符ローカル宛名なら発火() {
+        assert!(has_x_orig_cc_dollar_local(
+            b"From: a@x\r\nX-Original-Cc: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_dollar_local(
+            b"From: a@x\r\nX-Original-Cc: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_cc_dollar_local(
+            b"From: a@x\r\nX-Original-Cc: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元返信口がドル符ローカル宛名なら発火() {
+        assert!(has_x_orig_reply_to_dollar_local(
+            b"From: a@x\r\nX-Original-Reply-To: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_dollar_local(
+            b"From: a@x\r\nX-Original-Reply-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_orig_reply_to_dollar_local(
+            b"From: a@x\r\nX-Original-Reply-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 開封通知先がドル符ローカル宛名なら発火() {
+        assert!(has_disposition_to_dollar_local(
+            b"From: a@x\r\nDisposition-Notification-To: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_dollar_local(
+            b"From: a@x\r\nDisposition-Notification-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_disposition_to_dollar_local(
+            b"From: a@x\r\nDisposition-Notification-To: a@y\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 受領通知先がドル符ローカル宛名なら発火() {
+        assert!(has_return_receipt_dollar_local(
+            b"From: a@x\r\nReturn-Receipt-To: a$b@y\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_dollar_local(
+            b"From: a@x\r\nReturn-Receipt-To: a@xample$.com\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_return_receipt_dollar_local(
+            b"From: a@x\r\nReturn-Receipt-To: a@y\r\nTo: b@y\r\n\r\nx"
         ));
     }
 
