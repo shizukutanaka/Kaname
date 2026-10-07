@@ -3274,6 +3274,14 @@ pub struct Envelope {
     pub env_from_quoted_local: bool,
     /// `Errors-To:` の値が鉤括弧ローカル宛名形か (D2845)。
     pub errors_to_quoted_local: bool,
+    /// `Apparently-To:`/`X-Apparently-To:` 系の値が二重アット宛名形か (D2891)。
+    pub apparently_to_two_at: bool,
+    /// `Apparently-From:`/`Apparently-Sender:` 系の値が二重アット宛名形か (D2892)。
+    pub apparently_from_two_at: bool,
+    /// `X-Original-To:` の値が二重アット宛名形か (D2893)。
+    pub x_original_to_two_at: bool,
+    /// `X-Original-From:` の値が二重アット宛名形か (D2894)。
+    pub x_original_from_two_at: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7028,6 +7036,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let env_to_quoted_local = has_env_to_quoted_local(bytes);
     let env_from_quoted_local = has_env_from_quoted_local(bytes);
     let errors_to_quoted_local = has_errors_to_quoted_local(bytes);
+    let apparently_to_two_at = has_apparently_to_two_at(bytes);
+    let apparently_from_two_at = has_apparently_from_two_at(bytes);
+    let x_original_to_two_at = has_x_original_to_two_at(bytes);
+    let x_original_from_two_at = has_x_original_from_two_at(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8575,6 +8587,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         env_to_quoted_local,
         env_from_quoted_local,
         errors_to_quoted_local,
+        apparently_to_two_at,
+        apparently_from_two_at,
+        x_original_to_two_at,
+        x_original_from_two_at,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48028,6 +48044,215 @@ pub fn has_x_orig_rcpt_to_unclosed(raw: &[u8]) -> bool {
     })
 }
 
+/// `Apparently-To:`/`X-Apparently-To:` 系 の値が二重アットの宛名形か判定する (D2891)。
+///
+/// 見せ宛を記す欄なのに `a@b@c` のようにアットマークが二つある宛名
+/// — 先のアットで割る実装と後のアットで割る実装と構文エラーにする実装で見せ宛がずれる (標準・Envelope宛欄側は `two_at_addr` D1747 済み)。
+#[must_use]
+pub fn has_apparently_to_two_at(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = &l[c + 1..];
+        let n = l[..c].trim();
+        if !(n == "apparently-to" || n == "x-apparently-to") {
+            return false;
+        }
+        for seg in v.split(',') {
+            let mut in_q = false;
+            let mut ats = 0usize;
+            for b in seg.bytes() {
+                if b == b'"' {
+                    in_q = !in_q;
+                } else if b == b'@' && !in_q {
+                    ats += 1;
+                }
+            }
+            if ats >= 2 {
+                return true;
+            }
+        }
+        false
+    })
+}
+
+/// `Apparently-From:`/`Apparently-Sender:` 系 の値が二重アットの宛名形か判定する (D2892)。
+///
+/// 表差出人を記す欄なのに `a@b@c` のようにアットマークが二つある宛名
+/// — 先のアットで割る実装と後のアットで割る実装と構文エラーにする実装で表差出人がずれる (標準・Envelope宛欄側は `two_at_addr` D1747 済み)。
+#[must_use]
+pub fn has_apparently_from_two_at(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = &l[c + 1..];
+        let n = l[..c].trim();
+        if !(n == "apparently-from" || n == "apparently-sender" || n == "x-apparently-from" || n == "x-apparently-sender") {
+            return false;
+        }
+        for seg in v.split(',') {
+            let mut in_q = false;
+            let mut ats = 0usize;
+            for b in seg.bytes() {
+                if b == b'"' {
+                    in_q = !in_q;
+                } else if b == b'@' && !in_q {
+                    ats += 1;
+                }
+            }
+            if ats >= 2 {
+                return true;
+            }
+        }
+        false
+    })
+}
+
+/// `X-Original-To:` の値が二重アットの宛名形か判定する (D2893)。
+///
+/// 元宛を記す欄なのに `a@b@c` のようにアットマークが二つある宛名
+/// — 先のアットで割る実装と後のアットで割る実装と構文エラーにする実装で元宛がずれる (標準・Envelope宛欄側は `two_at_addr` D1747 済み)。
+#[must_use]
+pub fn has_x_original_to_two_at(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = &l[c + 1..];
+        let n = l[..c].trim();
+        if !(n == "x-original-to") {
+            return false;
+        }
+        for seg in v.split(',') {
+            let mut in_q = false;
+            let mut ats = 0usize;
+            for b in seg.bytes() {
+                if b == b'"' {
+                    in_q = !in_q;
+                } else if b == b'@' && !in_q {
+                    ats += 1;
+                }
+            }
+            if ats >= 2 {
+                return true;
+            }
+        }
+        false
+    })
+}
+
+/// `X-Original-From:` の値が二重アットの宛名形か判定する (D2894)。
+///
+/// 元差出人を記す欄なのに `a@b@c` のようにアットマークが二つある宛名
+/// — 先のアットで割る実装と後のアットで割る実装と構文エラーにする実装で元差出人がずれる (標準・Envelope宛欄側は `two_at_addr` D1747 済み)。
+#[must_use]
+pub fn has_x_original_from_two_at(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.to_ascii_lowercase().lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        let v = &l[c + 1..];
+        let n = l[..c].trim();
+        if !(n == "x-original-from") {
+            return false;
+        }
+        for seg in v.split(',') {
+            let mut in_q = false;
+            let mut ats = 0usize;
+            for b in seg.bytes() {
+                if b == b'"' {
+                    in_q = !in_q;
+                } else if b == b'@' && !in_q {
+                    ats += 1;
+                }
+            }
+            if ats >= 2 {
+                return true;
+            }
+        }
+        false
+    })
+}
+
+r441
 /// `X-Confirm-Reading-To:` の値がドル符宛名形か判定する
 /// (D2635)。
 ///
@@ -109083,6 +109308,47 @@ mod tests {
     }
 
     #[test]
+    fn 見せ宛記録が二重アットなら発火() {
+        assert!(has_apparently_to_two_at(
+            b"From: a@x\r\nApparently-To: a@b@c\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_to_two_at(
+            b"From: a@x\r\nApparently-To: a@b\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 表差出人記録が二重アットなら発火() {
+        assert!(has_apparently_from_two_at(
+            b"From: a@x\r\nApparently-From: a@b@c\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_apparently_from_two_at(
+            b"From: a@x\r\nApparently-From: a@b\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元宛記録が二重アットなら発火() {
+        assert!(has_x_original_to_two_at(
+            b"From: a@x\r\nX-Original-To: a@b@c\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_original_to_two_at(
+            b"From: a@x\r\nX-Original-To: a@b\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn 元差出人記録が二重アットなら発火() {
+        assert!(has_x_original_from_two_at(
+            b"From: a@x\r\nX-Original-From: a@b@c\r\nTo: b@y\r\n\r\nx"
+        ));
+        assert!(!has_x_original_from_two_at(
+            b"From: a@x\r\nX-Original-From: a@b\r\nTo: b@y\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+r441
     fn 閲覧確認先が縦線宛名なら発火() {
         assert!(has_confirm_reading_pipe(
             b"From: a@x\r\nX-Confirm-Reading-To: a@xample|.com\r\nTo: b@y\r\n\r\nx"
