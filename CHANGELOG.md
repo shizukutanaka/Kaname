@@ -154,6 +154,10 @@
 ### Security — D2782: `X-Envelope-To:` 欄のローカル部井桁宛名値 (`a#b@y` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_hash_local` を追加 (`Envelope-To:`/`Delivered-To:` 本命は `addr_hash_local` が網羅)。
 ### Security — D2783: `X-Envelope-From:`/`X-MailFrom:` 等欄のローカル部井桁宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_hash_local` を追加。
 ### Security — D2784: `Errors-To:` 欄のローカル部井桁宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_hash_local` を追加。
+- D2802: `X-Confirm-Reading-To:` のローカル部井桁宛名値 — 閲覧確認先記録のローカル部井桁異形
+- D2803: `Resent-Reply-To:` のローカル部井桁宛名値 — 再送返信口記録のローカル部井桁異形
+- D2804: `Apparently-Resent-*:` 系 のローカル部井桁宛名値 — 再送残渣記録のローカル部井桁異形
+- D2805: `X-Original-Rcpt-To:` 系 のローカル部井桁宛名値 — 元受取人記録のローカル部井桁異形
 - D2818: Apparently-To:`/`X-Apparently-To:` 系 のローカル部反転符宛名値 — 見せ宛記録のローカル部反転符異形
 - D2819: Apparently-From:`/`Apparently-Sender:` 系 のローカル部反転符宛名値 — 表差出人記録のローカル部反転符異形
 - D2820: X-Original-To: のローカル部反転符宛名値 — 元宛先記録のローカル部反転符異形
