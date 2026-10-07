@@ -2326,3 +2326,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2992 | OpenPGP: の非 名=値/鍵要素値 (鍵識別欄の値異形) | 鍵識別ずれ |
 | D2993 | Content-Return: の語彙外値 (本文返却欄の値異形) | 返却ずれ |
 | D2994 | Mail-Followup-To:/Mail-Reply-To: の非宛名値 (追従先欄の値異形) | 追従ずれ |
+| D3011 | X-MS-Exchange-MessageSentRepresentingEmailAddress: の非宛名値 (代理送信欄の値異形) | 代理ずれ |
+| D3012 | X-MS-Exchange-Parent-Message-Id: の非GUID値 (親識別欄の値異形) | 識別ずれ |
+| D3013 | X-MS-Exchange-ForwardedLoop: の非宛名値 (転送巡回欄の値異形) | 巡回ずれ |
+| D3014 | X-Exchange-Processed-By-BccFoldering: の非GUID値 (Bcc処理欄の値異形) | 処理ずれ |

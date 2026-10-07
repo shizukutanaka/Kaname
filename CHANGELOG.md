@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3011: `X-MS-Exchange-MessageSentRepresentingEmailAddress:` 欄の非宛名値を代理送信ずれとして検出 — `Envelope` に `ms_msre_bad` を追加。
+### Security — D3012: `X-MS-Exchange-Parent-Message-Id:` 欄の非GUID値 (波括弧許容) を親識別ずれとして検出 — `Envelope` に `ms_pmi_bad` を追加。
+### Security — D3013: `X-MS-Exchange-ForwardedLoop:` 欄の非宛名値を転送巡回ずれとして検出 — `Envelope` に `ms_fwdl_bad` を追加。
+### Security — D3014: `X-Exchange-Processed-By-BccFoldering:` 欄の非GUID値 (波括弧許容) をBcc処理ずれとして検出 — `Envelope` に `xep_bcf_bad` を追加。
+
 ### Fixed — Devin Review (#678): `received_*` 節異字検出群 (138 検出器) がヘッダ区画ではなくメッセージ全体を走査しており、本文中の `Received:` 風行で誤発火していた問題を修正。全検出器を `header_end` (最初の空行) 区画へ統一。
 ### Security — D2043: `Message-ID:` 系欄 (refs 以外) の識別子前の隔離コメントを検出 — `Envelope` に `msgid_comment_lead` を追加 (refs 側 `refs_comment_lead`、直結 `)<`/`>(` の `msgid_paren` の補完)。
 ### Security — D2044: `Subject:` の地域返信・転送接頭語 (`AW:`/`SV:`/`RIF:`/`YNT:` 等) を検出 — `Envelope` に `subject_locale_prefix` を追加 (`encoded_re_subject` の補完)。

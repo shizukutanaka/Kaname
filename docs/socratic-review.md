@@ -4625,3 +4625,8 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 
 問: `Autocrypt:`/`OpenPGP:`/`Content-Return:`/`Mail-Followup-To:`/`Mail-Reply-To:` の値の形は検査済みか。
 答: 未検出だった — 鍵素材・返却方針・追従先を送信側が自称する欄は値の文法が绿地だった。`名=値` 連接・`addr=` 宛名・`allowed|prohibited` 語彙・宛名/poster 形の外れを異形として D2991–D2994 を追加。交渉の体裁だけを真似る擬態へ面を広げた。
+
+## ラウンド 471 — 「経路の陪席記録」の自問自答
+
+問: `X-MS-Exchange-MessageSentRepresentingEmailAddress`/`Parent-Message-Id`/`ForwardedLoop`/`X-Exchange-Processed-By-BccFoldering` の欄があれば組織の経路追跡を示すか。
+答: これらは組織の内部機構が刻む陪席記録で形が決まっている — 代理送信元・巡回先は宛名、親識別子・Bcc処理モジュールは GUID。org_claim の prefix 検出群に含まれない绿地だったため、形を欠く値を「経路追跡を刻んだ体裁」の擬態として D3011–D3014 を追加した。権威の刻印は「値が権威の形をしているか」で問う原則の継続適用。
