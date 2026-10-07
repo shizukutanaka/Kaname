@@ -210,11 +210,124 @@
 ### Security — D2871: `Apparently-Resent-*:` 系欄の未閉塞クオート宛名値を再送宛ずれとして検出 — `Envelope` に `apparently_resent_unclosed` を追加。
 ### Security — D2872: `X-Original-Rcpt-To:` 系欄の未閉塞クオート宛名値を元受取人ずれとして検出 — `Envelope` に `x_orig_rcpt_to_unclosed` を追加。
 
+- D2806: Apparently-To:`/`X-Apparently-To:` 系 のローカル部ハット宛名値 — 見せ宛記録のローカル部ハット異形
+- D2807: Apparently-From:`/`Apparently-Sender:` 系 のローカル部ハット宛名値 — 表差出人記録のローカル部ハット異形
+- D2808: X-Original-To: のローカル部ハット宛名値 — 元宛先記録のローカル部ハット異形
+- D2809: X-Original-From: のローカル部ハット宛名値 — 元差出人記録のローカル部ハット異形
+### Security — D2791: `X-Envelope-To:` 欄のローカル部ドル符宛名値 (`a$b@y` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_dollar_local` を追加 (`Envelope-To:`/`Delivered-To:` 本命は `addr_dollar_local` が網羅)。
+### Security — D2792: `X-Envelope-From:`/`X-MailFrom:` 等欄のローカル部ドル符宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_dollar_local` を追加。
+### Security — D2793: `Errors-To:` 欄のローカル部ドル符宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_dollar_local` を追加。
+- D2814: `X-Confirm-Reading-To:` のローカル部ハット宛名値 — 閲覧確認先記録のローカル部ハット異形
+- D2815: `Resent-Reply-To:` のローカル部ハット宛名値 — 再送返信口記録のローカル部ハット異形
+- D2816: `Apparently-Resent-*:` 系 のローカル部ハット宛名値 — 再送残渣記録のローカル部ハット異形
+- D2817: `X-Original-Rcpt-To:` 系 のローカル部ハット宛名値 — 元受取人記録のローカル部ハット異形
 ### Security — D2858: `Envelope-To:`/`Delivered-To:`/`X-Envelope-To:` 系欄の未閉塞クオート宛名値 (`"a@y` 形) を封書宛ずれとして検出 — `Envelope` に `env_to_unclosed` を追加。
 ### Security — D2859: `X-Envelope-From:`/`X-MailFrom:`/`X-Mail-From:` 系欄の未閉塞クオート宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_unclosed` を追加。
 ### Security — D2860: `Errors-To:` 欄の未閉塞クオート宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_unclosed` を追加。
 
 devin/1791332973-unclosed-cell1
+### Security — D2927: `X-MS-Has-Attach:`/`X-Has-Attach:` 系欄の yes/no 語彙外れを添付標旗記録異形として検出 — `Envelope` に `ms_has_attach_bad` を追加。
+
+### Security — D2928: `X-MS-TNEF-Correlator:`/`X-TNEFCorrelator:` 系欄の base64 相関子形外れを添付相関記録異形として検出 — `Envelope` に `tnef_correlator_bad` を追加。
+
+### Security — D2929: `X-MS-Exchange-Transport-EndToEndLatency:` 系欄の `HH:MM:SS.mmm` 経過時刻形外れを運輸遅延記録異形として検出 — `Envelope` に `ms_latency_bad` を追加。
+
+### Security — D2930: `X-Mailer:`/`User-Agent:`/`X-MimeOLE:` 系欄の制御文字・非ascii混入を送信器記録異形として検出 — `Envelope` に `mailer_bad` を追加。
+
+### Security — D2963: `List-Post:` 等の操作欄が `<URI>` 形でない値を検出 (`list_uri_bad`)
+### Security — D2964: `List-Unsubscribe-Post:` が `List-Unsubscribe=One-Click` 語彙でない値を検出 (`unsub_post_bad`)
+### Security — D2965: `Archived-At:`/`X-Archived-At:` が URI 形でない値を検出 (`archived_at_bad`)
+### Security — D2966: `Injection-Info:` の各要素が `名=値` 形でない値を検出 (`injection_info_bad`)
+### Security — D2975: `Disposition-Notification-Options:` の各要素が `名=required|optional` 形でない値を検出 (`dnt_opt_bad`)
+### Security — D2976: `VBR-Info:` の各要素が `名=値` 形でない値を検出 (`vbr_info_bad`)
+### Security — D2977: `Feedback-Type:`/`X-Feedback-Type:` が語彙外の値を検出 (`feedback_type_bad`)
+### Security — D2978: `Feedback-ID:`/`X-Feedback-ID:` が4要素の連接でない値を検出 (`feedback_id_bad`)
+### Security — D2979: `Precedence:`/`X-Precedence:` が単一トークンでない値を検出 (`precedence_bad`)
+### Security — D2980: `X-Loop:` が宛名形 (`@` を持つ) でない値を検出 (`x_loop_bad`)
+### Security — D2981: `X-UIDL:`/`UIDL:`/`X-UID:` が空白なし印字トークンでない値を検出 (`uidl_bad`)
+### Security — D2982: `X-Received:` が `by`/(`with`|`id`) 構造を欠く値を検出 (`x_received_bad`)
+### Security — D2983: `X-Originating-IP:` が `[IP]` 形でない値を検出 (`origin_ip_bad`)
+### Security — D2984: `X-Complaints-To:`/`X-Report-Abuse:`/`X-Report-Spam:`/`X-Complaints-Info:` が宛名/URI 形でない値を検出 (`abuse_uri_bad`)
+### Security — D2985: `Auto-Submitted:` が `no`/`auto-*` 語彙外の値を検出 (`auto_sub_bad`)
+### Security — D2986: `X-Authenticated-Sender:`/`X-Get-Message-Sender-Via:` が宛名形でない値を検出 (`auth_sender_bad`)
+### Security — D2987: `X-Spam-Report:`/`X-Spam-Check-Results:` が `*`/`=` 構造を欠く値を検出 (`spam_report_bad`)
+### Security — D2988: `X-Spam-Checker-Version:` が `x.y` 版番号を欠く値を検出 (`spam_ver_bad`)
+### Security — D2989: `X-BeenThere:` が宛名形でない値を検出 (`beenthere_bad`)
+### Security — D2990: `X-No-Archive:`/`X-Archive:` が `yes`/`no` 語彙外の値を検出 (`no_archive_bad`)
+### Security — D2967: `X-Spam-Flag:`/`X-Spam-Flagged:` が YES/NO 語彙でない値を検出 (`spam_flag_bad`)
+### Security — D2968: `X-Spam-Status:` が `Yes|No … score=…` 形でない値を検出 (`spam_status_bad`)
+### Security — D2969: `X-Spam-Level:` が星のみでない値を検出 (`spam_level_bad`)
+### Security — D2970: `X-Spam-Score:`/`X-Spam-Rating:` が数値でない値を検出 (`spam_score_bad`)
+### Security — D2943: `Newsgroups:` の値がニュース群のカンマ連接形でないことを値形異形として検出 — `Envelope` に `newsgroups_bad` を追加。
+
+### Security — D2944: `Path:` の値が bang-path 形でないことを値形異形として検出 — `Envelope` に `path_bang_bad` を追加。
+
+### Security — D2945: `Xref:` の値が `ホスト 群:番号` 形でないことを値形異形として検出 — `Envelope` に `xref_bad` を追加。
+
+### Security — D2946: `Followup-To:` の値がニュース群連接形 (`poster` を除く) でないことを値形異形として検出 — `Envelope` に `followup_bad` を追加。
+
+### Security — D2947: `Original-Recipient:` の値が `型;宛名` 形でないことを値形異形として検出 — `Envelope` に `orig_recipient_bad` を追加。
+
+### Security — D2948: `Final-Recipient:` の値が `型;宛名` 形でないことを値形異形として検出 — `Envelope` に `final_recipient_bad` を追加。
+
+### Security — D2949: `Reporting-MTA:` の値が `型;名` 形でないことを値形異形として検出 — `Envelope` に `reporting_mta_bad` を追加。
+
+### Security — D2950: `MDN-Gateway:` の値が `型;名` 形でないことを値形異形として検出 — `Envelope` に `mdn_gateway_bad` を追加。
+
+### Security — D2951: `Remote-MTA:` の値が `型;名` 形でないことを値形異形として検出 — `Envelope` に `remote_mta_bad` を追加。
+
+### Security — D2952: `Status:` の値が三段数字形 (`5.1.1`) でないことを値形異形として検出 — `Envelope` に `dsn_status_bad` を追加。
+
+### Security — D2953: `Original-Envelope-Id:` の値が印字可能な識別子形でないことを値形異形として検出 — `Envelope` に `orig_envid_bad` を追加。
+
+### Security — D2954: `Diagnostic-Code:` の値が `型;診断文` 形でないことを値形異形として検出 — `Envelope` に `diag_code_bad` を追加。
+
+### Security — D2955: `Original-Message-ID:` の値が msgid 角括弧形でないことを値形異形として検出 — `Envelope` に `orig_msgid_bad` を追加。
+
+### Security — D2956: `Disposition:` の値が `方式/種別; 修飾` 形でないことを値形異形として検出 — `Envelope` に `mdn_disposition_bad` を追加。
+
+### Security — D2957: `Reporting-UA:` の値が UA 名形でないことを値形異形として検出 — `Envelope` に `reporting_ua_bad` を追加。
+
+### Security — D2958: `Message-Context:` の値が RFC 3458 の規定語彙でないことを値形異形として検出 — `Envelope` に `msg_context_bad` を追加。
+
+### Security — D2939: `Content-MD5:` の値が base64 の16バイト語形でないことを値形異形として検出 — `Envelope` に `content_md5_bad` を追加。
+
+### Security — D2940: `Content-Language:` の値が言語タグ形でないことを値形異形として検出 — `Envelope` に `content_lang_bad` を追加。
+
+### Security — D2941: `Content-Digest:` の値が `アルゴ=値` 形でないことを値形異形として検出 — `Envelope` に `content_digest_bad` を追加。
+
+### Security — D2942: `Content-Features:` の値が `名[=値]` の `;` 連接形でないことを値形異形として検出 — `Envelope` に `content_features_bad` を追加。
+
+### Security — D2931: アドレス欄の表示名 (phrase) に混入した制御文字・双方向制御・ゼロ幅文字を表示名異形として検出 — `Envelope` に `display_ctrl_bad` を追加。
+
+### Security — D2932: アドレス欄の表示名が裸ドメイン形 (`label.tld`、スキームなし) であることを表示名異形として検出 — `Envelope` に `display_domain_bad` を追加。
+
+### Security — D2933: アドレス欄の表示名に英字がない (句読点・数字のみ) ことを表示名異形として検出 — `Envelope` に `display_punct_bad` を追加。
+
+### Security — D2934: アドレス欄の表示名が100文字を超えることを表示名異形として検出 — `Envelope` に `display_long_bad` を追加。
+
+### Security — D2971: `Received-SPF:`/`X-Received-SPF:` の先頭が判定語彙でない値を検出 (`recv_spf_bad`)
+### Security — D2972: `TLS-Required:` が `No` でない値を検出 (`tls_required_bad`)
+### Security — D2973: `Require-Recipient-Valid-Since:` が `宛名; 日時` 形でない値を検出 (`req_rcpt_bad`)
+### Security — D2974: `BIMI-Location:` が https でない / `BIMI-Indicator:` が単一トークンでない値を検出 (`bimi_mark_bad`)
+### Security — D2959: `Control:` が `動詞 引数` 形でない値を検出 (`control_bad`)
+### Security — D2960: `Supersedes:`/`Also-Control:` が msgid `<…@…>` を含まない値を検出 (`supersedes_bad`)
+### Security — D2961: `Cancel-Lock:`/`Cancel-Key:` の各要素が `方式:データ` 形でない値を検出 (`cancel_lock_bad`)
+### Security — D2962: `NNTP-Posting-Host:` が単一トークン形でない値を検出 (`posting_host_bad`)
+### Security — D2935: アドレス欄の表示名に混入した生の非ascii文字を表示名異形として検出 — `Envelope` に `display_raw_nonascii` を追加。
+
+### Security — D2936: アドレス欄の表示名の encoded-word が構造文字に復号されることを表示名異形として検出 — `Envelope` に `display_ew_danger` を追加。
+
+### Security — D2937: アドレス欄の表示名にエスケープなしの内側鉤括弧が混在することを表示名異形として検出 — `Envelope` に `display_inner_quote` を追加。
+
+### Security — D2938: アドレス欄の表示名が空白のみであることを表示名異形として検出 — `Envelope` に `display_ws_only` を追加。
+
+### Security — D2846: `Apparently-To:`/`X-Apparently-To:` 系欄のローカル部鉤括弧宛名値 (`"a b"@y` 形) を見せ宛ずれとして検出 — `Envelope` に `apparently_to_quoted_local` を追加。
+### Security — D2847: `Apparently-From:`/`Apparently-Sender:` 系欄のローカル部鉤括弧宛名値を表差出人ずれとして検出 — `Envelope` に `apparently_from_quoted_local` を追加。
+### Security — D2848: `X-Original-To:` 欄のローカル部鉤括弧宛名値を元宛ずれとして検出 — `Envelope` に `x_orig_to_quoted_local` を追加。
+### Security — D2849: `X-Original-From:` 欄のローカル部鉤括弧宛名値を元差出人ずれとして検出 — `Envelope` に `x_orig_from_quoted_local` を追加。
+
+devin/1791331333-quoted-local-cell2
 ### Security — D2895: `Subject:` 欄のゼロ幅文字 (U+200B–U+200D, U+FEFF) を件名ずれとして検出 — `Envelope` に `subject_zero_width` を追加。
 ### Security — D2896: `Subject:` 欄の双方向制御文字 (U+202A–U+202E, U+2066–U+2069) を件名ずれとして検出 — `Envelope` に `subject_bidi` を追加。
 ### Security — D2897: `Subject:` 欄のタグ文字 (U+E0000–U+E007F) を件名ずれとして検出 — `Envelope` に `subject_tag_chars` を追加。
