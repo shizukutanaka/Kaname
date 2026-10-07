@@ -4549,3 +4549,6 @@ Newsgroups・Path・Xref・Followup-To は NNTP 由来の欄で、既存は `nnt
 ## ラウンド 455 — 「報告は誰が書いたか」の自問自答
 
 DSN/MDN の記録欄 (Original-Recipient・Final-Recipient・Reporting-MTA・MDN-Gateway) は配送機が残す署名帳。送信側から届くこれは既に異様だが、値が `型;値` の構文を守らなければ「転記された正規報告」と「体裁だけ真似た擬装」を区別できる — 共通文法の値検査として追加した。
+## ラウンド 456 — 「不達の顔は誰が作るか」の自問自答
+
+DSN 宛先別欄 (Remote-MTA・Status・Original-Envelope-Id・Diagnostic-Code) は不達報告の内側記録だが、ヘッダ層に直置きされれば本文が「配達失敗の体裁」を自己主張する。存在を見るだけでは正規転記と擬装を区別できない — `型;値`・三段数字・識別子の各文法を値検査として追加した。
