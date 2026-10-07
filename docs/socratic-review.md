@@ -4583,3 +4583,9 @@ Content-MD5・Content-Digest・Content-Features・Content-Language は送信側�
 ## ラウンド 452 — 「表示名は復号後も名か」の自問自答
 
 表示名軸第2セル。前回が「中身の性質」なら今回は「符号化と構造の境界」。encoded-word は phrase で合法だが、復号結果が `<>` や `,;@` なら「名」と「アドレス」の境界が実装間でずれる。生8bit・空白のみ・内側鉤括弧も同じく「規格上ありえないのに受理される形」であり、送信者名の一貫した読みを保証するには値の構造まで見る必要がある。
+
+## ラウンド 429 — 「鉤括弧の記録欄ローカル部・第2セル」の自問自答
+
+問: 見せ宛・表差出人・元宛・元差出人を記す欄で `"a b"@y` のようにローカル部が鉤括弧囲みの宛名は検出済みか。
+答: 未検出だった — `Apparently-To:`/`X-Apparently-To:` 系、`Apparently-From:`/`Apparently-Sender:` 系、`X-Original-To:`、`X-Original-From:` の鉤括弧ローカル部宛名は引用局所部の受理/拒否でずれるため D2846–D2849 を追加。セル1 (`addr_quoted_local` 等) と同じ判定形。
+devin/1791331333-quoted-local-cell2
