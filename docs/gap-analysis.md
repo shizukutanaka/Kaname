@@ -2230,4 +2230,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2964 | List-Unsubscribe-Post: の非 One-Click 値 (解除投稿欄の値異形) | 解除処理ずれ |
 | D2965 | Archived-At: の非 URI 値 (保管先欄の値異形) | 保管参照ずれ |
 | D2966 | Injection-Info: の非 名=値 値 (注入情報欄の値異形) | 投稿記録ずれ |
+| D2975 | Disposition-Notification-Options: の非 名=required|optional 値 (通知選択欄の値異形) | 通知要求ずれ |
+| D2976 | VBR-Info: の非 名=値 値 (信託情報欄の値異形) | 信託照合ずれ |
+| D2977 | Feedback-Type 系の語彙外値 (反応種別欄の値異形) | 報告種別ずれ |
+| D2978 | Feedback-ID 系の非4要素値 (反応識別欄の値異形) | 報告照合ずれ |
 devin/1791332973-unclosed-cell1

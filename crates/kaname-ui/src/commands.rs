@@ -8160,6 +8160,19 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("注入情報欄の値が異形です—注入情報値の扱いで投稿記録がずれます".to_string());
     }
 
+    if env.dnt_opt_bad {
+        render_risks.push("通知選択欄の値が異形です—通知選択値の扱いで通知要求がずれます".to_string());
+    }
+    if env.vbr_info_bad {
+        render_risks.push("信託情報欄の値が異形です—信託情報値の扱いで信託照合がずれます".to_string());
+    }
+    if env.feedback_type_bad {
+        render_risks.push("反応種別欄の値が異形です—反応種別値の扱いで報告種別がずれます".to_string());
+    }
+    if env.feedback_id_bad {
+        render_risks.push("反応識別欄の値が異形です—反応識別値の扱いで報告照合がずれます".to_string());
+    }
+
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }
