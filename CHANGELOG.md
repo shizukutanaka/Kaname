@@ -210,6 +210,11 @@
 ### Security — D2871: `Apparently-Resent-*:` 系欄の未閉塞クオート宛名値を再送宛ずれとして検出 — `Envelope` に `apparently_resent_unclosed` を追加。
 ### Security — D2872: `X-Original-Rcpt-To:` 系欄の未閉塞クオート宛名値を元受取人ずれとして検出 — `Envelope` に `x_orig_rcpt_to_unclosed` を追加。
 
+### Security — D2888: `X-Envelope-To:` 欄の二重アット宛名値 (`a@b@c` 形) を封書宛ずれとして検出 — `Envelope` に `x_env_to_two_at` を追加。
+### Security — D2889: `X-Envelope-From:`/`X-MailFrom:`/`X-Mail-From:` 系欄の二重アット宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_two_at` を追加。
+### Security — D2890: `Errors-To:` 欄の二重アット宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_two_at` を追加。
+
+r440
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。
