@@ -3470,6 +3470,13 @@ pub struct Envelope {
     pub content_class_bad: bool,
     /// X-OriginatorOrg 系欄の値がドメイン形でない
     pub originator_org_bad: bool,
+    /// X-MS-Exchange SCL 系欄の値が整数範囲でない
+    pub ms_scl_bad: bool,
+    /// X-MS-Exchange 配送追跡欄の値が GUID 形でない
+    pub ms_nmi_bad: bool,
+    /// X-Forefront/X-Microsoft Antispam 系欄の値が対連接形でない
+    pub ms_as_report_bad: bool,
+    /// Feedback-ID 系欄の値が4区分形でない
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7340,6 +7347,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let thread_index_bad = has_thread_index_bad(bytes);
     let content_class_bad = has_content_class_bad(bytes);
     let originator_org_bad = has_originator_org_bad(bytes);
+    let ms_scl_bad = has_ms_scl_bad(bytes);
+    let ms_nmi_bad = has_ms_nmi_bad(bytes);
+    let ms_as_report_bad = has_ms_as_report_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8996,6 +9006,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         thread_index_bad,
         content_class_bad,
         originator_org_bad,
+        ms_scl_bad,
+        ms_nmi_bad,
+        ms_as_report_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -51530,6 +51543,112 @@ pub fn has_originator_org_bad(raw: &[u8]) -> bool {
             || !v.chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
             || v.split('.').any(|t| t.is_empty())
+    })
+}
+
+/// `X-MS-Exchange-Organization-SCL:` 系欄の値が -1 から 9 の整数範囲でなければスパム信頼度記録の異形として検出する (D2923)。
+pub fn has_ms_scl_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !l.starts_with("x-ms-exchange-organization-scl:") {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        match v.parse::<i32>() {
+            Ok(n) => !(-1..=9).contains(&n),
+            Err(_) => true,
+        }
+    })
+}
+
+/// `X-MS-Exchange-Organization-Network-Message-Id:` 系欄の値が GUID 形でなければ配送追跡記録の異形として検出する (D2924)。
+pub fn has_ms_nmi_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-ms-exchange-organization-network-message-id:")
+            || l.starts_with("x-ms-exchange-crosstenant-network-message-id:"))
+        {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let parts: Vec<&str> = v.split('-').collect();
+        let lens = [8usize, 4, 4, 4, 12];
+        !(parts.len() == 5
+            && parts
+                .iter()
+                .zip(lens.iter())
+                .all(|(p, n)| p.len() == *n && p.chars().all(|c| c.is_ascii_hexdigit())))
+    })
+}
+
+/// `X-Forefront-Antispam-Report:`/`X-Microsoft-Antispam:` 系欄の値が `KEY=value` 対の連接でなければ判定記録の異形として検出する (D2925)。
+pub fn has_ms_as_report_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !(l.starts_with("x-forefront-antispam-report:")
+            || l.starts_with("x-microsoft-antispam:"))
+        {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        v.is_empty()
+            || v.split(';').any(|p| {
+                let p = p.trim();
+                if p.is_empty() {
+                    return true;
+                }
+                let sep = p.find(['=', ':']);
+                match sep {
+                    None => true,
+                    Some(i) => {
+                        let k = &p[..i];
+                        k.is_empty()
+                            || !k.chars().all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '-')
+                    }
+                }
+            })
     })
 }
 
@@ -131716,4 +131835,55 @@ fn 投稿機欄が異形なら発火() {
             b"X-OriginatorOrg: example.com\r\n\r\nbody"
         ));
         assert!(!has_originator_org_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 信頼度欄が異形なら発火() {
+        assert!(has_ms_scl_bad(
+            b"X-MS-Exchange-Organization-SCL: 99\r\n\r\nbody"
+        ));
+        assert!(has_ms_scl_bad(
+            b"X-MS-Exchange-Organization-SCL: not-a-number\r\n\r\nbody"
+        ));
+        assert!(!has_ms_scl_bad(
+            b"X-MS-Exchange-Organization-SCL: -1\r\n\r\nbody"
+        ));
+        assert!(!has_ms_scl_bad(
+            b"X-MS-Exchange-Organization-SCL: 5\r\n\r\nbody"
+        ));
+        assert!(!has_ms_scl_bad(b"From: a@b\r\n\r\nbody"));
+        assert!(!has_ms_scl_bad(
+            b"X-Microsoft-Antispam-Mailbox-Delivery: ucf:0;jmr:0;auth:0;dest:I\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 追跡欄が異形なら発火() {
+        assert!(has_ms_nmi_bad(
+            b"X-MS-Exchange-Organization-Network-Message-Id: not-a-guid\r\n\r\nbody"
+        ));
+        assert!(has_ms_nmi_bad(
+            b"X-MS-Exchange-Organization-Network-Message-Id: 1234\r\n\r\nbody"
+        ));
+        assert!(!has_ms_nmi_bad(
+            b"X-MS-Exchange-Organization-Network-Message-Id: 4eb7f84c-c2a6-4bc0-9e7f-1a2b3c4d5e6f\r\n\r\nbody"
+        ));
+        assert!(!has_ms_nmi_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 判定記録欄が異形なら発火() {
+        assert!(has_ms_as_report_bad(
+            b"X-Forefront-Antispam-Report: just-words\r\n\r\nbody"
+        ));
+        assert!(has_ms_as_report_bad(
+            b"X-Forefront-Antispam-Report: CIP=1;;SRV=2\r\n\r\nbody"
+        ));
+        assert!(!has_ms_as_report_bad(
+            b"X-Forefront-Antispam-Report: CIP:1.2.3.4;CTRY=JP;SRV=a1\r\n\r\nbody"
+        ));
+        assert!(!has_ms_as_report_bad(
+            b"X-Microsoft-Antispam: BCL:0\r\n\r\nbody"
+        ));
+        assert!(!has_ms_as_report_bad(b"From: a@b\r\n\r\nbody"));
     }

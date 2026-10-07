@@ -2310,6 +2310,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2920 | Thread-Index: の非base64値 (スレッド索引欄の値異形) | 経路ずれ |
 | D2921 | Content-Class: の非urn値 (種別欄の値異形) | 経路ずれ |
 | D2922 | X-OriginatorOrg: 系の非ドメイン値 (発信組織欄の値異形) | 経路ずれ |
+| D2923 | X-MS-Exchange SCL 系の整数範囲外れ (信頼度欄の値異形) | 経路ずれ |
+| D2924 | X-MS-Exchange 追跡欄の非GUID値 (追跡欄の値異形) | 経路ずれ |
+| D2925 | X-Forefront/X-Microsoft Antispam 系の非対連接値 (判定記録欄の値異形) | 経路ずれ |
+| D2926 | Feedback-ID 系の非4区分値 (報酬識別欄の値異形) | 経路ずれ |
 devin/1791332973-unclosed-cell1
 | D2846 | Apparently-To:/X-Apparently-To: 系のローカル部鉤括弧宛名値 (見せ宛記録のローカル部鉤括弧異形) | 見せ宛ずれ |
 | D2847 | Apparently-From:/Apparently-Sender: 系のローカル部鉤括弧宛名値 (表差出人記録のローカル部鉤括弧異形) | 表差出人ずれ |
