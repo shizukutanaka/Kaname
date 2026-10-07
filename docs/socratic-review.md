@@ -4526,3 +4526,7 @@ devin/1791332973-unclosed-cell1
 
 X-MS-Has-Attach の語彙は yes/no のみ、TNEF-Correlator は base64 相関子、EndToEndLatency は `HH:MM:SS.mmm`、X-Mailer は印字可能ASCII — いずれも「書く権限が運輸側にある」欄で、値の形が規定を外れるなら運輸記録の擬態となる。攻撃者は「MS経路が刻んだように見せる」欄を任意に置けるが、形が外れれば確実な異形として切れる — 値の語彙・形両方を閉じた欄は検出に最適。
 
+## ラウンド 456 — 「不達の顔は誰が作るか」の自問自答
+
+DSN 宛先別欄 (Remote-MTA・Status・Original-Envelope-Id・Diagnostic-Code) は不達報告の内側記録だが、ヘッダ層に直置きされれば本文が「配達失敗の体裁」を自己主張する。存在を見るだけでは正規転記と擬装を区別できない — `型;値`・三段数字・識別子の各文法を値検査として追加した。
+

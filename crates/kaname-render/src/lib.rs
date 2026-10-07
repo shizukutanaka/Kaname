@@ -3298,6 +3298,14 @@ pub struct Envelope {
     pub ms_latency_bad: bool,
     /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
     pub mailer_bad: bool,
+    /// Remote-MTA 欄の値が 型;名 形でない
+    pub remote_mta_bad: bool,
+    /// Status 欄の値が三段数字形でない
+    pub dsn_status_bad: bool,
+    /// Original-Envelope-Id 欄の値が識別子形でない
+    pub orig_envid_bad: bool,
+    /// Diagnostic-Code 欄の値が 型;診断文 形でない
+    pub diag_code_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7077,6 +7085,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
     let ms_latency_bad = has_ms_latency_bad(bytes);
     let mailer_bad = has_mailer_bad(bytes);
+    let remote_mta_bad = has_remote_mta_bad(bytes);
+    let dsn_status_bad = has_dsn_status_bad(bytes);
+    let orig_envid_bad = has_orig_envid_bad(bytes);
+    let diag_code_bad = has_diag_code_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8642,6 +8654,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         tnef_correlator_bad,
         ms_latency_bad,
         mailer_bad,
+        remote_mta_bad,
+        dsn_status_bad,
+        orig_envid_bad,
+        diag_code_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48476,6 +48492,139 @@ pub fn has_mailer_bad(raw: &[u8]) -> bool {
         let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
         v.is_empty()
             || v.chars().any(|c| !c.is_ascii() || (c.is_ascii_control() && c != '\t'))
+    })
+}
+
+/// `型;値` 形の DSN 記録欄の値が構造を守るか判定する補助。
+///
+/// RFC 3464 は `mta-name-type ";" mta-name` — 型名は atom、
+/// 値は非空で `@` または `.` を含む。
+fn dsn_field_ok(v: &str) -> bool {
+    let Some(c) = v.find(';') else { return false };
+    let (ty, val) = v.split_at(c);
+    let val = &val[1..];
+    let ty_ok = !ty.trim().is_empty()
+        && ty.trim()
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.');
+    let a = val.trim();
+    ty_ok && !a.is_empty() && (a.contains('@') || a.contains('.'))
+}
+
+/// `Remote-MTA:` の値が `型;名` 形でなければ値形異形として検出する (D2951)。
+///
+/// RFC 3464 の宛先側 MTA 記録欄 — `dns;mail.x` 形を欠く値は
+/// 受理実装で配達経路の解釈がずれる。
+pub fn has_remote_mta_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("remote-mta:") else { return false };
+        !dsn_field_ok(v.trim())
+    })
+}
+
+/// `Status:` の値が `区分.細部.項目` の三段数字形でなければ値形異形として検出する (D2952)。
+///
+/// RFC 3464 の DSN 状態欄 — `5.1.1` 形 (三段とも数字・先頭区分は
+/// 2/4/5) を欠く値は受理実装で不達区分の解釈がずれる。
+pub fn has_dsn_status_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("status:") else { return false };
+        let v = v.trim();
+        let parts: Vec<&str> = v.split('.').collect();
+        !(parts.len() == 3
+            && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+            && matches!(parts[0], "2" | "4" | "5"))
+    })
+}
+
+/// `Original-Envelope-Id:` の値が印字可能な識別子形でなければ値形異形として検出する (D2953)。
+///
+/// RFC 3464 の ENVID 記録欄 — 空・空白・制御文字を含む値は
+/// 受理実装で元封書識別の解釈がずれる。
+pub fn has_orig_envid_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("original-envelope-id:") else { return false };
+        let v = v.trim();
+        v.is_empty() || v.chars().any(|c| c.is_control() || c.is_whitespace())
+    })
+}
+
+/// `Diagnostic-Code:` の値が `型;診断文` 形でなければ値形異形として検出する (D2954)。
+///
+/// RFC 3464 の診断記録欄 — `smtp; 550 ...` 形を欠く値は
+/// 受理実装で不達診断の解釈がずれる。
+pub fn has_diag_code_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("diagnostic-code:") else { return false };
+        let v = v.trim();
+        let Some(c) = v.find(';') else { return true };
+        let (ty, rest) = v.split_at(c);
+        ty.trim().is_empty()
+            || !ty
+                .trim()
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+            || rest[1..].trim().is_empty()
     })
 }
 
@@ -127562,4 +127711,43 @@ body";
         assert!(!has_mailer_bad(b"X-Mailer: Outlook 16.0\r\n\r\nbody"));
         assert!(!has_mailer_bad(b"User-Agent: Thunderbird/115.0\r\n\r\nbody"));
         assert!(!has_mailer_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 遠隔転送欄が異形なら発火() {
+        assert!(has_remote_mta_bad(b"Remote-MTA: dns\r\n\r\nbody"));
+        assert!(!has_remote_mta_bad(
+            b"Remote-MTA: dns;mail.example.com\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 状態欄が異形なら発火() {
+        assert!(has_dsn_status_bad(b"Status: 5.1\r\n\r\nbody"));
+        assert!(has_dsn_status_bad(b"Status: x.y.z\r\n\r\nbody"));
+        assert!(has_dsn_status_bad(b"Status: 9.9.9\r\n\r\nbody"));
+        assert!(!has_dsn_status_bad(b"Status: 5.1.1\r\n\r\nbody"));
+        assert!(!has_dsn_status_bad(b"Status: 2.0.0\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 元封書識別欄が異形なら発火() {
+        assert!(has_orig_envid_bad(b"Original-Envelope-Id:\r\n\r\nbody"));
+        assert!(has_orig_envid_bad(
+            b"Original-Envelope-Id: a b\r\n\r\nbody"
+        ));
+        assert!(!has_orig_envid_bad(
+            b"Original-Envelope-Id: abc123def\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 診断欄が異形なら発火() {
+        assert!(has_diag_code_bad(
+            b"Diagnostic-Code: 550 5.1.1\r\n\r\nbody"
+        ));
+        assert!(has_diag_code_bad(b"Diagnostic-Code: smtp;\r\n\r\nbody"));
+        assert!(!has_diag_code_bad(
+            b"Diagnostic-Code: smtp; 550 5.1.1 user unknown\r\n\r\nbody"
+        ));
     }
