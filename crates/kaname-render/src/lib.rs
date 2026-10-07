@@ -3298,6 +3298,14 @@ pub struct Envelope {
     pub ms_latency_bad: bool,
     /// X-Mailer/User-Agent 系欄の値が制御文字・非asciiを含む
     pub mailer_bad: bool,
+    /// Newsgroups 欄の値が群カンマ連接形でない
+    pub newsgroups_bad: bool,
+    /// Path 欄の値が bang-path 形でない
+    pub path_bang_bad: bool,
+    /// Xref 欄の値が ホスト 群:番号 形でない
+    pub xref_bad: bool,
+    /// Followup-To 欄の値が群連接形 (poster 以外) でない
+    pub followup_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7077,6 +7085,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
     let ms_latency_bad = has_ms_latency_bad(bytes);
     let mailer_bad = has_mailer_bad(bytes);
+    let newsgroups_bad = has_newsgroups_bad(bytes);
+    let path_bang_bad = has_path_bang_bad(bytes);
+    let xref_bad = has_xref_bad(bytes);
+    let followup_bad = has_followup_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8642,6 +8654,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         tnef_correlator_bad,
         ms_latency_bad,
         mailer_bad,
+        newsgroups_bad,
+        path_bang_bad,
+        xref_bad,
+        followup_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48476,6 +48492,162 @@ pub fn has_mailer_bad(raw: &[u8]) -> bool {
         let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
         v.is_empty()
             || v.chars().any(|c| !c.is_ascii() || (c.is_ascii_control() && c != '\t'))
+    })
+}
+
+/// `Newsgroups:` の値がニュース群のカンマ連接形でなければ値形異形として検出する (D2943)。
+///
+/// RFC 5536 は `group.name` のカンマ連接 — 空要素・空白・`@`・ドット
+/// なし名を含む値は受理実装で経路判定がずれる。
+pub fn has_newsgroups_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("newsgroups:") else { return false };
+        let v = v.trim();
+        let group_ok = |t: &str| -> bool {
+            !t.is_empty()
+                && t.contains('.')
+                && t.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
+                && t.split('.').all(|seg| !seg.is_empty())
+        };
+        v.is_empty() || !v.split(',').all(|t| group_ok(t.trim()))
+    })
+}
+
+/// `Path:` の値が bang-path 形 (`a!b!c`) でなければ値形異形として検出する (D2944)。
+///
+/// 各経路名は atom — 空区切り (`a!!b`)・`@@`・空白混入の値は
+/// 受理実装で転送経路の解釈がずれる。
+pub fn has_path_bang_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("path:") else { return false };
+        let v = v.trim();
+        let node_ok = |t: &str| -> bool {
+            !t.is_empty()
+                && t.chars().all(|c| {
+                    c.is_ascii_alphanumeric()
+                        || ".-_".contains(c)
+                })
+        };
+        v.is_empty()
+            || v.contains('@')
+            || !v.split('!').all(|t| node_ok(t))
+    })
+}
+
+/// `Xref:` の値が `ホスト 群:番号 …` 形でなければ値形異形として検出する (D2945)。
+///
+/// 先頭はホスト名、以後は `group:number` — 番号が数字でない・
+/// 対が欠ける値は受理実装で既読記録の対応付けがずれる。
+pub fn has_xref_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("xref:") else { return false };
+        let v = v.trim();
+        let mut it = v.split_whitespace();
+        let Some(host) = it.next() else { return true };
+        if host.is_empty()
+            || !host
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        {
+            return true;
+        }
+        let mut saw_pair = false;
+        for t in it {
+            let Some(c) = t.rfind(':') else { return true };
+            let (grp, num) = t.split_at(c);
+            let num = &num[1..];
+            if grp.is_empty()
+                || num.is_empty()
+                || !num.chars().all(|c| c.is_ascii_digit())
+            {
+                return true;
+            }
+            saw_pair = true;
+        }
+        !saw_pair
+    })
+}
+
+/// `Followup-To:` の値がニュース群連接形 (または `poster`) でなければ値形異形として検出する (D2946)。
+///
+/// RFC 5536 は Newsgroups 同形 + `poster` 語彙 — 空要素・空白・`@` を
+/// 含む値は受理実装で返信先群の解釈がずれる。
+pub fn has_followup_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("followup-to:") else { return false };
+        let v = v.trim();
+        if v == "poster" {
+            return false;
+        }
+        let group_ok = |t: &str| -> bool {
+            !t.is_empty()
+                && t.contains('.')
+                && t.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
+                && t.split('.').all(|seg| !seg.is_empty())
+        };
+        v.is_empty() || !v.split(',').all(|t| group_ok(t.trim()))
     })
 }
 
@@ -127562,4 +127734,40 @@ body";
         assert!(!has_mailer_bad(b"X-Mailer: Outlook 16.0\r\n\r\nbody"));
         assert!(!has_mailer_bad(b"User-Agent: Thunderbird/115.0\r\n\r\nbody"));
         assert!(!has_mailer_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 群連接欄が異形なら発火() {
+        assert!(has_newsgroups_bad(b"Newsgroups: x\r\n\r\nbody"));
+        assert!(has_newsgroups_bad(b"Newsgroups: a@b.c\r\n\r\nbody"));
+        assert!(has_newsgroups_bad(b"Newsgroups: a..b\r\n\r\nbody"));
+        assert!(!has_newsgroups_bad(
+            b"Newsgroups: news.announce, misc.test\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 経路欄が異形なら発火() {
+        assert!(has_path_bang_bad(b"Path: a!!b\r\n\r\nbody"));
+        assert!(has_path_bang_bad(b"Path: a!b@x\r\n\r\nbody"));
+        assert!(!has_path_bang_bad(b"Path: a!b!c\r\n\r\nbody"));
+        assert!(!has_path_bang_bad(b"Path: not-for-mail\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 参照番号欄が異形なら発火() {
+        assert!(has_xref_bad(b"Xref: h news.test:x\r\n\r\nbody"));
+        assert!(has_xref_bad(b"Xref: h\r\n\r\nbody"));
+        assert!(!has_xref_bad(
+            b"Xref: host.example news.test:123 misc.a:4\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 追討欄が異形なら発火() {
+        assert!(has_followup_bad(b"Followup-To: x\r\n\r\nbody"));
+        assert!(!has_followup_bad(b"Followup-To: poster\r\n\r\nbody"));
+        assert!(!has_followup_bad(
+            b"Followup-To: misc.test, news.announce\r\n\r\nbody"
+        ));
     }

@@ -4526,3 +4526,7 @@ devin/1791332973-unclosed-cell1
 
 X-MS-Has-Attach の語彙は yes/no のみ、TNEF-Correlator は base64 相関子、EndToEndLatency は `HH:MM:SS.mmm`、X-Mailer は印字可能ASCII — いずれも「書く権限が運輸側にある」欄で、値の形が規定を外れるなら運輸記録の擬態となる。攻撃者は「MS経路が刻んだように見せる」欄を任意に置けるが、形が外れれば確実な異形として切れる — 値の語彙・形両方を閉じた欄は検出に最適。
 
+## ラウンド 454 — 「ニュース欄は誰が読むか」の自問自答
+
+Newsgroups・Path・Xref・Followup-To は NNTP 由来の欄で、既存は `nntp_routing` の存在検出のみ。メール経路に混ざる NNTP 欄はそれ自体が異様だが、値の形まで見れば「転記されただけの正規値」と「形を守らない擬装値」を区別できる — 群連接・bang-path・群:番号の各文法を値検査として追加した。
+
