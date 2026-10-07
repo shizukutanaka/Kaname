@@ -3354,6 +3354,14 @@ pub struct Envelope {
     pub orig_envid_bad: bool,
     /// Diagnostic-Code 欄の値が 型;診断文 形でない
     pub diag_code_bad: bool,
+    /// Original-Message-ID 欄の値が msgid 角括弧形でない
+    pub orig_msgid_bad: bool,
+    /// Disposition 欄の値が 方式/種別;修飾 形でない
+    pub mdn_disposition_bad: bool,
+    /// Reporting-UA 欄の値が UA 名形でない
+    pub reporting_ua_bad: bool,
+    /// Message-Context 欄の値が規定語彙でない
+    pub msg_context_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7161,6 +7169,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let dsn_status_bad = has_dsn_status_bad(bytes);
     let orig_envid_bad = has_orig_envid_bad(bytes);
     let diag_code_bad = has_diag_code_bad(bytes);
+    let orig_msgid_bad = has_orig_msgid_bad(bytes);
+    let mdn_disposition_bad = has_mdn_disposition_bad(bytes);
+    let reporting_ua_bad = has_reporting_ua_bad(bytes);
+    let msg_context_bad = has_msg_context_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8754,6 +8766,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dsn_status_bad,
         orig_envid_bad,
         diag_code_bad,
+        orig_msgid_bad,
+        mdn_disposition_bad,
+        reporting_ua_bad,
+        msg_context_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -49391,6 +49407,129 @@ pub fn has_diag_code_bad(raw: &[u8]) -> bool {
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
             || rest[1..].trim().is_empty()
+    })
+}
+
+/// `Original-Message-ID:` の値が `<…>` の msgid 形でなければ値形異形として検出する (D2955)。
+///
+/// RFC 3798 の MDN 元メッセージ識別欄 — 角括弧で括らない値は
+/// 受理実装で元メッセージ同定がずれる。
+pub fn has_orig_msgid_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("original-message-id:") else { return false };
+        let v = v.trim();
+        !(v.starts_with('<') && v.ends_with('>') && v.len() > 2 && v.contains('@'))
+    })
+}
+
+/// `Disposition:` の値が `方式/種別; 修飾` 形でなければ値形異形として検出する (D2956)。
+///
+/// RFC 3798 の MDN 処理結果欄 — `manual-action/MDN-sent-manually;
+/// displayed` 形を欠く値は受理実装で開封扱いの解釈がずれる。
+pub fn has_mdn_disposition_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("disposition:") else { return false };
+        let v = v.trim();
+        let Some(sl) = v.find('/') else { return true };
+        let (mode, rest) = v.split_at(sl);
+        let rest = &rest[1..];
+        let mode_ok = matches!(mode.trim(), "manual-action" | "automatic-action");
+        let ty = rest.split(';').next().unwrap_or("").trim();
+        !mode_ok
+            || !(ty.starts_with("mdn-sent-") || ty == "deleted")
+            || !rest.contains(';')
+    })
+}
+
+/// `Reporting-UA:` の値が UA 名形 (アドレス形でない) でなければ値形異形として検出する (D2957)。
+///
+/// RFC 3798 の開封報告 UA 欄は製品名を載せる欄 — `@` や `<>` の
+/// 宛名形は受理実装で報告元の解釈がずれる。
+pub fn has_reporting_ua_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("reporting-ua:") else { return false };
+        let v = v.trim();
+        v.is_empty() || v.contains('@') || v.contains('<') || v.contains('>')
+    })
+}
+
+/// `Message-Context:` の値が規定語彙でなければ値形異形として検出する (D2958)。
+///
+/// RFC 3458 の文脈欄は `voice-message`/`fax-message`/`pager-message`/
+/// `multimedia-message`/`text-message`/`none` の閉語彙 — 語彙外の値は
+/// 受理実装で文脈判定がずれる。
+pub fn has_msg_context_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("message-context:") else { return false };
+        !matches!(
+            v.trim(),
+            "voice-message"
+                | "fax-message"
+                | "pager-message"
+                | "multimedia-message"
+                | "text-message"
+                | "none"
+        )
     })
 }
 
@@ -128706,4 +128845,49 @@ fn 迷惑点欄が異形なら発火() {
         assert!(!has_diag_code_bad(
             b"Diagnostic-Code: smtp; 550 5.1.1 user unknown\r\n\r\nbody"
         ));
+    }
+
+    #[test]
+    fn 元識別欄が異形なら発火() {
+        assert!(has_orig_msgid_bad(b"Original-Message-ID: abc\r\n\r\nbody"));
+        assert!(has_orig_msgid_bad(
+            b"Original-Message-ID: <abc\r\n\r\nbody"
+        ));
+        assert!(!has_orig_msgid_bad(
+            b"Original-Message-ID: <abc@x.com>\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 処理結果欄が異形なら発火() {
+        assert!(has_mdn_disposition_bad(
+            b"Disposition: displayed\r\n\r\nbody"
+        ));
+        assert!(has_mdn_disposition_bad(
+            b"Disposition: manual-action/MDN-sent-manually\r\n\r\nbody"
+        ));
+        assert!(!has_mdn_disposition_bad(
+            b"Disposition: manual-action/MDN-sent-manually; displayed\r\n\r\nbody"
+        ));
+        assert!(!has_mdn_disposition_bad(
+            b"Disposition: automatic-action/MDN-sent-automatically; deleted\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 報告機欄が異形なら発火() {
+        assert!(has_reporting_ua_bad(b"Reporting-UA: a@b.com\r\n\r\nbody"));
+        assert!(has_reporting_ua_bad(b"Reporting-UA:\r\n\r\nbody"));
+        assert!(!has_reporting_ua_bad(
+            b"Reporting-UA: Kaname/0.7\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn 文脈欄が異形なら発火() {
+        assert!(has_msg_context_bad(b"Message-Context: x\r\n\r\nbody"));
+        assert!(!has_msg_context_bad(
+            b"Message-Context: voice-message\r\n\r\nbody"
+        ));
+        assert!(!has_msg_context_bad(b"Message-Context: none\r\n\r\nbody"));
     }

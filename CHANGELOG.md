@@ -274,6 +274,14 @@ devin/1791332973-unclosed-cell1
 
 ### Security — D2954: `Diagnostic-Code:` の値が `型;診断文` 形でないことを値形異形として検出 — `Envelope` に `diag_code_bad` を追加。
 
+### Security — D2955: `Original-Message-ID:` の値が msgid 角括弧形でないことを値形異形として検出 — `Envelope` に `orig_msgid_bad` を追加。
+
+### Security — D2956: `Disposition:` の値が `方式/種別; 修飾` 形でないことを値形異形として検出 — `Envelope` に `mdn_disposition_bad` を追加。
+
+### Security — D2957: `Reporting-UA:` の値が UA 名形でないことを値形異形として検出 — `Envelope` に `reporting_ua_bad` を追加。
+
+### Security — D2958: `Message-Context:` の値が RFC 3458 の規定語彙でないことを値形異形として検出 — `Envelope` に `msg_context_bad` を追加。
+
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。

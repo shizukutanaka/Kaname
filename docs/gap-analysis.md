@@ -2254,4 +2254,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2952 | Status 欄の非三段数字値 (値形異形) | 不達区分ずれ |
 | D2953 | Original-Envelope-Id 欄の非識別子値 (値形異形) | 封書同定ずれ |
 | D2954 | Diagnostic-Code 欄の非 型;診断文 値 (値形異形) | 不達診断ずれ |
+| D2955 | Original-Message-ID 欄の非 msgid 値 (値形異形) | 元メール同定ずれ |
+| D2956 | Disposition 欄の非 方式/種別 値 (値形異形) | 開封扱いずれ |
+| D2957 | Reporting-UA 欄の非 UA名 値 (値形異形) | 報告元ずれ |
+| D2958 | Message-Context 欄の語彙外値 (値形異形) | 種別判定ずれ |
 devin/1791332973-unclosed-cell1

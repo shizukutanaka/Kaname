@@ -4552,3 +4552,6 @@ DSN/MDN の記録欄 (Original-Recipient・Final-Recipient・Reporting-MTA・MDN
 ## ラウンド 456 — 「不達の顔は誰が作るか」の自問自答
 
 DSN 宛先別欄 (Remote-MTA・Status・Original-Envelope-Id・Diagnostic-Code) は不達報告の内側記録だが、ヘッダ層に直置きされれば本文が「配達失敗の体裁」を自己主張する。存在を見るだけでは正規転記と擬装を区別できない — `型;値`・三段数字・識別子の各文法を値検査として追加した。
+## ラウンド 457 — 「開封の返事は誰が書くか」の自問自答
+
+MDN 残欄 (Original-Message-ID・Disposition・Reporting-UA・Message-Context) は開封報告の内側記録。ヘッダ層に直置きされれば本文が「開封済みの体裁」を自己主張する。msgid 角括弧・方式/種別・UA 名・文脈語彙の各文法を値検査として追加した。
