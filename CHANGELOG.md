@@ -154,6 +154,10 @@
 ### Security — D2782: `X-Envelope-To:` 欄のローカル部井桁宛名値 (`a#b@y` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_hash_local` を追加 (`Envelope-To:`/`Delivered-To:` 本命は `addr_hash_local` が網羅)。
 ### Security — D2783: `X-Envelope-From:`/`X-MailFrom:` 等欄のローカル部井桁宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_hash_local` を追加。
 ### Security — D2784: `Errors-To:` 欄のローカル部井桁宛名値を返送先ずれとして検出 — `Envelope` に `errors_to_hash_local` を追加。
+- D2830: Apparently-To:`/`X-Apparently-To:` 系 のローカル部ドル符宛名値 — 見せ宛記録のローカル部ドル符異形
+- D2831: Apparently-From:`/`Apparently-Sender:` 系 のローカル部ドル符宛名値 — 表差出人記録のローカル部ドル符異形
+- D2832: X-Original-To: のローカル部ドル符宛名値 — 元宛先記録のローカル部ドル符異形
+- D2833: X-Original-From: のローカル部ドル符宛名値 — 元差出人記録のローカル部ドル符異形
 ### Security — D2842: アドレス欄・配達記録欄のローカル部鉤括弧宛名値 (`"a b"@y` 形) を宛名ずれとして検出 — `Envelope` に `addr_quoted_local` を追加。
 ### Security — D2843: `X-Envelope-To:` のローカル部鉤括弧宛名値 (`"a b"@y` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_quoted_local` を追加。
 ### Security — D2844: `X-Envelope-From:`/`X-MailFrom:` 等のローカル部鉤括弧宛名値 (`"a b"@y` 形) を封書差出人ずれとして検出 — `Envelope` に `env_from_quoted_local` を追加。
