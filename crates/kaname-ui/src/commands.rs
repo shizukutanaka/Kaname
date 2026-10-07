@@ -8144,6 +8144,15 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.errors_to_backtick_local {
         render_risks.push("返送先記録の宛名ローカル部に反転符です—反転符の扱いで返送先がずれます".to_string());
     }
+    if env.env_to_caret_local {
+        render_risks.push("封書宛先記録の宛名ローカル部にハットです—ハットの扱いで封書宛先がずれます".to_string());
+    }
+    if env.env_from_caret_local {
+        render_risks.push("封書差出人記録の宛名ローカル部にハットです—ハットの扱いで封書差出人がずれます".to_string());
+    }
+    if env.errors_to_caret_local {
+        render_risks.push("返送先記録の宛名ローカル部にハットです—ハットの扱いで返送先がずれます".to_string());
+    }
     if env.apparently_to_rbracket {
         render_risks.push("見せ宛記録の宛名に逆角括弧です—角括弧閉じの扱いで見せ宛がずれます".to_string());
     }
@@ -8587,6 +8596,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     if env.return_receipt_dollar_local {
         render_risks.push("受領先記録の宛名ローカル部にドル符です—ドル符の扱いで受領先がずれます".to_string());
+    }
+    if env.x_orig_cc_hash_local {
+        render_risks.push("元副宛記録の宛名ローカル部に井桁です—井桁の扱いで元副宛がずれます".to_string());
+    }
+    if env.x_orig_reply_to_hash_local {
+        render_risks.push("元返信口記録の宛名ローカル部に井桁です—井桁の扱いで元返信口がずれます".to_string());
+    }
+    if env.disposition_to_hash_local {
+        render_risks.push("開封通知先記録の宛名ローカル部に井桁です—井桁の扱いで開封通知先がずれます".to_string());
+    }
+    if env.return_receipt_hash_local {
+        render_risks.push("受領先記録の宛名ローカル部に井桁です—井桁の扱いで受領先がずれます".to_string());
     }
     if env.x_orig_cc_pipe {
         render_risks.push("元副宛記録の宛名ドメインに縦線です—縦線の扱いで元副宛がずれます".to_string());
