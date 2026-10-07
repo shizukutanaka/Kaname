@@ -8335,6 +8335,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.display_ws_only {
         render_risks.push("表示名が空白のみです—名の扱いで送信者がずれます".to_string());
     }
+    if env.subject_zero_width {
+        render_risks.push("件名がゼロ幅文字を含みます—ゼロ幅の扱いで件名がずれます".to_string());
+    }
+    if env.subject_bidi {
+        render_risks.push("件名が双方向制御文字を含みます—双方向制御の扱いで件名がずれます".to_string());
+    }
+    if env.subject_tag_chars {
+        render_risks.push("件名がタグ文字を含みます—タグ文字の扱いで件名がずれます".to_string());
+    }
+    if env.subject_ctrl {
+        render_risks.push("件名が制御文字を含みます—制御文字の扱いで件名がずれます".to_string());
+    }
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }

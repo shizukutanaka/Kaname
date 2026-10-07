@@ -3427,6 +3427,14 @@ pub struct Envelope {
     pub display_inner_quote: bool,
     /// アドレス欄の表示名が空白のみ
     pub display_ws_only: bool,
+    /// `Subject:` の値にゼロ幅文字を含むか (D2895)。
+    pub subject_zero_width: bool,
+    /// `Subject:` の値に双方向制御文字を含むか (D2896)。
+    pub subject_bidi: bool,
+    /// `Subject:` の値にタグ文字を含むか (D2897)。
+    pub subject_tag_chars: bool,
+    /// `Subject:` の値に制御文字を含むか (D2898)。
+    pub subject_ctrl: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7270,6 +7278,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let display_ew_danger = has_display_ew_danger(bytes);
     let display_inner_quote = has_display_inner_quote(bytes);
     let display_ws_only = has_display_ws_only(bytes);
+    let subject_zero_width = has_subject_zero_width(bytes);
+    let subject_bidi = has_subject_bidi(bytes);
+    let subject_tag_chars = has_subject_tag_chars(bytes);
+    let subject_ctrl = has_subject_ctrl(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8899,6 +8911,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         display_ew_danger,
         display_inner_quote,
         display_ws_only,
+        subject_zero_width,
+        subject_bidi,
+        subject_tag_chars,
+        subject_ctrl,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -50514,6 +50530,138 @@ pub fn has_display_ws_only(raw: &[u8]) -> bool {
             && before.ends_with('"')
             && before.len() >= 3
             && before[1..before.len() - 1].chars().all(|c| c.is_whitespace())
+    })
+}
+
+/// `Subject:` の値にゼロ幅文字 (U+200B–U+200D, U+FEFF)を含むか判定する (D2895)。
+///
+/// `Subject: a\u{200B}b` のように件名にゼロ幅文字 (U+200B–U+200D, U+FEFF)を埋める手口
+/// — フィルタは接続語を見るが読み手には無印 — ゼロ幅を潰す実装と残す実装で件名照合がずれる。
+#[must_use]
+pub fn has_subject_zero_width(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim().eq_ignore_ascii_case("subject") && (l[c + 1..].chars().any(|ch| ('\u{200B}'..='\u{200D}').contains(&ch) || ch == '\u{FEFF}'))
+    })
+}
+
+/// `Subject:` の値に双方向制御文字 (U+202A–U+202E, U+2066–U+2069)を含むか判定する (D2896)。
+///
+/// `Subject: a\u{200B}b` のように件名に双方向制御文字 (U+202A–U+202E, U+2066–U+2069)を埋める手口
+/// — 表示順を反転させて件名を読み違えさせる — 制御を描く実装と捨てる実装で件名がずれる。
+#[must_use]
+pub fn has_subject_bidi(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim().eq_ignore_ascii_case("subject") && (l[c + 1..].chars().any(|ch| ('\u{202A}'..='\u{202E}').contains(&ch) || ('\u{2066}'..='\u{2069}').contains(&ch)))
+    })
+}
+
+/// `Subject:` の値にタグ文字 (U+E0000–U+E007F)を含むか判定する (D2897)。
+///
+/// `Subject: a\u{200B}b` のように件名にタグ文字 (U+E0000–U+E007F)を埋める手口
+/// — 不可視タグ文字で語彙を埋め込む — 本文側は `unicode_tag_chars` で見ているが件名は绿地。
+#[must_use]
+pub fn has_subject_tag_chars(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim().eq_ignore_ascii_case("subject") && (l[c + 1..].chars().any(|ch| ('\u{E0000}'..='\u{E007F}').contains(&ch)))
+    })
+}
+
+/// `Subject:` の値に制御文字 (C0/C1、タブ除く)を含むか判定する (D2898)。
+///
+/// `Subject: a\u{200B}b` のように件名に制御文字 (C0/C1、タブ除く)を埋める手口
+/// — 生の制御文字は RFC 的に不正 — 落とす実装と残す実装で件名がずれる。
+#[must_use]
+pub fn has_subject_ctrl(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(c) = l.find(':') else {
+            return false;
+        };
+        l[..c].trim().eq_ignore_ascii_case("subject") && (l[c + 1..].chars().any(|ch| (ch < ' ' && ch != '\t') || ('\u{7F}'..='\u{9F}').contains(&ch)))
     })
 }
 
@@ -101598,7 +101746,7 @@ mod tests {
     fn duplicate_identity_headers_は一意ヘッダ重複を検出する() {
         // D1292 — Subject 二重 / From 二重 / Message-ID 二重
         assert!(has_duplicate_identity_headers(
-            b"From: a@x\r\nSubject: hello\r\nSubject: goodbye\r\n\r\nb"
+            "From: a@x\r\nSubject: hello\r\nSubject: goodbye\r\n\r\nb".as_bytes()
         ));
         assert!(has_duplicate_identity_headers(
             b"From: a@x\r\nFrom: b@y\r\nSubject: s\r\n\r\nb"
@@ -101608,7 +101756,7 @@ mod tests {
         ));
         // 継続行は別ヘッダとして数えない
         assert!(!has_duplicate_identity_headers(
-            b"From: a@x\r\nSubject: very long\r\n folded\r\n\r\nb"
+            "From: a@x\r\nSubject: very long\r\n folded\r\n\r\nb".as_bytes()
         ));
         // X-From: 等の X- 系は from: にマッチしない
         assert!(!has_duplicate_identity_headers(
@@ -101748,18 +101896,18 @@ mod tests {
     fn mixed_line_endings_は改行混在を検出する() {
         // D1298 — ヘッダ部の CRLF + 裸 LF
         assert!(has_mixed_line_endings(
-            b"From: a@x\r\nSubject: hi\nTo: b@y\r\n\r\nbody"
+            "From: a@x\r\nSubject: hi\nTo: b@y\r\n\r\nbody".as_bytes()
         ));
         // 全 CRLF / 全 LF は不発火
         assert!(!has_mixed_line_endings(
-            b"From: a@x\r\nSubject: hi\r\n\r\nbody"
+            "From: a@x\r\nSubject: hi\r\n\r\nbody".as_bytes()
         ));
         assert!(!has_mixed_line_endings(
             b"From: a@x\nSubject: hi\n\nbody"
         ));
         // 本文中の混在は対象外 (ヘッダ部のみ)
         assert!(!has_mixed_line_endings(
-            b"From: a@x\r\nSubject: hi\r\n\r\nline1\nline2\r\n"
+            "From: a@x\r\nSubject: hi\r\n\r\nline1\nline2\r\n".as_bytes()
         ));
     }
 
@@ -102532,7 +102680,7 @@ mod tests {
     #[test]
     fn no_recipient_headers_は宛先欄の不在を検出する() {
         assert!(has_no_recipient_headers(
-            b"From: a@x\r\nSubject: x\r\n\r\nx"
+            "From: a@x\r\nSubject: x\r\n\r\nx".as_bytes()
         ));
         // 欄はあるが値が空
         assert!(has_no_recipient_headers(b"To:\r\nSubject: x\r\n\r\nx"));
@@ -112609,6 +112757,48 @@ mod tests {
     }
 
     #[test]
+    fn 件名がゼロ幅なら発火() {
+        assert!(has_subject_zero_width(
+            "From: a@x\r\nSubject: a\u{200B}b\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_subject_zero_width(
+            "From: a@x\r\nSubject: hello\r\n\r\nx".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn 件名が双方向制御なら発火() {
+        assert!(has_subject_bidi(
+            "From: a@x\r\nSubject: a\u{202E}b\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_subject_bidi(
+            "From: a@x\r\nSubject: hello\r\n\r\nx".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn 件名がタグ文字なら発火() {
+        assert!(has_subject_tag_chars(
+            "From: a@x\r\nSubject: a\u{E0020}b\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_subject_tag_chars(
+            "From: a@x\r\nSubject: hello\r\n\r\nx".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn 件名が制御文字なら発火() {
+        assert!(has_subject_ctrl(
+            "From: a@x\r\nSubject: a\u{000B}b\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_subject_ctrl(
+            "From: a@x\r\nSubject: hello\r\n\r\nx".as_bytes()
+        ));
+    }
+
+
+
+    #[test]
     fn 再送返信口が縦線宛名なら発火() {
         assert!(has_resent_reply_to_pipe(
             b"From: a@x\r\nResent-Reply-To: a@xample|.com\r\nTo: b@y\r\n\r\nx"
@@ -116000,10 +116190,10 @@ mod tests {
     #[test]
     fn 元の件名記録が件名と一致すれば発火() {
         assert!(has_x_orig_subject_same_as_subject(
-            b"From: a@x\r\nSubject: hello\r\nX-Original-Subject: hello\r\nTo: b@y\r\n\r\nx"
+            "From: a@x\r\nSubject: hello\r\nX-Original-Subject: hello\r\nTo: b@y\r\n\r\nx".as_bytes()
         ));
         assert!(!has_x_orig_subject_same_as_subject(
-            b"From: a@x\r\nSubject: hello\r\nX-Original-Subject: other\r\nTo: b@y\r\n\r\nx"
+            "From: a@x\r\nSubject: hello\r\nX-Original-Subject: other\r\nTo: b@y\r\n\r\nx".as_bytes()
         ));
     }
 

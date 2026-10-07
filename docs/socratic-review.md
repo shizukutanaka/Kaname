@@ -4589,3 +4589,8 @@ Content-MD5・Content-Digest・Content-Features・Content-Language は送信側�
 問: 見せ宛・表差出人・元宛・元差出人を記す欄で `"a b"@y` のようにローカル部が鉤括弧囲みの宛名は検出済みか。
 答: 未検出だった — `Apparently-To:`/`X-Apparently-To:` 系、`Apparently-From:`/`Apparently-Sender:` 系、`X-Original-To:`、`X-Original-From:` の鉤括弧ローカル部宛名は引用局所部の受理/拒否でずれるため D2846–D2849 を追加。セル1 (`addr_quoted_local` 等) と同じ判定形。
 devin/1791331333-quoted-local-cell2
+
+## ラウンド 442 — 「件名の不可視文字」の自問自答
+
+問: `Subject:` にゼロ幅・双方向制御・タグ・制御文字を埋める値は検出済みか。
+答: 未検出だった — 件名側は地域接頭語 (`subject_locale_prefix`) と元件名記録 (`x_orig_subject_*`) しか見ておらず、本文には `unicode_tag_chars` があるのに件名値自体の不可視文字は绿地。フィルタ回避と表示順改ざんの両方に効くため D2895–D2898 を追加。
