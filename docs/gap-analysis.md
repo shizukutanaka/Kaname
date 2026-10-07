@@ -2266,4 +2266,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2956 | Disposition 欄の非 方式/種別 値 (値形異形) | 開封扱いずれ |
 | D2957 | Reporting-UA 欄の非 UA名 値 (値形異形) | 報告元ずれ |
 | D2958 | Message-Context 欄の語彙外値 (値形異形) | 種別判定ずれ |
+| D2939 | Content-MD5 欄の非24文字base64値 (値形異形) | 検証ずれ |
+| D2940 | Content-Language 欄の非言語タグ値 (値形異形) | 言語ずれ |
+| D2941 | Content-Digest 欄の非アルゴ=値 (値形異形) | 検証ずれ |
+| D2942 | Content-Features 欄の非連接値 (値形異形) | 特徴ずれ |
 devin/1791332973-unclosed-cell1

@@ -4565,3 +4565,6 @@ DSN 宛先別欄 (Remote-MTA・Status・Original-Envelope-Id・Diagnostic-Code) 
 ## ラウンド 457 — 「開封の返事は誰が書くか」の自問自答
 
 MDN 残欄 (Original-Message-ID・Disposition・Reporting-UA・Message-Context) は開封報告の内側記録。ヘッダ層に直置きされれば本文が「開封済みの体裁」を自己主張する。msgid 角括弧・方式/種別・UA 名・文脈語彙の各文法を値検査として追加した。
+## ラウンド 453 — 「自己申告は誰が検証するか」の自問自答
+
+Content-MD5・Content-Digest・Content-Features・Content-Language は送信側が「照合済み・規格どおり」を自称する欄。既存は存在検出 (`integrity_claim` がプレゼンスのみ) で、値の形を見ていなかった。形すら守らない自称値は「検証はどこにもない」ことを示す — 値の文法を検査すれば、体裁だけの自称と規格どおりの記録を区別できる。
