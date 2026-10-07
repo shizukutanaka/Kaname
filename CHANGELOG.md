@@ -246,6 +246,10 @@ devin/1791332973-unclosed-cell1
 ### Security — D2980: `X-Loop:` が宛名形 (`@` を持つ) でない値を検出 (`x_loop_bad`)
 ### Security — D2981: `X-UIDL:`/`UIDL:`/`X-UID:` が空白なし印字トークンでない値を検出 (`uidl_bad`)
 ### Security — D2982: `X-Received:` が `by`/(`with`|`id`) 構造を欠く値を検出 (`x_received_bad`)
+### Security — D2967: `X-Spam-Flag:`/`X-Spam-Flagged:` が YES/NO 語彙でない値を検出 (`spam_flag_bad`)
+### Security — D2968: `X-Spam-Status:` が `Yes|No … score=…` 形でない値を検出 (`spam_status_bad`)
+### Security — D2969: `X-Spam-Level:` が星のみでない値を検出 (`spam_level_bad`)
+### Security — D2970: `X-Spam-Score:`/`X-Spam-Rating:` が数値でない値を検出 (`spam_score_bad`)
 ### Security — D2559: `Envelope-To:`/`X-Envelope-To:` 系欄のドメイン側縦線宛名値 (`a@xample|.com` 形) を封書宛先ずれとして検出 — `Envelope` に `env_to_pipe` を追加。
 ### Security — D2560: `Delivered-To:` 欄のドメイン側縦線宛名値を配達履歴ずれとして検出 — `Envelope` に `delivered_to_pipe` を追加。
 ### Security — D2561: `X-Envelope-From:`/`X-MailFrom:` 等欄のドメイン側縦線宛名値を封書差出人ずれとして検出 — `Envelope` に `env_from_pipe` を追加。

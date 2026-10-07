@@ -8186,6 +8186,19 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("反応識別欄の値が異形です—反応識別値の扱いで報告照合がずれます".to_string());
     }
 
+    if env.spam_flag_bad {
+        render_risks.push("迷惑旗欄の値が異形です—迷惑旗値の扱いで迷惑判定がずれます".to_string());
+    }
+    if env.spam_status_bad {
+        render_risks.push("迷惑状態欄の値が異形です—迷惑状態値の扱いで迷惑判定がずれます".to_string());
+    }
+    if env.spam_level_bad {
+        render_risks.push("迷惑度欄の値が異形です—迷惑度値の扱いで迷惑判定がずれます".to_string());
+    }
+    if env.spam_score_bad {
+        render_risks.push("迷惑点欄の値が異形です—迷惑点値の扱いで迷惑判定がずれます".to_string());
+    }
+
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }
