@@ -3290,6 +3290,14 @@ pub struct Envelope {
     pub env_from_quoted_local: bool,
     /// `Errors-To:` の値が鉤括弧ローカル宛名形か (D2845)。
     pub errors_to_quoted_local: bool,
+    /// Auto-Submitted 欄の値が規定語彙外
+    pub auto_submitted_bad: bool,
+    /// Precedence 欄の値が規定語彙外
+    pub precedence_bad: bool,
+    /// X-Originating-IP 欄の値が角括弧付きIP表記でない
+    pub x_orig_ip_bad: bool,
+    /// X-Auto-Response-Suppress 欄のトークンが規定語彙外
+    pub x_auto_suppress_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7065,6 +7073,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let env_to_quoted_local = has_env_to_quoted_local(bytes);
     let env_from_quoted_local = has_env_from_quoted_local(bytes);
     let errors_to_quoted_local = has_errors_to_quoted_local(bytes);
+    let auto_submitted_bad = has_auto_submitted_bad(bytes);
+    let precedence_bad = has_precedence_bad(bytes);
+    let x_orig_ip_bad = has_x_orig_ip_bad(bytes);
+    let x_auto_suppress_bad = has_x_auto_suppress_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8626,6 +8638,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         env_to_quoted_local,
         env_from_quoted_local,
         errors_to_quoted_local,
+        auto_submitted_bad,
+        precedence_bad,
+        x_orig_ip_bad,
+        x_auto_suppress_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -48342,6 +48358,127 @@ pub fn has_x_orig_rcpt_to_caret_local(raw: &[u8]) -> bool {
 }
 
 /// `X-Confirm-Reading-To:` の値がドル符宛名形か判定する
+/// Auto-Submitted 欄の値が RFC 3834 の規定語彙外なら異形として検出する (D2915)。
+pub fn has_auto_submitted_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !l.starts_with("auto-submitted:") {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        !["auto-generated", "auto-replied", "auto-forwarded", "no"]
+            .iter()
+            .any(|k| v == *k)
+    })
+}
+
+/// Precedence 欄の値が規定語彙外なら配送優先度の異形として検出する (D2916)。
+pub fn has_precedence_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !l.starts_with("precedence:") {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        !["bulk", "junk", "list", "normal", "first-class", "special-delivery", "non-delivery"]
+            .iter()
+            .any(|k| v == *k)
+    })
+}
+
+/// X-Originating-IP 欄の値が角括弧付き IP 表記でなければ送信元偽装候補として検出する (D2917)。
+pub fn has_x_orig_ip_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !l.starts_with("x-originating-ip:") {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let bracketed = v.starts_with('[') && v.ends_with(']');
+        let ipv4 = bracketed
+            && v[1..v.len() - 1].split('.').count() == 4
+            && v[1..v.len() - 1]
+                .split('.')
+                .all(|o| !o.is_empty() && o.chars().all(|c| c.is_ascii_digit()));
+        let ipv6 = bracketed && v[1..v.len() - 1].to_ascii_lowercase().starts_with("ipv6:");
+        !(ipv4 || ipv6)
+    })
+}
+
+/// X-Auto-Response-Suppress 欄のトークンが Exchange の規定語彙外なら抑制指定の異形として検出する (D2918)。
+pub fn has_x_auto_suppress_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if !l.starts_with("x-auto-response-suppress:") {
+            return false;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        v.split(',').any(|t| {
+            let t = t.trim();
+            t.is_empty()
+                || !["oof", "autoreply", "rn", "nrn", "dr", "ndr", "all", "none"]
+                    .iter()
+                    .any(|k| t == *k)
+        })
+    })
+}
+
 /// (D2635)。
 ///
 /// 閲覧確認先を記す欄なのに `a@x$` のようにドメイン側に孤立 `$` を
@@ -127375,4 +127512,58 @@ body";
             b"From: \"Taro Tanaka\" <a@b>\r\n\r\nbody"
         ));
         assert!(!has_url_display_name(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 自動応答欄が未規定値なら発火() {
+        assert!(has_auto_submitted_bad(
+            b"Auto-Submitted: maybe\r\n\r\nbody"
+        ));
+        assert!(has_auto_submitted_bad(b"Auto-Submitted: \r\n\r\nbody"));
+        assert!(!has_auto_submitted_bad(
+            b"Auto-Submitted: auto-generated\r\n\r\nbody"
+        ));
+        assert!(!has_auto_submitted_bad(b"Auto-Submitted: no\r\n\r\nbody"));
+        assert!(!has_auto_submitted_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 配送優先欄が未規定値なら発火() {
+        assert!(has_precedence_bad(b"Precedence: urgent-secret\r\n\r\nbody"));
+        assert!(has_precedence_bad(b"Precedence: \r\n\r\nbody"));
+        assert!(!has_precedence_bad(b"Precedence: bulk\r\n\r\nbody"));
+        assert!(!has_precedence_bad(b"Precedence: list\r\n\r\nbody"));
+        assert!(!has_precedence_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 送信元経路欄が異形なら発火() {
+        assert!(has_x_orig_ip_bad(b"X-Originating-IP: 10.0.0.1\r\n\r\nbody"));
+        assert!(has_x_orig_ip_bad(
+            b"X-Originating-IP: [not-an-ip]\r\n\r\nbody"
+        ));
+        assert!(!has_x_orig_ip_bad(
+            b"X-Originating-IP: [10.0.0.1]\r\n\r\nbody"
+        ));
+        assert!(!has_x_orig_ip_bad(
+            b"X-Originating-IP: [IPv6:::1]\r\n\r\nbody"
+        ));
+        assert!(!has_x_orig_ip_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 応答抑制欄が異形なら発火() {
+        assert!(has_x_auto_suppress_bad(
+            b"X-Auto-Response-Suppress: OOF, secret\r\n\r\nbody"
+        ));
+        assert!(has_x_auto_suppress_bad(
+            b"X-Auto-Response-Suppress: OOF,\r\n\r\nbody"
+        ));
+        assert!(!has_x_auto_suppress_bad(
+            b"X-Auto-Response-Suppress: OOF, AutoReply\r\n\r\nbody"
+        ));
+        assert!(!has_x_auto_suppress_bad(
+            b"X-Auto-Response-Suppress: All\r\n\r\nbody"
+        ));
+        assert!(!has_x_auto_suppress_bad(b"From: a@b\r\n\r\nbody"));
     }

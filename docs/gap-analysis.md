@@ -2222,4 +2222,8 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2858 | Envelope-To:/Delivered-To:/X-Envelope-To: 系の未閉塞クオート宛名値 (封書宛記録のクオート未閉塞異形) | 封書宛ずれ |
 | D2859 | X-Envelope-From:/X-MailFrom:/X-Mail-From: 系の未閉塞クオート宛名値 (封書差出人記録のクオート未閉塞異形) | 封書差出人ずれ |
 | D2860 | Errors-To: の未閉塞クオート宛名値 (返送先記録のクオート未閉塞異形) | 返送先ずれ |
+| D2915 | Auto-Submitted: の未規定値 (自動応答欄の語彙外値異形) | 経路ずれ |
+| D2916 | Precedence: の未規定値 (配送優先欄の語彙外値異形) | 経路ずれ |
+| D2917 | X-Originating-IP: の非IP表記値 (送信元欄の値異形) | 経路ずれ |
+| D2918 | X-Auto-Response-Suppress: の語彙外トークン (応答抑制欄の値異形) | 経路ずれ |
 devin/1791332973-unclosed-cell1
