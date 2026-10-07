@@ -3386,6 +3386,14 @@ pub struct Envelope {
     pub content_digest_bad: bool,
     /// Content-Features 欄の値が 名[=値] の連接形でない
     pub content_features_bad: bool,
+    /// アドレス欄の表示名に制御文字・双方向制御・ゼロ幅文字がある
+    pub display_ctrl_bad: bool,
+    /// アドレス欄の表示名が裸ドメイン形
+    pub display_domain_bad: bool,
+    /// アドレス欄の表示名に英字がない
+    pub display_punct_bad: bool,
+    /// アドレス欄の表示名が100文字超
+    pub display_long_bad: bool,
     /// `X-Envelope-To:` の値がローカル部反転符宛名 (D2788 — 封書宛先ずれ)。
     pub env_to_backtick_local: bool,
     /// `X-Envelope-From:/X-MailFrom: 等` の値がローカル部反転符宛名 (D2789 — 封書差出人ずれ)。
@@ -7209,6 +7217,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let content_lang_bad = has_content_lang_bad(bytes);
     let content_digest_bad = has_content_digest_bad(bytes);
     let content_features_bad = has_content_features_bad(bytes);
+    let display_ctrl_bad = has_display_ctrl_bad(bytes);
+    let display_domain_bad = has_display_domain_bad(bytes);
+    let display_punct_bad = has_display_punct_bad(bytes);
+    let display_long_bad = has_display_long_bad(bytes);
     let env_to_backtick_local = has_env_to_backtick_local(bytes);
     let env_from_backtick_local = has_env_from_backtick_local(bytes);
     let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
@@ -8818,6 +8830,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         content_lang_bad,
         content_digest_bad,
         content_features_bad,
+        display_ctrl_bad,
+        display_domain_bad,
+        display_punct_bad,
+        display_long_bad,
         env_to_backtick_local,
         env_from_backtick_local,
         errors_to_backtick_local,
@@ -49912,6 +49928,154 @@ pub fn has_content_features_bad(raw: &[u8]) -> bool {
                     None => token_ok(p),
                 }
             })
+    })
+}
+
+/// アドレス欄の行から表示名 (phrase) 部分を取り出す。
+///
+/// `<addr>` があればその前を切り出し、外側の鉤括弧を外した値を返す。
+/// `<addr>` がない行は表示名を持たない (値全体が addr か phrase-only
+/// の判定は別検出器の領分) ので None。
+fn display_phrase(val: &str) -> Option<&str> {
+    let lt = val.find('<')?;
+    let mut p = val[..lt].trim();
+    if p.starts_with('"') && p.ends_with('"') && p.len() >= 2 {
+        p = &p[1..p.len() - 1];
+    }
+    if p.is_empty() {
+        return None;
+    }
+    Some(p)
+}
+
+/// アドレス欄の表示名に制御文字・双方向制御・ゼロ幅文字が混入していれば表示名異形として検出する (D2931)。
+///
+/// phrase 部はヘッダ行に制御文字を含まないのが規格で、双方向制御
+/// (U+202A–E・U+2066–9) やゼロ幅 (U+200B–F・U+FEFF) は名の見え方を
+/// 変える擬装になる。
+pub fn has_display_ctrl_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let bad = |p: &str| -> bool {
+        p.chars().any(|c| {
+            (c.is_control() && c != '\t')
+                || ('\u{202a}'..='\u{202e}').contains(&c)
+                || ('\u{2066}'..='\u{2069}').contains(&c)
+                || ('\u{200b}'..='\u{200f}').contains(&c)
+                || c == '\u{feff}'
+        })
+    };
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        display_phrase(&l[colon + 1..]).map(|p| bad(p)).unwrap_or(false)
+    })
+}
+
+/// アドレス欄の表示名が裸ドメイン形 (`label.tld`、スキームなし) なら表示名異形として検出する (D2932)。
+///
+/// 組織ドメインを名に据える擬装 — スキーム付き/`www.` は D1481 が見る。
+pub fn has_display_domain_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        let Some(p) = display_phrase(&l[colon + 1..]) else { return false };
+        let p = p.to_ascii_lowercase();
+        p.contains('.')
+            && !p.contains(' ')
+            && p.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+            && p.split('.').all(|t| !t.is_empty())
+            && !p.contains('@')
+    })
+}
+
+/// アドレス欄の表示名に文字 (英字) が1つもなければ表示名異形として検出する (D2933)。
+///
+/// 句読点・数字のみの送信名 (`"!!!"`・`"123"` 等) は名として機能しない擬装値。
+pub fn has_display_punct_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        let Some(p) = display_phrase(&l[colon + 1..]) else { return false };
+        !p.chars().any(|c| c.is_ascii_alphabetic())
+    })
+}
+
+/// アドレス欄の表示名が100文字を超えれば表示名異形として検出する (D2934)。
+pub fn has_display_long_bad(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first { logical.push(' '); logical.push_str(l.trim_start()); }
+        } else {
+            if !first { logical.push('\n'); }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical.lines().any(|l| {
+        let Some(colon) = l.find(':') else { return false };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            return false;
+        }
+        display_phrase(&l[colon + 1..])
+            .map(|p| p.chars().count() > 100)
+            .unwrap_or(false)
     })
 }
 
@@ -129370,4 +129534,50 @@ fn 迷惑点欄が異形なら発火() {
         assert!(!has_content_features_bad(
             b"Content-Features: font-size=12; font-type=serif\r\n\r\nbody"
         ));
+    }
+
+    #[test]
+    fn 表示名に制御文字があれば発火() {
+        assert!(has_display_ctrl_bad(
+            b"From: \"Bad\x7fName\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(has_display_ctrl_bad(
+            b"From: \"Bad\xe2\x80\x8bName\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(!has_display_ctrl_bad(b"From: \"Good Name\" <a@b>\r\n\r\nbody"));
+        assert!(!has_display_ctrl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名が裸ドメインなら発火() {
+        assert!(has_display_domain_bad(
+            b"From: \"support.apple.com\" <spam@x>\r\n\r\nbody"
+        ));
+        assert!(has_display_domain_bad(
+            b"From: \"secure-bank.co.jp\" <spam@x>\r\n\r\nbody"
+        ));
+        assert!(!has_display_domain_bad(
+            b"From: \"Support Team\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(!has_display_domain_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名に英字がなければ発火() {
+        assert!(has_display_punct_bad(b"From: \"!!!\" <a@b>\r\n\r\nbody"));
+        assert!(has_display_punct_bad(b"From: \"123\" <a@b>\r\n\r\nbody"));
+        assert!(!has_display_punct_bad(b"From: \"A\" <a@b>\r\n\r\nbody"));
+        assert!(!has_display_punct_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn 表示名が長すぎれば発火() {
+        let long = format!(
+            "From: \"{}\" <a@b>\r\n\r\nbody",
+            "a".repeat(120)
+        );
+        assert!(has_display_long_bad(long.as_bytes()));
+        let ok = format!("From: \"{}\" <a@b>\r\n\r\nbody", "a".repeat(60));
+        assert!(!has_display_long_bad(ok.as_bytes()));
+        assert!(!has_display_long_bad(b"From: a@b\r\n\r\nbody"));
     }

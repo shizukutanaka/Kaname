@@ -8285,6 +8285,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.content_features_bad {
         render_risks.push("内容特徴欄の値が異形です—特徴値の扱いで特徴判定がずれます".to_string());
     }
+    if env.display_ctrl_bad {
+        render_risks.push("表示名に制御文字・不可視文字が混ざっています—名の見え方がずれます".to_string());
+    }
+    if env.display_domain_bad {
+        render_risks.push("表示名がドメイン形です—名の扱いで送信者がずれます".to_string());
+    }
+    if env.display_punct_bad {
+        render_risks.push("表示名に英字がありません—名の扱いで送信者がずれます".to_string());
+    }
+    if env.display_long_bad {
+        render_risks.push("表示名が長すぎます—名の扱いで送信者がずれます".to_string());
+    }
     if env.env_to_backtick_local {
         render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
     }
