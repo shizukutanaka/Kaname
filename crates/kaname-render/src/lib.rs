@@ -3371,6 +3371,14 @@ pub struct Envelope {
     pub drcv_bad: bool,
     /// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
     pub xdto_bad: bool,
+    /// `X-Originating-Email:` 欄の値が宛名形でない (D3079 — 発信宛名ずれ)。
+    pub xoemail_bad: bool,
+    /// `X-Sent-To:` 欄の値が宛名形でない (D3080 — 配送宛名ずれ)。
+    pub xsentto_bad: bool,
+    /// `X-Originating-Domain:` 欄の値が単一の FQDN トークン形でない (D3081 — 発信局名ずれ)。
+    pub xodom_bad: bool,
+    /// `X-Message-UUID:` 欄の値が GUID 形でない (D3082 — 配送識別ずれ)。
+    pub xmuuid_bad: bool,
     /// `X-Primary-IP:` 欄の値が IPv4 形でない (D3071 — 発信原局ずれ)。
     pub xpip_bad: bool,
     /// `X-Old-Message-ID:` 欄の値が msgid 形でない (D3072 — 書換識別ずれ)。
@@ -7364,6 +7372,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let pver_bad = has_pver_bad(bytes);
     let drcv_bad = has_drcv_bad(bytes);
     let xdto_bad = has_xdto_bad(bytes);
+    let xoemail_bad = has_xoemail_bad(bytes);
+    let xsentto_bad = has_xsentto_bad(bytes);
+    let xodom_bad = has_xodom_bad(bytes);
+    let xmuuid_bad = has_xmuuid_bad(bytes);
     let xpip_bad = has_xpip_bad(bytes);
     let xomsg_bad = has_xomsg_bad(bytes);
     let xbadrs_bad = has_xbadrs_bad(bytes);
@@ -9059,6 +9071,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         pver_bad,
         drcv_bad,
         xdto_bad,
+        xoemail_bad,
+        xsentto_bad,
+        xodom_bad,
+        xmuuid_bad,
         xpip_bad,
         xomsg_bad,
         xbadrs_bad,
@@ -52937,6 +52953,47 @@ fn has_xvhost_bad(bytes: &[u8]) -> bool {
             || !t
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
+    })
+}
+
+/// `X-Originating-Email:` 欄の値が宛名形でない (D3079 — 発信宛名ずれ)。
+fn has_xoemail_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-originating-email:"], |t| {
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-Sent-To:` 欄の値が宛名形でない (D3080 — 配送宛名ずれ)。
+fn has_xsentto_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sent-to:"], |t| {
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-Originating-Domain:` 欄の値が単一の FQDN トークン形でない (D3081 — 発信局名ずれ)。
+fn has_xodom_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-originating-domain:"], |t| {
+        t.split_whitespace().count() != 1
+            || !t.contains('.')
+            || !t
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_')
+    })
+}
+
+/// `X-Message-UUID:` 欄の値が GUID 形でない (D3082 — 配送識別ずれ)。
+fn has_xmuuid_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-message-uuid:"], |t| {
+        let t = t
+            .strip_prefix('{')
+            .and_then(|s| s.strip_suffix('}'))
+            .unwrap_or(t);
+        let seg: Vec<&str> = t.split('-').collect();
+        if seg.len() != 5 || seg.iter().any(|s| s.is_empty() || !s.bytes().all(|b| b.is_ascii_hexdigit())) {
+            return true;
+        }
+        let lens: Vec<usize> = seg.iter().map(|s| s.len()).collect();
+        lens != [8, 4, 4, 4, 12]
     })
 }
 
@@ -133610,6 +133667,48 @@ fn 投稿機欄が異形なら発火() {
         assert!(!has_xdto_bad(b"From: a@b\r\n\r\nbody"));
     }
 
+#[test]
+fn d3079_xoemail_bad() {
+    assert!(has_xoemail_bad(b"X-Originating-Email: not addr\r\n\r\nbody"));
+    assert!(has_xoemail_bad(b"X-Originating-Email: a@@x.com\r\n\r\nbody"));
+    assert!(has_xoemail_bad(b"X-Originating-Email:\r\n\r\nbody"));
+    assert!(!has_xoemail_bad(
+        b"X-Originating-Email: user@example.com\r\n\r\nbody"
+    ));
+    assert!(!has_xoemail_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3080_xsentto_bad() {
+    assert!(has_xsentto_bad(b"X-Sent-To: not addr\r\n\r\nbody"));
+    assert!(has_xsentto_bad(b"X-Sent-To: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xsentto_bad(b"X-Sent-To: u@x.com\r\n\r\nbody"));
+    assert!(!has_xsentto_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3081_xodom_bad() {
+    assert!(has_xodom_bad(b"X-Originating-Domain: ex ample.com\r\n\r\nbody"));
+    assert!(has_xodom_bad(b"X-Originating-Domain: nodots\r\n\r\nbody"));
+    assert!(has_xodom_bad(b"X-Originating-Domain: bad@host\r\n\r\nbody"));
+    assert!(!has_xodom_bad(
+        b"X-Originating-Domain: mail.example.com\r\n\r\nbody"
+    ));
+    assert!(!has_xodom_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3082_xmuuid_bad() {
+    assert!(has_xmuuid_bad(b"X-Message-UUID: not-a-guid\r\n\r\nbody"));
+    assert!(has_xmuuid_bad(b"X-Message-UUID: 1234\r\n\r\nbody"));
+    assert!(!has_xmuuid_bad(
+        b"X-Message-UUID: 12345678-9abc-def1-2345-6789abcdef01\r\n\r\nbody"
+    ));
+    assert!(!has_xmuuid_bad(
+        b"X-Message-UUID: {12345678-9abc-def1-2345-6789abcdef01}\r\n\r\nbody"
+    ));
+    assert!(!has_xmuuid_bad(b"From: a@b\r\n\r\nbody"));
+}
     #[test]
     fn d3071_xpip_bad() {
         assert!(has_xpip_bad(b"X-Primary-IP: not.an.ip\r\n\r\nbody"));
