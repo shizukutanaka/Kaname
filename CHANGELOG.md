@@ -8,6 +8,10 @@
 ### Security — D3068: `Posting-Version:` 欄の非 `version site` 値を投稿記録ずれとして検出 — `Envelope` に `pver_bad` を追加。
 ### Security — D3069: `Date-Received:` 欄の非日時形値を到着記録ずれとして検出 — `Envelope` に `drcv_bad` を追加。
 ### Security — D3070: `X-Delivered-To:` 欄の非宛名形値を配達記録ずれとして検出 — `Envelope` に `xdto_bad` を追加。
+### Security — D3075: `X-ME-Sender:` 欄の非宛名形値を認証送信者名札ずれとして検出 — `Envelope` に `xmes_bad` を追加。
+### Security — D3076: `X-Eudora-Signature:` 欄の非単一印字トークン値を署名機印ずれとして検出 — `Envelope` に `xeud_bad` を追加。
+### Security — D3077: `X-Sender-UID:` 欄の非数字トークン値を送信者番号ずれとして検出 — `Envelope` に `xsuid_bad` を追加。
+### Security — D3078: `X-Newsreader:` 欄の非印字値を投稿機名札ずれとして検出 — `Envelope` に `xnr_bad` を追加。
 
 ### Security — D3003: `X-MS-Exchange-CrossTenant-Id:` 欄の非GUID値を越境識別ずれとして検出 — `Envelope` に `ms_ct_id_bad` を追加。
 ### Security — D3004: `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の非 `[IP]` 値を越境接続ずれとして検出 — `Envelope` に `ms_ct_ip_bad` を追加。

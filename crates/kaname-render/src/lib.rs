@@ -3363,6 +3363,14 @@ pub struct Envelope {
     pub drcv_bad: bool,
     /// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
     pub xdto_bad: bool,
+    /// `X-ME-Sender:` 欄の値が宛名形でない (D3075 — 認証送信者名札ずれ)。
+    pub xmes_bad: bool,
+    /// `X-Eudora-Signature:` 欄の値が単一印字トークン形でない (D3076 — 署名機印ずれ)。
+    pub xeud_bad: bool,
+    /// `X-Sender-UID:` 欄の値が数字トークン形でない (D3077 — 送信者番号ずれ)。
+    pub xsuid_bad: bool,
+    /// `X-Newsreader:` 欄の値が印字可能な非空値でない (D3078 — 投稿機名札ずれ)。
+    pub xnr_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7344,6 +7352,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let pver_bad = has_pver_bad(bytes);
     let drcv_bad = has_drcv_bad(bytes);
     let xdto_bad = has_xdto_bad(bytes);
+    let xmes_bad = has_xmes_bad(bytes);
+    let xeud_bad = has_xeud_bad(bytes);
+    let xsuid_bad = has_xsuid_bad(bytes);
+    let xnr_bad = has_xnr_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -9031,6 +9043,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         pver_bad,
         drcv_bad,
         xdto_bad,
+        xmes_bad,
+        xeud_bad,
+        xsuid_bad,
+        xnr_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -52698,6 +52714,36 @@ fn has_drcv_bad(bytes: &[u8]) -> bool {
 fn has_xdto_bad(bytes: &[u8]) -> bool {
     dc_each(bytes, &["x-delivered-to:"], |t| {
         !t.contains('@') || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-ME-Sender:` 欄の値が宛名形でない (D3075 — 認証送信者名札ずれ)。
+fn has_xmes_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-me-sender:"], |t| {
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-Eudora-Signature:` 欄の値が単一印字トークン形でない (D3076 — 署名機印ずれ)。
+fn has_xeud_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-eudora-signature:"], |t| {
+        t.is_empty()
+            || t.split_whitespace().count() != 1
+            || !t.bytes().all(|b| b.is_ascii_graphic())
+    })
+}
+
+/// `X-Sender-UID:` 欄の値が数字トークン形でない (D3077 — 送信者番号ずれ)。
+fn has_xsuid_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sender-uid:"], |t| {
+        t.is_empty() || !t.bytes().all(|b| b.is_ascii_digit())
+    })
+}
+
+/// `X-Newsreader:` 欄の値が印字可能な非空値でない (D3078 — 投稿機名札ずれ)。
+fn has_xnr_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-newsreader:"], |t| {
+        t.is_empty() || !t.bytes().all(|b| (b == b' ') || (0x21..=0x7e).contains(&b))
     })
 }
 
@@ -133350,3 +133396,39 @@ fn 投稿機欄が異形なら発火() {
         assert!(!has_xdto_bad(b"From: a@b\r\n\r\nbody"));
     }
 
+#[test]
+fn d3075_xmes_bad() {
+    assert!(has_xmes_bad(b"X-ME-Sender: not addr\r\n\r\nbody"));
+    assert!(has_xmes_bad(b"X-ME-Sender: a@@x.com\r\n\r\nbody"));
+    assert!(has_xmes_bad(b"X-ME-Sender:\r\n\r\nbody"));
+    assert!(!has_xmes_bad(b"X-ME-Sender: user@example.com\r\n\r\nbody"));
+    assert!(!has_xmes_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3076_xeud_bad() {
+    assert!(has_xeud_bad(b"X-Eudora-Signature: not token\r\n\r\nbody"));
+    assert!(has_xeud_bad(b"X-Eudora-Signature:\r\n\r\nbody"));
+    assert!(!has_xeud_bad(
+        b"X-Eudora-Signature: Q0xhbUFWLjEuMi4z\r\n\r\nbody"
+    ));
+    assert!(!has_xeud_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3077_xsuid_bad() {
+    assert!(has_xsuid_bad(b"X-Sender-UID: abc123\r\n\r\nbody"));
+    assert!(has_xsuid_bad(b"X-Sender-UID: \r\n\r\nbody"));
+    assert!(!has_xsuid_bad(b"X-Sender-UID: 54960\r\n\r\nbody"));
+    assert!(!has_xsuid_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3078_xnr_bad() {
+    assert!(has_xnr_bad(b"X-Newsreader:\r\n\r\nbody"));
+    assert!(has_xnr_bad(b"X-Newsreader: \xe2\x80\x8b\r\n\r\nbody"));
+    assert!(!has_xnr_bad(
+        b"X-Newsreader: Forte Agent 1.91/32.564\r\n\r\nbody"
+    ));
+    assert!(!has_xnr_bad(b"From: a@b\r\n\r\nbody"));
+}
