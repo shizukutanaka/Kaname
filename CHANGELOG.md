@@ -8,6 +8,10 @@
 ### Security — D3048: `Incomplete-Copy:` 欄の語彙外値を抜粋指定ずれとして検出 — `Envelope` に `x4_inc_bad` を追加。
 ### Security — D3049: `Auto-Forwarded:` 欄の語彙外値を自動転送指定ずれとして検出 — `Envelope` に `x4_afwd_bad` を追加。
 ### Security — D3050: `Obsoletes:` 欄の非識別子連接値を廃棄指示ずれとして検出 — `Envelope` に `x4_obs_bad` を追加。
+### Security — D3067: `Relay-Version:` 欄の非 `version site` 値を中継記録ずれとして検出 — `Envelope` に `rver_bad` を追加。
+### Security — D3068: `Posting-Version:` 欄の非 `version site` 値を投稿記録ずれとして検出 — `Envelope` に `pver_bad` を追加。
+### Security — D3069: `Date-Received:` 欄の非日時形値を到着記録ずれとして検出 — `Envelope` に `drcv_bad` を追加。
+### Security — D3070: `X-Delivered-To:` 欄の非宛名形値を配達記録ずれとして検出 — `Envelope` に `xdto_bad` を追加。
 
 ### Security — D3003: `X-MS-Exchange-CrossTenant-Id:` 欄の非GUID値を越境識別ずれとして検出 — `Envelope` に `ms_ct_id_bad` を追加。
 ### Security — D3004: `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の非 `[IP]` 値を越境接続ずれとして検出 — `Envelope` に `ms_ct_ip_bad` を追加。

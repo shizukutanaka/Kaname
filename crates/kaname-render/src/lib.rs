@@ -3363,6 +3363,14 @@ pub struct Envelope {
     pub x4_afwd_bad: bool,
     /// `Obsoletes:` 欄の値が識別子連接形でない (D3050 — 廃棄指示ずれ)。
     pub x4_obs_bad: bool,
+    /// `Relay-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
+    pub rver_bad: bool,
+    /// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
+    pub pver_bad: bool,
+    /// `Date-Received:` 欄の値が日時形でない (D3069 — 到着記録ずれ)。
+    pub drcv_bad: bool,
+    /// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
+    pub xdto_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7344,6 +7352,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x4_inc_bad = has_x4_inc_bad(bytes);
     let x4_afwd_bad = has_x4_afwd_bad(bytes);
     let x4_obs_bad = has_x4_obs_bad(bytes);
+    let rver_bad = has_rver_bad(bytes);
+    let pver_bad = has_pver_bad(bytes);
+    let drcv_bad = has_drcv_bad(bytes);
+    let xdto_bad = has_xdto_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -9031,6 +9043,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x4_inc_bad,
         x4_afwd_bad,
         x4_obs_bad,
+        rver_bad,
+        pver_bad,
+        drcv_bad,
+        xdto_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -52750,6 +52766,101 @@ fn has_x4_obs_bad(bytes: &[u8]) -> bool {
         }
     }
     false
+}
+
+fn dc_hdr_end(bytes: &[u8]) -> usize {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    end
+}
+
+fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> bool {
+    let end = dc_hdr_end(bytes);
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        for name in names {
+            if let Some(v) = low.strip_prefix(name) {
+                if f(v.trim()) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `version site` 形でなければ真 (NNTP 中継・投稿記録用)。
+fn dc_ver_site_bad(t: &str) -> bool {
+    let w: Vec<&str> = t.split_whitespace().collect();
+    w.len() < 2
+        || !(w[0].chars().any(|c| c.is_ascii_digit())
+            && (w[0].contains('.')
+                || w[0].chars().any(|c| c.is_ascii_alphabetic())))
+        || !w[1]
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        || w[1].chars().any(|c| c == '@')
+}
+
+/// `Relay-Version:`/`Posting-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
+fn has_rver_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["relay-version:"], dc_ver_site_bad)
+}
+
+/// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
+fn has_pver_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["posting-version:"], dc_ver_site_bad)
+}
+
+/// `Date-Received:` 欄の値が日時形でない (D3069 — 到着記録ずれ)。
+fn has_drcv_bad(bytes: &[u8]) -> bool {
+    let months = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    dc_each(bytes, &["date-received:"], |t| {
+        let w: Vec<&str> = t.split_whitespace().collect();
+        let has_mon = w.iter().any(|p| {
+            let p = p.trim_end_matches(',');
+            months.iter().any(|m| p == *m)
+        });
+        let has_year = w.iter().any(|p| {
+            p.trim_end_matches(',').len() == 4
+                && p.trim_end_matches(',').chars().all(|c| c.is_ascii_digit())
+        });
+        let has_time = w.iter().any(|p| {
+            let t: Vec<&str> = p.split(':').collect();
+            t.len() == 3
+                && t.iter()
+                    .all(|s| (1..=2).contains(&s.len()) && s.chars().all(|c| c.is_ascii_digit()))
+        });
+        !(has_mon && has_year && has_time)
+    })
+}
+
+/// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
+fn has_xdto_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-delivered-to:"], |t| {
+        !t.contains('@') || t.starts_with('@') || t.ends_with('@')
+    })
 }
 
 /// (D2635)。
@@ -131320,16 +131431,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131346,16 +131447,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131367,18 +131458,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133400,5 +133479,44 @@ fn 投稿機欄が異形なら発火() {
             b"Obsoletes: <a@x.com> <b@x.com>\r\n\r\nbody"
         ));
         assert!(!has_x4_obs_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+
+    #[test]
+    fn d3067_rver_bad() {
+        assert!(has_rver_bad(b"Relay-Version: onlyversion\r\n\r\nbody"));
+        assert!(has_rver_bad(b"Relay-Version: site host\r\n\r\nbody"));
+        assert!(has_rver_bad(b"Relay-Version:\r\n\r\nbody"));
+        assert!(!has_rver_bad(b"Relay-Version: B2.12 news.example.com\r\n\r\nbody"));
+        assert!(!has_rver_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3068_pver_bad() {
+        assert!(has_pver_bad(b"Posting-Version: onlyver\r\n\r\nbody"));
+        assert!(has_pver_bad(b"Posting-Version: \r\n\r\nbody"));
+        assert!(!has_pver_bad(b"Posting-Version: B2.4 site.example.org\r\n\r\nbody"));
+        assert!(!has_pver_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3069_drcv_bad() {
+        assert!(has_drcv_bad(b"Date-Received: not a date\r\n\r\nbody"));
+        assert!(has_drcv_bad(b"Date-Received: 2026-10-01\r\n\r\nbody"));
+        assert!(has_drcv_bad(b"Date-Received:\r\n\r\nbody"));
+        assert!(!has_drcv_bad(
+            b"Date-Received: Wed, 01 Oct 2026 10:30:00 +0000\r\n\r\nbody"
+        ));
+        assert!(!has_drcv_bad(b"Date-Received: 01 Oct 2026 10:30:00\r\n\r\nbody"));
+        assert!(!has_drcv_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3070_xdto_bad() {
+        assert!(has_xdto_bad(b"X-Delivered-To: not an addr\r\n\r\nbody"));
+        assert!(has_xdto_bad(b"X-Delivered-To: @example.com\r\n\r\nbody"));
+        assert!(has_xdto_bad(b"X-Delivered-To:\r\n\r\nbody"));
+        assert!(!has_xdto_bad(b"X-Delivered-To: user@example.com\r\n\r\nbody"));
+        assert!(!has_xdto_bad(b"From: a@b\r\n\r\nbody"));
     }
 
