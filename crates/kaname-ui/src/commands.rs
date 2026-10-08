@@ -9397,6 +9397,42 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.list_followup_bad {
         render_risks.push("追従先欄の値が異形です—追従値の扱いで返信経路がずれます".to_string());
     }
+    if env.xip_asf_bad {
+        render_risks.push("機器判定欄の値が真偽形でないです—判定値の扱いで経路評価がずれます".to_string());
+    }
+    if env.xip_av_bad {
+        render_risks.push("機器検査欄の値が連接形でないです—検査値の扱いで経路評価がずれます".to_string());
+    }
+    if env.xip_asr_bad {
+        render_risks.push("機器結果欄の値が符号形でないです—結果値の扱いで照合がずれます".to_string());
+    }
+    if env.xpp_sdet_bad {
+        render_risks.push("機器詳細欄の値が連接形でないです—詳細値の扱いで経路評価がずれます".to_string());
+    }
+    if env.ms_msre_bad {
+        render_risks.push("代理送信欄の値が宛名形でないです—代理値の扱いで発信元評価がずれます".to_string());
+    }
+    if env.ms_pmi_bad {
+        render_risks.push("親識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
+    }
+    if env.ms_fwdl_bad {
+        render_risks.push("転送巡回欄の値が宛名形でないです—巡回値の扱いで経路評価がずれます".to_string());
+    }
+    if env.xep_bcf_bad {
+        render_risks.push("Bcc処理欄の値がGUID形でないです—処理値の扱いで経路評価がずれます".to_string());
+    }
+    if env.ms_ptt_bad {
+        render_risks.push("輸送種別欄の値が語彙外です—輸送分類の扱いで経路判定がずれます".to_string());
+    }
+    if env.ms_authas_bad {
+        render_risks.push("認証主体欄の値が語彙外です—主体判定の扱いで発信元評価がずれます".to_string());
+    }
+    if env.ms_ct_oat_bad {
+        render_risks.push("越境到着欄の値が日時形でないです—到着時刻の扱いで経路時系列がずれます".to_string());
+    }
+    if env.ms_prvs_bad {
+        render_risks.push("報酬識別欄の値が16進形でないです—識別値の扱いで照合がずれます".to_string());
+    }
     if env.ms_ct_id_bad {
         render_risks.push("越境識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
     }
