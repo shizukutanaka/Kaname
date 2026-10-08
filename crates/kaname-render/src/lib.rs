@@ -3323,6 +3323,54 @@ pub struct Envelope {
     pub ms_prvscid_bad: bool,
     /// `X-MS-Exchange-CrossTenant-FromEntityHeader:` 欄の値が由来語彙外 (D3030 — 由来ずれ)。
     pub ms_entity_bad: bool,
+    /// `X-IronPort-Anti-Spam-Filtered:` 欄の値がtrue/falseでない (D3007 — 機器判定ずれ)。
+    pub xip_asf_bad: bool,
+    /// `X-IronPort-AV:` 欄の値が `名=値` 連接でない (D3008 — 機器検査ずれ)。
+    pub xip_av_bad: bool,
+    /// `X-IronPort-Anti-Spam-Result:` 欄の値がbase64形でない (D3009 — 機器結果ずれ)。
+    pub xip_asr_bad: bool,
+    /// `X-Proofpoint-Spam-Details:` 欄の値が `名=値` 空白連接でない (D3010 — 機器詳細ずれ)。
+    pub xpp_sdet_bad: bool,
+    /// `X-MS-Exchange-MessageSentRepresentingEmailAddress:` 欄の値が宛名形でない (D3011 — 代理送信ずれ)。
+    pub ms_msre_bad: bool,
+    /// `X-MS-Exchange-Parent-Message-Id:` 欄の値がGUID形でない (D3012 — 親識別ずれ)。
+    pub ms_pmi_bad: bool,
+    /// `X-MS-Exchange-ForwardedLoop:` 欄の値が宛名形でない (D3013 — 転送巡回ずれ)。
+    pub ms_fwdl_bad: bool,
+    /// `X-Exchange-Processed-By-BccFoldering:` 欄の値がGUID形でない (D3014 — Bcc処理ずれ)。
+    pub xep_bcf_bad: bool,
+    /// `X-MS-PublicTrafficType:` 欄の値が Email 語彙外 (D2995 — 輸送ずれ)。
+    pub ms_ptt_bad: bool,
+    /// `X-MS-Exchange-Organization-AuthAs:` 欄の値が主体語彙外 (D2996 — 主体ずれ)。
+    pub ms_authas_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-OriginalArrivalTime:` 欄の値が日時形でない (D2997 — 越境到着ずれ)。
+    pub ms_ct_oat_bad: bool,
+    /// `X-Forefront-PRVS:` 欄の値が16進トークン形でない (D2998 — 識別ずれ)。
+    pub ms_prvs_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-Id:` 欄の値がGUID形でない (D3003 — 越境識別ずれ)。
+    pub ms_ct_id_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の値がIP形でない (D3004 — 越境接続ずれ)。
+    pub ms_ct_ip_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-AuthAs:` 欄の値が主体語彙外 (D3005 — 越境主体ずれ)。
+    pub ms_ct_authas_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-AuthSource:` 欄の値がホスト名形でない (D3006 — 越境認証元ずれ)。
+    pub ms_ct_asrc_bad: bool,
+    /// `X-MS-Exchange-Organization-MessageDirectionality:` 欄の値が方向語彙外 (D2999 — 方向ずれ)。
+    pub ms_dir_bad: bool,
+    /// `X-MS-Exchange-Organization-AuthMechanism:` 欄の値が方式番号形でない (D3000 — 方式ずれ)。
+    pub ms_authmech_bad: bool,
+    /// `X-MS-Office365-Filtering-Correlation-Id:` 欄の値がGUID形でない (D3001 — 関連識別ずれ)。
+    pub ms_corr_id_bad: bool,
+    /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
+    pub ms_exp_time_bad: bool,
+    /// `Relay-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
+    pub rver_bad: bool,
+    /// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
+    pub pver_bad: bool,
+    /// `Date-Received:` 欄の値が日時形でない (D3069 — 到着記録ずれ)。
+    pub drcv_bad: bool,
+    /// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
+    pub xdto_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7284,6 +7332,30 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_ctmid_bad = has_ms_ctmid_bad(bytes);
     let ms_prvscid_bad = has_ms_prvscid_bad(bytes);
     let ms_entity_bad = has_ms_entity_bad(bytes);
+    let xip_asf_bad = has_xip_asf_bad(bytes);
+    let xip_av_bad = has_xip_av_bad(bytes);
+    let xip_asr_bad = has_xip_asr_bad(bytes);
+    let xpp_sdet_bad = has_xpp_sdet_bad(bytes);
+    let ms_msre_bad = has_ms_msre_bad(bytes);
+    let ms_pmi_bad = has_ms_pmi_bad(bytes);
+    let ms_fwdl_bad = has_ms_fwdl_bad(bytes);
+    let xep_bcf_bad = has_xep_bcf_bad(bytes);
+    let ms_ptt_bad = has_ms_ptt_bad(bytes);
+    let ms_authas_bad = has_ms_authas_bad(bytes);
+    let ms_ct_oat_bad = has_ms_ct_oat_bad(bytes);
+    let ms_prvs_bad = has_ms_prvs_bad(bytes);
+    let ms_ct_id_bad = has_ms_ct_id_bad(bytes);
+    let ms_ct_ip_bad = has_ms_ct_ip_bad(bytes);
+    let ms_ct_authas_bad = has_ms_ct_authas_bad(bytes);
+    let ms_ct_asrc_bad = has_ms_ct_asrc_bad(bytes);
+    let ms_dir_bad = has_ms_dir_bad(bytes);
+    let ms_authmech_bad = has_ms_authmech_bad(bytes);
+    let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
+    let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let rver_bad = has_rver_bad(bytes);
+    let pver_bad = has_pver_bad(bytes);
+    let drcv_bad = has_drcv_bad(bytes);
+    let xdto_bad = has_xdto_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -8951,6 +9023,30 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_ctmid_bad,
         ms_prvscid_bad,
         ms_entity_bad,
+        xip_asf_bad,
+        xip_av_bad,
+        xip_asr_bad,
+        xpp_sdet_bad,
+        ms_msre_bad,
+        ms_pmi_bad,
+        ms_fwdl_bad,
+        xep_bcf_bad,
+        ms_ptt_bad,
+        ms_authas_bad,
+        ms_ct_oat_bad,
+        ms_prvs_bad,
+        ms_ct_id_bad,
+        ms_ct_ip_bad,
+        ms_ct_authas_bad,
+        ms_ct_asrc_bad,
+        ms_dir_bad,
+        ms_authmech_bad,
+        ms_corr_id_bad,
+        ms_exp_time_bad,
+        rver_bad,
+        pver_bad,
+        drcv_bad,
+        xdto_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -51684,16 +51780,27 @@ pub fn has_ms_as_report_bad(raw: &[u8]) -> bool {
     })
 }
 
-/// 暗号・交渉系自己申告欄 (`Autocrypt:`/`OpenPGP:`/`Content-Return:`/
-/// `Mail-Followup-To:`/`Mail-Reply-To:`) の値形検査用に、ヘッダ部を
-/// 論理行 (折り畳みを継続行へ展開) へ直す (D2991–D2994)。
-fn crypto_hdr_text(bytes: &[u8]) -> String {
-    let text = String::from_utf8_lossy(bytes);
-    let text = text.replace("\r\n", "\n");
-    let header_end = text.find("\n\n").unwrap_or(text.len());
-    let mut logical = String::with_capacity(header_end + 1);
+/// 自己申告系欄 (`Autocrypt:`/`OpenPGP:`/`Content-Return:`/
+/// `Mail-Followup-To:`/`Mail-Reply-To:`/`X-MS-*`/`X-Forefront-PRVS:`) の
+/// 値形検査用に、ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn claims_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
     let mut first = true;
-    for l in text[..header_end].lines() {
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
         if l.starts_with(' ') || l.starts_with('\t') {
             if !first {
                 logical.push(' ');
@@ -51714,14 +51821,16 @@ fn crypto_hdr_text(bytes: &[u8]) -> String {
 /// 持たなければ暗号交渉記録の異形として検出する (D2991)。
 ///
 /// `Autocrypt:` (draft-ietf-autocrypt) は送信側が自分の鍵素材と
-/// 宛名を申告する交渉欄 — `addr=` を欠く、要素が `名=値` 形を外れる、
-/// addr 値が宛名形を欠く値は「鍵交渉できる体裁」の擬態。
+/// 宛名を申告する交渉欄 — `addr=` 宛名と `keydata=` 鍵素材の両方を
+/// 必須要素とし、欠く・要素が `名=値` 形を外れる・addr 値が宛名形を
+/// 欠く値は「鍵交渉できる体裁」の擬態 (鍵素材を欠く値は交渉に使えない)。
 fn has_autocrypt_bad(bytes: &[u8]) -> bool {
-    let logical = crypto_hdr_text(bytes);
+    let logical = claims_hdr_text(bytes);
     for l in logical.lines() {
         let low = l.to_ascii_lowercase();
         if let Some(v) = low.strip_prefix("autocrypt:") {
             let mut has_addr = false;
+            let mut has_keydata = false;
             for el in v.split(';') {
                 let e = el.trim();
                 if e.is_empty() {
@@ -51733,14 +51842,18 @@ fn has_autocrypt_bad(bytes: &[u8]) -> bool {
                 if p == 0 || e[p + 1..].trim().is_empty() {
                     return true;
                 }
-                if &e[..p] == "addr" {
-                    has_addr = true;
-                    if !e[p + 1..].contains('@') {
-                        return true;
+                match &e[..p] {
+                    "addr" => {
+                        has_addr = true;
+                        if !e[p + 1..].contains('@') {
+                            return true;
+                        }
                     }
+                    "keydata" => has_keydata = true,
+                    _ => {}
                 }
             }
-            if !has_addr {
+            if !has_addr || !has_keydata {
                 return true;
             }
         }
@@ -51748,14 +51861,15 @@ fn has_autocrypt_bad(bytes: &[u8]) -> bool {
     false
 }
 
-/// `OpenPGP:` 欄の値が `名=値` の `;` 連接で `id=`/`url=`/`preference=`
-/// のいずれかも持たなければ鍵識別記録の異形として検出する (D2992)。
+/// `OpenPGP:` 欄の値が `名=値` の `;` 連接で `id=`/`url=` のいずれも
+/// 持たなければ鍵識別記録の異形として検出する (D2992)。
 ///
 /// `OpenPGP:` (draft-josefsson-openpgp-email-news-header) は送信側の
 /// 鍵指紋・鍵 URL・署名/暗号の希望を記す欄 — 要素が `名=値` を欠く、
-/// 鍵要素を何も持たない値は「鍵を提示した体裁」の擬態。
+/// `id=`/`url=` の鍵要素を何も持たない値 (`preference=` だけは鍵を
+/// 特定できない) は「鍵を提示した体裁」の擬態。
 fn has_openpgp_bad(bytes: &[u8]) -> bool {
-    let logical = crypto_hdr_text(bytes);
+    let logical = claims_hdr_text(bytes);
     for l in logical.lines() {
         let low = l.to_ascii_lowercase();
         if let Some(v) = low.strip_prefix("openpgp:") {
@@ -51771,7 +51885,7 @@ fn has_openpgp_bad(bytes: &[u8]) -> bool {
                 if p == 0 || e[p + 1..].trim().is_empty() {
                     return true;
                 }
-                if matches!(&e[..p], "id" | "url" | "preference") {
+                if matches!(&e[..p], "id" | "url") {
                     has_key = true;
                 }
             }
@@ -51789,7 +51903,7 @@ fn has_openpgp_bad(bytes: &[u8]) -> bool {
 /// `Content-Return:` は返送時に本文を添えてよいかの方針を記す
 /// X.400 系欄 — 語彙外の値は「返却方針を記した体裁」の擬態。
 fn has_content_return_bad(bytes: &[u8]) -> bool {
-    let logical = crypto_hdr_text(bytes);
+    let logical = claims_hdr_text(bytes);
     for l in logical.lines() {
         let low = l.to_ascii_lowercase();
         if let Some(v) = low.strip_prefix("content-return:") {
@@ -51806,10 +51920,11 @@ fn has_content_return_bad(bytes: &[u8]) -> bool {
 /// 宛名形でもなければ追従先記録の異形として検出する (D2994)。
 ///
 /// `Mail-Followup-To:`/`Mail-Reply-To:` はメーリングリスト慣習の
-/// 追従先指定欄 — `poster` でも `@` を持つ宛名列でもない値は
-/// 「追従経路を記した体裁」の擬態。
+/// 追従先指定欄 — `poster` でも全要素が `@` を持つ宛名列でもない
+/// 値は「追従経路を記した体裁」の擬態 (宛名列の中に宛名でない
+/// 要素を忍ばせる形を含む)。
 fn has_list_followup_bad(bytes: &[u8]) -> bool {
-    let logical = crypto_hdr_text(bytes);
+    let logical = claims_hdr_text(bytes);
     for l in logical.lines() {
         let low = l.to_ascii_lowercase();
         if let Some(v) = low
@@ -51817,7 +51932,168 @@ fn has_list_followup_bad(bytes: &[u8]) -> bool {
             .or_else(|| low.strip_prefix("mail-reply-to:"))
         {
             let t = v.trim();
-            if t.is_empty() || (t != "poster" && !t.contains('@')) {
+            if t.is_empty() {
+                return true;
+            }
+            if t != "poster"
+                && t.split(',')
+                    .any(|el| el.trim().is_empty() || !el.trim().contains('@'))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-PublicTrafficType:` 欄の値が `Email` 語彙でなければ輸送種別記録の
+/// 異形として検出する (D2995)。
+///
+/// Exchange Online Protection が輸送中に付ける分類は `Email` 固定の
+/// 単語彙欄 — 語彙外の値は「EOP 輸送分類を記した体裁」の擬態
+/// (`has_exchange_org_claim` は存在のみ、こちらは値文法)。
+fn has_ms_ptt_bad(bytes: &[u8]) -> bool {
+    let logical = claims_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-publictraffictype:") {
+            if v.trim() != "email" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-Organization-AuthAs:` 欄の値が
+/// `Internal`/`Anonymous`/`External` 語彙でなければ認証主体記録の
+/// 異形として検出する (D2996)。
+///
+/// Exchange 輸送が記す認証主体は決まった語彙 — 語彙外の値は
+/// 「組織内認証を記した体裁」の擬態。
+fn has_ms_authas_bad(bytes: &[u8]) -> bool {
+    let logical = claims_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-organization-authas:") {
+            let t = v.trim();
+            if !matches!(t, "internal" | "anonymous" | "external") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-OriginalArrivalTime:` 欄の値が
+/// `DD Mon YYYY HH:MM:SS` の日時形でなければ越境到着記録の異形として
+/// 検出する (D2997)。
+///
+/// テナント境界を越えた到着時刻を記す欄 — `X-OriginalArrivalTime:` 系
+/// (D2919) と同じ日時形をとるべき値が形を欠くのは「越境時刻を記した
+/// 体裁」の擬態。
+fn has_ms_ct_oat_bad(bytes: &[u8]) -> bool {
+    let logical = claims_hdr_text(bytes);
+    let months = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-exchange-crosstenant-originalarrivaltime:")
+        {
+            let w: Vec<&str> = v.trim().split_whitespace().collect();
+            let ok = w.len() >= 4
+                && w[0].len() == 2
+                && w[0].chars().all(|c| c.is_ascii_digit())
+                && months.iter().any(|m| w[1] == *m)
+                && w[2].len() == 4
+                && w[2].chars().all(|c| c.is_ascii_digit())
+                && {
+                    let t: Vec<&str> = w[3].split(':').collect();
+                    t.len() == 3
+                        && t.iter().all(|p| {
+                            let p = p.split('.').next().unwrap_or(p);
+                            p.len() == 2 && p.chars().all(|c| c.is_ascii_digit())
+                        })
+                };
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Forefront-PRVS:` 欄の値が16進トークンの形でなければ報酬識別記録の
+/// 異形として検出する (D2998)。
+///
+/// Forefront 系が付ける報酬・追跡用の識別子は16進値の単一トークン —
+/// 形を欠く値は「識別子を記した体裁」の擬態。
+fn has_ms_prvs_bad(bytes: &[u8]) -> bool {
+    let logical = claims_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-forefront-prvs:") {
+            let t = v.trim();
+            if t.len() < 4 || t.len() > 32 || !t.chars().all(|c| c.is_ascii_hexdigit())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// セキュリティ機器 (`X-IronPort-*`/`X-Proofpoint-*`) の記録欄の値形検査用に、
+/// ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す (D3007–D3010)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn vnd_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-IronPort-Anti-Spam-Filtered:` 欄の値が `true`/`false` でなければ
+/// IronPort 迷惑フィルタ判定記録の異形として検出する (D3007)。
+///
+/// IronPort が刻む判定欄は真偽値の単一値 — それ以外の値は
+/// 「機器検査を通った体裁」の擬態 (バラクーダ等の prefix は存在検出
+/// 済みだが IronPort/Proofpoint はどの検出器にも触れられていなかった)。
+fn has_xip_asf_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ironport-anti-spam-filtered:") {
+            let t = v.trim();
+            if t != "true" && t != "false" {
                 return true;
             }
         }
@@ -51950,6 +52226,622 @@ fn has_ms_entity_bad(bytes: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// `X-IronPort-AV:` 欄の値が `名=値` の `;` 連接でなければ
+/// IronPort アンチウイルス検査記録の異形として検出する (D3008)。
+///
+/// 実値は `E=Sophos;i="4.98"` のような `;` 連接の `名=値` —
+/// 構造を欠く値は「AV 検査を記録した体裁」の擬態。
+fn has_xip_av_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ironport-av:") {
+            let t = v.trim().trim_end_matches(';').trim_end();
+            let ok = !t.is_empty()
+                && t.split(';').all(|e| {
+                    let e = e.trim();
+                    !e.is_empty()
+                        && e.contains('=')
+                        && !e.starts_with('=')
+                        && !e.ends_with('=')
+                });
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-IronPort-Anti-Spam-Result:` 欄の値が base64 系の単一トークンで
+/// なければ IronPort 迷惑判定結果記録の異形として検出する (D3009)。
+///
+/// 実値は結果を符号化した長い不透明トークン — 短い・空白を含む・
+/// base64 字種でない値は「判定結果を記録した体裁」の擬態。
+fn has_xip_asr_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ironport-anti-spam-result:") {
+            let t = v.trim();
+            let ok = t.len() >= 20
+                && !t.contains(char::is_whitespace)
+                && t.chars().all(|c| {
+                    c.is_ascii_alphanumeric()
+                        || c == '+'
+                        || c == '/'
+                        || c == '='
+                });
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Proofpoint-Spam-Details:` 欄の値が `名=値` の空白連接でなければ
+/// Proofpoint 迷惑判定詳細記録の異形として検出する (D3010)。
+///
+/// 実値は `rule=… score=… suspectscore=…` のような空白区切り
+/// `名=値` トークン列 — `=` を欠く要素を含む値は
+/// 「判定詳細を記録した体裁」の擬態。
+fn has_xpp_sdet_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-proofpoint-spam-details:") {
+            let t = v.trim();
+            let ok = !t.is_empty()
+                && t.split_whitespace()
+                    .all(|e| e.contains('=') && !e.starts_with('='));
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// MS Exchange 経路追跡系補足欄 (`X-MS-Exchange-MessageSentRepresenting*`/
+/// `Parent-Message-Id`/`ForwardedLoop`/`X-Exchange-Processed-By-*`) の
+/// 値形検査用に、ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す
+/// (D3011–D3014)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn ms2_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `v` が `8-4-4-4-12` ハイフン区切り16進 GUID か判定する (D3012/D3014)。
+fn is_ms_guid(v: &str) -> bool {
+    let b = v.as_bytes();
+    b.len() == 36
+        && b[8] == b'-'
+        && b[13] == b'-'
+        && b[18] == b'-'
+        && b[23] == b'-'
+        && v.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// `X-MS-Exchange-MessageSentRepresentingEmailAddress:` 欄の値が
+/// 宛名形でなければ代理送信記録の異形として検出する (D3011)。
+///
+/// 代理人が送った元メールボックスを刻む欄は単一宛名 — `@` を欠く
+/// 値は「代理送信を記録した体裁」の擬態 (org_claim 群の
+/// prefix 検出群に含まれない绿地)。
+fn has_ms_msre_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix(
+            "x-ms-exchange-messagesentrepresentingemailaddress:",
+        ) {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-Parent-Message-Id:` 欄の値が GUID (波括弧許容)
+/// でなければ親識別記録の異形として検出する (D3012)。
+///
+/// 親メッセージ識別子は GUID の単一値 — 形を欠く値は
+/// 「親識別を記録した体裁」の擬態。
+fn has_ms_pmi_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-parent-message-id:") {
+            let t = v
+                .trim()
+                .strip_prefix('{')
+                .and_then(|x| x.strip_suffix('}'))
+                .unwrap_or_else(|| v.trim());
+            if !is_ms_guid(t) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-ForwardedLoop:` 欄の値が宛名形でなければ
+/// 転送巡回記録の異形として検出する (D3013)。
+///
+/// 転送ループ検知のために巡回先を刻む欄は宛名値 — `@` を欠く
+/// 値は「巡回を記録した体裁」の擬態。
+fn has_ms_fwdl_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-forwardedloop:") {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Exchange-Processed-By-BccFoldering:` 欄の値が GUID (波括弧許容)
+/// でなければ Bcc 処理記録の異形として検出する (D3014)。
+///
+/// Bcc 分解処理を担当したモジュールを刻む欄は GUID の単一値 —
+/// 形を欠く値は「Bcc 処理を記録した体裁」の擬態。
+fn has_xep_bcf_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-exchange-processed-by-bccfoldering:")
+        {
+            let t = v
+                .trim()
+                .strip_prefix('{')
+                .and_then(|x| x.strip_suffix('}'))
+                .unwrap_or_else(|| v.trim());
+            if !is_ms_guid(t) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// MS 越境記録系自己申告欄 (`X-MS-Exchange-CrossTenant-*`) の値形検査用に、
+/// ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す (D3003–D3006)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn ms_ct_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-MS-Exchange-CrossTenant-Id:` 欄の値が GUID
+/// (`8-4-4-4-12` ハイフン区切り16進) でなければ越境識別記録の
+/// 異形として検出する (D3003)。
+///
+/// 越境元テナントの識別子は GUID の単一値 — 形を欠く値は
+/// 「越境記録を刻んだ体裁」の擬態 (`has_exchange_org_claim` は
+/// 存在のみ、こちらは値文法)。
+fn has_ms_ct_id_bad(bytes: &[u8]) -> bool {
+    let logical = ms_ct_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-crosstenant-id:") {
+            let t = v.trim();
+            let b = t.as_bytes();
+            let ok = b.len() == 36
+                && b[8] == b'-'
+                && b[13] == b'-'
+                && b[18] == b'-'
+                && b[23] == b'-'
+                && t.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の値が
+/// `[IP]` リテラル形でなければ越境接続記録の異形として検出する (D3004)。
+///
+/// 越境元が接続したと記されるIPは角括弧囲みのリテラル —
+/// 括弧を欠く・中身がIP (数字・ドット・コロン・16進) でない値は
+/// 「接続元を記録した体裁」の擬態。
+fn has_ms_ct_ip_bad(bytes: &[u8]) -> bool {
+    let logical = ms_ct_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix(
+            "x-ms-exchange-crosstenant-originalattributedconnectingip:",
+        ) {
+            let t = v.trim();
+            let inner = t.strip_prefix('[').and_then(|x| x.strip_suffix(']'));
+            let ok = match inner {
+                Some(i) => {
+                    let i = i.strip_prefix("ipv6:").unwrap_or(i);
+                    !i.is_empty()
+                        && i.len() <= 45
+                        && (i.contains('.') || i.contains(':'))
+                        && i.chars().all(|c| {
+                            c.is_ascii_digit()
+                                || c.is_ascii_hexdigit()
+                                || c == '.'
+                                || c == ':'
+                        })
+                }
+                None => false,
+            };
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-AuthAs:` 欄の値が
+/// `Internal`/`Anonymous`/`External` 語彙でなければ越境認証主体記録の
+/// 異形として検出する (D3005)。
+///
+/// 越境元の認証主体は組織欄 (D2996) と同じ閉じた語彙 — 語彙外の値は
+/// 「越境認証を記した体裁」の擬態。
+fn has_ms_ct_authas_bad(bytes: &[u8]) -> bool {
+    let logical = ms_ct_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-crosstenant-authas:") {
+            let t = v.trim();
+            if !matches!(t, "internal" | "anonymous" | "external") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-AuthSource:` 欄の値がドット区切りの
+/// ホスト名形でなければ越境認証元記録の異形として検出する (D3006)。
+///
+/// 越境元の認証を行ったホストは FQDN の単一値 — 空白・`@` を含む、
+/// ドットを欠く、ラベルが空の値は「認証元を記録した体裁」の擬態
+/// (`has_originator_org_bad` と同じドメイン形の問い)。
+fn has_ms_ct_asrc_bad(bytes: &[u8]) -> bool {
+    let logical = ms_ct_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-exchange-crosstenant-authsource:")
+        {
+            let t = v.trim();
+            let ok = !t.is_empty()
+                && !t.contains(' ')
+                && !t.contains('@')
+                && t.contains('.')
+                && t.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+                && t.split('.').all(|t| !t.is_empty());
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// MS 組織処理系自己申告欄 (`X-MS-Exchange-Organization-*`/
+/// `X-MS-Office365-Filtering-*`) の値形検査用に、ヘッダ部を
+/// 論理行 (折り畳みを継続行へ展開) へ直す (D2999–D3002)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn ms_org_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-MS-Exchange-Organization-MessageDirectionality:` 欄の値が
+/// `Originating`/`Incoming` 語彙でなければ輸送方向記録の異形として
+/// 検出する (D2999)。
+///
+/// Exchange 輸送が刻む発信方向は `Originating`/`Incoming` の2語彙 —
+/// 語彙外の値は「社内発信の体裁」を装う擬態
+/// (`has_exchange_org_claim` は存在のみ、こちらは値文法)。
+fn has_ms_dir_bad(bytes: &[u8]) -> bool {
+    let logical = ms_org_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-exchange-organization-messagedirectionality:")
+        {
+            let t = v.trim();
+            if !matches!(t, "originating" | "incoming") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-Organization-AuthMechanism:` 欄の値が方式番号
+/// (1–2桁の 0–10) でなければ認証方式記録の異形として検出する (D3000)。
+///
+/// Exchange が記す認証方式は 00–10 の番号語彙 (例: 10=送信認証済み
+/// クライアント) — 番号形を欠く値は「輸送が方式を記録した体裁」の擬態。
+fn has_ms_authmech_bad(bytes: &[u8]) -> bool {
+    let logical = ms_org_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-exchange-organization-authmechanism:")
+        {
+            let t = v.trim();
+            let ok = !t.is_empty()
+                && t.len() <= 2
+                && t.chars().all(|c| c.is_ascii_digit())
+                && t.parse::<u8>().map_or(false, |n| n <= 10);
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Office365-Filtering-Correlation-Id:` 欄の値が GUID
+/// (`8-4-4-4-12` ハイフン区切り16進) でなければ関連識別記録の
+/// 異形として検出する (D3001)。
+///
+/// Office365 フィルタ処理が刻む相関識別子は GUID の単一値 —
+/// 形を欠く値は「フィルタ処理を記録した体裁」の擬態。
+fn has_ms_corr_id_bad(bytes: &[u8]) -> bool {
+    let logical = ms_org_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-office365-filtering-correlation-id:")
+        {
+            let t = v.trim();
+            let b = t.as_bytes();
+            let ok = b.len() == 36
+                && b[8] == b'-'
+                && b[13] == b'-'
+                && b[18] == b'-'
+                && b[23] == b'-'
+                && t.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が
+/// `D[D] Mon YYYY HH:MM:SS` の日時形でなければ失効開始記録の異形として
+/// 検出する (D3002)。
+///
+/// メッセージ失効の開始時刻を記す欄 — 到着日時系 (D2919/D2997) と同じ
+/// 日時形をとるべき値が形を欠くのは「失効時刻を記した体裁」の擬態。
+fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
+    let logical = ms_org_hdr_text(bytes);
+    let months = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-exchange-organization-expirationstarttime:")
+        {
+            let w: Vec<&str> = v.trim().split_whitespace().collect();
+            let ok = w.len() >= 4
+                && !w[0].is_empty()
+                && w[0].len() <= 2
+                && w[0].chars().all(|c| c.is_ascii_digit())
+                && months.iter().any(|m| w[1] == *m)
+                && w[2].len() == 4
+                && w[2].chars().all(|c| c.is_ascii_digit())
+                && {
+                    let t: Vec<&str> = w[3].split(':').collect();
+                    t.len() == 3
+                        && t.iter().all(|p| {
+                            let p = p.split('.').next().unwrap_or(p);
+                            (1..=2).contains(&p.len())
+                                && p.chars().all(|c| c.is_ascii_digit())
+                        })
+                };
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn dc_hdr_end(bytes: &[u8]) -> usize {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    end
+}
+
+fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> bool {
+    let end = dc_hdr_end(bytes);
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        for name in names {
+            if let Some(v) = low.strip_prefix(name) {
+                if f(v.trim()) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `version site` 形でなければ真 (NNTP 中継・投稿記録用)。
+fn dc_ver_site_bad(t: &str) -> bool {
+    let w: Vec<&str> = t.split_whitespace().collect();
+    w.len() < 2
+        || !(w[0].chars().any(|c| c.is_ascii_digit())
+            && (w[0].contains('.')
+                || w[0].chars().any(|c| c.is_ascii_alphabetic())))
+        || !w[1]
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        || w[1].chars().any(|c| c == '@')
+}
+
+/// `Relay-Version:`/`Posting-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
+fn has_rver_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["relay-version:"], dc_ver_site_bad)
+}
+
+/// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
+fn has_pver_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["posting-version:"], dc_ver_site_bad)
+}
+
+/// `Date-Received:` 欄の値が日時形でない (D3069 — 到着記録ずれ)。
+fn has_drcv_bad(bytes: &[u8]) -> bool {
+    let months = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    dc_each(bytes, &["date-received:"], |t| {
+        let w: Vec<&str> = t.split_whitespace().collect();
+        let has_mon = w.iter().any(|p| {
+            let p = p.trim_end_matches(',');
+            months.iter().any(|m| p == *m)
+        });
+        let has_year = w.iter().any(|p| {
+            p.trim_end_matches(',').len() == 4
+                && p.trim_end_matches(',').chars().all(|c| c.is_ascii_digit())
+        });
+        let has_time = w.iter().any(|p| {
+            let t: Vec<&str> = p.split(':').collect();
+            t.len() == 3
+                && t.iter()
+                    .all(|s| (1..=2).contains(&s.len()) && s.chars().all(|c| c.is_ascii_digit()))
+        });
+        !(has_mon && has_year && has_time)
+    })
+}
+
+/// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
+fn has_xdto_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-delivered-to:"], |t| {
+        !t.contains('@') || t.starts_with('@') || t.ends_with('@')
+    })
 }
 
 /// (D2635)。
@@ -130520,16 +131412,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -130546,16 +131428,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -130567,18 +131439,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -132193,6 +133053,9 @@ fn 投稿機欄が異形なら発火() {
         assert!(has_autocrypt_bad(b"Autocrypt: keydata=AAAA\r\n\r\nbody"));
         assert!(has_autocrypt_bad(b"Autocrypt: junk\r\n\r\nbody"));
         assert!(has_autocrypt_bad(b"Autocrypt: addr=alice\r\n\r\nbody"));
+        assert!(has_autocrypt_bad(
+            b"Autocrypt: addr=alice@example.com; prefer-encrypt=mutual\r\n\r\nbody"
+        ));
         assert!(!has_autocrypt_bad(
             b"Autocrypt: addr=alice@example.com; prefer-encrypt=mutual; keydata=AAAA\r\n\r\nbody"
         ));
@@ -132207,7 +133070,8 @@ fn 投稿機欄が異形なら発火() {
         assert!(!has_openpgp_bad(
             b"OpenPGP: id=0123456789ABCDEF0123456789ABCDEF01234567; url=https://x/key.asc\r\n\r\nbody"
         ));
-        assert!(!has_openpgp_bad(b"OpenPGP: preference=sign\r\n\r\nbody"));
+        assert!(has_openpgp_bad(b"OpenPGP: preference=sign\r\n\r\nbody"));
+        assert!(!has_openpgp_bad(b"OpenPGP: url=https://x/key.asc\r\n\r\nbody"));
         assert!(!has_openpgp_bad(b"From: a@b\r\n\r\nbody"));
     }
 
@@ -132228,8 +133092,14 @@ fn 投稿機欄が異形なら発火() {
             b"Mail-Followup-To: someone\r\n\r\nbody"
         ));
         assert!(has_list_followup_bad(b"Mail-Reply-To: x\r\n\r\nbody"));
+        assert!(has_list_followup_bad(
+            b"Mail-Followup-To: list@example.com, attacker\r\n\r\nbody"
+        ));
         assert!(!has_list_followup_bad(
             b"Mail-Followup-To: list@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_list_followup_bad(
+            b"Mail-Followup-To: a@x.com, b@y.com\r\n\r\nbody"
         ));
         assert!(!has_list_followup_bad(
             b"Mail-Followup-To: poster\r\n\r\nbody"
@@ -132295,3 +133165,358 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_entity_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3007_xip_asf_bad() {
+        assert!(has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered: yes\r\n\r\nbody"
+        ));
+        assert!(has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered:\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered: true\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered: false\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asf_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3008_xip_av_bad() {
+        assert!(has_xip_av_bad(
+            b"X-IronPort-AV: clean\r\n\r\nbody"
+        ));
+        assert!(has_xip_av_bad(
+            b"X-IronPort-AV: E=Sophos; i=\r\n\r\nbody"
+        ));
+        assert!(has_xip_av_bad(b"X-IronPort-AV:\r\n\r\nbody"));
+        assert!(!has_xip_av_bad(
+            b"X-IronPort-AV: E=Sophos;i=\"4.98\"\r\n\r\nbody"
+        ));
+        assert!(!has_xip_av_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3009_xip_asr_bad() {
+        assert!(has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result: clean\r\n\r\nbody"
+        ));
+        assert!(has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result: iQRJ HQBg AAA\r\n\r\nbody"
+        ));
+        assert!(has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result:\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result: iQRJHQBgAAAADAQAMNzk3Ljk2MTY5ODc2\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3010_xpp_sdet_bad() {
+        assert!(has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details: mail is clean\r\n\r\nbody"
+        ));
+        assert!(has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details: rule=notspam bogus\r\n\r\nbody"
+        ));
+        assert!(has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details:\r\n\r\nbody"
+        ));
+        assert!(!has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details: rule=notspam score=98 suspectscore=98 classifier=spam\r\n\r\nbody"
+        ));
+        assert!(!has_xpp_sdet_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3011_ms_msre_bad() {
+        assert!(has_ms_msre_bad(
+            b"X-MS-Exchange-MessageSentRepresentingEmailAddress: delegate\r\n\r\nbody"
+        ));
+        assert!(has_ms_msre_bad(
+            b"X-MS-Exchange-MessageSentRepresentingEmailAddress:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_msre_bad(
+            b"X-MS-Exchange-MessageSentRepresentingEmailAddress: boss@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_ms_msre_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3012_ms_pmi_bad() {
+        assert!(has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id: parent\r\n\r\nbody"
+        ));
+        assert!(has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id: {12345678-1234-1234-1234-123456789012}\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pmi_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3013_ms_fwdl_bad() {
+        assert!(has_ms_fwdl_bad(
+            b"X-MS-Exchange-ForwardedLoop: loop\r\n\r\nbody"
+        ));
+        assert!(has_ms_fwdl_bad(
+            b"X-MS-Exchange-ForwardedLoop:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_fwdl_bad(
+            b"X-MS-Exchange-ForwardedLoop: user@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_ms_fwdl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3014_xep_bcf_bad() {
+        assert!(has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering: bcc\r\n\r\nbody"
+        ));
+        assert!(has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering:\r\n\r\nbody"
+        ));
+        assert!(!has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering: {12345678-1234-1234-1234-123456789012}\r\n\r\nbody"
+        ));
+        assert!(!has_xep_bcf_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2995_ms_ptt_bad() {
+        assert!(has_ms_ptt_bad(
+            b"X-MS-PublicTrafficType: Bulk\r\n\r\nbody"
+        ));
+        assert!(has_ms_ptt_bad(b"X-MS-PublicTrafficType:\r\n\r\nbody"));
+        assert!(!has_ms_ptt_bad(
+            b"X-MS-PublicTrafficType: Email\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ptt_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2996_ms_authas_bad() {
+        assert!(has_ms_authas_bad(
+            b"X-MS-Exchange-Organization-AuthAs: Everyone\r\n\r\nbody"
+        ));
+        assert!(has_ms_authas_bad(
+            b"X-MS-Exchange-Organization-AuthAs:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authas_bad(
+            b"X-MS-Exchange-Organization-AuthAs: Internal\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authas_bad(
+            b"X-MS-Exchange-Organization-AuthAs: Anonymous\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authas_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2997_ms_ct_oat_bad() {
+        assert!(has_ms_ct_oat_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalArrivalTime: yesterday\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_oat_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalArrivalTime:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_oat_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalArrivalTime: 07 Oct 2026 10:00:00.0000 (UTC)\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_oat_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2998_ms_prvs_bad() {
+        assert!(has_ms_prvs_bad(b"X-Forefront-PRVS: 04A8-5F00\r\n\r\nbody"));
+        assert!(has_ms_prvs_bad(b"X-Forefront-PRVS: xyz\r\n\r\nbody"));
+        assert!(has_ms_prvs_bad(b"X-Forefront-PRVS:\r\n\r\nbody"));
+        assert!(!has_ms_prvs_bad(b"X-Forefront-PRVS: 04A85F00\r\n\r\nbody"));
+        assert!(!has_ms_prvs_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3003_ms_ct_id_bad() {
+        assert!(has_ms_ct_id_bad(
+            b"X-MS-Exchange-CrossTenant-Id: tenant\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_id_bad(
+            b"X-MS-Exchange-CrossTenant-Id:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_id_bad(
+            b"X-MS-Exchange-CrossTenant-Id: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_id_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3004_ms_ct_ip_bad() {
+        assert!(has_ms_ct_ip_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: 1.2.3.4\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_ip_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: [host]\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_ip_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_ip_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: [1.2.3.4]\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_ip_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: [IPv6:2001:db8::1]\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_ip_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3005_ms_ct_authas_bad() {
+        assert!(has_ms_ct_authas_bad(
+            b"X-MS-Exchange-CrossTenant-AuthAs: Everyone\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_authas_bad(
+            b"X-MS-Exchange-CrossTenant-AuthAs:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_authas_bad(
+            b"X-MS-Exchange-CrossTenant-AuthAs: Internal\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_authas_bad(
+            b"X-MS-Exchange-CrossTenant-AuthAs: Anonymous\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_authas_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3006_ms_ct_asrc_bad() {
+        assert!(has_ms_ct_asrc_bad(
+            b"X-MS-Exchange-CrossTenant-AuthSource: not a host\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_asrc_bad(
+            b"X-MS-Exchange-CrossTenant-AuthSource: host\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_asrc_bad(
+            b"X-MS-Exchange-CrossTenant-AuthSource:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_asrc_bad(
+            b"X-MS-Exchange-CrossTenant-AuthSource: AM8P195MB0184.eurprd05.prod.outlook.com\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_asrc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2999_ms_dir_bad() {
+        assert!(has_ms_dir_bad(
+            b"X-MS-Exchange-Organization-MessageDirectionality: Internal\r\n\r\nbody"
+        ));
+        assert!(has_ms_dir_bad(
+            b"X-MS-Exchange-Organization-MessageDirectionality:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_dir_bad(
+            b"X-MS-Exchange-Organization-MessageDirectionality: Originating\r\n\r\nbody"
+        ));
+        assert!(!has_ms_dir_bad(
+            b"X-MS-Exchange-Organization-MessageDirectionality: Incoming\r\n\r\nbody"
+        ));
+        assert!(!has_ms_dir_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3000_ms_authmech_bad() {
+        assert!(has_ms_authmech_bad(
+            b"X-MS-Exchange-Organization-AuthMechanism: smtp\r\n\r\nbody"
+        ));
+        assert!(has_ms_authmech_bad(
+            b"X-MS-Exchange-Organization-AuthMechanism: 99\r\n\r\nbody"
+        ));
+        assert!(has_ms_authmech_bad(
+            b"X-MS-Exchange-Organization-AuthMechanism:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authmech_bad(
+            b"X-MS-Exchange-Organization-AuthMechanism: 10\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authmech_bad(
+            b"X-MS-Exchange-Organization-AuthMechanism: 06\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authmech_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3001_ms_corr_id_bad() {
+        assert!(has_ms_corr_id_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id: abc\r\n\r\nbody"
+        ));
+        assert!(has_ms_corr_id_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id: 12345678-1234-1234-1234-12345678901z\r\n\r\nbody"
+        ));
+        assert!(!has_ms_corr_id_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_ms_corr_id_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3002_ms_exp_time_bad() {
+        assert!(has_ms_exp_time_bad(
+            b"X-MS-Exchange-Organization-ExpirationStartTime: soon\r\n\r\nbody"
+        ));
+        assert!(has_ms_exp_time_bad(
+            b"X-MS-Exchange-Organization-ExpirationStartTime:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_exp_time_bad(
+            b"X-MS-Exchange-Organization-ExpirationStartTime: 8 Oct 2026 14:29:00.0000\r\n\r\nbody"
+        ));
+        assert!(!has_ms_exp_time_bad(
+            b"X-MS-Exchange-Organization-ExpirationStartTime: 08 Oct 2026 14:29:00.0000\r\n\r\nbody"
+        ));
+        assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3067_rver_bad() {
+        assert!(has_rver_bad(b"Relay-Version: onlyversion\r\n\r\nbody"));
+        assert!(has_rver_bad(b"Relay-Version: site host\r\n\r\nbody"));
+        assert!(has_rver_bad(b"Relay-Version:\r\n\r\nbody"));
+        assert!(!has_rver_bad(b"Relay-Version: B2.12 news.example.com\r\n\r\nbody"));
+        assert!(!has_rver_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3068_pver_bad() {
+        assert!(has_pver_bad(b"Posting-Version: onlyver\r\n\r\nbody"));
+        assert!(has_pver_bad(b"Posting-Version: \r\n\r\nbody"));
+        assert!(!has_pver_bad(b"Posting-Version: B2.4 site.example.org\r\n\r\nbody"));
+        assert!(!has_pver_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3069_drcv_bad() {
+        assert!(has_drcv_bad(b"Date-Received: not a date\r\n\r\nbody"));
+        assert!(has_drcv_bad(b"Date-Received: 2026-10-01\r\n\r\nbody"));
+        assert!(has_drcv_bad(b"Date-Received:\r\n\r\nbody"));
+        assert!(!has_drcv_bad(
+            b"Date-Received: Wed, 01 Oct 2026 10:30:00 +0000\r\n\r\nbody"
+        ));
+        assert!(!has_drcv_bad(b"Date-Received: 01 Oct 2026 10:30:00\r\n\r\nbody"));
+        assert!(!has_drcv_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3070_xdto_bad() {
+        assert!(has_xdto_bad(b"X-Delivered-To: not an addr\r\n\r\nbody"));
+        assert!(has_xdto_bad(b"X-Delivered-To: @example.com\r\n\r\nbody"));
+        assert!(has_xdto_bad(b"X-Delivered-To:\r\n\r\nbody"));
+        assert!(!has_xdto_bad(b"X-Delivered-To: user@example.com\r\n\r\nbody"));
+        assert!(!has_xdto_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
