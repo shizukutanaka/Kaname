@@ -8,6 +8,10 @@
 ### Security — D3068: `Posting-Version:` 欄の非 `version site` 値を投稿記録ずれとして検出 — `Envelope` に `pver_bad` を追加。
 ### Security — D3069: `Date-Received:` 欄の非日時形値を到着記録ずれとして検出 — `Envelope` に `drcv_bad` を追加。
 ### Security — D3070: `X-Delivered-To:` 欄の非宛名形値を配達記録ずれとして検出 — `Envelope` に `xdto_bad` を追加。
+### Security — D3079: `X-Originating-Email:` 欄の非宛名形値を発信宛名ずれとして検出 — `Envelope` に `xoemail_bad` を追加。
+### Security — D3080: `X-Sent-To:` 欄の非宛名形値を配送宛名ずれとして検出 — `Envelope` に `xsentto_bad` を追加。
+### Security — D3081: `X-Originating-Domain:` 欄の非FQDNトークン値を発信局名ずれとして検出 — `Envelope` に `xodom_bad` を追加。
+### Security — D3082: `X-Message-UUID:` 欄の非GUID形値を配送識別ずれとして検出 — `Envelope` に `xmuuid_bad` を追加。
 ### Security — D3071: `X-Primary-IP:` 欄の非IPv4値を発信原局ずれとして検出 — `Envelope` に `xpip_bad` を追加。
 ### Security — D3072: `X-Old-Message-ID:` 欄の非msgid形値を書換識別ずれとして検出 — `Envelope` に `xomsg_bad` を追加。
 ### Security — D3073: `X-Bounce-Address:` 欄の非宛名形値を返送記録ずれとして検出 — `Envelope` に `xbadrs_bad` を追加。
