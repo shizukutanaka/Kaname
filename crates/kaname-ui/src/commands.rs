@@ -9491,7 +9491,19 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("組織越境除去欄の値が true/false でないです—組織記録の扱いで除去照合がずれます".to_string());
     }
     if env.msoip_bad {
-        render_risks.push("組織元接続IP欄の値がIPv4形でないです—組織記録の扱いで接続元照合がずれます".to_string());
+        render_risks.push("組織元接続IP欄の値がIP形でないです—組織記録の扱いで接続元照合がずれます".to_string());
+    }
+    if env.xmdsc_bad {
+        render_risks.push("検疫機得点欄の値が数値形でないです—検疫記録の扱いで得点照合がずれます".to_string());
+    }
+    if env.xmato_bad {
+        render_risks.push("変換記録欄の値が from 型 to 型 でないです—変換記録の扱いで変換照合がずれます".to_string());
+    }
+    if env.xsrc_bad {
+        render_risks.push("中継国欄の値が国コード連接形でないです—中継記録の扱いで国コード照合がずれます".to_string());
+    }
+    if env.xeid_bad {
+        render_risks.push("封書識別欄の値が単一印字トークンでないです—封書記録の扱いで識別照合がずれます".to_string());
     }
     if env.xpip_bad {
         render_risks.push("発信原局欄の値が IPv4 形でないです—経路記録の扱いで発信元特定がずれます".to_string());
