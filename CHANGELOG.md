@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D2999: `X-MS-Exchange-Organization-MessageDirectionality:` 欄の語彙外値 (`Originating`/`Incoming` 以外) を輸送方向ずれとして検出 — `Envelope` に `ms_dir_bad` を追加。
+### Security — D3000: `X-MS-Exchange-Organization-AuthMechanism:` 欄の非方式番号値 (1–2桁の 0–10 以外) を認証方式ずれとして検出 — `Envelope` に `ms_authmech_bad` を追加。
+### Security — D3001: `X-MS-Office365-Filtering-Correlation-Id:` 欄の非GUID値を関連識別ずれとして検出 — `Envelope` に `ms_corr_id_bad` を追加。
+### Security — D3002: `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の非日時形値を失効開始ずれとして検出 — `Envelope` に `ms_exp_time_bad` を追加。
+
 ### Security — D3003: `X-MS-Exchange-CrossTenant-Id:` 欄の非GUID値を越境識別ずれとして検出 — `Envelope` に `ms_ct_id_bad` を追加。
 ### Security — D3004: `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の非 `[IP]` 値を越境接続ずれとして検出 — `Envelope` に `ms_ct_ip_bad` を追加。
 ### Security — D3005: `X-MS-Exchange-CrossTenant-AuthAs:` 欄の語彙外値 (`Internal`/`Anonymous`/`External` 以外) を越境認証主体ずれとして検出 — `Envelope` に `ms_ct_authas_bad` を追加。
