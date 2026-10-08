@@ -2354,6 +2354,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3080 | X-Sent-To: の非宛名形値 (配送宛名欄の値異形) | 配送宛名ずれ |
 | D3081 | X-Originating-Domain: の非FQDNトークン値 (発信局名欄の値異形) | 発信局名ずれ |
 | D3082 | X-Message-UUID: の非GUID形値 (配送識別欄の値異形) | 配送識別ずれ |
+| D3119 | X-MS-Exchange-Organization-OriginalSize: の非整数値 (組織元寸法欄の値異形) | 組織元寸法ずれ |
+| D3120 | X-MS-Exchange-Organization-SCLThreshold: の非整数値 (組織閾値欄の値異形) | 組織閾値ずれ |
+| D3121 | X-MS-Exchange-Transport-CrossTenantHeadersStripped: の非 true/false 値 (組織越境除去欄の値異形) | 組織越境除去ずれ |
+| D3122 | X-MS-Exchange-Organization-Original-SMTP-Client-IP:/Server-IP: の非IPv4値 (組織元接続IP欄の値異形) | 組織元接続IPずれ |
 | D3071 | X-Primary-IP: の非IPv4値 (発信原局欄の値異形) | 発信原局ずれ |
 | D3072 | X-Old-Message-ID: の非msgid形値 (書換識別欄の値異形) | 書換識別ずれ |
 | D3073 | X-Bounce-Address: の非宛名形値 (返送記録欄の値異形) | 返送記録ずれ |
