@@ -3315,6 +3315,14 @@ pub struct Envelope {
     pub content_return_bad: bool,
     /// `Mail-Followup-To:`/`Mail-Reply-To:` 欄の値が宛名/poster 形でない (D2994 — 追従ずれ)。
     pub list_followup_bad: bool,
+    /// `X-MS-Exchange-Organization-PCL:` 欄の値が数値形でない (D3027 — 疑い度ずれ)。
+    pub ms_pcl_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-Message-Id:` 欄の値が GUID 形でない (D3028 — 越境識別ずれ)。
+    pub ms_ctmid_bad: bool,
+    /// `X-MS-Office365-Filtering-Correlation-Id-Prvs:` 欄の値が16進形でない (D3029 — 照合鍵ずれ)。
+    pub ms_prvscid_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-FromEntityHeader:` 欄の値が由来語彙外 (D3030 — 由来ずれ)。
+    pub ms_entity_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7272,6 +7280,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let openpgp_bad = has_openpgp_bad(bytes);
     let content_return_bad = has_content_return_bad(bytes);
     let list_followup_bad = has_list_followup_bad(bytes);
+    let ms_pcl_bad = has_ms_pcl_bad(bytes);
+    let ms_ctmid_bad = has_ms_ctmid_bad(bytes);
+    let ms_prvscid_bad = has_ms_prvscid_bad(bytes);
+    let ms_entity_bad = has_ms_entity_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -8935,6 +8947,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         openpgp_bad,
         content_return_bad,
         list_followup_bad,
+        ms_pcl_bad,
+        ms_ctmid_bad,
+        ms_prvscid_bad,
+        ms_entity_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -51802,6 +51818,133 @@ fn has_list_followup_bad(bytes: &[u8]) -> bool {
         {
             let t = v.trim();
             if t.is_empty() || (t != "poster" && !t.contains('@')) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// MS 組織処理欄の残り (`X-MS-Exchange-Organization-PCL:`/
+/// `X-MS-Exchange-CrossTenant-Message-Id:`/
+/// `X-MS-Office365-Filtering-Correlation-Id-Prvs:`/
+/// `X-MS-Exchange-CrossTenant-FromEntityHeader:`) の値形検査用に、
+/// ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す (D3027–D3030)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn ms3_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-MS-Exchange-Organization-PCL:` 欄の値が数値 (Phishing
+/// Confidence Level) でなければ疑い度記録の異形として検出する
+/// (D3027)。
+///
+/// 組織が刻むフィッシング疑い度は整数値 — 語句や空値は「疑い度を
+/// 刻んだ体裁」の擬態。
+fn has_ms_pcl_bad(bytes: &[u8]) -> bool {
+    let logical = ms3_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-organization-pcl:") {
+            let t = v.trim();
+            if t.parse::<i32>().is_err() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-Message-Id:` 欄の値が GUID 形
+/// (`8-4-4-4-12` の16進、波括弧許容) でなければ越境識別記録の
+/// 異形として検出する (D3028)。
+///
+/// 越境処理が刻む相関識別子は GUID — 語句や空値は「越境識別を
+/// 刻んだ体裁」の擬態。
+fn has_ms_ctmid_bad(bytes: &[u8]) -> bool {
+    let logical = ms3_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-crosstenant-message-id:") {
+            let v = v.trim();
+            let v = v.strip_prefix('{').and_then(|r| r.strip_suffix('}')).unwrap_or(v);
+            let b = v.as_bytes();
+            let ok = b.len() == 36
+                && b[8] == b'-'
+                && b[13] == b'-'
+                && b[18] == b'-'
+                && b[23] == b'-'
+                && v.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Office365-Filtering-Correlation-Id-Prvs:` 欄の値が
+/// 16進トークン (8桁以上) でなければ照合鍵記録の異形として
+/// 検出する (D3029)。
+///
+/// PRVS 系の相関鍵は `X-Forefront-PRVS:` (D2998) と同じ16進語形 —
+/// 形を欠く値は「照合鍵を刻んだ体裁」の擬態。
+fn has_ms_prvscid_bad(bytes: &[u8]) -> bool {
+    let logical = ms3_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-office365-filtering-correlation-id-prvs:") {
+            let t = v.trim();
+            if t.len() < 8 || !t.chars().all(|c| c.is_ascii_hexdigit()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-FromEntityHeader:` 欄の値が
+/// `Internet`/`Hosted`/`Hybrid`/`None` の由来語彙外なら
+/// 越境由来記録の異形として検出する (D3030)。
+///
+/// 越境メールの由来区分は閉じた語彙 — 語彙外の値は「越境由来を
+/// 刻んだ体裁」の擬態。
+fn has_ms_entity_bad(bytes: &[u8]) -> bool {
+    let logical = ms3_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-crosstenant-fromentityheader:") {
+            let t = v.trim();
+            if !matches!(t, "internet" | "hosted" | "hybrid" | "none") {
                 return true;
             }
         }
@@ -132092,4 +132235,63 @@ fn 投稿機欄が異形なら発火() {
             b"Mail-Followup-To: poster\r\n\r\nbody"
         ));
         assert!(!has_list_followup_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3027_ms_pcl_bad() {
+        assert!(has_ms_pcl_bad(
+            b"X-MS-Exchange-Organization-PCL: high\r\n\r\nbody"
+        ));
+        assert!(has_ms_pcl_bad(
+            b"X-MS-Exchange-Organization-PCL:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pcl_bad(
+            b"X-MS-Exchange-Organization-PCL: 3\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pcl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3028_ms_ctmid_bad() {
+        assert!(has_ms_ctmid_bad(
+            b"X-MS-Exchange-CrossTenant-Message-Id: not-a-guid\r\n\r\nbody"
+        ));
+        assert!(has_ms_ctmid_bad(
+            b"X-MS-Exchange-CrossTenant-Message-Id:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ctmid_bad(
+            b"X-MS-Exchange-CrossTenant-Message-Id: {12345678-1234-1234-1234-123456789012}\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ctmid_bad(
+            b"X-MS-Exchange-CrossTenant-Message-Id: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ctmid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3029_ms_prvscid_bad() {
+        assert!(has_ms_prvscid_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id-Prvs: nothex!\r\n\r\nbody"
+        ));
+        assert!(has_ms_prvscid_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id-Prvs: 12\r\n\r\nbody"
+        ));
+        assert!(!has_ms_prvscid_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id-Prvs: E5B3AB4F7F4E4B4A\r\n\r\nbody"
+        ));
+        assert!(!has_ms_prvscid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3030_ms_entity_bad() {
+        assert!(has_ms_entity_bad(
+            b"X-MS-Exchange-CrossTenant-FromEntityHeader: smtp\r\n\r\nbody"
+        ));
+        assert!(has_ms_entity_bad(
+            b"X-MS-Exchange-CrossTenant-FromEntityHeader:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_entity_bad(
+            b"X-MS-Exchange-CrossTenant-FromEntityHeader: Internet\r\n\r\nbody"
+        ));
+        assert!(!has_ms_entity_bad(b"From: a@b\r\n\r\nbody"));
     }
