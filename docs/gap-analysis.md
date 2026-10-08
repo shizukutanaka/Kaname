@@ -2350,3 +2350,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3044 | Latest-Delivery-Time: の非日時形値 (最終期限欄の値異形) | 期限ずれ |
 | D3045 | Alternate-Recipient: の非宛名値 (代宛先欄の値異形) | 代宛先ずれ |
 | D3046 | Prevent-NonDelivery-Report: の語彙外値 (報告抑止欄の値異形) | 抑止ずれ |
+| D3067 | Relay-Version: の非 version site 値 (中継版号欄の値異形) | 中継記録ずれ |
+| D3068 | Posting-Version: の非 version site 値 (投稿版号欄の値異形) | 投稿記録ずれ |
+| D3069 | Date-Received: の非日時形値 (到着日時欄の値異形) | 到着記録ずれ |
+| D3070 | X-Delivered-To: の非宛名形値 (配達宛先欄の値異形) | 配達記録ずれ |
