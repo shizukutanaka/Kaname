@@ -9457,6 +9457,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_hamr_bad {
         render_risks.push("判定経緯欄の値が報告構造形でないです—経緯の扱いで発信元評価がずれます".to_string());
     }
+    if env.ms_dir_bad {
+        render_risks.push("輸送方向欄の値が語彙外です—方向判定の扱いで発信元評価がずれます".to_string());
+    }
+    if env.ms_authmech_bad {
+        render_risks.push("認証方式欄の値が番号形でないです—方式判定の扱いで経路評価がずれます".to_string());
+    }
+    if env.ms_corr_id_bad {
+        render_risks.push("関連識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
+    }
+    if env.ms_exp_time_bad {
+        render_risks.push("失効開始欄の値が日時形でないです—失効時刻の扱いで経路時系列がずれます".to_string());
+    }
+    if env.rver_bad {
+        render_risks.push("中継版号欄の値が 版号 局名 形でないです—中継記録の扱いで経路時系列がずれます".to_string());
+    }
+    if env.pver_bad {
+        render_risks.push("投稿版号欄の値が 版号 局名 形でないです—投稿記録の扱いで経路時系列がずれます".to_string());
+    }
+    if env.drcv_bad {
+        render_risks.push("到着日時欄の値が日時形でないです—到着記録の扱いで経路時系列がずれます".to_string());
+    }
+    if env.xdto_bad {
+        render_risks.push("配達宛先欄の値が宛名形でないです—配達記録の扱いで照合がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

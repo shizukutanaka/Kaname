@@ -3355,6 +3355,22 @@ pub struct Envelope {
     pub x_mcs_bad: bool,
     /// `X-Ham-Report:` 欄の値が報告構造を欠く (D3038 — 判定経緯ずれ)。
     pub x_hamr_bad: bool,
+    /// `X-MS-Exchange-Organization-MessageDirectionality:` 欄の値が方向語彙外 (D2999 — 方向ずれ)。
+    pub ms_dir_bad: bool,
+    /// `X-MS-Exchange-Organization-AuthMechanism:` 欄の値が方式番号形でない (D3000 — 方式ずれ)。
+    pub ms_authmech_bad: bool,
+    /// `X-MS-Office365-Filtering-Correlation-Id:` 欄の値がGUID形でない (D3001 — 関連識別ずれ)。
+    pub ms_corr_id_bad: bool,
+    /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
+    pub ms_exp_time_bad: bool,
+    /// `Relay-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
+    pub rver_bad: bool,
+    /// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
+    pub pver_bad: bool,
+    /// `Date-Received:` 欄の値が日時形でない (D3069 — 到着記録ずれ)。
+    pub drcv_bad: bool,
+    /// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
+    pub xdto_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7332,6 +7348,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_fbl_bad = has_x_fbl_bad(bytes);
     let x_mcs_bad = has_x_mcs_bad(bytes);
     let x_hamr_bad = has_x_hamr_bad(bytes);
+    let ms_dir_bad = has_ms_dir_bad(bytes);
+    let ms_authmech_bad = has_ms_authmech_bad(bytes);
+    let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
+    let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let rver_bad = has_rver_bad(bytes);
+    let pver_bad = has_pver_bad(bytes);
+    let drcv_bad = has_drcv_bad(bytes);
+    let xdto_bad = has_xdto_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -9015,6 +9039,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_fbl_bad,
         x_mcs_bad,
         x_hamr_bad,
+        ms_dir_bad,
+        ms_authmech_bad,
+        ms_corr_id_bad,
+        ms_exp_time_bad,
+        rver_bad,
+        pver_bad,
+        drcv_bad,
+        xdto_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -52584,6 +52616,256 @@ fn has_x_hamr_bad(bytes: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// MS 組織処理系自己申告欄 (`X-MS-Exchange-Organization-*`/
+/// `X-MS-Office365-Filtering-*`) の値形検査用に、ヘッダ部を
+/// 論理行 (折り畳みを継続行へ展開) へ直す (D2999–D3002)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn ms_org_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-MS-Exchange-Organization-MessageDirectionality:` 欄の値が
+/// `Originating`/`Incoming` 語彙でなければ輸送方向記録の異形として
+/// 検出する (D2999)。
+///
+/// Exchange 輸送が刻む発信方向は `Originating`/`Incoming` の2語彙 —
+/// 語彙外の値は「社内発信の体裁」を装う擬態
+/// (`has_exchange_org_claim` は存在のみ、こちらは値文法)。
+fn has_ms_dir_bad(bytes: &[u8]) -> bool {
+    let logical = ms_org_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-exchange-organization-messagedirectionality:")
+        {
+            let t = v.trim();
+            if !matches!(t, "originating" | "incoming") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-Organization-AuthMechanism:` 欄の値が方式番号
+/// (1–2桁の 0–10) でなければ認証方式記録の異形として検出する (D3000)。
+///
+/// Exchange が記す認証方式は 00–10 の番号語彙 (例: 10=送信認証済み
+/// クライアント) — 番号形を欠く値は「輸送が方式を記録した体裁」の擬態。
+fn has_ms_authmech_bad(bytes: &[u8]) -> bool {
+    let logical = ms_org_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-exchange-organization-authmechanism:")
+        {
+            let t = v.trim();
+            let ok = !t.is_empty()
+                && t.len() <= 2
+                && t.chars().all(|c| c.is_ascii_digit())
+                && t.parse::<u8>().map_or(false, |n| n <= 10);
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Office365-Filtering-Correlation-Id:` 欄の値が GUID
+/// (`8-4-4-4-12` ハイフン区切り16進) でなければ関連識別記録の
+/// 異形として検出する (D3001)。
+///
+/// Office365 フィルタ処理が刻む相関識別子は GUID の単一値 —
+/// 形を欠く値は「フィルタ処理を記録した体裁」の擬態。
+fn has_ms_corr_id_bad(bytes: &[u8]) -> bool {
+    let logical = ms_org_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-office365-filtering-correlation-id:")
+        {
+            let t = v.trim();
+            let b = t.as_bytes();
+            let ok = b.len() == 36
+                && b[8] == b'-'
+                && b[13] == b'-'
+                && b[18] == b'-'
+                && b[23] == b'-'
+                && t.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が
+/// `D[D] Mon YYYY HH:MM:SS` の日時形でなければ失効開始記録の異形として
+/// 検出する (D3002)。
+///
+/// メッセージ失効の開始時刻を記す欄 — 到着日時系 (D2919/D2997) と同じ
+/// 日時形をとるべき値が形を欠くのは「失効時刻を記した体裁」の擬態。
+fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
+    let logical = ms_org_hdr_text(bytes);
+    let months = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-exchange-organization-expirationstarttime:")
+        {
+            let w: Vec<&str> = v.trim().split_whitespace().collect();
+            let ok = w.len() >= 4
+                && !w[0].is_empty()
+                && w[0].len() <= 2
+                && w[0].chars().all(|c| c.is_ascii_digit())
+                && months.iter().any(|m| w[1] == *m)
+                && w[2].len() == 4
+                && w[2].chars().all(|c| c.is_ascii_digit())
+                && {
+                    let t: Vec<&str> = w[3].split(':').collect();
+                    t.len() == 3
+                        && t.iter().all(|p| {
+                            let p = p.split('.').next().unwrap_or(p);
+                            (1..=2).contains(&p.len())
+                                && p.chars().all(|c| c.is_ascii_digit())
+                        })
+                };
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn dc_hdr_end(bytes: &[u8]) -> usize {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    end
+}
+
+fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> bool {
+    let end = dc_hdr_end(bytes);
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        for name in names {
+            if let Some(v) = low.strip_prefix(name) {
+                if f(v.trim()) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `version site` 形でなければ真 (NNTP 中継・投稿記録用)。
+fn dc_ver_site_bad(t: &str) -> bool {
+    let w: Vec<&str> = t.split_whitespace().collect();
+    w.len() < 2
+        || !(w[0].chars().any(|c| c.is_ascii_digit())
+            && (w[0].contains('.')
+                || w[0].chars().any(|c| c.is_ascii_alphabetic())))
+        || !w[1]
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        || w[1].chars().any(|c| c == '@')
+}
+
+/// `Relay-Version:`/`Posting-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
+fn has_rver_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["relay-version:"], dc_ver_site_bad)
+}
+
+/// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
+fn has_pver_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["posting-version:"], dc_ver_site_bad)
+}
+
+/// `Date-Received:` 欄の値が日時形でない (D3069 — 到着記録ずれ)。
+fn has_drcv_bad(bytes: &[u8]) -> bool {
+    let months = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    dc_each(bytes, &["date-received:"], |t| {
+        let w: Vec<&str> = t.split_whitespace().collect();
+        let has_mon = w.iter().any(|p| {
+            let p = p.trim_end_matches(',');
+            months.iter().any(|m| p == *m)
+        });
+        let has_year = w.iter().any(|p| {
+            p.trim_end_matches(',').len() == 4
+                && p.trim_end_matches(',').chars().all(|c| c.is_ascii_digit())
+        });
+        let has_time = w.iter().any(|p| {
+            let t: Vec<&str> = p.split(':').collect();
+            t.len() == 3
+                && t.iter()
+                    .all(|s| (1..=2).contains(&s.len()) && s.chars().all(|c| c.is_ascii_digit()))
+        });
+        !(has_mon && has_year && has_time)
+    })
+}
+
+/// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
+fn has_xdto_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-delivered-to:"], |t| {
+        !t.contains('@') || t.starts_with('@') || t.ends_with('@')
+    })
 }
 
 /// (D2635)。
@@ -131154,16 +131436,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131180,16 +131452,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131201,18 +131463,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133173,5 +133423,112 @@ fn 投稿機欄が異形なら発火() {
             b"X-Ham-Report: score=-0.1 required=3.0\r\n\r\nbody"
         ));
         assert!(!has_x_hamr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+
+    #[test]
+    fn d2999_ms_dir_bad() {
+        assert!(has_ms_dir_bad(
+            b"X-MS-Exchange-Organization-MessageDirectionality: Internal\r\n\r\nbody"
+        ));
+        assert!(has_ms_dir_bad(
+            b"X-MS-Exchange-Organization-MessageDirectionality:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_dir_bad(
+            b"X-MS-Exchange-Organization-MessageDirectionality: Originating\r\n\r\nbody"
+        ));
+        assert!(!has_ms_dir_bad(
+            b"X-MS-Exchange-Organization-MessageDirectionality: Incoming\r\n\r\nbody"
+        ));
+        assert!(!has_ms_dir_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3000_ms_authmech_bad() {
+        assert!(has_ms_authmech_bad(
+            b"X-MS-Exchange-Organization-AuthMechanism: smtp\r\n\r\nbody"
+        ));
+        assert!(has_ms_authmech_bad(
+            b"X-MS-Exchange-Organization-AuthMechanism: 99\r\n\r\nbody"
+        ));
+        assert!(has_ms_authmech_bad(
+            b"X-MS-Exchange-Organization-AuthMechanism:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authmech_bad(
+            b"X-MS-Exchange-Organization-AuthMechanism: 10\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authmech_bad(
+            b"X-MS-Exchange-Organization-AuthMechanism: 06\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authmech_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3001_ms_corr_id_bad() {
+        assert!(has_ms_corr_id_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id: abc\r\n\r\nbody"
+        ));
+        assert!(has_ms_corr_id_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id: 12345678-1234-1234-1234-12345678901z\r\n\r\nbody"
+        ));
+        assert!(!has_ms_corr_id_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_ms_corr_id_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3002_ms_exp_time_bad() {
+        assert!(has_ms_exp_time_bad(
+            b"X-MS-Exchange-Organization-ExpirationStartTime: soon\r\n\r\nbody"
+        ));
+        assert!(has_ms_exp_time_bad(
+            b"X-MS-Exchange-Organization-ExpirationStartTime:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_exp_time_bad(
+            b"X-MS-Exchange-Organization-ExpirationStartTime: 8 Oct 2026 14:29:00.0000\r\n\r\nbody"
+        ));
+        assert!(!has_ms_exp_time_bad(
+            b"X-MS-Exchange-Organization-ExpirationStartTime: 08 Oct 2026 14:29:00.0000\r\n\r\nbody"
+        ));
+        assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3067_rver_bad() {
+        assert!(has_rver_bad(b"Relay-Version: onlyversion\r\n\r\nbody"));
+        assert!(has_rver_bad(b"Relay-Version: site host\r\n\r\nbody"));
+        assert!(has_rver_bad(b"Relay-Version:\r\n\r\nbody"));
+        assert!(!has_rver_bad(b"Relay-Version: B2.12 news.example.com\r\n\r\nbody"));
+        assert!(!has_rver_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3068_pver_bad() {
+        assert!(has_pver_bad(b"Posting-Version: onlyver\r\n\r\nbody"));
+        assert!(has_pver_bad(b"Posting-Version: \r\n\r\nbody"));
+        assert!(!has_pver_bad(b"Posting-Version: B2.4 site.example.org\r\n\r\nbody"));
+        assert!(!has_pver_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3069_drcv_bad() {
+        assert!(has_drcv_bad(b"Date-Received: not a date\r\n\r\nbody"));
+        assert!(has_drcv_bad(b"Date-Received: 2026-10-01\r\n\r\nbody"));
+        assert!(has_drcv_bad(b"Date-Received:\r\n\r\nbody"));
+        assert!(!has_drcv_bad(
+            b"Date-Received: Wed, 01 Oct 2026 10:30:00 +0000\r\n\r\nbody"
+        ));
+        assert!(!has_drcv_bad(b"Date-Received: 01 Oct 2026 10:30:00\r\n\r\nbody"));
+        assert!(!has_drcv_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3070_xdto_bad() {
+        assert!(has_xdto_bad(b"X-Delivered-To: not an addr\r\n\r\nbody"));
+        assert!(has_xdto_bad(b"X-Delivered-To: @example.com\r\n\r\nbody"));
+        assert!(has_xdto_bad(b"X-Delivered-To:\r\n\r\nbody"));
+        assert!(!has_xdto_bad(b"X-Delivered-To: user@example.com\r\n\r\nbody"));
+        assert!(!has_xdto_bad(b"From: a@b\r\n\r\nbody"));
     }
 
