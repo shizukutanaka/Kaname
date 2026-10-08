@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+### Fixed — Devin Review (#803): `Autocrypt:` は `keydata=` 必須化・`OpenPGP:` は `id=`/`url=` 必須化 (`preference=` 単独を異形へ)・`Mail-Followup-To:`/`Mail-Reply-To:` は宛名列を要素ごとに検査・自己申告欄のヘッダ走査を本文全体変換から生バイト境界検出へ変更 (解析コスト削減)。
+### Security — D2995: `X-MS-PublicTrafficType:` 欄の非 `Email` 値を輸送種別ずれとして検出 — `Envelope` に `ms_ptt_bad` を追加。
+### Security — D2996: `X-MS-Exchange-Organization-AuthAs:` 欄の語彙外値 (`Internal`/`Anonymous`/`External` 以外) を認証主体ずれとして検出 — `Envelope` に `ms_authas_bad` を追加。
+### Security — D2997: `X-MS-Exchange-CrossTenant-OriginalArrivalTime:` 欄の非日時形値を越境到着ずれとして検出 — `Envelope` に `ms_ct_oat_bad` を追加。
+### Security — D2998: `X-Forefront-PRVS:` 欄の非16進トークン値を報酬識別ずれとして検出 — `Envelope` に `ms_prvs_bad` を追加。
+
 ### Security — D3011: `X-MS-Exchange-MessageSentRepresentingEmailAddress:` 欄の非宛名値を代理送信ずれとして検出 — `Envelope` に `ms_msre_bad` を追加。
 ### Security — D3012: `X-MS-Exchange-Parent-Message-Id:` 欄の非GUID値 (波括弧許容) を親識別ずれとして検出 — `Envelope` に `ms_pmi_bad` を追加。
 ### Security — D3013: `X-MS-Exchange-ForwardedLoop:` 欄の非宛名値を転送巡回ずれとして検出 — `Envelope` に `ms_fwdl_bad` を追加。

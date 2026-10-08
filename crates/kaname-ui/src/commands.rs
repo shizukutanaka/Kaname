@@ -9421,6 +9421,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.xep_bcf_bad {
         render_risks.push("Bcc処理欄の値がGUID形でないです—処理値の扱いで経路評価がずれます".to_string());
     }
+    if env.ms_ptt_bad {
+        render_risks.push("輸送種別欄の値が語彙外です—輸送分類の扱いで経路判定がずれます".to_string());
+    }
+    if env.ms_authas_bad {
+        render_risks.push("認証主体欄の値が語彙外です—主体判定の扱いで発信元評価がずれます".to_string());
+    }
+    if env.ms_ct_oat_bad {
+        render_risks.push("越境到着欄の値が日時形でないです—到着時刻の扱いで経路時系列がずれます".to_string());
+    }
+    if env.ms_prvs_bad {
+        render_risks.push("報酬識別欄の値が16進形でないです—識別値の扱いで照合がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

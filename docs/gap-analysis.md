@@ -2334,3 +2334,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3012 | X-MS-Exchange-Parent-Message-Id: の非GUID値 (親識別欄の値異形) | 識別ずれ |
 | D3013 | X-MS-Exchange-ForwardedLoop: の非宛名値 (転送巡回欄の値異形) | 巡回ずれ |
 | D3014 | X-Exchange-Processed-By-BccFoldering: の非GUID値 (Bcc処理欄の値異形) | 処理ずれ |
+| D2995 | X-MS-PublicTrafficType: の非 Email 値 (輸送種別欄の値異形) | 輸送ずれ |
+| D2996 | X-MS-Exchange-Organization-AuthAs: の語彙外値 (認証主体欄の値異形) | 主体ずれ |
+| D2997 | X-MS-Exchange-CrossTenant-OriginalArrivalTime: の非日時形値 (越境到着欄の値異形) | 越境ずれ |
+| D2998 | X-Forefront-PRVS: の非16進値 (報酬識別欄の値異形) | 識別ずれ |

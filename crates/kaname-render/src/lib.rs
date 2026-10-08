@@ -3331,6 +3331,14 @@ pub struct Envelope {
     pub ms_fwdl_bad: bool,
     /// `X-Exchange-Processed-By-BccFoldering:` 欄の値がGUID形でない (D3014 — Bcc処理ずれ)。
     pub xep_bcf_bad: bool,
+    /// `X-MS-PublicTrafficType:` 欄の値が Email 語彙外 (D2995 — 輸送ずれ)。
+    pub ms_ptt_bad: bool,
+    /// `X-MS-Exchange-Organization-AuthAs:` 欄の値が主体語彙外 (D2996 — 主体ずれ)。
+    pub ms_authas_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-OriginalArrivalTime:` 欄の値が日時形でない (D2997 — 越境到着ずれ)。
+    pub ms_ct_oat_bad: bool,
+    /// `X-Forefront-PRVS:` 欄の値が16進トークン形でない (D2998 — 識別ずれ)。
+    pub ms_prvs_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7296,6 +7304,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_pmi_bad = has_ms_pmi_bad(bytes);
     let ms_fwdl_bad = has_ms_fwdl_bad(bytes);
     let xep_bcf_bad = has_xep_bcf_bad(bytes);
+    let ms_ptt_bad = has_ms_ptt_bad(bytes);
+    let ms_authas_bad = has_ms_authas_bad(bytes);
+    let ms_ct_oat_bad = has_ms_ct_oat_bad(bytes);
+    let ms_prvs_bad = has_ms_prvs_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -8967,6 +8979,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_pmi_bad,
         ms_fwdl_bad,
         xep_bcf_bad,
+        ms_ptt_bad,
+        ms_authas_bad,
+        ms_ct_oat_bad,
+        ms_prvs_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -51700,16 +51716,27 @@ pub fn has_ms_as_report_bad(raw: &[u8]) -> bool {
     })
 }
 
-/// 暗号・交渉系自己申告欄 (`Autocrypt:`/`OpenPGP:`/`Content-Return:`/
-/// `Mail-Followup-To:`/`Mail-Reply-To:`) の値形検査用に、ヘッダ部を
-/// 論理行 (折り畳みを継続行へ展開) へ直す (D2991–D2994)。
-fn crypto_hdr_text(bytes: &[u8]) -> String {
-    let text = String::from_utf8_lossy(bytes);
-    let text = text.replace("\r\n", "\n");
-    let header_end = text.find("\n\n").unwrap_or(text.len());
-    let mut logical = String::with_capacity(header_end + 1);
+/// 自己申告系欄 (`Autocrypt:`/`OpenPGP:`/`Content-Return:`/
+/// `Mail-Followup-To:`/`Mail-Reply-To:`/`X-MS-*`/`X-Forefront-PRVS:`) の
+/// 値形検査用に、ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn claims_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
     let mut first = true;
-    for l in text[..header_end].lines() {
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
         if l.starts_with(' ') || l.starts_with('\t') {
             if !first {
                 logical.push(' ');
@@ -51730,14 +51757,16 @@ fn crypto_hdr_text(bytes: &[u8]) -> String {
 /// 持たなければ暗号交渉記録の異形として検出する (D2991)。
 ///
 /// `Autocrypt:` (draft-ietf-autocrypt) は送信側が自分の鍵素材と
-/// 宛名を申告する交渉欄 — `addr=` を欠く、要素が `名=値` 形を外れる、
-/// addr 値が宛名形を欠く値は「鍵交渉できる体裁」の擬態。
+/// 宛名を申告する交渉欄 — `addr=` 宛名と `keydata=` 鍵素材の両方を
+/// 必須要素とし、欠く・要素が `名=値` 形を外れる・addr 値が宛名形を
+/// 欠く値は「鍵交渉できる体裁」の擬態 (鍵素材を欠く値は交渉に使えない)。
 fn has_autocrypt_bad(bytes: &[u8]) -> bool {
-    let logical = crypto_hdr_text(bytes);
+    let logical = claims_hdr_text(bytes);
     for l in logical.lines() {
         let low = l.to_ascii_lowercase();
         if let Some(v) = low.strip_prefix("autocrypt:") {
             let mut has_addr = false;
+            let mut has_keydata = false;
             for el in v.split(';') {
                 let e = el.trim();
                 if e.is_empty() {
@@ -51749,14 +51778,18 @@ fn has_autocrypt_bad(bytes: &[u8]) -> bool {
                 if p == 0 || e[p + 1..].trim().is_empty() {
                     return true;
                 }
-                if &e[..p] == "addr" {
-                    has_addr = true;
-                    if !e[p + 1..].contains('@') {
-                        return true;
+                match &e[..p] {
+                    "addr" => {
+                        has_addr = true;
+                        if !e[p + 1..].contains('@') {
+                            return true;
+                        }
                     }
+                    "keydata" => has_keydata = true,
+                    _ => {}
                 }
             }
-            if !has_addr {
+            if !has_addr || !has_keydata {
                 return true;
             }
         }
@@ -51764,14 +51797,15 @@ fn has_autocrypt_bad(bytes: &[u8]) -> bool {
     false
 }
 
-/// `OpenPGP:` 欄の値が `名=値` の `;` 連接で `id=`/`url=`/`preference=`
-/// のいずれかも持たなければ鍵識別記録の異形として検出する (D2992)。
+/// `OpenPGP:` 欄の値が `名=値` の `;` 連接で `id=`/`url=` のいずれも
+/// 持たなければ鍵識別記録の異形として検出する (D2992)。
 ///
 /// `OpenPGP:` (draft-josefsson-openpgp-email-news-header) は送信側の
 /// 鍵指紋・鍵 URL・署名/暗号の希望を記す欄 — 要素が `名=値` を欠く、
-/// 鍵要素を何も持たない値は「鍵を提示した体裁」の擬態。
+/// `id=`/`url=` の鍵要素を何も持たない値 (`preference=` だけは鍵を
+/// 特定できない) は「鍵を提示した体裁」の擬態。
 fn has_openpgp_bad(bytes: &[u8]) -> bool {
-    let logical = crypto_hdr_text(bytes);
+    let logical = claims_hdr_text(bytes);
     for l in logical.lines() {
         let low = l.to_ascii_lowercase();
         if let Some(v) = low.strip_prefix("openpgp:") {
@@ -51787,7 +51821,7 @@ fn has_openpgp_bad(bytes: &[u8]) -> bool {
                 if p == 0 || e[p + 1..].trim().is_empty() {
                     return true;
                 }
-                if matches!(&e[..p], "id" | "url" | "preference") {
+                if matches!(&e[..p], "id" | "url") {
                     has_key = true;
                 }
             }
@@ -51805,7 +51839,7 @@ fn has_openpgp_bad(bytes: &[u8]) -> bool {
 /// `Content-Return:` は返送時に本文を添えてよいかの方針を記す
 /// X.400 系欄 — 語彙外の値は「返却方針を記した体裁」の擬態。
 fn has_content_return_bad(bytes: &[u8]) -> bool {
-    let logical = crypto_hdr_text(bytes);
+    let logical = claims_hdr_text(bytes);
     for l in logical.lines() {
         let low = l.to_ascii_lowercase();
         if let Some(v) = low.strip_prefix("content-return:") {
@@ -51822,10 +51856,11 @@ fn has_content_return_bad(bytes: &[u8]) -> bool {
 /// 宛名形でもなければ追従先記録の異形として検出する (D2994)。
 ///
 /// `Mail-Followup-To:`/`Mail-Reply-To:` はメーリングリスト慣習の
-/// 追従先指定欄 — `poster` でも `@` を持つ宛名列でもない値は
-/// 「追従経路を記した体裁」の擬態。
+/// 追従先指定欄 — `poster` でも全要素が `@` を持つ宛名列でもない
+/// 値は「追従経路を記した体裁」の擬態 (宛名列の中に宛名でない
+/// 要素を忍ばせる形を含む)。
 fn has_list_followup_bad(bytes: &[u8]) -> bool {
-    let logical = crypto_hdr_text(bytes);
+    let logical = claims_hdr_text(bytes);
     for l in logical.lines() {
         let low = l.to_ascii_lowercase();
         if let Some(v) = low
@@ -51833,7 +51868,112 @@ fn has_list_followup_bad(bytes: &[u8]) -> bool {
             .or_else(|| low.strip_prefix("mail-reply-to:"))
         {
             let t = v.trim();
-            if t.is_empty() || (t != "poster" && !t.contains('@')) {
+            if t.is_empty() {
+                return true;
+            }
+            if t != "poster"
+                && t.split(',')
+                    .any(|el| el.trim().is_empty() || !el.trim().contains('@'))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-PublicTrafficType:` 欄の値が `Email` 語彙でなければ輸送種別記録の
+/// 異形として検出する (D2995)。
+///
+/// Exchange Online Protection が輸送中に付ける分類は `Email` 固定の
+/// 単語彙欄 — 語彙外の値は「EOP 輸送分類を記した体裁」の擬態
+/// (`has_exchange_org_claim` は存在のみ、こちらは値文法)。
+fn has_ms_ptt_bad(bytes: &[u8]) -> bool {
+    let logical = claims_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-publictraffictype:") {
+            if v.trim() != "email" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-Organization-AuthAs:` 欄の値が
+/// `Internal`/`Anonymous`/`External` 語彙でなければ認証主体記録の
+/// 異形として検出する (D2996)。
+///
+/// Exchange 輸送が記す認証主体は決まった語彙 — 語彙外の値は
+/// 「組織内認証を記した体裁」の擬態。
+fn has_ms_authas_bad(bytes: &[u8]) -> bool {
+    let logical = claims_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-organization-authas:") {
+            let t = v.trim();
+            if !matches!(t, "internal" | "anonymous" | "external") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-OriginalArrivalTime:` 欄の値が
+/// `DD Mon YYYY HH:MM:SS` の日時形でなければ越境到着記録の異形として
+/// 検出する (D2997)。
+///
+/// テナント境界を越えた到着時刻を記す欄 — `X-OriginalArrivalTime:` 系
+/// (D2919) と同じ日時形をとるべき値が形を欠くのは「越境時刻を記した
+/// 体裁」の擬態。
+fn has_ms_ct_oat_bad(bytes: &[u8]) -> bool {
+    let logical = claims_hdr_text(bytes);
+    let months = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-exchange-crosstenant-originalarrivaltime:")
+        {
+            let w: Vec<&str> = v.trim().split_whitespace().collect();
+            let ok = w.len() >= 4
+                && w[0].len() == 2
+                && w[0].chars().all(|c| c.is_ascii_digit())
+                && months.iter().any(|m| w[1] == *m)
+                && w[2].len() == 4
+                && w[2].chars().all(|c| c.is_ascii_digit())
+                && {
+                    let t: Vec<&str> = w[3].split(':').collect();
+                    t.len() == 3
+                        && t.iter().all(|p| {
+                            let p = p.split('.').next().unwrap_or(p);
+                            p.len() == 2 && p.chars().all(|c| c.is_ascii_digit())
+                        })
+                };
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Forefront-PRVS:` 欄の値が16進トークンの形でなければ報酬識別記録の
+/// 異形として検出する (D2998)。
+///
+/// Forefront 系が付ける報酬・追跡用の識別子は16進値の単一トークン —
+/// 形を欠く値は「識別子を記した体裁」の擬態。
+fn has_ms_prvs_bad(bytes: &[u8]) -> bool {
+    let logical = claims_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-forefront-prvs:") {
+            let t = v.trim();
+            if t.len() < 4 || t.len() > 32 || !t.chars().all(|c| c.is_ascii_hexdigit())
+            {
                 return true;
             }
         }
@@ -132353,6 +132493,9 @@ fn 投稿機欄が異形なら発火() {
         assert!(has_autocrypt_bad(b"Autocrypt: keydata=AAAA\r\n\r\nbody"));
         assert!(has_autocrypt_bad(b"Autocrypt: junk\r\n\r\nbody"));
         assert!(has_autocrypt_bad(b"Autocrypt: addr=alice\r\n\r\nbody"));
+        assert!(has_autocrypt_bad(
+            b"Autocrypt: addr=alice@example.com; prefer-encrypt=mutual\r\n\r\nbody"
+        ));
         assert!(!has_autocrypt_bad(
             b"Autocrypt: addr=alice@example.com; prefer-encrypt=mutual; keydata=AAAA\r\n\r\nbody"
         ));
@@ -132367,7 +132510,8 @@ fn 投稿機欄が異形なら発火() {
         assert!(!has_openpgp_bad(
             b"OpenPGP: id=0123456789ABCDEF0123456789ABCDEF01234567; url=https://x/key.asc\r\n\r\nbody"
         ));
-        assert!(!has_openpgp_bad(b"OpenPGP: preference=sign\r\n\r\nbody"));
+        assert!(has_openpgp_bad(b"OpenPGP: preference=sign\r\n\r\nbody"));
+        assert!(!has_openpgp_bad(b"OpenPGP: url=https://x/key.asc\r\n\r\nbody"));
         assert!(!has_openpgp_bad(b"From: a@b\r\n\r\nbody"));
     }
 
@@ -132388,8 +132532,14 @@ fn 投稿機欄が異形なら発火() {
             b"Mail-Followup-To: someone\r\n\r\nbody"
         ));
         assert!(has_list_followup_bad(b"Mail-Reply-To: x\r\n\r\nbody"));
+        assert!(has_list_followup_bad(
+            b"Mail-Followup-To: list@example.com, attacker\r\n\r\nbody"
+        ));
         assert!(!has_list_followup_bad(
             b"Mail-Followup-To: list@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_list_followup_bad(
+            b"Mail-Followup-To: a@x.com, b@y.com\r\n\r\nbody"
         ));
         assert!(!has_list_followup_bad(
             b"Mail-Followup-To: poster\r\n\r\nbody"
@@ -132523,4 +132673,56 @@ fn 投稿機欄が異形なら発火() {
             b"X-Exchange-Processed-By-BccFoldering: {12345678-1234-1234-1234-123456789012}\r\n\r\nbody"
         ));
         assert!(!has_xep_bcf_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2995_ms_ptt_bad() {
+        assert!(has_ms_ptt_bad(
+            b"X-MS-PublicTrafficType: Bulk\r\n\r\nbody"
+        ));
+        assert!(has_ms_ptt_bad(b"X-MS-PublicTrafficType:\r\n\r\nbody"));
+        assert!(!has_ms_ptt_bad(
+            b"X-MS-PublicTrafficType: Email\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ptt_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2996_ms_authas_bad() {
+        assert!(has_ms_authas_bad(
+            b"X-MS-Exchange-Organization-AuthAs: Everyone\r\n\r\nbody"
+        ));
+        assert!(has_ms_authas_bad(
+            b"X-MS-Exchange-Organization-AuthAs:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authas_bad(
+            b"X-MS-Exchange-Organization-AuthAs: Internal\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authas_bad(
+            b"X-MS-Exchange-Organization-AuthAs: Anonymous\r\n\r\nbody"
+        ));
+        assert!(!has_ms_authas_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2997_ms_ct_oat_bad() {
+        assert!(has_ms_ct_oat_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalArrivalTime: yesterday\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_oat_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalArrivalTime:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_oat_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalArrivalTime: 07 Oct 2026 10:00:00.0000 (UTC)\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_oat_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d2998_ms_prvs_bad() {
+        assert!(has_ms_prvs_bad(b"X-Forefront-PRVS: 04A8-5F00\r\n\r\nbody"));
+        assert!(has_ms_prvs_bad(b"X-Forefront-PRVS: xyz\r\n\r\nbody"));
+        assert!(has_ms_prvs_bad(b"X-Forefront-PRVS:\r\n\r\nbody"));
+        assert!(!has_ms_prvs_bad(b"X-Forefront-PRVS: 04A85F00\r\n\r\nbody"));
+        assert!(!has_ms_prvs_bad(b"From: a@b\r\n\r\nbody"));
     }
