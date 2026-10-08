@@ -16,6 +16,10 @@
 ### Security — D3104: `X-MailScanner-To:` 欄の非宛名連接値を走査機封書宛先ずれとして検出 — `Envelope` に `xmst_bad` を追加。
 ### Security — D3105: `X-MailScanner-ID:`/`X-MailScanner-QueueID:` 欄の非単一印字トークン値を走査機識別ずれとして検出 — `Envelope` に `xmsid_bad` を追加。
 ### Security — D3106: `X-MailScanner-SpamCheck:` 欄の非 `spam`/`not spam` 始まり値を走査機判定詳細ずれとして検出 — `Envelope` に `xmssc_bad` を追加。
+### Security — D3119: `X-MS-Exchange-Organization-OriginalSize:` 欄の非整数値を組織元寸法ずれとして検出 — `Envelope` に `msos_bad` を追加。
+### Security — D3120: `X-MS-Exchange-Organization-SCLThreshold:` 欄の非整数値を組織閾値ずれとして検出 — `Envelope` に `msst_bad` を追加。
+### Security — D3121: `X-MS-Exchange-Transport-CrossTenantHeadersStripped:` 欄の非 `true`/`false` 値を組織越境除去ずれとして検出 — `Envelope` に `mscts_bad` を追加。
+### Security — D3122: `X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` 欄の非IPv4値を組織元接続IPずれとして検出 — `Envelope` に `msoip_bad` を追加。
 ### Security — D3071: `X-Primary-IP:` 欄の非IPv4値を発信原局ずれとして検出 — `Envelope` に `xpip_bad` を追加。
 ### Security — D3072: `X-Old-Message-ID:` 欄の非msgid形値を書換識別ずれとして検出 — `Envelope` に `xomsg_bad` を追加。
 ### Security — D3073: `X-Bounce-Address:` 欄の非宛名形値を返送記録ずれとして検出 — `Envelope` に `xbadrs_bad` を追加。
