@@ -3371,6 +3371,14 @@ pub struct Envelope {
     pub xbadrs_bad: bool,
     /// `X-VHost:` 欄の値が局名トークン形でない (D3074 — 仮想局ずれ)。
     pub xvhost_bad: bool,
+    /// `X-Envelope-Recipient:` 欄の値が宛名形でない (D3083 — 封書受取人ずれ)。
+    pub xenvir_bad: bool,
+    /// `X-SpamScore:` 欄の値が数値形でない (D3084 — 迷惑点副記ずれ)。
+    pub xsps_bad: bool,
+    /// `X-Originating-Host:` 欄の値が局名またはIPリテラル形でない (D3085 — 発信局副記ずれ)。
+    pub xohost_bad: bool,
+    /// `X-Delivered-Via:` 欄の値が宛名形でない (D3086 — 経由宛名ずれ)。
+    pub xdvia_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7356,6 +7364,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xomsg_bad = has_xomsg_bad(bytes);
     let xbadrs_bad = has_xbadrs_bad(bytes);
     let xvhost_bad = has_xvhost_bad(bytes);
+    let xenvir_bad = has_xenvir_bad(bytes);
+    let xsps_bad = has_xsps_bad(bytes);
+    let xohost_bad = has_xohost_bad(bytes);
+    let xdvia_bad = has_xdvia_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -9047,6 +9059,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xomsg_bad,
         xbadrs_bad,
         xvhost_bad,
+        xenvir_bad,
+        xsps_bad,
+        xohost_bad,
+        xdvia_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -52768,6 +52784,46 @@ fn has_xvhost_bad(bytes: &[u8]) -> bool {
             || !t
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
+    })
+}
+
+/// `X-Envelope-Recipient:` 欄の値が宛名形でない (D3083 — 封書受取人ずれ)。
+fn has_xenvir_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-envelope-recipient:"], |t| {
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-SpamScore:` 欄の値が数値形でない (D3084 — 迷惑点副記ずれ)。
+fn has_xsps_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-spamscore:"], |t| {
+        t.trim_start_matches(|c| c == '-' || c == '+')
+            .parse::<f64>()
+            .is_err()
+    })
+}
+
+/// `X-Originating-Host:` 欄の値が局名またはIPリテラル形でない (D3085 — 発信局副記ずれ)。
+fn has_xohost_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-originating-host:"], |t| {
+        if t.split_whitespace().count() != 1 {
+            return true;
+        }
+        if let Some(inner) = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            return inner.split('.').count() != 4
+                || !inner.split('.').all(|o| o.parse::<u8>().is_ok());
+        }
+        t.is_empty()
+            || !t
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_')
+    })
+}
+
+/// `X-Delivered-Via:` 欄の値が宛名形でない (D3086 — 経由宛名ずれ)。
+fn has_xdvia_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-delivered-via:"], |t| {
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
     })
 }
 
@@ -133478,3 +133534,45 @@ fn 投稿機欄が異形なら発火() {
             b"X-Delivered-To:\r\n user@example.com\r\n\r\nbody"
         ));
     }
+
+#[test]
+fn d3083_xenvir_bad() {
+    assert!(has_xenvir_bad(b"X-Envelope-Recipient: not addr\r\n\r\nbody"));
+    assert!(has_xenvir_bad(b"X-Envelope-Recipient: a@@x.com\r\n\r\nbody"));
+    assert!(has_xenvir_bad(b"X-Envelope-Recipient:\r\n\r\nbody"));
+    assert!(!has_xenvir_bad(
+        b"X-Envelope-Recipient: user@example.com\r\n\r\nbody"
+    ));
+    assert!(!has_xenvir_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3084_xsps_bad() {
+    assert!(has_xsps_bad(b"X-SpamScore: not a number\r\n\r\nbody"));
+    assert!(has_xsps_bad(b"X-SpamScore:\r\n\r\nbody"));
+    assert!(!has_xsps_bad(b"X-SpamScore: 1.5\r\n\r\nbody"));
+    assert!(!has_xsps_bad(b"X-SpamScore: -0.2\r\n\r\nbody"));
+    assert!(!has_xsps_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3085_xohost_bad() {
+    assert!(has_xohost_bad(b"X-Originating-Host: bad host\r\n\r\nbody"));
+    assert!(has_xohost_bad(b"X-Originating-Host: [999.1.2.3]\r\n\r\nbody"));
+    assert!(has_xohost_bad(b"X-Originating-Host:\r\n\r\nbody"));
+    assert!(!has_xohost_bad(
+        b"X-Originating-Host: mail.example.com\r\n\r\nbody"
+    ));
+    assert!(!has_xohost_bad(
+        b"X-Originating-Host: [192.0.2.1]\r\n\r\nbody"
+    ));
+    assert!(!has_xohost_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3086_xdvia_bad() {
+    assert!(has_xdvia_bad(b"X-Delivered-Via: not addr\r\n\r\nbody"));
+    assert!(has_xdvia_bad(b"X-Delivered-Via: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xdvia_bad(b"X-Delivered-Via: u@x.com\r\n\r\nbody"));
+    assert!(!has_xdvia_bad(b"From: a@b\r\n\r\nbody"));
+}
