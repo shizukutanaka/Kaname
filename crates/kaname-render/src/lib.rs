@@ -3339,6 +3339,14 @@ pub struct Envelope {
     pub ms_ct_oat_bad: bool,
     /// `X-Forefront-PRVS:` 欄の値が16進トークン形でない (D2998 — 識別ずれ)。
     pub ms_prvs_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-Id:` 欄の値がGUID形でない (D3003 — 越境識別ずれ)。
+    pub ms_ct_id_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の値がIP形でない (D3004 — 越境接続ずれ)。
+    pub ms_ct_ip_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-AuthAs:` 欄の値が主体語彙外 (D3005 — 越境主体ずれ)。
+    pub ms_ct_authas_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-AuthSource:` 欄の値がホスト名形でない (D3006 — 越境認証元ずれ)。
+    pub ms_ct_asrc_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7308,6 +7316,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authas_bad = has_ms_authas_bad(bytes);
     let ms_ct_oat_bad = has_ms_ct_oat_bad(bytes);
     let ms_prvs_bad = has_ms_prvs_bad(bytes);
+    let ms_ct_id_bad = has_ms_ct_id_bad(bytes);
+    let ms_ct_ip_bad = has_ms_ct_ip_bad(bytes);
+    let ms_ct_authas_bad = has_ms_ct_authas_bad(bytes);
+    let ms_ct_asrc_bad = has_ms_ct_asrc_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -8983,6 +8995,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authas_bad,
         ms_ct_oat_bad,
         ms_prvs_bad,
+        ms_ct_id_bad,
+        ms_ct_ip_bad,
+        ms_ct_authas_bad,
+        ms_ct_asrc_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -52245,6 +52261,157 @@ fn has_xep_bcf_bad(bytes: &[u8]) -> bool {
                 .and_then(|x| x.strip_suffix('}'))
                 .unwrap_or_else(|| v.trim());
             if !is_ms_guid(t) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// MS 越境記録系自己申告欄 (`X-MS-Exchange-CrossTenant-*`) の値形検査用に、
+/// ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す (D3003–D3006)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn ms_ct_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-MS-Exchange-CrossTenant-Id:` 欄の値が GUID
+/// (`8-4-4-4-12` ハイフン区切り16進) でなければ越境識別記録の
+/// 異形として検出する (D3003)。
+///
+/// 越境元テナントの識別子は GUID の単一値 — 形を欠く値は
+/// 「越境記録を刻んだ体裁」の擬態 (`has_exchange_org_claim` は
+/// 存在のみ、こちらは値文法)。
+fn has_ms_ct_id_bad(bytes: &[u8]) -> bool {
+    let logical = ms_ct_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-crosstenant-id:") {
+            let t = v.trim();
+            let b = t.as_bytes();
+            let ok = b.len() == 36
+                && b[8] == b'-'
+                && b[13] == b'-'
+                && b[18] == b'-'
+                && b[23] == b'-'
+                && t.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の値が
+/// `[IP]` リテラル形でなければ越境接続記録の異形として検出する (D3004)。
+///
+/// 越境元が接続したと記されるIPは角括弧囲みのリテラル —
+/// 括弧を欠く・中身がIP (数字・ドット・コロン・16進) でない値は
+/// 「接続元を記録した体裁」の擬態。
+fn has_ms_ct_ip_bad(bytes: &[u8]) -> bool {
+    let logical = ms_ct_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix(
+            "x-ms-exchange-crosstenant-originalattributedconnectingip:",
+        ) {
+            let t = v.trim();
+            let inner = t.strip_prefix('[').and_then(|x| x.strip_suffix(']'));
+            let ok = match inner {
+                Some(i) => {
+                    let i = i.strip_prefix("ipv6:").unwrap_or(i);
+                    !i.is_empty()
+                        && i.len() <= 45
+                        && (i.contains('.') || i.contains(':'))
+                        && i.chars().all(|c| {
+                            c.is_ascii_digit()
+                                || c.is_ascii_hexdigit()
+                                || c == '.'
+                                || c == ':'
+                        })
+                }
+                None => false,
+            };
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-AuthAs:` 欄の値が
+/// `Internal`/`Anonymous`/`External` 語彙でなければ越境認証主体記録の
+/// 異形として検出する (D3005)。
+///
+/// 越境元の認証主体は組織欄 (D2996) と同じ閉じた語彙 — 語彙外の値は
+/// 「越境認証を記した体裁」の擬態。
+fn has_ms_ct_authas_bad(bytes: &[u8]) -> bool {
+    let logical = ms_ct_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-crosstenant-authas:") {
+            let t = v.trim();
+            if !matches!(t, "internal" | "anonymous" | "external") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-AuthSource:` 欄の値がドット区切りの
+/// ホスト名形でなければ越境認証元記録の異形として検出する (D3006)。
+///
+/// 越境元の認証を行ったホストは FQDN の単一値 — 空白・`@` を含む、
+/// ドットを欠く、ラベルが空の値は「認証元を記録した体裁」の擬態
+/// (`has_originator_org_bad` と同じドメイン形の問い)。
+fn has_ms_ct_asrc_bad(bytes: &[u8]) -> bool {
+    let logical = ms_ct_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-ms-exchange-crosstenant-authsource:")
+        {
+            let t = v.trim();
+            let ok = !t.is_empty()
+                && !t.contains(' ')
+                && !t.contains('@')
+                && t.contains('.')
+                && t.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+                && t.split('.').all(|t| !t.is_empty());
+            if !ok {
                 return true;
             }
         }
@@ -132725,4 +132892,72 @@ fn 投稿機欄が異形なら発火() {
         assert!(has_ms_prvs_bad(b"X-Forefront-PRVS:\r\n\r\nbody"));
         assert!(!has_ms_prvs_bad(b"X-Forefront-PRVS: 04A85F00\r\n\r\nbody"));
         assert!(!has_ms_prvs_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3003_ms_ct_id_bad() {
+        assert!(has_ms_ct_id_bad(
+            b"X-MS-Exchange-CrossTenant-Id: tenant\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_id_bad(
+            b"X-MS-Exchange-CrossTenant-Id:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_id_bad(
+            b"X-MS-Exchange-CrossTenant-Id: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_id_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3004_ms_ct_ip_bad() {
+        assert!(has_ms_ct_ip_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: 1.2.3.4\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_ip_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: [host]\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_ip_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_ip_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: [1.2.3.4]\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_ip_bad(
+            b"X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: [IPv6:2001:db8::1]\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_ip_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3005_ms_ct_authas_bad() {
+        assert!(has_ms_ct_authas_bad(
+            b"X-MS-Exchange-CrossTenant-AuthAs: Everyone\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_authas_bad(
+            b"X-MS-Exchange-CrossTenant-AuthAs:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_authas_bad(
+            b"X-MS-Exchange-CrossTenant-AuthAs: Internal\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_authas_bad(
+            b"X-MS-Exchange-CrossTenant-AuthAs: Anonymous\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_authas_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3006_ms_ct_asrc_bad() {
+        assert!(has_ms_ct_asrc_bad(
+            b"X-MS-Exchange-CrossTenant-AuthSource: not a host\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_asrc_bad(
+            b"X-MS-Exchange-CrossTenant-AuthSource: host\r\n\r\nbody"
+        ));
+        assert!(has_ms_ct_asrc_bad(
+            b"X-MS-Exchange-CrossTenant-AuthSource:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_asrc_bad(
+            b"X-MS-Exchange-CrossTenant-AuthSource: AM8P195MB0184.eurprd05.prod.outlook.com\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ct_asrc_bad(b"From: a@b\r\n\r\nbody"));
     }

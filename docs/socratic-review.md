@@ -4640,3 +4640,8 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 
 問: `Autocrypt: addr=a@x` は交渉として成り立つか。`OpenPGP: preference=sign` は鍵を指すか。`Mail-Followup-To: a@x, junk` は宛名列か。Microsoft の輸送記録欄の値は語彙内か。
 答: いずれも必須部品を欠いていた — `Autocrypt:` は `keydata=` 無しに交渉に使えず、`OpenPGP:` は `preference=` だけでは鍵を特定できず、宛名列は要素ごとに問わねば中に非宛名を忍ばせられる。体裁の文法は「部品の有無」まで問う必要があった (Devin Review #803 より修正)。同じ問いを Microsoft 365 の組織処理欄へ向けると — `X-MS-PublicTrafficType:` は `Email` 固定、`AuthAs:` は Internal/Anonymous/External の語彙、CrossTenant-OriginalArrivalTime は日時形、X-Forefront-PRVS は16進値と、権威の刻む値はすべて形が決まっている。存在検出だけでは「語彙外の値を置く擬態」を見逃すため、値文法として D2995–D2998 を追加した。あわせてヘッダ検査の走査範囲を本文全体変換から生バイト境界検出へ変え、大きな本文を持つ入力での解析コストを削った。
+
+## ラウンド 469 — 「越境の証明書」の自問自答
+
+問: `X-MS-Exchange-CrossTenant-*` の欄があれば組織をまたいだ正規の到着を示すか。
+答: 越境記録はテナントID (GUID)・接続IP (`[IP]` リテラル)・認証主体 (Internal/Anonymous/External)・認証元ホスト (FQDN) の4つの形で刻まれる — いずれも形が閉じており、形を欠く値は「正当な越境を演出する擬態」。`x-ms-exchange-crosstenant` の存在検出だけでは語彙外・形を欠く値を見逃すため、値文法として D3003–D3006 を追加した。権威の刻む欄は「値が権威の形をしているか」で問うという同じ原則を、組織内欄 (D2999–D3002) に続き越境欄にも展開した。

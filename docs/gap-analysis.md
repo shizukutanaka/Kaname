@@ -2338,3 +2338,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2996 | X-MS-Exchange-Organization-AuthAs: の語彙外値 (認証主体欄の値異形) | 主体ずれ |
 | D2997 | X-MS-Exchange-CrossTenant-OriginalArrivalTime: の非日時形値 (越境到着欄の値異形) | 越境ずれ |
 | D2998 | X-Forefront-PRVS: の非16進値 (報酬識別欄の値異形) | 識別ずれ |
+| D3003 | X-MS-Exchange-CrossTenant-Id: の非GUID値 (越境識別欄の値異形) | 識別ずれ |
+| D3004 | X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: の非[IP]値 (越境接続欄の値異形) | 接続ずれ |
+| D3005 | X-MS-Exchange-CrossTenant-AuthAs: の語彙外値 (越境認証主体欄の値異形) | 主体ずれ |
+| D3006 | X-MS-Exchange-CrossTenant-AuthSource: の非ホスト名値 (越境認証元欄の値異形) | 認証元ずれ |
