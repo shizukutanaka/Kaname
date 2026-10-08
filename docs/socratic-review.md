@@ -4626,6 +4626,11 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 問: `Autocrypt:`/`OpenPGP:`/`Content-Return:`/`Mail-Followup-To:`/`Mail-Reply-To:` の値の形は検査済みか。
 答: 未検出だった — 鍵素材・返却方針・追従先を送信側が自称する欄は値の文法が绿地だった。`名=値` 連接・`addr=` 宛名・`allowed|prohibited` 語彙・宛名/poster 形の外れを異形として D2991–D2994 を追加。交渉の体裁だけを真似る擬態へ面を広げた。
 
+## ラウンド 470 — 「機器の刻印」の自問自答
+
+問: `X-IronPort-*` や `X-Proofpoint-*` の欄があればゲートウェイ機器が検査済みと信じられるか。
+答: 機器の刻印は形が決まっている — IronPort の判定は真偽値 (`Filtered: true`)、AV 検査は `名=値` の `;` 連接 (`E=Sophos;i="4.98"`)、迷惑結果は長い不透明トークン、Proofpoint の詳細は空白連接の `名=値` 列 (`rule=… score=…`)。形を欠く値は「機器検査を通った体裁」の擬態であり、受信側が自ら刻むべき欄を送信側が自称した上に値まで崩れている。Barracuda 等の prefix は存在検出済みだったが IronPort/Proofpoint は绿地だったため、値文法として D3007–D3010 を追加した。
+
 ## ラウンド 471 — 「経路の陪席記録」の自問自答
 
 問: `X-MS-Exchange-MessageSentRepresentingEmailAddress`/`Parent-Message-Id`/`ForwardedLoop`/`X-Exchange-Processed-By-BccFoldering` の欄があれば組織の経路追跡を示すか。
