@@ -3379,6 +3379,14 @@ pub struct Envelope {
     pub xsdbar_bad: bool,
     /// `X-Amavis-SpamScore:`/`X-Amavis-Score:` 欄の値が数値形でない (D3114 — 検疫機得点ずれ)。
     pub xamsc_bad: bool,
+    /// `X-MS-Exchange-Organization-OriginalSize:` 欄の値が整数形でない (D3119 — 組織元寸法ずれ)。
+    pub msos_bad: bool,
+    /// `X-MS-Exchange-Organization-SCLThreshold:` 欄の値が整数形でない (D3120 — 組織閾値ずれ)。
+    pub msst_bad: bool,
+    /// `X-MS-Exchange-Transport-CrossTenantHeadersStripped:` 欄の値が `true`/`false` でない (D3121 — 組織越境除去ずれ)。
+    pub mscts_bad: bool,
+    /// `X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` 欄の値がIPv4形でない (D3122 — 組織元接続IPずれ)。
+    pub msoip_bad: bool,
     /// `X-Primary-IP:` 欄の値が IPv4 形でない (D3071 — 発信原局ずれ)。
     pub xpip_bad: bool,
     /// `X-Old-Message-ID:` 欄の値が msgid 形でない (D3072 — 書換識別ずれ)。
@@ -7376,6 +7384,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xsdpt_bad = has_xsdpt_bad(bytes);
     let xsdbar_bad = has_xsdbar_bad(bytes);
     let xamsc_bad = has_xamsc_bad(bytes);
+    let msos_bad = has_msos_bad(bytes);
+    let msst_bad = has_msst_bad(bytes);
+    let mscts_bad = has_mscts_bad(bytes);
+    let msoip_bad = has_msoip_bad(bytes);
     let xpip_bad = has_xpip_bad(bytes);
     let xomsg_bad = has_xomsg_bad(bytes);
     let xbadrs_bad = has_xbadrs_bad(bytes);
@@ -9075,6 +9087,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xsdpt_bad,
         xsdbar_bad,
         xamsc_bad,
+        msos_bad,
+        msst_bad,
+        mscts_bad,
+        msoip_bad,
         xpip_bad,
         xomsg_bad,
         xbadrs_bad,
@@ -52871,6 +52887,52 @@ fn has_xamsc_bad(bytes: &[u8]) -> bool {
         bytes,
         &["x-amavis-spamscore:", "x-amavis-score:"],
         |t| t.is_empty() || t.parse::<f64>().is_err(),
+    )
+}
+
+/// `X-MS-Exchange-Organization-OriginalSize:` 欄の値が整数形でない (D3119 — 組織元寸法ずれ)。
+fn has_msos_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-ms-exchange-organization-originalsize:"],
+        |t| t.is_empty() || !t.bytes().all(|b| b.is_ascii_digit()),
+    )
+}
+
+/// `X-MS-Exchange-Organization-SCLThreshold:` 欄の値が整数形でない (D3120 — 組織閾値ずれ)。
+fn has_msst_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-ms-exchange-organization-sclthreshold:"],
+        |t| t.is_empty() || !t.bytes().all(|b| b.is_ascii_digit()),
+    )
+}
+
+/// `X-MS-Exchange-Transport-CrossTenantHeadersStripped:` 欄の値が `true`/`false` でない (D3121 — 組織越境除去ずれ)。
+fn has_mscts_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-ms-exchange-transport-crosstenantheadersstripped:"],
+        |t| !matches!(t.to_ascii_lowercase().as_str(), "true" | "false"),
+    )
+}
+
+/// `X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` 欄の値がIPv4形でない (D3122 — 組織元接続IPずれ)。
+fn has_msoip_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &[
+            "x-ms-exchange-organization-original-smtp-client-ip:",
+            "x-ms-exchange-organization-original-smtp-server-ip:",
+        ],
+        |t| {
+            let oct: Vec<&str> = t.split('.').collect();
+            oct.len() != 4
+                || oct.iter().any(|o| {
+                    o.is_empty() || !o.bytes().all(|b| b.is_ascii_digit())
+                        || o.parse::<u8>().is_err()
+                })
+        },
     )
 }
 
@@ -133658,4 +133720,42 @@ fn d3114_xamsc_bad() {
     assert!(!has_xamsc_bad(b"X-Amavis-SpamScore: 5.1\r\n\r\nbody"));
     assert!(!has_xamsc_bad(b"X-Amavis-Score: -0.002\r\n\r\nbody"));
     assert!(!has_xamsc_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3119_msos_bad() {
+    assert!(has_msos_bad(b"X-MS-Exchange-Organization-OriginalSize: not num\r\n\r\nbody"));
+    assert!(has_msos_bad(b"X-MS-Exchange-Organization-OriginalSize: 1.5\r\n\r\nbody"));
+    assert!(has_msos_bad(b"X-MS-Exchange-Organization-OriginalSize:\r\n\r\nbody"));
+    assert!(!has_msos_bad(b"X-MS-Exchange-Organization-OriginalSize: 12345\r\n\r\nbody"));
+    assert!(!has_msos_bad(b"X-MS-Exchange-Organization-OriginalSize: 0\r\n\r\nbody"));
+    assert!(!has_msos_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3120_msst_bad() {
+    assert!(has_msst_bad(b"X-MS-Exchange-Organization-SCLThreshold: not num\r\n\r\nbody"));
+    assert!(has_msst_bad(b"X-MS-Exchange-Organization-SCLThreshold:\r\n\r\nbody"));
+    assert!(!has_msst_bad(b"X-MS-Exchange-Organization-SCLThreshold: 5\r\n\r\nbody"));
+    assert!(!has_msst_bad(b"X-MS-Exchange-Organization-SCLThreshold: 9\r\n\r\nbody"));
+    assert!(!has_msst_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3121_mscts_bad() {
+    assert!(has_mscts_bad(b"X-MS-Exchange-Transport-CrossTenantHeadersStripped: maybe\r\n\r\nbody"));
+    assert!(has_mscts_bad(b"X-MS-Exchange-Transport-CrossTenantHeadersStripped:\r\n\r\nbody"));
+    assert!(!has_mscts_bad(b"X-MS-Exchange-Transport-CrossTenantHeadersStripped: true\r\n\r\nbody"));
+    assert!(!has_mscts_bad(b"X-MS-Exchange-Transport-CrossTenantHeadersStripped: FALSE\r\n\r\nbody"));
+    assert!(!has_mscts_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3122_msoip_bad() {
+    assert!(has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: not ip\r\n\r\nbody"));
+    assert!(has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Server-IP: 999.1.2.3\r\n\r\nbody"));
+    assert!(has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: 1.2.3\r\n\r\nbody"));
+    assert!(!has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: 10.1.2.3\r\n\r\nbody"));
+    assert!(!has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Server-IP: 192.168.0.1\r\n\r\nbody"));
+    assert!(!has_msoip_bad(b"From: a@b\r\n\r\nbody"));
 }
