@@ -2362,6 +2362,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3096 | X-SA-Exim-Rcpt: の非宛名連接値 (検疫機宛先欄の値異形) | 検疫機宛先ずれ |
 | D3097 | X-SA-Exim-Version: の非版号値 (検疫機版号欄の値異形) | 検疫機版号ずれ |
 | D3098 | X-SA-Exim-Scanned: の非 Yes/No 始まり値 (検疫機走査印欄の値異形) | 検疫機走査印ずれ |
+| D3119 | X-MS-Exchange-Organization-OriginalSize: の非整数値 (組織元寸法欄の値異形) | 組織元寸法ずれ |
+| D3120 | X-MS-Exchange-Organization-SCLThreshold: の非整数値 (組織閾値欄の値異形) | 組織閾値ずれ |
+| D3121 | X-MS-Exchange-Transport-CrossTenantHeadersStripped: の非 true/false 値 (組織越境除去欄の値異形) | 組織越境除去ずれ |
+| D3122 | X-MS-Exchange-Organization-Original-SMTP-Client-IP:/Server-IP: の非IPv4値 (組織元接続IP欄の値異形) | 組織元接続IPずれ |
 | D3071 | X-Primary-IP: の非IPv4値 (発信原局欄の値異形) | 発信原局ずれ |
 | D3072 | X-Old-Message-ID: の非msgid形値 (書換識別欄の値異形) | 書換識別ずれ |
 | D3073 | X-Bounce-Address: の非宛名形値 (返送記録欄の値異形) | 返送記録ずれ |
