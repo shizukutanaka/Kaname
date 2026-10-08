@@ -3377,8 +3377,16 @@ pub struct Envelope {
     pub msst_bad: bool,
     /// `X-MS-Exchange-Transport-CrossTenantHeadersStripped:` 欄の値が `true`/`false` でない (D3121 — 組織越境除去ずれ)。
     pub mscts_bad: bool,
-    /// `X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` 欄の値がIPv4形でない (D3122 — 組織元接続IPずれ)。
+    /// `X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` 欄の値がIP形でない (D3122 — 組織元接続IPずれ)。
     pub msoip_bad: bool,
+    /// `X-MIMEDefang-Spam-Score:`/`X-Fortimail-Spam-Score:` 欄の値が数値形でない (D3123 — 検疫機得点ずれ)。
+    pub xmdsc_bad: bool,
+    /// `X-MIME-Autoconverted:` 欄の値が `from 型 to 型` 形でない (D3124 — 変換記録ずれ)。
+    pub xmato_bad: bool,
+    /// `X-Spam-Relay-Country:` 欄の値が国コード連接形でない (D3125 — 中継国ずれ)。
+    pub xsrc_bad: bool,
+    /// `X-EVP-Envelope-ID:` 欄の値が単一印字トークンでない (D3126 — 封書識別ずれ)。
+    pub xeid_bad: bool,
     /// `X-Primary-IP:` 欄の値が IPv4 形でない (D3071 — 発信原局ずれ)。
     pub xpip_bad: bool,
     /// `X-Old-Message-ID:` 欄の値が msgid 形でない (D3072 — 書換識別ずれ)。
@@ -7376,6 +7384,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msst_bad = has_msst_bad(bytes);
     let mscts_bad = has_mscts_bad(bytes);
     let msoip_bad = has_msoip_bad(bytes);
+    let xmdsc_bad = has_xmdsc_bad(bytes);
+    let xmato_bad = has_xmato_bad(bytes);
+    let xsrc_bad = has_xsrc_bad(bytes);
+    let xeid_bad = has_xeid_bad(bytes);
     let xpip_bad = has_xpip_bad(bytes);
     let xomsg_bad = has_xomsg_bad(bytes);
     let xbadrs_bad = has_xbadrs_bad(bytes);
@@ -9075,6 +9087,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         msst_bad,
         mscts_bad,
         msoip_bad,
+        xmdsc_bad,
+        xmato_bad,
+        xsrc_bad,
+        xeid_bad,
         xpip_bad,
         xomsg_bad,
         xbadrs_bad,
@@ -52871,7 +52887,7 @@ fn has_mscts_bad(bytes: &[u8]) -> bool {
     )
 }
 
-/// `X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` 欄の値がIPv4形でない (D3122 — 組織元接続IPずれ)。
+/// `X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` 欄の値がIP形でない (D3122 — 組織元接続IPずれ)。
 fn has_msoip_bad(bytes: &[u8]) -> bool {
     dc_each(
         bytes,
@@ -52879,15 +52895,43 @@ fn has_msoip_bad(bytes: &[u8]) -> bool {
             "x-ms-exchange-organization-original-smtp-client-ip:",
             "x-ms-exchange-organization-original-smtp-server-ip:",
         ],
-        |t| {
-            let oct: Vec<&str> = t.split('.').collect();
-            oct.len() != 4
-                || oct.iter().any(|o| {
-                    o.is_empty() || !o.bytes().all(|b| b.is_ascii_digit())
-                        || o.parse::<u8>().is_err()
-                })
-        },
+        |t| t.parse::<std::net::IpAddr>().is_err(),
     )
+}
+
+/// `X-MIMEDefang-Spam-Score:`/`X-Fortimail-Spam-Score:` 欄の値が数値形でない (D3123 — 検疫機得点ずれ)。
+fn has_xmdsc_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-mimedefang-spam-score:", "x-fortimail-spam-score:"],
+        |t| t.is_empty() || t.parse::<f64>().is_err(),
+    )
+}
+
+/// `X-MIME-Autoconverted:` 欄の値が `from 型 to 型` 形でない (D3124 — 変換記録ずれ)。
+fn has_xmato_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-mime-autoconverted:"], |t| {
+        let l = t.to_ascii_lowercase();
+        !(l.starts_with("from ") && l[5..].contains(" to "))
+    })
+}
+
+/// `X-Spam-Relay-Country:` 欄の値が国コード連接形でない (D3125 — 中継国ずれ)。
+fn has_xsrc_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-spam-relay-country:"], |t| {
+        t.is_empty()
+            || t.split_whitespace().any(|w| {
+                w != "--"
+                    && !(w.len() == 2 && w.bytes().all(|b| b.is_ascii_alphabetic()))
+            })
+    })
+}
+
+/// `X-EVP-Envelope-ID:` 欄の値が単一印字トークンでない (D3126 — 封書識別ずれ)。
+fn has_xeid_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-evp-envelope-id:"], |t| {
+        t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+    })
 }
 
 /// (D2635)。
@@ -133676,4 +133720,50 @@ fn d3122_msoip_bad() {
     assert!(!has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: 10.1.2.3\r\n\r\nbody"));
     assert!(!has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Server-IP: 192.168.0.1\r\n\r\nbody"));
     assert!(!has_msoip_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3123_xmdsc_bad() {
+    assert!(has_xmdsc_bad(b"X-MIMEDefang-Spam-Score: not num\r\n\r\nbody"));
+    assert!(has_xmdsc_bad(b"X-Fortimail-Spam-Score:\r\n\r\nbody"));
+    assert!(!has_xmdsc_bad(b"X-MIMEDefang-Spam-Score: 12.5\r\n\r\nbody"));
+    assert!(!has_xmdsc_bad(b"X-Fortimail-Spam-Score: -0.42\r\n\r\nbody"));
+    assert!(!has_xmdsc_bad(b"X-MIMEDefang-Spam-Score: NaN\r\n\r\nbody"));
+    assert!(!has_xmdsc_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3124_xmato_bad() {
+    assert!(has_xmato_bad(b"X-MIME-Autoconverted: garbage\r\n\r\nbody"));
+    assert!(has_xmato_bad(b"X-MIME-Autoconverted:\r\n\r\nbody"));
+    assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from 8bit to quoted-printable\r\n\r\nbody"));
+    assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from quoted-printable to 8bit by sendmail\r\n\r\nbody"));
+    assert!(!has_xmato_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3125_xsrc_bad() {
+    assert!(has_xsrc_bad(b"X-Spam-Relay-Country: notacountry\r\n\r\nbody"));
+    assert!(has_xsrc_bad(b"X-Spam-Relay-Country:\r\n\r\nbody"));
+    assert!(!has_xsrc_bad(b"X-Spam-Relay-Country: US\r\n\r\nbody"));
+    assert!(!has_xsrc_bad(b"X-Spam-Relay-Country: US DE CN\r\n\r\nbody"));
+    assert!(!has_xsrc_bad(b"X-Spam-Relay-Country: --\r\n\r\nbody"));
+    assert!(!has_xsrc_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3126_xeid_bad() {
+    assert!(has_xeid_bad(b"X-EVP-Envelope-ID: not token\r\n\r\nbody"));
+    assert!(has_xeid_bad(b"X-EVP-Envelope-ID:\r\n\r\nbody"));
+    assert!(!has_xeid_bad(b"X-EVP-Envelope-ID: f47e9ab1-0002-4c55\r\n\r\nbody"));
+    assert!(!has_xeid_bad(b"X-EVP-Envelope-ID: ABC123\r\n\r\nbody"));
+    assert!(!has_xeid_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3122_msoip_ipv6_ok() {
+    assert!(!has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: 2001:db8::1\r\n\r\nbody"));
+    assert!(!has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Server-IP: ::1\r\n\r\nbody"));
+    assert!(has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: 999.1.2.3\r\n\r\nbody"));
+    assert!(has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: not ip\r\n\r\nbody"));
 }

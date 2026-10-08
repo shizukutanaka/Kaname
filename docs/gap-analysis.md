@@ -2357,7 +2357,11 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3119 | X-MS-Exchange-Organization-OriginalSize: の非整数値 (組織元寸法欄の値異形) | 組織元寸法ずれ |
 | D3120 | X-MS-Exchange-Organization-SCLThreshold: の非整数値 (組織閾値欄の値異形) | 組織閾値ずれ |
 | D3121 | X-MS-Exchange-Transport-CrossTenantHeadersStripped: の非 true/false 値 (組織越境除去欄の値異形) | 組織越境除去ずれ |
-| D3122 | X-MS-Exchange-Organization-Original-SMTP-Client-IP:/Server-IP: の非IPv4値 (組織元接続IP欄の値異形) | 組織元接続IPずれ |
+| D3122 | X-MS-Exchange-Organization-Original-SMTP-Client-IP:/Server-IP: の非IP値 (組織元接続IP欄の値異形) | 組織元接続IPずれ |
+| D3123 | X-MIMEDefang-Spam-Score:/X-Fortimail-Spam-Score: の非数値値 (検疫機得点欄の値異形) | 検疫機得点ずれ |
+| D3124 | X-MIME-Autoconverted: の非 from 型 to 型 値 (変換記録欄の値異形) | 変換記録ずれ |
+| D3125 | X-Spam-Relay-Country: の非国コード連接値 (中継国欄の値異形) | 中継国ずれ |
+| D3126 | X-EVP-Envelope-ID: の非単一印字トークン値 (封書識別欄の値異形) | 封書識別ずれ |
 | D3071 | X-Primary-IP: の非IPv4値 (発信原局欄の値異形) | 発信原局ずれ |
 | D3072 | X-Old-Message-ID: の非msgid形値 (書換識別欄の値異形) | 書換識別ずれ |
 | D3073 | X-Bounce-Address: の非宛名形値 (返送記録欄の値異形) | 返送記録ずれ |
