@@ -4,6 +4,10 @@
 ### Security — D3004: `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の非 `[IP]` 値を越境接続ずれとして検出 — `Envelope` に `ms_ct_ip_bad` を追加。
 ### Security — D3005: `X-MS-Exchange-CrossTenant-AuthAs:` 欄の語彙外値 (`Internal`/`Anonymous`/`External` 以外) を越境認証主体ずれとして検出 — `Envelope` に `ms_ct_authas_bad` を追加。
 ### Security — D3006: `X-MS-Exchange-CrossTenant-AuthSource:` 欄の非ホスト名値を越境認証元ずれとして検出 — `Envelope` に `ms_ct_asrc_bad` を追加。
+### Security — D3035: `X-Amazon-Original-Recipient:` 欄の非宛名値を元宛記録ずれとして検出 — `Envelope` に `x_amzrc_bad` を追加。
+### Security — D3036: `X-FBL-Name:` 欄の非印字トークン値を報告機名ずれとして検出 — `Envelope` に `x_fbl_bad` を追加。
+### Security — D3037: `X-Mimecast-Spam-Score:` 欄の非整数値を疑い度ずれとして検出 — `Envelope` に `x_mcs_bad` を追加。
+### Security — D3038: `X-Ham-Report:` 欄の報告構造欠落値を判定経緯ずれとして検出 — `Envelope` に `x_hamr_bad` を追加。
 
 ### Fixed — Devin Review (#803): `Autocrypt:` は `keydata=` 必須化・`OpenPGP:` は `id=`/`url=` 必須化 (`preference=` 単独を異形へ)・`Mail-Followup-To:`/`Mail-Reply-To:` は宛名列を要素ごとに検査・自己申告欄のヘッダ走査を本文全体変換から生バイト境界検出へ変更 (解析コスト削減)。
 ### Security — D2995: `X-MS-PublicTrafficType:` 欄の非 `Email` 値を輸送種別ずれとして検出 — `Envelope` に `ms_ptt_bad` を追加。

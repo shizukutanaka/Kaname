@@ -2342,3 +2342,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3004 | X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: の非[IP]値 (越境接続欄の値異形) | 接続ずれ |
 | D3005 | X-MS-Exchange-CrossTenant-AuthAs: の語彙外値 (越境認証主体欄の値異形) | 主体ずれ |
 | D3006 | X-MS-Exchange-CrossTenant-AuthSource: の非ホスト名値 (越境認証元欄の値異形) | 認証元ずれ |
+| D3035 | X-Amazon-Original-Recipient: の非宛名値 (元宛記録欄の値異形) | 元宛ずれ |
+| D3036 | X-FBL-Name: の非印字トークン値 (報告機名欄の値異形) | 報告機ずれ |
+| D3037 | X-Mimecast-Spam-Score: の非整数値 (疑い度欄の値異形) | 疑い度ずれ |
+| D3038 | X-Ham-Report: の報告構造欠落値 (判定経緯欄の値異形) | 経緯ずれ |
