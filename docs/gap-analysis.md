@@ -2326,3 +2326,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2992 | OpenPGP: の非 名=値/鍵要素値 (鍵識別欄の値異形) | 鍵識別ずれ |
 | D2993 | Content-Return: の語彙外値 (本文返却欄の値異形) | 返却ずれ |
 | D2994 | Mail-Followup-To:/Mail-Reply-To: の非宛名値 (追従先欄の値異形) | 追従ずれ |
+| D3023 | X-Quarantine-ID: の非括弧識別値 (検疫識別欄の値異形) | 検疫ずれ |
+| D3024 | X-Spam-DCC: の非三段値 (照合集計欄の値異形) | 照合集計ずれ |
+| D3025 | X-MS-Exchange-Organization-SenderIdResult: の語彙外値 (送信者判定欄の値異形) | 送信者判定ずれ |
+| D3026 | X-Mailgun-* の値異形 (配信機印欄の値異形) | 配信機印ずれ |

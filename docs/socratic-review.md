@@ -4625,3 +4625,8 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 
 問: `Autocrypt:`/`OpenPGP:`/`Content-Return:`/`Mail-Followup-To:`/`Mail-Reply-To:` の値の形は検査済みか。
 答: 未検出だった — 鍵素材・返却方針・追従先を送信側が自称する欄は値の文法が绿地だった。`名=値` 連接・`addr=` 宛名・`allowed|prohibited` 語彙・宛名/poster 形の外れを異形として D2991–D2994 を追加。交渉の体裁だけを真似る擬態へ面を広げた。
+
+## ラウンド 474 — 「配送機の検印」の自問自答
+
+問: `X-Quarantine-ID:`/`X-Spam-DCC:`/`X-MS-Exchange-Organization-SenderIdResult:`/`X-Mailgun-*` の欄があれば配送機・検疫機の処理を示すか。
+答: これらは配送機が捺す検印 — 検疫識別は `<識別子>` の角括弧形、DCC 照合集計は `局名: 機名 件数` の三段形、SenderID 判定は SPF 語彙、Mailgun は IPv4/`true|false`/トークンで、いずれも形が決まっている。Network-Message-Id (D2924) や SenderIdResult を除きどの検出器にも触れられていない绿地だったため、形を欠く値を「配送機が検印した体裁」の擬態として D3023–D3026 を追加した。権威の刻印は「値が権威の形をしているか」で問う原う原則の継続適用。
