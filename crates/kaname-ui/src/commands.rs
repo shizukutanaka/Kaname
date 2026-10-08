@@ -9493,6 +9493,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.xrtpath_bad {
         render_risks.push("返送先裏控欄の値が宛名形でないです—返送記録の扱いで宛先照合がずれます".to_string());
     }
+    if env.xsaef_bad {
+        render_risks.push("検疫機元宛欄の値が宛名形でないです—検査記録の扱いで送信元照合がずれます".to_string());
+    }
+    if env.xsaer_bad {
+        render_risks.push("検疫機宛先欄の値が宛名連接形でないです—検査記録の扱いで宛先照合がずれます".to_string());
+    }
+    if env.xsaev_bad {
+        render_risks.push("検疫機版号欄の値が版号形でないです—検査記録の扱いで検疫機識別がずれます".to_string());
+    }
+    if env.xsaes_bad {
+        render_risks.push("検疫機走査印欄の値が Yes/No 始まりでないです—検査記録の扱いで走査確認がずれます".to_string());
+    }
     if env.xpip_bad {
         render_risks.push("発信原局欄の値が IPv4 形でないです—経路記録の扱いで発信元特定がずれます".to_string());
     }

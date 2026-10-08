@@ -3379,6 +3379,14 @@ pub struct Envelope {
     pub xraddr_bad: bool,
     /// `X-Return-Path:` 欄の値が `<>` でも宛名形でもない (D3094 — 返送先裏控ずれ)。
     pub xrtpath_bad: bool,
+    /// `X-SA-Exim-Mail-From:` 欄の値が `<>` でも宛名形でもない (D3095 — 検疫機元宛ずれ)。
+    pub xsaef_bad: bool,
+    /// `X-SA-Exim-Rcpt:` 欄の値が宛名連接形でない (D3096 — 検疫機宛先ずれ)。
+    pub xsaer_bad: bool,
+    /// `X-SA-Exim-Version:` 欄の値が版号形でない (D3097 — 検疫機版号ずれ)。
+    pub xsaev_bad: bool,
+    /// `X-SA-Exim-Scanned:` 欄の値が `Yes`/`No` 始まりでない (D3098 — 検疫機走査印ずれ)。
+    pub xsaes_bad: bool,
     /// `X-Primary-IP:` 欄の値が IPv4 形でない (D3071 — 発信原局ずれ)。
     pub xpip_bad: bool,
     /// `X-Old-Message-ID:` 欄の値が msgid 形でない (D3072 — 書換識別ずれ)。
@@ -7376,6 +7384,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xmsmbx_bad = has_xmsmbx_bad(bytes);
     let xraddr_bad = has_xraddr_bad(bytes);
     let xrtpath_bad = has_xrtpath_bad(bytes);
+    let xsaef_bad = has_xsaef_bad(bytes);
+    let xsaer_bad = has_xsaer_bad(bytes);
+    let xsaev_bad = has_xsaev_bad(bytes);
+    let xsaes_bad = has_xsaes_bad(bytes);
     let xpip_bad = has_xpip_bad(bytes);
     let xomsg_bad = has_xomsg_bad(bytes);
     let xbadrs_bad = has_xbadrs_bad(bytes);
@@ -9075,6 +9087,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xmsmbx_bad,
         xraddr_bad,
         xrtpath_bad,
+        xsaef_bad,
+        xsaer_bad,
+        xsaev_bad,
+        xsaes_bad,
         xpip_bad,
         xomsg_bad,
         xbadrs_bad,
@@ -52892,6 +52908,48 @@ fn has_xrtpath_bad(bytes: &[u8]) -> bool {
             .and_then(|s| s.strip_suffix('>'))
             .unwrap_or(t);
         t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-SA-Exim-Mail-From:` 欄の値が `<>` でも宛名形でもない (D3095 — 検疫機元宛ずれ)。
+fn has_xsaef_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-mail-from:"], |t| {
+        if t == "<>" {
+            return false;
+        }
+        let t = t
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(t);
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-SA-Exim-Rcpt:` 欄の値が宛名連接形でない (D3096 — 検疫機宛先ずれ)。
+fn has_xsaer_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-rcpt:"], |t| {
+        t.split(',').any(|a| {
+            let a = a.trim()
+                .strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+                .unwrap_or_else(|| a.trim());
+            a.is_empty() || a.matches('@').count() != 1 || a.starts_with('@') || a.ends_with('@')
+        })
+    })
+}
+
+/// `X-SA-Exim-Version:` 欄の値が版号形でない (D3097 — 検疫機版号ずれ)。
+fn has_xsaev_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-version:"], |t| {
+        t.split('.').any(|s| s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()))
+    })
+}
+
+/// `X-SA-Exim-Scanned:` 欄の値が `Yes`/`No` 始まりでない (D3098 — 検疫機走査印ずれ)。
+fn has_xsaes_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-scanned:"], |t| {
+        let l = t.to_ascii_lowercase();
+        !(l.starts_with("yes") || l.starts_with("no"))
     })
 }
 
@@ -133701,4 +133759,43 @@ fn d3094_xrtpath_bad() {
     assert!(!has_xrtpath_bad(b"X-Return-Path: <u@x.com>\r\n\r\nbody"));
     assert!(!has_xrtpath_bad(b"X-Return-Path: u@x.com\r\n\r\nbody"));
     assert!(!has_xrtpath_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3095_xsaef_bad() {
+    assert!(has_xsaef_bad(b"X-SA-Exim-Mail-From: not addr\r\n\r\nbody"));
+    assert!(has_xsaef_bad(b"X-SA-Exim-Mail-From: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"X-SA-Exim-Mail-From: <>\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"X-SA-Exim-Mail-From: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"X-SA-Exim-Mail-From: u@x.com\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3096_xsaer_bad() {
+    assert!(has_xsaer_bad(b"X-SA-Exim-Rcpt: not addr\r\n\r\nbody"));
+    assert!(has_xsaer_bad(b"X-SA-Exim-Rcpt: u@x.com, bad@\r\n\r\nbody"));
+    assert!(has_xsaer_bad(b"X-SA-Exim-Rcpt:\r\n\r\nbody"));
+    assert!(!has_xsaer_bad(b"X-SA-Exim-Rcpt: u@x.com\r\n\r\nbody"));
+    assert!(!has_xsaer_bad(b"X-SA-Exim-Rcpt: <u@x.com>, v@y.com\r\n\r\nbody"));
+    assert!(!has_xsaer_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3097_xsaev_bad() {
+    assert!(has_xsaev_bad(b"X-SA-Exim-Version: not ver\r\n\r\nbody"));
+    assert!(has_xsaev_bad(b"X-SA-Exim-Version: 4.2.x\r\n\r\nbody"));
+    assert!(has_xsaev_bad(b"X-SA-Exim-Version: .4.2\r\n\r\nbody"));
+    assert!(!has_xsaev_bad(b"X-SA-Exim-Version: 4.2.1\r\n\r\nbody"));
+    assert!(!has_xsaev_bad(b"X-SA-Exim-Version: 4.96\r\n\r\nbody"));
+    assert!(!has_xsaev_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3098_xsaes_bad() {
+    assert!(has_xsaes_bad(b"X-SA-Exim-Scanned: maybe\r\n\r\nbody"));
+    assert!(has_xsaes_bad(b"X-SA-Exim-Scanned:\r\n\r\nbody"));
+    assert!(!has_xsaes_bad(b"X-SA-Exim-Scanned: Yes\r\n\r\nbody"));
+    assert!(!has_xsaes_bad(b"X-SA-Exim-Scanned: No (on relay.example.com)\r\n\r\nbody"));
+    assert!(!has_xsaes_bad(b"From: a@b\r\n\r\nbody"));
 }

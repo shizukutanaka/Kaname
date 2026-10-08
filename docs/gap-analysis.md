@@ -2358,6 +2358,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3092 | X-MS-Exchange-GeneratedBySourceMailbox: の非GUID値 (元受信箱欄の値異形) | 元受信箱ずれ |
 | D3093 | X-Remote-Addr:/X-Real-IP:/X-Client-Addr: の非IP値 (接続元欄の値異形) | 接続元ずれ |
 | D3094 | X-Return-Path: の非 <>/宛名形値 (返送先裏控欄の値異形) | 返送先裏控ずれ |
+| D3095 | X-SA-Exim-Mail-From: の非 <>/宛名形値 (検疫機元宛欄の値異形) | 検疫機元宛ずれ |
+| D3096 | X-SA-Exim-Rcpt: の非宛名連接値 (検疫機宛先欄の値異形) | 検疫機宛先ずれ |
+| D3097 | X-SA-Exim-Version: の非版号値 (検疫機版号欄の値異形) | 検疫機版号ずれ |
+| D3098 | X-SA-Exim-Scanned: の非 Yes/No 始まり値 (検疫機走査印欄の値異形) | 検疫機走査印ずれ |
 | D3071 | X-Primary-IP: の非IPv4値 (発信原局欄の値異形) | 発信原局ずれ |
 | D3072 | X-Old-Message-ID: の非msgid形値 (書換識別欄の値異形) | 書換識別ずれ |
 | D3073 | X-Bounce-Address: の非宛名形値 (返送記録欄の値異形) | 返送記録ずれ |
