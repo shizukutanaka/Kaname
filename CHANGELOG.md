@@ -8,6 +8,10 @@
 ### Security — D3052: `Originator-Return-Address:` 欄の非宛名形値を返送対象ずれとして検出 — `Envelope` に `x4_ora_bad` を追加。
 ### Security — D3053: `Original-Encoded-Information-Types:` 欄の非種別連接値を符号種別ずれとして検出 — `Envelope` に `x4_oeit_bad` を追加。
 ### Security — D3054: `Content-Identifier:` 欄の非印字トークン値を本文識別ずれとして検出 — `Envelope` に `x4_cid_bad` を追加。
+### Security — D3067: `Relay-Version:` 欄の非 `version site` 値を中継記録ずれとして検出 — `Envelope` に `rver_bad` を追加。
+### Security — D3068: `Posting-Version:` 欄の非 `version site` 値を投稿記録ずれとして検出 — `Envelope` に `pver_bad` を追加。
+### Security — D3069: `Date-Received:` 欄の非日時形値を到着記録ずれとして検出 — `Envelope` に `drcv_bad` を追加。
+### Security — D3070: `X-Delivered-To:` 欄の非宛名形値を配達記録ずれとして検出 — `Envelope` に `xdto_bad` を追加。
 
 ### Security — D3003: `X-MS-Exchange-CrossTenant-Id:` 欄の非GUID値を越境識別ずれとして検出 — `Envelope` に `ms_ct_id_bad` を追加。
 ### Security — D3004: `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の非 `[IP]` 値を越境接続ずれとして検出 — `Envelope` に `ms_ct_ip_bad` を追加。
