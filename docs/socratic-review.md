@@ -4692,3 +4692,17 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 
 問: 問い足りない仮定は。
 答: 「ヘッダは一行で書かれる」。だが RFC 5322 の折り畳みでは値は継続行へ逃げられる。検査が物理行を読むか論理行を読むかは、控えを裏返して読むか否かの差だ。
+
+## ラウンド 497 — 「検疫機の台帳」
+
+問: 計量印の次に、台帳に名を記す印は。
+答: spamd は `X-Spamd-Checker-Version:` に `SpamAssassin x.y.z`、Amavis は `X-Amavis-Checker-Version:` に `Amavisd-new x.y.z` と名乗り、`X-Amavis-Original-Mail-From:`/`X-Amavis-Original-To:` に元封書を写し、rspamd は `X-Rspamd-User:` に使用者を記す。台帳の行があることは見えていたが、名乗りの字句を検める者はいなかった。
+
+問: 台帳を検める第一原理は。
+答: 名乗りは機器の署名からしか出ない——SpamAssassin が `SpamAssassin`、Amavisd が `Amavisd` と名乗らぬ行は台帳の行ではない。元封書は `<>` か宛名連接、使用者は空白なき印字トークン。
+
+問: 4件は要か。
+答: 要る。値文法としては完全绿地で、正常値 (`SpamAssassin 3.4.6`/`Amavisd-new 2.11.0`/`user@example.com`/`daemon`/`<>`/`u@x.com, <v@y.com>`) は不発火、異形のみ発火する。名乗り2件・元封書・使用者——台帳の签証として自足する最小組だ。
+
+問: 問い足りない仮定は。
+答: 「名乗り欄は読み手が機器の署名と信じ込む」。だが名乗りの字を知らぬ名乗りは署名ではない——台帳を信じるなら、先にそれが機器の自署か問うべきだ。
