@@ -2362,6 +2362,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3124 | X-MIME-Autoconverted: の非 from 型 to 型 値 (変換記録欄の値異形) | 変換記録ずれ |
 | D3125 | X-Spam-Relay-Country: の非国コード連接値 (中継国欄の値異形) | 中継国ずれ |
 | D3126 | X-EVP-Envelope-ID: の非単一印字トークン値 (封書識別欄の値異形) | 封書識別ずれ |
+| D3127 | X-MS-Exchange-Transport-OriginalRecipient: の非宛名値 (組織元宛先欄の値異形) | 組織元宛先ずれ |
+| D3128 | X-MS-Exchange-Organization-OriginalArrivalTime: の非日時形値 (組織元到着欄の値異形) | 組織元到着ずれ |
+| D3129 | X-MS-Exchange-Organization-AuthSource-Lob: の非ホスト名値 (組織認証元欄の値異形) | 組織認証元ずれ |
+| D3130 | X-MS-Exchange-Organization-AVStamp-Service: の非単一印字トークン値 (組織検査印欄の値異形) | 組織検査印ずれ |
 | D3071 | X-Primary-IP: の非IPv4値 (発信原局欄の値異形) | 発信原局ずれ |
 | D3072 | X-Old-Message-ID: の非msgid形値 (書換識別欄の値異形) | 書換識別ずれ |
 | D3073 | X-Bounce-Address: の非宛名形値 (返送記録欄の値異形) | 返送記録ずれ |
