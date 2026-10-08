@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3011: `X-MS-Exchange-MessageSentRepresentingEmailAddress:` 欄の非宛名値を代理送信ずれとして検出 — `Envelope` に `ms_msre_bad` を追加。
+### Security — D3012: `X-MS-Exchange-Parent-Message-Id:` 欄の非GUID値 (波括弧許容) を親識別ずれとして検出 — `Envelope` に `ms_pmi_bad` を追加。
+### Security — D3013: `X-MS-Exchange-ForwardedLoop:` 欄の非宛名値を転送巡回ずれとして検出 — `Envelope` に `ms_fwdl_bad` を追加。
+### Security — D3014: `X-Exchange-Processed-By-BccFoldering:` 欄の非GUID値 (波括弧許容) をBcc処理ずれとして検出 — `Envelope` に `xep_bcf_bad` を追加。
+
 ### Security — D3007: `X-IronPort-Anti-Spam-Filtered:` 欄の非真偽値を機器判定ずれとして検出 — `Envelope` に `xip_asf_bad` を追加。
 ### Security — D3008: `X-IronPort-AV:` 欄の非 `名=値` 連接値を機器検査ずれとして検出 — `Envelope` に `xip_av_bad` を追加。
 ### Security — D3009: `X-IronPort-Anti-Spam-Result:` 欄の非base64形値を機器結果ずれとして検出 — `Envelope` に `xip_asr_bad` を追加。

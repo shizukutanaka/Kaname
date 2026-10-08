@@ -3323,6 +3323,14 @@ pub struct Envelope {
     pub xip_asr_bad: bool,
     /// `X-Proofpoint-Spam-Details:` 欄の値が `名=値` 空白連接でない (D3010 — 機器詳細ずれ)。
     pub xpp_sdet_bad: bool,
+    /// `X-MS-Exchange-MessageSentRepresentingEmailAddress:` 欄の値が宛名形でない (D3011 — 代理送信ずれ)。
+    pub ms_msre_bad: bool,
+    /// `X-MS-Exchange-Parent-Message-Id:` 欄の値がGUID形でない (D3012 — 親識別ずれ)。
+    pub ms_pmi_bad: bool,
+    /// `X-MS-Exchange-ForwardedLoop:` 欄の値が宛名形でない (D3013 — 転送巡回ずれ)。
+    pub ms_fwdl_bad: bool,
+    /// `X-Exchange-Processed-By-BccFoldering:` 欄の値がGUID形でない (D3014 — Bcc処理ずれ)。
+    pub xep_bcf_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7284,6 +7292,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xip_av_bad = has_xip_av_bad(bytes);
     let xip_asr_bad = has_xip_asr_bad(bytes);
     let xpp_sdet_bad = has_xpp_sdet_bad(bytes);
+    let ms_msre_bad = has_ms_msre_bad(bytes);
+    let ms_pmi_bad = has_ms_pmi_bad(bytes);
+    let ms_fwdl_bad = has_ms_fwdl_bad(bytes);
+    let xep_bcf_bad = has_xep_bcf_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -8951,6 +8963,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xip_av_bad,
         xip_asr_bad,
         xpp_sdet_bad,
+        ms_msre_bad,
+        ms_pmi_bad,
+        ms_fwdl_bad,
+        xep_bcf_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -51951,6 +51967,144 @@ fn has_xpp_sdet_bad(bytes: &[u8]) -> bool {
                 && t.split_whitespace()
                     .all(|e| e.contains('=') && !e.starts_with('='));
             if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// MS Exchange 経路追跡系補足欄 (`X-MS-Exchange-MessageSentRepresenting*`/
+/// `Parent-Message-Id`/`ForwardedLoop`/`X-Exchange-Processed-By-*`) の
+/// 値形検査用に、ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す
+/// (D3011–D3014)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn ms2_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `v` が `8-4-4-4-12` ハイフン区切り16進 GUID か判定する (D3012/D3014)。
+fn is_ms_guid(v: &str) -> bool {
+    let b = v.as_bytes();
+    b.len() == 36
+        && b[8] == b'-'
+        && b[13] == b'-'
+        && b[18] == b'-'
+        && b[23] == b'-'
+        && v.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// `X-MS-Exchange-MessageSentRepresentingEmailAddress:` 欄の値が
+/// 宛名形でなければ代理送信記録の異形として検出する (D3011)。
+///
+/// 代理人が送った元メールボックスを刻む欄は単一宛名 — `@` を欠く
+/// 値は「代理送信を記録した体裁」の擬態 (org_claim 群の
+/// prefix 検出群に含まれない绿地)。
+fn has_ms_msre_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix(
+            "x-ms-exchange-messagesentrepresentingemailaddress:",
+        ) {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-Parent-Message-Id:` 欄の値が GUID (波括弧許容)
+/// でなければ親識別記録の異形として検出する (D3012)。
+///
+/// 親メッセージ識別子は GUID の単一値 — 形を欠く値は
+/// 「親識別を記録した体裁」の擬態。
+fn has_ms_pmi_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-parent-message-id:") {
+            let t = v
+                .trim()
+                .strip_prefix('{')
+                .and_then(|x| x.strip_suffix('}'))
+                .unwrap_or_else(|| v.trim());
+            if !is_ms_guid(t) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-ForwardedLoop:` 欄の値が宛名形でなければ
+/// 転送巡回記録の異形として検出する (D3013)。
+///
+/// 転送ループ検知のために巡回先を刻む欄は宛名値 — `@` を欠く
+/// 値は「巡回を記録した体裁」の擬態。
+fn has_ms_fwdl_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-forwardedloop:") {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Exchange-Processed-By-BccFoldering:` 欄の値が GUID (波括弧許容)
+/// でなければ Bcc 処理記録の異形として検出する (D3014)。
+///
+/// Bcc 分解処理を担当したモジュールを刻む欄は GUID の単一値 —
+/// 形を欠く値は「Bcc 処理を記録した体裁」の擬態。
+fn has_xep_bcf_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-exchange-processed-by-bccfoldering:")
+        {
+            let t = v
+                .trim()
+                .strip_prefix('{')
+                .and_then(|x| x.strip_suffix('}'))
+                .unwrap_or_else(|| v.trim());
+            if !is_ms_guid(t) {
                 return true;
             }
         }
@@ -132307,4 +132461,66 @@ fn 投稿機欄が異形なら発火() {
             b"X-Proofpoint-Spam-Details: rule=notspam score=98 suspectscore=98 classifier=spam\r\n\r\nbody"
         ));
         assert!(!has_xpp_sdet_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3011_ms_msre_bad() {
+        assert!(has_ms_msre_bad(
+            b"X-MS-Exchange-MessageSentRepresentingEmailAddress: delegate\r\n\r\nbody"
+        ));
+        assert!(has_ms_msre_bad(
+            b"X-MS-Exchange-MessageSentRepresentingEmailAddress:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_msre_bad(
+            b"X-MS-Exchange-MessageSentRepresentingEmailAddress: boss@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_ms_msre_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3012_ms_pmi_bad() {
+        assert!(has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id: parent\r\n\r\nbody"
+        ));
+        assert!(has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id: {12345678-1234-1234-1234-123456789012}\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pmi_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3013_ms_fwdl_bad() {
+        assert!(has_ms_fwdl_bad(
+            b"X-MS-Exchange-ForwardedLoop: loop\r\n\r\nbody"
+        ));
+        assert!(has_ms_fwdl_bad(
+            b"X-MS-Exchange-ForwardedLoop:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_fwdl_bad(
+            b"X-MS-Exchange-ForwardedLoop: user@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_ms_fwdl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3014_xep_bcf_bad() {
+        assert!(has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering: bcc\r\n\r\nbody"
+        ));
+        assert!(has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering:\r\n\r\nbody"
+        ));
+        assert!(!has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering: {12345678-1234-1234-1234-123456789012}\r\n\r\nbody"
+        ));
+        assert!(!has_xep_bcf_bad(b"From: a@b\r\n\r\nbody"));
     }

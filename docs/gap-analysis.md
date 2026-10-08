@@ -2330,3 +2330,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3008 | X-IronPort-AV: の非 名=値 連接値 (機器検査欄の値異形) | 検査ずれ |
 | D3009 | X-IronPort-Anti-Spam-Result: の非base64形値 (機器結果欄の値異形) | 結果ずれ |
 | D3010 | X-Proofpoint-Spam-Details: の非 名=値 空白連接値 (機器詳細欄の値異形) | 詳細ずれ |
+| D3011 | X-MS-Exchange-MessageSentRepresentingEmailAddress: の非宛名値 (代理送信欄の値異形) | 代理ずれ |
+| D3012 | X-MS-Exchange-Parent-Message-Id: の非GUID値 (親識別欄の値異形) | 識別ずれ |
+| D3013 | X-MS-Exchange-ForwardedLoop: の非宛名値 (転送巡回欄の値異形) | 巡回ずれ |
+| D3014 | X-Exchange-Processed-By-BccFoldering: の非GUID値 (Bcc処理欄の値異形) | 処理ずれ |
