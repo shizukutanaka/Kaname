@@ -9409,6 +9409,78 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_envsnd_bad {
         render_risks.push("封書差出人欄の値が宛名形でないです—封書値の扱いで経路評価がずれます".to_string());
     }
+    if env.xip_asf_bad {
+        render_risks.push("機器判定欄の値が真偽形でないです—判定値の扱いで経路評価がずれます".to_string());
+    }
+    if env.xip_av_bad {
+        render_risks.push("機器検査欄の値が連接形でないです—検査値の扱いで経路評価がずれます".to_string());
+    }
+    if env.xip_asr_bad {
+        render_risks.push("機器結果欄の値が符号形でないです—結果値の扱いで照合がずれます".to_string());
+    }
+    if env.xpp_sdet_bad {
+        render_risks.push("機器詳細欄の値が連接形でないです—詳細値の扱いで経路評価がずれます".to_string());
+    }
+    if env.ms_msre_bad {
+        render_risks.push("代理送信欄の値が宛名形でないです—代理値の扱いで発信元評価がずれます".to_string());
+    }
+    if env.ms_pmi_bad {
+        render_risks.push("親識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
+    }
+    if env.ms_fwdl_bad {
+        render_risks.push("転送巡回欄の値が宛名形でないです—巡回値の扱いで経路評価がずれます".to_string());
+    }
+    if env.xep_bcf_bad {
+        render_risks.push("Bcc処理欄の値がGUID形でないです—処理値の扱いで経路評価がずれます".to_string());
+    }
+    if env.ms_ptt_bad {
+        render_risks.push("輸送種別欄の値が語彙外です—輸送分類の扱いで経路判定がずれます".to_string());
+    }
+    if env.ms_authas_bad {
+        render_risks.push("認証主体欄の値が語彙外です—主体判定の扱いで発信元評価がずれます".to_string());
+    }
+    if env.ms_ct_oat_bad {
+        render_risks.push("越境到着欄の値が日時形でないです—到着時刻の扱いで経路時系列がずれます".to_string());
+    }
+    if env.ms_prvs_bad {
+        render_risks.push("報酬識別欄の値が16進形でないです—識別値の扱いで照合がずれます".to_string());
+    }
+    if env.ms_ct_id_bad {
+        render_risks.push("越境識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
+    }
+    if env.ms_ct_ip_bad {
+        render_risks.push("越境接続欄の値がIP形でないです—接続値の扱いで経路評価がずれます".to_string());
+    }
+    if env.ms_ct_authas_bad {
+        render_risks.push("越境認証主体欄の値が語彙外です—主体判定の扱いで発信元評価がずれます".to_string());
+    }
+    if env.ms_ct_asrc_bad {
+        render_risks.push("越境認証元欄の値がホスト名形でないです—認証元の扱いで経路評価がずれます".to_string());
+    }
+    if env.ms_dir_bad {
+        render_risks.push("輸送方向欄の値が語彙外です—方向判定の扱いで発信元評価がずれます".to_string());
+    }
+    if env.ms_authmech_bad {
+        render_risks.push("認証方式欄の値が番号形でないです—方式判定の扱いで経路評価がずれます".to_string());
+    }
+    if env.ms_corr_id_bad {
+        render_risks.push("関連識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
+    }
+    if env.ms_exp_time_bad {
+        render_risks.push("失効開始欄の値が日時形でないです—失効時刻の扱いで経路時系列がずれます".to_string());
+    }
+    if env.rver_bad {
+        render_risks.push("中継版号欄の値が 版号 局名 形でないです—中継記録の扱いで経路時系列がずれます".to_string());
+    }
+    if env.pver_bad {
+        render_risks.push("投稿版号欄の値が 版号 局名 形でないです—投稿記録の扱いで経路時系列がずれます".to_string());
+    }
+    if env.drcv_bad {
+        render_risks.push("到着日時欄の値が日時形でないです—到着記録の扱いで経路時系列がずれます".to_string());
+    }
+    if env.xdto_bad {
+        render_risks.push("配達宛先欄の値が宛名形でないです—配達記録の扱いで照合がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
