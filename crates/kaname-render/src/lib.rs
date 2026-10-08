@@ -3371,6 +3371,14 @@ pub struct Envelope {
     pub xodom_bad: bool,
     /// `X-Message-UUID:` 欄の値が GUID 形でない (D3082 — 配送識別ずれ)。
     pub xmuuid_bad: bool,
+    /// `X-MailScanner-From:` 欄の値が `<>` でも宛名形でもない (D3103 — 走査機封書元宛ずれ)。
+    pub xmsf_bad: bool,
+    /// `X-MailScanner-To:` 欄の値が宛名連接形でない (D3104 — 走査機封書宛先ずれ)。
+    pub xmst_bad: bool,
+    /// `X-MailScanner-ID:`/`X-MailScanner-QueueID:` 欄の値が単一印字トークンでない (D3105 — 走査機識別ずれ)。
+    pub xmsid_bad: bool,
+    /// `X-MailScanner-SpamCheck:` 欄の値が `spam`/`not spam` 始まりでない (D3106 — 走査機判定詳細ずれ)。
+    pub xmssc_bad: bool,
     /// `X-Primary-IP:` 欄の値が IPv4 形でない (D3071 — 発信原局ずれ)。
     pub xpip_bad: bool,
     /// `X-Old-Message-ID:` 欄の値が msgid 形でない (D3072 — 書換識別ずれ)。
@@ -7364,6 +7372,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xsentto_bad = has_xsentto_bad(bytes);
     let xodom_bad = has_xodom_bad(bytes);
     let xmuuid_bad = has_xmuuid_bad(bytes);
+    let xmsf_bad = has_xmsf_bad(bytes);
+    let xmst_bad = has_xmst_bad(bytes);
+    let xmsid_bad = has_xmsid_bad(bytes);
+    let xmssc_bad = has_xmssc_bad(bytes);
     let xpip_bad = has_xpip_bad(bytes);
     let xomsg_bad = has_xomsg_bad(bytes);
     let xbadrs_bad = has_xbadrs_bad(bytes);
@@ -9059,6 +9071,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xsentto_bad,
         xodom_bad,
         xmuuid_bad,
+        xmsf_bad,
+        xmst_bad,
+        xmsid_bad,
+        xmssc_bad,
         xpip_bad,
         xomsg_bad,
         xbadrs_bad,
@@ -52825,6 +52841,54 @@ fn has_xmuuid_bad(bytes: &[u8]) -> bool {
         }
         let lens: Vec<usize> = seg.iter().map(|s| s.len()).collect();
         lens != [8, 4, 4, 4, 12]
+    })
+}
+
+/// `X-MailScanner-From:` 欄の値が `<>` でも宛名形でもない (D3103 — 走査機封書元宛ずれ)。
+fn has_xmsf_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-mailscanner-from:"], |t| {
+        if t == "<>" {
+            return false;
+        }
+        let t = t
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(t);
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-MailScanner-To:` 欄の値が宛名連接形でない (D3104 — 走査機封書宛先ずれ)。
+fn has_xmst_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-mailscanner-to:"], |t| {
+        t.split(',').any(|a| {
+            let a = a.trim();
+            let a = a
+                .strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+                .unwrap_or(a);
+            a.is_empty() || a.matches('@').count() != 1 || a.starts_with('@') || a.ends_with('@')
+        })
+    })
+}
+
+/// `X-MailScanner-ID:`/`X-MailScanner-QueueID:` 欄の値が単一印字トークンでない (D3105 — 走査機識別ずれ)。
+fn has_xmsid_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-mailscanner-id:", "x-mailscanner-queueid:"],
+        |t| {
+            t.is_empty()
+                || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+        },
+    )
+}
+
+/// `X-MailScanner-SpamCheck:` 欄の値が `spam`/`not spam` 始まりでない (D3106 — 走査機判定詳細ずれ)。
+fn has_xmssc_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-mailscanner-spamcheck:"], |t| {
+        let l = t.to_ascii_lowercase();
+        !(l.starts_with("spam") || l.starts_with("not spam"))
     })
 }
 
@@ -133577,3 +133641,42 @@ fn d3082_xmuuid_bad() {
             b"X-Delivered-To:\r\n user@example.com\r\n\r\nbody"
         ));
     }
+
+#[test]
+fn d3103_xmsf_bad() {
+    assert!(has_xmsf_bad(b"X-MailScanner-From: not addr\r\n\r\nbody"));
+    assert!(has_xmsf_bad(b"X-MailScanner-From: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"X-MailScanner-From: <>\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"X-MailScanner-From: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"X-MailScanner-From: u@x.com\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3104_xmst_bad() {
+    assert!(has_xmst_bad(b"X-MailScanner-To: not addr\r\n\r\nbody"));
+    assert!(has_xmst_bad(b"X-MailScanner-To: u@x.com, bad@\r\n\r\nbody"));
+    assert!(has_xmst_bad(b"X-MailScanner-To:\r\n\r\nbody"));
+    assert!(!has_xmst_bad(b"X-MailScanner-To: u@x.com\r\n\r\nbody"));
+    assert!(!has_xmst_bad(b"X-MailScanner-To: <u@x.com>, v@y.com\r\n\r\nbody"));
+    assert!(!has_xmst_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3105_xmsid_bad() {
+    assert!(has_xmsid_bad(b"X-MailScanner-ID: not id here\r\n\r\nbody"));
+    assert!(has_xmsid_bad(b"X-MailScanner-ID:\r\n\r\nbody"));
+    assert!(has_xmsid_bad(b"X-MailScanner-QueueID: id with space\r\n\r\nbody"));
+    assert!(!has_xmsid_bad(b"X-MailScanner-ID: 4xA1B2C3D4E5\r\n\r\nbody"));
+    assert!(!has_xmsid_bad(b"X-MailScanner-QueueID: A1B2C3.D4\r\n\r\nbody"));
+    assert!(!has_xmsid_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3106_xmssc_bad() {
+    assert!(has_xmssc_bad(b"X-MailScanner-SpamCheck: maybe\r\n\r\nbody"));
+    assert!(has_xmssc_bad(b"X-MailScanner-SpamCheck:\r\n\r\nbody"));
+    assert!(!has_xmssc_bad(b"X-MailScanner-SpamCheck: spam, SpamAssassin (score=10.5, required 5)\r\n\r\nbody"));
+    assert!(!has_xmssc_bad(b"X-MailScanner-SpamCheck: not spam, SpamAssassin (score=-1.0, required 5)\r\n\r\nbody"));
+    assert!(!has_xmssc_bad(b"From: a@b\r\n\r\nbody"));
+}

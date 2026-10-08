@@ -12,6 +12,10 @@
 ### Security — D3080: `X-Sent-To:` 欄の非宛名形値を配送宛名ずれとして検出 — `Envelope` に `xsentto_bad` を追加。
 ### Security — D3081: `X-Originating-Domain:` 欄の非FQDNトークン値を発信局名ずれとして検出 — `Envelope` に `xodom_bad` を追加。
 ### Security — D3082: `X-Message-UUID:` 欄の非GUID形値を配送識別ずれとして検出 — `Envelope` に `xmuuid_bad` を追加。
+### Security — D3103: `X-MailScanner-From:` 欄の非 `<>`/宛名形値を走査機封書元宛ずれとして検出 — `Envelope` に `xmsf_bad` を追加。
+### Security — D3104: `X-MailScanner-To:` 欄の非宛名連接値を走査機封書宛先ずれとして検出 — `Envelope` に `xmst_bad` を追加。
+### Security — D3105: `X-MailScanner-ID:`/`X-MailScanner-QueueID:` 欄の非単一印字トークン値を走査機識別ずれとして検出 — `Envelope` に `xmsid_bad` を追加。
+### Security — D3106: `X-MailScanner-SpamCheck:` 欄の非 `spam`/`not spam` 始まり値を走査機判定詳細ずれとして検出 — `Envelope` に `xmssc_bad` を追加。
 ### Security — D3071: `X-Primary-IP:` 欄の非IPv4値を発信原局ずれとして検出 — `Envelope` に `xpip_bad` を追加。
 ### Security — D3072: `X-Old-Message-ID:` 欄の非msgid形値を書換識別ずれとして検出 — `Envelope` に `xomsg_bad` を追加。
 ### Security — D3073: `X-Bounce-Address:` 欄の非宛名形値を返送記録ずれとして検出 — `Envelope` に `xbadrs_bad` を追加。
