@@ -3371,6 +3371,14 @@ pub struct Envelope {
     pub xbadrs_bad: bool,
     /// `X-VHost:` 欄の値が局名トークン形でない (D3074 — 仮想局ずれ)。
     pub xvhost_bad: bool,
+    /// `X-Real-From:` 欄の値が宛名形でない (D3087 — 実差出人ずれ)。
+    pub xrfrom_bad: bool,
+    /// `X-Real-To:`/`X-Real-RCPT:` 欄の値が宛名形でない (D3088 — 実宛先ずれ)。
+    pub xrto_bad: bool,
+    /// `X-Forwarded-By:` 欄の値が局名またはIPリテラル形でない (D3089 — 転送局ずれ)。
+    pub xfby_bad: bool,
+    /// `X-Forwarded-Host:`/`X-Forwarded-Server:` 欄の値が局名またはIPリテラル形でない (D3090 — 転送経路局ずれ)。
+    pub xfhost_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7356,6 +7364,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xomsg_bad = has_xomsg_bad(bytes);
     let xbadrs_bad = has_xbadrs_bad(bytes);
     let xvhost_bad = has_xvhost_bad(bytes);
+    let xrfrom_bad = has_xrfrom_bad(bytes);
+    let xrto_bad = has_xrto_bad(bytes);
+    let xfby_bad = has_xfby_bad(bytes);
+    let xfhost_bad = has_xfhost_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -9047,6 +9059,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xomsg_bad,
         xbadrs_bad,
         xvhost_bad,
+        xrfrom_bad,
+        xrto_bad,
+        xfby_bad,
+        xfhost_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -52768,6 +52784,54 @@ fn has_xvhost_bad(bytes: &[u8]) -> bool {
             || !t
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
+    })
+}
+
+/// `X-Real-From:` 欄の値が宛名形でない (D3087 — 実差出人ずれ)。
+fn has_xrfrom_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-real-from:"], |t| {
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-Real-To:`/`X-Real-RCPT:` 欄の値が宛名形でない (D3088 — 実宛先ずれ)。
+fn has_xrto_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-real-to:", "x-real-rcpt:"], |t| {
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-Forwarded-By:` 欄の値が局名またはIPリテラル形でない (D3089 — 転送局ずれ)。
+fn has_xfby_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-forwarded-by:"], |t| {
+        if t.split_whitespace().count() != 1 {
+            return true;
+        }
+        if let Some(inner) = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            return inner.split('.').count() != 4
+                || !inner.split('.').all(|o| o.parse::<u8>().is_ok());
+        }
+        t.is_empty()
+            || !t
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_')
+    })
+}
+
+/// `X-Forwarded-Host:`/`X-Forwarded-Server:` 欄の値が局名またはIPリテラル形でない (D3090 — 転送経路局ずれ)。
+fn has_xfhost_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-forwarded-host:", "x-forwarded-server:"], |t| {
+        if t.split_whitespace().count() != 1 {
+            return true;
+        }
+        if let Some(inner) = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            return inner.split('.').count() != 4
+                || !inner.split('.').all(|o| o.parse::<u8>().is_ok());
+        }
+        t.is_empty()
+            || !t
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_')
     })
 }
 
@@ -133478,3 +133542,45 @@ fn 投稿機欄が異形なら発火() {
             b"X-Delivered-To:\r\n user@example.com\r\n\r\nbody"
         ));
     }
+
+#[test]
+fn d3087_xrfrom_bad() {
+    assert!(has_xrfrom_bad(b"X-Real-From: not addr\r\n\r\nbody"));
+    assert!(has_xrfrom_bad(b"X-Real-From: a@@x.com\r\n\r\nbody"));
+    assert!(has_xrfrom_bad(b"X-Real-From:\r\n\r\nbody"));
+    assert!(!has_xrfrom_bad(b"X-Real-From: sender@example.com\r\n\r\nbody"));
+    assert!(!has_xrfrom_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3088_xrto_bad() {
+    assert!(has_xrto_bad(b"X-Real-To: not addr\r\n\r\nbody"));
+    assert!(has_xrto_bad(b"X-Real-RCPT: not addr\r\n\r\nbody"));
+    assert!(!has_xrto_bad(b"X-Real-To: u@x.com\r\n\r\nbody"));
+    assert!(!has_xrto_bad(b"X-Real-RCPT: u@x.com\r\n\r\nbody"));
+    assert!(!has_xrto_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3089_xfby_bad() {
+    assert!(has_xfby_bad(b"X-Forwarded-By: bad host\r\n\r\nbody"));
+    assert!(has_xfby_bad(b"X-Forwarded-By: [999.1.2.3]\r\n\r\nbody"));
+    assert!(has_xfby_bad(b"X-Forwarded-By:\r\n\r\nbody"));
+    assert!(!has_xfby_bad(b"X-Forwarded-By: mail.example.com\r\n\r\nbody"));
+    assert!(!has_xfby_bad(b"X-Forwarded-By: [192.0.2.1]\r\n\r\nbody"));
+    assert!(!has_xfby_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3090_xfhost_bad() {
+    assert!(has_xfhost_bad(b"X-Forwarded-Host: bad host\r\n\r\nbody"));
+    assert!(has_xfhost_bad(b"X-Forwarded-Server: bad host\r\n\r\nbody"));
+    assert!(has_xfhost_bad(b"X-Forwarded-Host: [999.1.2.3]\r\n\r\nbody"));
+    assert!(!has_xfhost_bad(
+        b"X-Forwarded-Host: relay.example.com\r\n\r\nbody"
+    ));
+    assert!(!has_xfhost_bad(
+        b"X-Forwarded-Server: [192.0.2.1]\r\n\r\nbody"
+    ));
+    assert!(!has_xfhost_bad(b"From: a@b\r\n\r\nbody"));
+}
