@@ -3355,6 +3355,14 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `Delivery-Report:` 欄の値が yes/no 外 (D3051 — 配送報告指定ずれ)。
+    pub x4_dr_bad: bool,
+    /// `Originator-Return-Address:` 欄の値が宛名形でない (D3052 — 返送対象ずれ)。
+    pub x4_ora_bad: bool,
+    /// `Original-Encoded-Information-Types:` 欄の値が種別連接形でない (D3053 — 符号種別ずれ)。
+    pub x4_oeit_bad: bool,
+    /// `Content-Identifier:` 欄の値が印字トークン形でない (D3054 — 本文識別ずれ)。
+    pub x4_cid_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7332,6 +7340,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let x4_dr_bad = has_x4_dr_bad(bytes);
+    let x4_ora_bad = has_x4_ora_bad(bytes);
+    let x4_oeit_bad = has_x4_oeit_bad(bytes);
+    let x4_cid_bad = has_x4_cid_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -9015,6 +9027,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        x4_dr_bad,
+        x4_ora_bad,
+        x4_oeit_bad,
+        x4_cid_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -52583,6 +52599,159 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
                         })
                 };
             if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Delivery-Report:` 欄の値が yes/no 外 (D3051 — 配送報告指定ずれ)。
+fn has_x4_dr_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("delivery-report:") {
+            let t = v.trim();
+            if t != "yes" && t != "no" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Originator-Return-Address:` 欄の値が宛名形でない (D3052 — 返送対象ずれ)。
+fn has_x4_ora_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("originator-return-address:") {
+            let t = v.trim();
+            if !(t.contains('@') || t == "<>") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Original-Encoded-Information-Types:` 欄の値が種別連接形でない (D3053 — 符号種別ずれ)。
+fn has_x4_oeit_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("original-encoded-information-types:") {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || v.split(',')
+                    .any(|t| {
+                        let t = t.trim();
+                        t.is_empty()
+                            || !t
+                                .chars()
+                                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+                    });
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Identifier:` 欄の値が印字トークン形でない (D3054 — 本文識別ずれ)。
+fn has_x4_cid_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("content-identifier:") {
+            let t = v.trim();
+            let bad = t.is_empty()
+                || !t
+                    .chars()
+                    .all(|c| (0x21..=0x7e).contains(&(c as u32)));
+            if bad {
                 return true;
             }
         }
@@ -133200,3 +133369,57 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3051_x4_dr_bad() {
+        assert!(has_x4_dr_bad(b"Delivery-Report: perhaps\r\n\r\nbody"));
+        assert!(has_x4_dr_bad(b"Delivery-Report:\r\n\r\nbody"));
+        assert!(!has_x4_dr_bad(b"Delivery-Report: yes\r\n\r\nbody"));
+        assert!(!has_x4_dr_bad(b"Delivery-Report: no\r\n\r\nbody"));
+        assert!(!has_x4_dr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3052_x4_ora_bad() {
+        assert!(has_x4_ora_bad(
+            b"Originator-Return-Address: not an addr\r\n\r\nbody"
+        ));
+        assert!(has_x4_ora_bad(b"Originator-Return-Address:\r\n\r\nbody"));
+        assert!(!has_x4_ora_bad(
+            b"Originator-Return-Address: sender@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_x4_ora_bad(b"Originator-Return-Address: <>\r\n\r\nbody"));
+        assert!(!has_x4_ora_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3053_x4_oeit_bad() {
+        assert!(has_x4_oeit_bad(
+            b"Original-Encoded-Information-Types: not a type!\r\n\r\nbody"
+        ));
+        assert!(has_x4_oeit_bad(
+            b"Original-Encoded-Information-Types:\r\n\r\nbody"
+        ));
+        assert!(has_x4_oeit_bad(
+            b"Original-Encoded-Information-Types: ia5-text,,g3-fax\r\n\r\nbody"
+        ));
+        assert!(!has_x4_oeit_bad(
+            b"Original-Encoded-Information-Types: ia5-text\r\n\r\nbody"
+        ));
+        assert!(!has_x4_oeit_bad(
+            b"Original-Encoded-Information-Types: ia5-text, g3-fax\r\n\r\nbody"
+        ));
+        assert!(!has_x4_oeit_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3054_x4_cid_bad() {
+        assert!(has_x4_cid_bad(b"Content-Identifier:\r\n\r\nbody"));
+        assert!(has_x4_cid_bad(b"Content-Identifier: has space\r\n\r\nbody"));
+        assert!(!has_x4_cid_bad(b"Content-Identifier: ipm-12345\r\n\r\nbody"));
+        assert!(!has_x4_cid_bad(
+            b"Content-Identifier: <id@example.com>\r\n\r\nbody"
+        ));
+        assert!(!has_x4_cid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+

@@ -2346,3 +2346,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3000 | X-MS-Exchange-Organization-AuthMechanism: の非方式番号値 (認証方式欄の値異形) | 方式ずれ |
 | D3001 | X-MS-Office365-Filtering-Correlation-Id: の非GUID値 (関連識別欄の値異形) | 識別ずれ |
 | D3002 | X-MS-Exchange-Organization-ExpirationStartTime: の非日時形値 (失効開始欄の値異形) | 失効ずれ |
+| D3051 | Delivery-Report: の語彙外値 (配送報告欄の値異形) | 報告ずれ |
+| D3052 | Originator-Return-Address: の非宛名形値 (返送対象欄の値異形) | 返送ずれ |
+| D3053 | Original-Encoded-Information-Types: の非種別連接値 (符号種別欄の値異形) | 種別ずれ |
+| D3054 | Content-Identifier: の非印字トークン値 (本文識別欄の値異形) | 識別ずれ |
