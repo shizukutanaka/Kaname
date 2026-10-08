@@ -3355,6 +3355,14 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `Lines:` 欄の値が整数形でない (D3039 — 記事行数ずれ)。
+    pub news_lines_bad: bool,
+    /// `X-SG-ID:`/`X-SG-EID:` 欄の値が長トークン形でない (D3040 — 配送識別ずれ)。
+    pub x_sg_bad: bool,
+    /// `PICS-Label:` 欄の値が評価構文形でない (D3041 — 評価記録ずれ)。
+    pub pics_bad: bool,
+    /// `Old-Return-Path:`/`X-Old-Return-Path:` 欄の値が宛名/空宛形でない (D3042 — 返送記録ずれ)。
+    pub old_rp_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7332,6 +7340,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let news_lines_bad = has_news_lines_bad(bytes);
+    let x_sg_bad = has_x_sg_bad(bytes);
+    let pics_bad = has_pics_bad(bytes);
+    let old_rp_bad = has_old_rp_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -9015,6 +9027,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        news_lines_bad,
+        x_sg_bad,
+        pics_bad,
+        old_rp_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -52583,6 +52599,164 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
                         })
                 };
             if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Lines:` 欄の値が整数形でない (D3039 — 記事行数ずれ)。
+fn has_news_lines_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("lines:") {
+            let v = v.trim();
+            if v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-SG-ID:`/`X-SG-EID:` 欄の値が長トークン形でない (D3040 — 配送識別ずれ)。
+fn has_x_sg_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        let hdr = low
+            .strip_prefix("x-sg-id:")
+            .or_else(|| low.strip_prefix("x-sg-eid:"));
+        if let Some(v) = hdr {
+            let v = v.trim().trim_matches('<').trim_matches('>');
+            let bad = v.len() < 16
+                || !v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `PICS-Label:` 欄の値が評価構文形でない (D3041 — 評価記録ずれ)。
+fn has_pics_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("pics-label:") {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || !v.starts_with('(')
+                || !v.is_ascii()
+                || v.chars().any(|c| c.is_control());
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Old-Return-Path:`/`X-Old-Return-Path:` 欄の値が宛名/空宛形でない (D3042 — 返送記録ずれ)。
+fn has_old_rp_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        let hdr = low
+            .strip_prefix("old-return-path:")
+            .or_else(|| low.strip_prefix("x-old-return-path:"));
+        if let Some(v) = hdr {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || (v != "<>"
+                    && (!v.contains('@')
+                        || !v.is_ascii()
+                        || v.chars().any(|c| c.is_control())
+                        || v.split_whitespace().count() != 1));
+            if bad {
                 return true;
             }
         }
@@ -133200,3 +133374,50 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3039_news_lines_bad() {
+        assert!(has_news_lines_bad(b"Lines: many\r\n\r\nbody"));
+        assert!(has_news_lines_bad(b"Lines:\r\n\r\nbody"));
+        assert!(has_news_lines_bad(b"Lines: 12.5\r\n\r\nbody"));
+        assert!(!has_news_lines_bad(b"Lines: 42\r\n\r\nbody"));
+        assert!(!has_news_lines_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3040_x_sg_bad() {
+        assert!(has_x_sg_bad(b"X-SG-ID: short\r\n\r\nbody"));
+        assert!(has_x_sg_bad(b"X-SG-ID:\r\n\r\nbody"));
+        assert!(has_x_sg_bad(b"X-SG-EID: x y z\r\n\r\nbody"));
+        assert!(!has_x_sg_bad(
+            b"X-SG-ID: Xo4kcqbvRrSMlPmKk8_YRg\r\n\r\nbody"
+        ));
+        assert!(!has_x_sg_bad(
+            b"X-SG-EID: AbCdEfGhIjKlMnOpQrStUvWx\r\n\r\nbody"
+        ));
+        assert!(!has_x_sg_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3041_pics_bad() {
+        assert!(has_pics_bad(b"PICS-Label: clean\r\n\r\nbody"));
+        assert!(has_pics_bad(b"PICS-Label:\r\n\r\nbody"));
+        assert!(has_pics_bad(b"PICS-Label: no parens here\r\n\r\nbody"));
+        assert!(!has_pics_bad(
+            b"PICS-Label: (PICS-1.1 http://ex.com/ labels r (n 0))\r\n\r\nbody"
+        ));
+        assert!(!has_pics_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3042_old_rp_bad() {
+        assert!(has_old_rp_bad(b"Old-Return-Path: not an addr\r\n\r\nbody"));
+        assert!(has_old_rp_bad(b"X-Old-Return-Path:\r\n\r\nbody"));
+        assert!(has_old_rp_bad(b"Old-Return-Path: a b@c\r\n\r\nbody"));
+        assert!(!has_old_rp_bad(
+            b"Old-Return-Path: bounce@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_old_rp_bad(b"Old-Return-Path: <>\r\n\r\nbody"));
+        assert!(!has_old_rp_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
