@@ -2354,6 +2354,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3068 | Posting-Version: の非 version site 値 (投稿版号欄の値異形) | 投稿記録ずれ |
 | D3069 | Date-Received: の非日時形値 (到着日時欄の値異形) | 到着記録ずれ |
 | D3070 | X-Delivered-To: の非宛名形値 (配達宛先欄の値異形) | 配達記録ずれ |
+| D3079 | X-Originating-Email: の非宛名形値 (発信宛名欄の値異形) | 発信宛名ずれ |
+| D3080 | X-Sent-To: の非宛名形値 (配送宛名欄の値異形) | 配送宛名ずれ |
+| D3081 | X-Originating-Domain: の非FQDNトークン値 (発信局名欄の値異形) | 発信局名ずれ |
+| D3082 | X-Message-UUID: の非GUID形値 (配送識別欄の値異形) | 配送識別ずれ |
 | D3071 | X-Primary-IP: の非IPv4値 (発信原局欄の値異形) | 発信原局ずれ |
 | D3072 | X-Old-Message-ID: の非msgid形値 (書換識別欄の値異形) | 書換識別ずれ |
 | D3073 | X-Bounce-Address: の非宛名形値 (返送記録欄の値異形) | 返送記録ずれ |
