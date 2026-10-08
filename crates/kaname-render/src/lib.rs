@@ -3315,6 +3315,14 @@ pub struct Envelope {
     pub content_return_bad: bool,
     /// `Mail-Followup-To:`/`Mail-Reply-To:` 欄の値が宛名/poster 形でない (D2994 — 追従ずれ)。
     pub list_followup_bad: bool,
+    /// `Conversion:` 欄の値が交換語彙外 (D3019 — 変換ずれ)。
+    pub conversion_bad: bool,
+    /// `Conversion-With-Loss:` 欄の値が交換語彙外 (D3020 — 損失変換ずれ)。
+    pub conversion_loss_bad: bool,
+    /// `Message-Type:` 欄の値が報告語彙外 (D3021 — 報告種別ずれ)。
+    pub message_type_bad: bool,
+    /// `Read-Date:`/`Disclose-Recipients:` 欄の値が異形 (D3022 — 閲覧記録ずれ)。
+    pub read_rec_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7272,6 +7280,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let openpgp_bad = has_openpgp_bad(bytes);
     let content_return_bad = has_content_return_bad(bytes);
     let list_followup_bad = has_list_followup_bad(bytes);
+    let conversion_bad = has_conversion_bad(bytes);
+    let conversion_loss_bad = has_conversion_loss_bad(bytes);
+    let message_type_bad = has_message_type_bad(bytes);
+    let read_rec_bad = has_read_rec_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -8935,6 +8947,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         openpgp_bad,
         content_return_bad,
         list_followup_bad,
+        conversion_bad,
+        conversion_loss_bad,
+        message_type_bad,
+        read_rec_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -51802,6 +51818,144 @@ fn has_list_followup_bad(bytes: &[u8]) -> bool {
         {
             let t = v.trim();
             if t.is_empty() || (t != "poster" && !t.contains('@')) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// X.400 交換欄 (`Conversion:`/`Conversion-With-Loss:`/`Message-Type:`/
+/// `Read-Date:`/`Disclose-Recipients:`) の値形検査用に、ヘッダ部を
+/// 論理行 (折り畳みを継続行へ展開) へ直す (D3019–D3022)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn x400_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `Conversion:` 欄の値が `prohibited`/`allowed`/`allowed with loss`
+/// (RFC 2156 ゲートウェイ変換指定) でなければ変換指定記録の異形
+/// として検出する (D3019)。
+///
+/// X.400 ゲートウェイが刻む変換指定は閉じた語彙 — 語彙外の値は
+/// 「ゲートウェイ変換を指定した体裁」の擬態。
+fn has_conversion_bad(bytes: &[u8]) -> bool {
+    let logical = x400_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("conversion:") {
+            let t = v.trim();
+            if !matches!(t, "prohibited" | "allowed" | "allowed with loss") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Conversion-With-Loss:` 欄の値が `prohibited`/`allowed`
+/// (RFC 2156 損失変換指定) でなければ損失変換指定記録の異形
+/// として検出する (D3020)。
+///
+/// 損失を伴う変換の可否だけを刻む欄は二値語彙 — 語彙外の値は
+/// 「損失変換を指定した体裁」の擬態。
+fn has_conversion_loss_bad(bytes: &[u8]) -> bool {
+    let logical = x400_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("conversion-with-loss:") {
+            let t = v.trim();
+            if !matches!(t, "prohibited" | "allowed") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Message-Type:` 欄の値が RFC 2156 の報告種別語彙
+/// (`delivery report`/`non-delivery report`/`disposition notification`/
+/// `probe`) でなければ報告種別記録の異形として検出する (D3021)。
+///
+/// 報告系メッセージの種別を刻む欄は閉じた語彙 — 語彙外の値は
+/// 「配送・開封報告である体裁」の擬態。
+fn has_message_type_bad(bytes: &[u8]) -> bool {
+    let logical = x400_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("message-type:") {
+            let t = v.trim();
+            if !matches!(
+                t,
+                "delivery report" | "non-delivery report" | "disposition notification" | "probe"
+            ) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Read-Date:` 欄の値が日時形でない、または `Disclose-Recipients:`
+/// 欄の値が `yes`/`no`/`prohibited` 語彙外なら閲覧記録の異形として
+/// 検出する (D3022)。
+///
+/// `Read-Date:` は RFC 2156 の閲読日時記録 (`DD Mon YYYY ...`)、
+/// `Disclose-Recipients:` は宛先名簿開示の可否語彙 — 形を欠く値は
+/// 「閲読・開示を記録した体裁」の擬態。
+fn has_read_rec_bad(bytes: &[u8]) -> bool {
+    const MONTHS: [&str; 12] = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let logical = x400_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("read-date:") {
+            let t = v.trim();
+            let mut it = t.split_whitespace();
+            let ok = it
+                .next()
+                .is_some_and(|d| d.len() <= 2 && d.chars().all(|c| c.is_ascii_digit()))
+                && it.next().is_some_and(|m| MONTHS.iter().any(|mm| m.starts_with(mm)))
+                && it
+                    .next()
+                    .is_some_and(|y| y.len() == 4 && y.chars().all(|c| c.is_ascii_digit()))
+                && t.contains(':');
+            if !ok {
+                return true;
+            }
+        } else if let Some(v) = low.strip_prefix("disclose-recipients:") {
+            let t = v.trim();
+            if !matches!(t, "yes" | "no" | "prohibited") {
                 return true;
             }
         }
@@ -132092,4 +132246,78 @@ fn 投稿機欄が異形なら発火() {
             b"Mail-Followup-To: poster\r\n\r\nbody"
         ));
         assert!(!has_list_followup_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3019_conversion_bad() {
+        assert!(has_conversion_bad(
+            b"Conversion: transcoded\r\n\r\nbody"
+        ));
+        assert!(has_conversion_bad(
+            b"Conversion:\r\n\r\nbody"
+        ));
+        assert!(!has_conversion_bad(
+            b"Conversion: allowed\r\n\r\nbody"
+        ));
+        assert!(!has_conversion_bad(
+            b"Conversion: allowed with loss\r\n\r\nbody"
+        ));
+        assert!(!has_conversion_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3020_conversion_loss_bad() {
+        assert!(has_conversion_loss_bad(
+            b"Conversion-With-Loss: maybe\r\n\r\nbody"
+        ));
+        assert!(has_conversion_loss_bad(
+            b"Conversion-With-Loss:\r\n\r\nbody"
+        ));
+        assert!(!has_conversion_loss_bad(
+            b"Conversion-With-Loss: allowed\r\n\r\nbody"
+        ));
+        assert!(!has_conversion_loss_bad(
+            b"Conversion-With-Loss: prohibited\r\n\r\nbody"
+        ));
+        assert!(!has_conversion_loss_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3021_message_type_bad() {
+        assert!(has_message_type_bad(
+            b"Message-Type: bounce\r\n\r\nbody"
+        ));
+        assert!(has_message_type_bad(
+            b"Message-Type:\r\n\r\nbody"
+        ));
+        assert!(!has_message_type_bad(
+            b"Message-Type: delivery report\r\n\r\nbody"
+        ));
+        assert!(!has_message_type_bad(
+            b"Message-Type: disposition notification\r\n\r\nbody"
+        ));
+        assert!(!has_message_type_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3022_read_rec_bad() {
+        assert!(has_read_rec_bad(
+            b"Read-Date: someday\r\n\r\nbody"
+        ));
+        assert!(has_read_rec_bad(
+            b"Read-Date:\r\n\r\nbody"
+        ));
+        assert!(has_read_rec_bad(
+            b"Disclose-Recipients: maybe\r\n\r\nbody"
+        ));
+        assert!(has_read_rec_bad(
+            b"Disclose-Recipients:\r\n\r\nbody"
+        ));
+        assert!(!has_read_rec_bad(
+            b"Read-Date: 01 Oct 2026 10:30:00 +0000\r\n\r\nbody"
+        ));
+        assert!(!has_read_rec_bad(
+            b"Disclose-Recipients: prohibited\r\n\r\nbody"
+        ));
+        assert!(!has_read_rec_bad(b"From: a@b\r\n\r\nbody"));
     }

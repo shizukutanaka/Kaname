@@ -2326,3 +2326,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2992 | OpenPGP: の非 名=値/鍵要素値 (鍵識別欄の値異形) | 鍵識別ずれ |
 | D2993 | Content-Return: の語彙外値 (本文返却欄の値異形) | 返却ずれ |
 | D2994 | Mail-Followup-To:/Mail-Reply-To: の非宛名値 (追従先欄の値異形) | 追従ずれ |
+| D3019 | Conversion: の語彙外値 (変換指定欄の値異形) | 変換ずれ |
+| D3020 | Conversion-With-Loss: の語彙外値 (損失変換欄の値異形) | 損失変換ずれ |
+| D3021 | Message-Type: の語彙外値 (報告種別欄の値異形) | 報告種別ずれ |
+| D3022 | Read-Date:/Disclose-Recipients: の異形値 (閲読記録欄の値異形) | 閲読記録ずれ |
