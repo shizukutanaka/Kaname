@@ -9481,6 +9481,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.xnr_bad {
         render_risks.push("投稿機名札欄の値が印字可能な値でないです—配送機記録の扱いで機器特定がずれます".to_string());
     }
+    if env.xpip_bad {
+        render_risks.push("発信原局欄の値が IPv4 形でないです—経路記録の扱いで発信元特定がずれます".to_string());
+    }
+    if env.xomsg_bad {
+        render_risks.push("書換前識別欄の値が識別子形でないです—識別記録の扱いで追跡がずれます".to_string());
+    }
+    if env.xbadrs_bad {
+        render_risks.push("返送記録欄の値が宛名形でないです—返送記録の扱いで照合がずれます".to_string());
+    }
+    if env.xvhost_bad {
+        render_risks.push("仮想局欄の値が単一局名形でないです—配送記録の扱いで経路把握がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

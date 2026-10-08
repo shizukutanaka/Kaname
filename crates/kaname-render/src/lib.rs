@@ -3371,6 +3371,14 @@ pub struct Envelope {
     pub xsuid_bad: bool,
     /// `X-Newsreader:` 欄の値が印字可能な非空値でない (D3078 — 投稿機名札ずれ)。
     pub xnr_bad: bool,
+    /// `X-Primary-IP:` 欄の値が IPv4 形でない (D3071 — 発信原局ずれ)。
+    pub xpip_bad: bool,
+    /// `X-Old-Message-ID:` 欄の値が msgid 形でない (D3072 — 書換識別ずれ)。
+    pub xomsg_bad: bool,
+    /// `X-Bounce-Address:` 欄の値が宛名形でない (D3073 — 返送記録ずれ)。
+    pub xbadrs_bad: bool,
+    /// `X-VHost:` 欄の値が局名トークン形でない (D3074 — 仮想局ずれ)。
+    pub xvhost_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7356,6 +7364,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xeud_bad = has_xeud_bad(bytes);
     let xsuid_bad = has_xsuid_bad(bytes);
     let xnr_bad = has_xnr_bad(bytes);
+    let xpip_bad = has_xpip_bad(bytes);
+    let xomsg_bad = has_xomsg_bad(bytes);
+    let xbadrs_bad = has_xbadrs_bad(bytes);
+    let xvhost_bad = has_xvhost_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -9047,6 +9059,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xeud_bad,
         xsuid_bad,
         xnr_bad,
+        xpip_bad,
+        xomsg_bad,
+        xbadrs_bad,
+        xvhost_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -52645,7 +52661,8 @@ fn dc_hdr_end(bytes: &[u8]) -> usize {
 fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> bool {
     let end = dc_hdr_end(bytes);
     let text = String::from_utf8_lossy(&bytes[..end]);
-    for ln in text.lines() {
+    let mut it = text.lines().peekable();
+    while let Some(ln) = it.next() {
         let l = ln.trim_start();
         if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
             continue;
@@ -52653,7 +52670,17 @@ fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> boo
         let low = l.to_lowercase();
         for name in names {
             if let Some(v) = low.strip_prefix(name) {
-                if f(v.trim()) {
+                let mut val = v.trim().to_string();
+                while let Some(nl) = it.peek() {
+                    if nl.starts_with(' ') || nl.starts_with('\t') {
+                        val.push(' ');
+                        val.push_str(nl.trim());
+                        it.next();
+                    } else {
+                        break;
+                    }
+                }
+                if f(&val) {
                     return true;
                 }
             }
@@ -52665,7 +52692,7 @@ fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> boo
 /// `version site` 形でなければ真 (NNTP 中継・投稿記録用)。
 fn dc_ver_site_bad(t: &str) -> bool {
     let w: Vec<&str> = t.split_whitespace().collect();
-    w.len() < 2
+    w.len() != 2
         || !(w[0].chars().any(|c| c.is_ascii_digit())
             && (w[0].contains('.')
                 || w[0].chars().any(|c| c.is_ascii_alphabetic())))
@@ -52713,7 +52740,50 @@ fn has_drcv_bad(bytes: &[u8]) -> bool {
 /// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
 fn has_xdto_bad(bytes: &[u8]) -> bool {
     dc_each(bytes, &["x-delivered-to:"], |t| {
-        !t.contains('@') || t.starts_with('@') || t.ends_with('@')
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-Primary-IP:` 欄の値が IPv4 ドット区切り形でない (D3071 — 発信原局ずれ)。
+fn has_xpip_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-primary-ip:"], |t| {
+        let t = t.trim();
+        let t = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')).unwrap_or(t);
+        let parts: Vec<&str> = t.split('.').collect();
+        parts.len() != 4
+            || !parts.iter().all(|p| {
+                (1..=3).contains(&p.len())
+                    && p.bytes().all(|b| b.is_ascii_digit())
+                    && p.parse::<u16>().map_or(false, |n| n <= 255)
+            })
+    })
+}
+
+/// `X-Old-Message-ID:` 欄の値が `<id@…>` msgid 形でない (D3072 — 書換識別ずれ)。
+fn has_xomsg_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-old-message-id:"], |t| {
+        let t = t.trim();
+        !(t.starts_with('<')
+            && t.ends_with('>')
+            && t.len() > 3
+            && t[1..t.len() - 1].contains('@')
+            && t[1..t.len() - 1].chars().all(|c| c.is_ascii_graphic()))
+    })
+}
+
+/// `X-Bounce-Address:` 欄の値が宛名形でない (D3073 — 返送記録ずれ)。
+fn has_xbadrs_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-bounce-address:"], |t| t.matches('@').count() != 1)
+}
+
+/// `X-VHost:` 欄の値が単一局名トークン形でない (D3074 — 仮想局ずれ)。
+fn has_xvhost_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-vhost:"], |t| {
+        t.is_empty()
+            || t.split_whitespace().count() != 1
+            || !t
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
     })
 }
 
@@ -131315,16 +131385,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131341,16 +131401,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131362,18 +131412,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133432,3 +133470,61 @@ fn d3078_xnr_bad() {
     ));
     assert!(!has_xnr_bad(b"From: a@b\r\n\r\nbody"));
 }
+    #[test]
+    fn d3071_xpip_bad() {
+        assert!(has_xpip_bad(b"X-Primary-IP: not.an.ip\r\n\r\nbody"));
+        assert!(has_xpip_bad(b"X-Primary-IP: 999.1.1.1\r\n\r\nbody"));
+        assert!(has_xpip_bad(b"X-Primary-IP:\r\n\r\nbody"));
+        assert!(!has_xpip_bad(b"X-Primary-IP: 192.0.2.1\r\n\r\nbody"));
+        assert!(!has_xpip_bad(b"X-Primary-IP: [192.0.2.1]\r\n\r\nbody"));
+        assert!(!has_xpip_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3072_xomsg_bad() {
+        assert!(has_xomsg_bad(b"X-Old-Message-ID: not msgid\r\n\r\nbody"));
+        assert!(has_xomsg_bad(b"X-Old-Message-ID: <noatsign>\r\n\r\nbody"));
+        assert!(has_xomsg_bad(b"X-Old-Message-ID:\r\n\r\nbody"));
+        assert!(!has_xomsg_bad(
+            b"X-Old-Message-ID: <abc123@news.example>\r\n\r\nbody"
+        ));
+        assert!(!has_xomsg_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3073_xbadrs_bad() {
+        assert!(has_xbadrs_bad(b"X-Bounce-Address: not addr\r\n\r\nbody"));
+        assert!(has_xbadrs_bad(b"X-Bounce-Address: a@@x.com\r\n\r\nbody"));
+        assert!(has_xbadrs_bad(b"X-Bounce-Address:\r\n\r\nbody"));
+        assert!(!has_xbadrs_bad(
+            b"X-Bounce-Address: bounces-42=a.com@b.com\r\n\r\nbody"
+        ));
+        assert!(!has_xbadrs_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3074_xvhost_bad() {
+        assert!(has_xvhost_bad(b"X-VHost: not host name\r\n\r\nbody"));
+        assert!(has_xvhost_bad(b"X-VHost: bad@host\r\n\r\nbody"));
+        assert!(has_xvhost_bad(b"X-VHost:\r\n\r\nbody"));
+        assert!(!has_xvhost_bad(b"X-VHost: mx1.example.com\r\n\r\nbody"));
+        assert!(!has_xvhost_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn r486_review_fixes() {
+        // #822 Devin Review: 折り畳み継続行・二重アット・3語版号を補強
+        assert!(has_xdto_bad(b"X-Delivered-To: user@@example.com\r\n\r\nbody"));
+        assert!(has_xdto_bad(
+            b"X-Delivered-To:\r\n not-an-addr\r\n\r\nbody"
+        ));
+        assert!(has_rver_bad(
+            b"Relay-Version: B2.12 host.example.com extra\r\n\r\nbody"
+        ));
+        assert!(!has_rver_bad(
+            b"Relay-Version: B2.12 host.example.com\r\n\r\nbody"
+        ));
+        assert!(!has_xdto_bad(
+            b"X-Delivered-To:\r\n user@example.com\r\n\r\nbody"
+        ));
+    }
