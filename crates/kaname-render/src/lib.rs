@@ -3315,6 +3315,22 @@ pub struct Envelope {
     pub content_return_bad: bool,
     /// `Mail-Followup-To:`/`Mail-Reply-To:` 欄の値が宛名/poster 形でない (D2994 — 追従ずれ)。
     pub list_followup_bad: bool,
+    /// `X-IronPort-Anti-Spam-Filtered:` 欄の値がtrue/falseでない (D3007 — 機器判定ずれ)。
+    pub xip_asf_bad: bool,
+    /// `X-IronPort-AV:` 欄の値が `名=値` 連接でない (D3008 — 機器検査ずれ)。
+    pub xip_av_bad: bool,
+    /// `X-IronPort-Anti-Spam-Result:` 欄の値がbase64形でない (D3009 — 機器結果ずれ)。
+    pub xip_asr_bad: bool,
+    /// `X-Proofpoint-Spam-Details:` 欄の値が `名=値` 空白連接でない (D3010 — 機器詳細ずれ)。
+    pub xpp_sdet_bad: bool,
+    /// `X-MS-Exchange-MessageSentRepresentingEmailAddress:` 欄の値が宛名形でない (D3011 — 代理送信ずれ)。
+    pub ms_msre_bad: bool,
+    /// `X-MS-Exchange-Parent-Message-Id:` 欄の値がGUID形でない (D3012 — 親識別ずれ)。
+    pub ms_pmi_bad: bool,
+    /// `X-MS-Exchange-ForwardedLoop:` 欄の値が宛名形でない (D3013 — 転送巡回ずれ)。
+    pub ms_fwdl_bad: bool,
+    /// `X-Exchange-Processed-By-BccFoldering:` 欄の値がGUID形でない (D3014 — Bcc処理ずれ)。
+    pub xep_bcf_bad: bool,
     /// `X-MS-PublicTrafficType:` 欄の値が Email 語彙外 (D2995 — 輸送ずれ)。
     pub ms_ptt_bad: bool,
     /// `X-MS-Exchange-Organization-AuthAs:` 欄の値が主体語彙外 (D2996 — 主体ずれ)。
@@ -7280,6 +7296,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let openpgp_bad = has_openpgp_bad(bytes);
     let content_return_bad = has_content_return_bad(bytes);
     let list_followup_bad = has_list_followup_bad(bytes);
+    let xip_asf_bad = has_xip_asf_bad(bytes);
+    let xip_av_bad = has_xip_av_bad(bytes);
+    let xip_asr_bad = has_xip_asr_bad(bytes);
+    let xpp_sdet_bad = has_xpp_sdet_bad(bytes);
+    let ms_msre_bad = has_ms_msre_bad(bytes);
+    let ms_pmi_bad = has_ms_pmi_bad(bytes);
+    let ms_fwdl_bad = has_ms_fwdl_bad(bytes);
+    let xep_bcf_bad = has_xep_bcf_bad(bytes);
     let ms_ptt_bad = has_ms_ptt_bad(bytes);
     let ms_authas_bad = has_ms_authas_bad(bytes);
     let ms_ct_oat_bad = has_ms_ct_oat_bad(bytes);
@@ -8947,6 +8971,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         openpgp_bad,
         content_return_bad,
         list_followup_bad,
+        xip_asf_bad,
+        xip_av_bad,
+        xip_asr_bad,
+        xpp_sdet_bad,
+        ms_msre_bad,
+        ms_pmi_bad,
+        ms_fwdl_bad,
+        xep_bcf_bad,
         ms_ptt_bad,
         ms_authas_bad,
         ms_ct_oat_bad,
@@ -51942,6 +51974,277 @@ fn has_ms_prvs_bad(bytes: &[u8]) -> bool {
             let t = v.trim();
             if t.len() < 4 || t.len() > 32 || !t.chars().all(|c| c.is_ascii_hexdigit())
             {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// セキュリティ機器 (`X-IronPort-*`/`X-Proofpoint-*`) の記録欄の値形検査用に、
+/// ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す (D3007–D3010)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn vnd_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-IronPort-Anti-Spam-Filtered:` 欄の値が `true`/`false` でなければ
+/// IronPort 迷惑フィルタ判定記録の異形として検出する (D3007)。
+///
+/// IronPort が刻む判定欄は真偽値の単一値 — それ以外の値は
+/// 「機器検査を通った体裁」の擬態 (バラクーダ等の prefix は存在検出
+/// 済みだが IronPort/Proofpoint はどの検出器にも触れられていなかった)。
+fn has_xip_asf_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ironport-anti-spam-filtered:") {
+            let t = v.trim();
+            if t != "true" && t != "false" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-IronPort-AV:` 欄の値が `名=値` の `;` 連接でなければ
+/// IronPort アンチウイルス検査記録の異形として検出する (D3008)。
+///
+/// 実値は `E=Sophos;i="4.98"` のような `;` 連接の `名=値` —
+/// 構造を欠く値は「AV 検査を記録した体裁」の擬態。
+fn has_xip_av_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ironport-av:") {
+            let t = v.trim().trim_end_matches(';').trim_end();
+            let ok = !t.is_empty()
+                && t.split(';').all(|e| {
+                    let e = e.trim();
+                    !e.is_empty()
+                        && e.contains('=')
+                        && !e.starts_with('=')
+                        && !e.ends_with('=')
+                });
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-IronPort-Anti-Spam-Result:` 欄の値が base64 系の単一トークンで
+/// なければ IronPort 迷惑判定結果記録の異形として検出する (D3009)。
+///
+/// 実値は結果を符号化した長い不透明トークン — 短い・空白を含む・
+/// base64 字種でない値は「判定結果を記録した体裁」の擬態。
+fn has_xip_asr_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ironport-anti-spam-result:") {
+            let t = v.trim();
+            let ok = t.len() >= 20
+                && !t.contains(char::is_whitespace)
+                && t.chars().all(|c| {
+                    c.is_ascii_alphanumeric()
+                        || c == '+'
+                        || c == '/'
+                        || c == '='
+                });
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Proofpoint-Spam-Details:` 欄の値が `名=値` の空白連接でなければ
+/// Proofpoint 迷惑判定詳細記録の異形として検出する (D3010)。
+///
+/// 実値は `rule=… score=… suspectscore=…` のような空白区切り
+/// `名=値` トークン列 — `=` を欠く要素を含む値は
+/// 「判定詳細を記録した体裁」の擬態。
+fn has_xpp_sdet_bad(bytes: &[u8]) -> bool {
+    let logical = vnd_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-proofpoint-spam-details:") {
+            let t = v.trim();
+            let ok = !t.is_empty()
+                && t.split_whitespace()
+                    .all(|e| e.contains('=') && !e.starts_with('='));
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// MS Exchange 経路追跡系補足欄 (`X-MS-Exchange-MessageSentRepresenting*`/
+/// `Parent-Message-Id`/`ForwardedLoop`/`X-Exchange-Processed-By-*`) の
+/// 値形検査用に、ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す
+/// (D3011–D3014)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn ms2_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `v` が `8-4-4-4-12` ハイフン区切り16進 GUID か判定する (D3012/D3014)。
+fn is_ms_guid(v: &str) -> bool {
+    let b = v.as_bytes();
+    b.len() == 36
+        && b[8] == b'-'
+        && b[13] == b'-'
+        && b[18] == b'-'
+        && b[23] == b'-'
+        && v.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// `X-MS-Exchange-MessageSentRepresentingEmailAddress:` 欄の値が
+/// 宛名形でなければ代理送信記録の異形として検出する (D3011)。
+///
+/// 代理人が送った元メールボックスを刻む欄は単一宛名 — `@` を欠く
+/// 値は「代理送信を記録した体裁」の擬態 (org_claim 群の
+/// prefix 検出群に含まれない绿地)。
+fn has_ms_msre_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix(
+            "x-ms-exchange-messagesentrepresentingemailaddress:",
+        ) {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-Parent-Message-Id:` 欄の値が GUID (波括弧許容)
+/// でなければ親識別記録の異形として検出する (D3012)。
+///
+/// 親メッセージ識別子は GUID の単一値 — 形を欠く値は
+/// 「親識別を記録した体裁」の擬態。
+fn has_ms_pmi_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-parent-message-id:") {
+            let t = v
+                .trim()
+                .strip_prefix('{')
+                .and_then(|x| x.strip_suffix('}'))
+                .unwrap_or_else(|| v.trim());
+            if !is_ms_guid(t) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-ForwardedLoop:` 欄の値が宛名形でなければ
+/// 転送巡回記録の異形として検出する (D3013)。
+///
+/// 転送ループ検知のために巡回先を刻む欄は宛名値 — `@` を欠く
+/// 値は「巡回を記録した体裁」の擬態。
+fn has_ms_fwdl_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-forwardedloop:") {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Exchange-Processed-By-BccFoldering:` 欄の値が GUID (波括弧許容)
+/// でなければ Bcc 処理記録の異形として検出する (D3014)。
+///
+/// Bcc 分解処理を担当したモジュールを刻む欄は GUID の単一値 —
+/// 形を欠く値は「Bcc 処理を記録した体裁」の擬態。
+fn has_xep_bcf_bad(bytes: &[u8]) -> bool {
+    let logical = ms2_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) =
+            low.strip_prefix("x-exchange-processed-by-bccfoldering:")
+        {
+            let t = v
+                .trim()
+                .strip_prefix('{')
+                .and_then(|x| x.strip_suffix('}'))
+                .unwrap_or_else(|| v.trim());
+            if !is_ms_guid(t) {
                 return true;
             }
         }
@@ -132242,6 +132545,134 @@ fn 投稿機欄が異形なら発火() {
             b"Mail-Followup-To: poster\r\n\r\nbody"
         ));
         assert!(!has_list_followup_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3007_xip_asf_bad() {
+        assert!(has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered: yes\r\n\r\nbody"
+        ));
+        assert!(has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered:\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered: true\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asf_bad(
+            b"X-IronPort-Anti-Spam-Filtered: false\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asf_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3008_xip_av_bad() {
+        assert!(has_xip_av_bad(
+            b"X-IronPort-AV: clean\r\n\r\nbody"
+        ));
+        assert!(has_xip_av_bad(
+            b"X-IronPort-AV: E=Sophos; i=\r\n\r\nbody"
+        ));
+        assert!(has_xip_av_bad(b"X-IronPort-AV:\r\n\r\nbody"));
+        assert!(!has_xip_av_bad(
+            b"X-IronPort-AV: E=Sophos;i=\"4.98\"\r\n\r\nbody"
+        ));
+        assert!(!has_xip_av_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3009_xip_asr_bad() {
+        assert!(has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result: clean\r\n\r\nbody"
+        ));
+        assert!(has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result: iQRJ HQBg AAA\r\n\r\nbody"
+        ));
+        assert!(has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result:\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asr_bad(
+            b"X-IronPort-Anti-Spam-Result: iQRJHQBgAAAADAQAMNzk3Ljk2MTY5ODc2\r\n\r\nbody"
+        ));
+        assert!(!has_xip_asr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3010_xpp_sdet_bad() {
+        assert!(has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details: mail is clean\r\n\r\nbody"
+        ));
+        assert!(has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details: rule=notspam bogus\r\n\r\nbody"
+        ));
+        assert!(has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details:\r\n\r\nbody"
+        ));
+        assert!(!has_xpp_sdet_bad(
+            b"X-Proofpoint-Spam-Details: rule=notspam score=98 suspectscore=98 classifier=spam\r\n\r\nbody"
+        ));
+        assert!(!has_xpp_sdet_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3011_ms_msre_bad() {
+        assert!(has_ms_msre_bad(
+            b"X-MS-Exchange-MessageSentRepresentingEmailAddress: delegate\r\n\r\nbody"
+        ));
+        assert!(has_ms_msre_bad(
+            b"X-MS-Exchange-MessageSentRepresentingEmailAddress:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_msre_bad(
+            b"X-MS-Exchange-MessageSentRepresentingEmailAddress: boss@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_ms_msre_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3012_ms_pmi_bad() {
+        assert!(has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id: parent\r\n\r\nbody"
+        ));
+        assert!(has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pmi_bad(
+            b"X-MS-Exchange-Parent-Message-Id: {12345678-1234-1234-1234-123456789012}\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pmi_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3013_ms_fwdl_bad() {
+        assert!(has_ms_fwdl_bad(
+            b"X-MS-Exchange-ForwardedLoop: loop\r\n\r\nbody"
+        ));
+        assert!(has_ms_fwdl_bad(
+            b"X-MS-Exchange-ForwardedLoop:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_fwdl_bad(
+            b"X-MS-Exchange-ForwardedLoop: user@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_ms_fwdl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3014_xep_bcf_bad() {
+        assert!(has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering: bcc\r\n\r\nbody"
+        ));
+        assert!(has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering:\r\n\r\nbody"
+        ));
+        assert!(!has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_xep_bcf_bad(
+            b"X-Exchange-Processed-By-BccFoldering: {12345678-1234-1234-1234-123456789012}\r\n\r\nbody"
+        ));
+        assert!(!has_xep_bcf_bad(b"From: a@b\r\n\r\nbody"));
     }
 
     #[test]
