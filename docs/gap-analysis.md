@@ -2346,3 +2346,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3000 | X-MS-Exchange-Organization-AuthMechanism: の非方式番号値 (認証方式欄の値異形) | 方式ずれ |
 | D3001 | X-MS-Office365-Filtering-Correlation-Id: の非GUID値 (関連識別欄の値異形) | 識別ずれ |
 | D3002 | X-MS-Exchange-Organization-ExpirationStartTime: の非日時形値 (失効開始欄の値異形) | 失効ずれ |
+| D3063 | X-SocketLabs-MessageId:/InjectionId:/Stream-Id: の非トークン値 (配送印欄の値異形) | 配送印ずれ |
+| D3064 | X-Canit-Stats-ID:/X-CanItPRO-Stream: 系の非トークン値 (処理印欄の値異形) | 処理印ずれ |
+| D3065 | X-Originating-Client: の非トークン値 (発信端末印欄の値異形) | 端末印ずれ |
+| D3066 | X-Mailing-Id:/X-MailingID: 系の非トークン値 (郵送識別印欄の値異形) | 郵送印ずれ |

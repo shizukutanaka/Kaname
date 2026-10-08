@@ -4,6 +4,10 @@
 ### Security — D3000: `X-MS-Exchange-Organization-AuthMechanism:` 欄の非方式番号値 (1–2桁の 0–10 以外) を認証方式ずれとして検出 — `Envelope` に `ms_authmech_bad` を追加。
 ### Security — D3001: `X-MS-Office365-Filtering-Correlation-Id:` 欄の非GUID値を関連識別ずれとして検出 — `Envelope` に `ms_corr_id_bad` を追加。
 ### Security — D3002: `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の非日時形値を失効開始ずれとして検出 — `Envelope` に `ms_exp_time_bad` を追加。
+### Security — D3063: `X-SocketLabs-MessageId:`/`InjectionId:`/`Stream-Id:` 欄の非トークン値を配送印ずれとして検出 — `Envelope` に `xsl_bad` を追加。
+### Security — D3064: `X-Canit-Stats-ID:`/`X-CanItPRO-Stream:` 系欄の非トークン値を処理印ずれとして検出 — `Envelope` に `xcit_bad` を追加。
+### Security — D3065: `X-Originating-Client:` 欄の非トークン値を発信端末印ずれとして検出 — `Envelope` に `xoc_bad` を追加。
+### Security — D3066: `X-Mailing-Id:`/`X-MailingID:` 系欄の非トークン値を郵送識別印ずれとして検出 — `Envelope` に `xmlid_bad` を追加。
 
 ### Security — D3003: `X-MS-Exchange-CrossTenant-Id:` 欄の非GUID値を越境識別ずれとして検出 — `Envelope` に `ms_ct_id_bad` を追加。
 ### Security — D3004: `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の非 `[IP]` 値を越境接続ずれとして検出 — `Envelope` に `ms_ct_ip_bad` を追加。
