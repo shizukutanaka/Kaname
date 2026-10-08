@@ -2350,3 +2350,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3040 | X-SG-ID:/X-SG-EID: の非長トークン値 (配送識別欄の値異形) | 識別ずれ |
 | D3041 | PICS-Label: の非評価構文値 (評価記録欄の値異形) | 評価ずれ |
 | D3042 | Old-Return-Path:/X-Old-Return-Path: の非宛名値 (返送記録欄の値異形) | 返送ずれ |
+| D3067 | Relay-Version: の非 version site 値 (中継版号欄の値異形) | 中継記録ずれ |
+| D3068 | Posting-Version: の非 version site 値 (投稿版号欄の値異形) | 投稿記録ずれ |
+| D3069 | Date-Received: の非日時形値 (到着日時欄の値異形) | 到着記録ずれ |
+| D3070 | X-Delivered-To: の非宛名形値 (配達宛先欄の値異形) | 配達記録ずれ |
