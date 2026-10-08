@@ -3355,6 +3355,14 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `Relay-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
+    pub rver_bad: bool,
+    /// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
+    pub pver_bad: bool,
+    /// `Date-Received:` 欄の値が日時形でない (D3069 — 到着記録ずれ)。
+    pub drcv_bad: bool,
+    /// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
+    pub xdto_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7332,6 +7340,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let rver_bad = has_rver_bad(bytes);
+    let pver_bad = has_pver_bad(bytes);
+    let drcv_bad = has_drcv_bad(bytes);
+    let xdto_bad = has_xdto_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -9015,6 +9027,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        rver_bad,
+        pver_bad,
+        drcv_bad,
+        xdto_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -52588,6 +52604,101 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
         }
     }
     false
+}
+
+fn dc_hdr_end(bytes: &[u8]) -> usize {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    end
+}
+
+fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> bool {
+    let end = dc_hdr_end(bytes);
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        for name in names {
+            if let Some(v) = low.strip_prefix(name) {
+                if f(v.trim()) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `version site` 形でなければ真 (NNTP 中継・投稿記録用)。
+fn dc_ver_site_bad(t: &str) -> bool {
+    let w: Vec<&str> = t.split_whitespace().collect();
+    w.len() < 2
+        || !(w[0].chars().any(|c| c.is_ascii_digit())
+            && (w[0].contains('.')
+                || w[0].chars().any(|c| c.is_ascii_alphabetic())))
+        || !w[1]
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        || w[1].chars().any(|c| c == '@')
+}
+
+/// `Relay-Version:`/`Posting-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
+fn has_rver_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["relay-version:"], dc_ver_site_bad)
+}
+
+/// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
+fn has_pver_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["posting-version:"], dc_ver_site_bad)
+}
+
+/// `Date-Received:` 欄の値が日時形でない (D3069 — 到着記録ずれ)。
+fn has_drcv_bad(bytes: &[u8]) -> bool {
+    let months = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    dc_each(bytes, &["date-received:"], |t| {
+        let w: Vec<&str> = t.split_whitespace().collect();
+        let has_mon = w.iter().any(|p| {
+            let p = p.trim_end_matches(',');
+            months.iter().any(|m| p == *m)
+        });
+        let has_year = w.iter().any(|p| {
+            p.trim_end_matches(',').len() == 4
+                && p.trim_end_matches(',').chars().all(|c| c.is_ascii_digit())
+        });
+        let has_time = w.iter().any(|p| {
+            let t: Vec<&str> = p.split(':').collect();
+            t.len() == 3
+                && t.iter()
+                    .all(|s| (1..=2).contains(&s.len()) && s.chars().all(|c| c.is_ascii_digit()))
+        });
+        !(has_mon && has_year && has_time)
+    })
+}
+
+/// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
+fn has_xdto_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-delivered-to:"], |t| {
+        !t.contains('@') || t.starts_with('@') || t.ends_with('@')
+    })
 }
 
 /// (D2635)。
@@ -133200,3 +133311,42 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3067_rver_bad() {
+        assert!(has_rver_bad(b"Relay-Version: onlyversion\r\n\r\nbody"));
+        assert!(has_rver_bad(b"Relay-Version: site host\r\n\r\nbody"));
+        assert!(has_rver_bad(b"Relay-Version:\r\n\r\nbody"));
+        assert!(!has_rver_bad(b"Relay-Version: B2.12 news.example.com\r\n\r\nbody"));
+        assert!(!has_rver_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3068_pver_bad() {
+        assert!(has_pver_bad(b"Posting-Version: onlyver\r\n\r\nbody"));
+        assert!(has_pver_bad(b"Posting-Version: \r\n\r\nbody"));
+        assert!(!has_pver_bad(b"Posting-Version: B2.4 site.example.org\r\n\r\nbody"));
+        assert!(!has_pver_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3069_drcv_bad() {
+        assert!(has_drcv_bad(b"Date-Received: not a date\r\n\r\nbody"));
+        assert!(has_drcv_bad(b"Date-Received: 2026-10-01\r\n\r\nbody"));
+        assert!(has_drcv_bad(b"Date-Received:\r\n\r\nbody"));
+        assert!(!has_drcv_bad(
+            b"Date-Received: Wed, 01 Oct 2026 10:30:00 +0000\r\n\r\nbody"
+        ));
+        assert!(!has_drcv_bad(b"Date-Received: 01 Oct 2026 10:30:00\r\n\r\nbody"));
+        assert!(!has_drcv_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3070_xdto_bad() {
+        assert!(has_xdto_bad(b"X-Delivered-To: not an addr\r\n\r\nbody"));
+        assert!(has_xdto_bad(b"X-Delivered-To: @example.com\r\n\r\nbody"));
+        assert!(has_xdto_bad(b"X-Delivered-To:\r\n\r\nbody"));
+        assert!(!has_xdto_bad(b"X-Delivered-To: user@example.com\r\n\r\nbody"));
+        assert!(!has_xdto_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
