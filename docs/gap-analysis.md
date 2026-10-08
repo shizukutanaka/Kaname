@@ -2330,3 +2330,27 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3020 | Conversion-With-Loss: の語彙外値 (損失変換欄の値異形) | 損失変換ずれ |
 | D3021 | Message-Type: の語彙外値 (報告種別欄の値異形) | 報告種別ずれ |
 | D3022 | Read-Date:/Disclose-Recipients: の異形値 (閲読記録欄の値異形) | 閲読記録ずれ |
+| D3007 | X-IronPort-Anti-Spam-Filtered: の非真偽値 (機器判定欄の値異形) | 判定ずれ |
+| D3008 | X-IronPort-AV: の非 名=値 連接値 (機器検査欄の値異形) | 検査ずれ |
+| D3009 | X-IronPort-Anti-Spam-Result: の非base64形値 (機器結果欄の値異形) | 結果ずれ |
+| D3010 | X-Proofpoint-Spam-Details: の非 名=値 空白連接値 (機器詳細欄の値異形) | 詳細ずれ |
+| D3011 | X-MS-Exchange-MessageSentRepresentingEmailAddress: の非宛名値 (代理送信欄の値異形) | 代理ずれ |
+| D3012 | X-MS-Exchange-Parent-Message-Id: の非GUID値 (親識別欄の値異形) | 識別ずれ |
+| D3013 | X-MS-Exchange-ForwardedLoop: の非宛名値 (転送巡回欄の値異形) | 巡回ずれ |
+| D3014 | X-Exchange-Processed-By-BccFoldering: の非GUID値 (Bcc処理欄の値異形) | 処理ずれ |
+| D2995 | X-MS-PublicTrafficType: の非 Email 値 (輸送種別欄の値異形) | 輸送ずれ |
+| D2996 | X-MS-Exchange-Organization-AuthAs: の語彙外値 (認証主体欄の値異形) | 主体ずれ |
+| D2997 | X-MS-Exchange-CrossTenant-OriginalArrivalTime: の非日時形値 (越境到着欄の値異形) | 越境ずれ |
+| D2998 | X-Forefront-PRVS: の非16進値 (報酬識別欄の値異形) | 識別ずれ |
+| D3003 | X-MS-Exchange-CrossTenant-Id: の非GUID値 (越境識別欄の値異形) | 識別ずれ |
+| D3004 | X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: の非[IP]値 (越境接続欄の値異形) | 接続ずれ |
+| D3005 | X-MS-Exchange-CrossTenant-AuthAs: の語彙外値 (越境認証主体欄の値異形) | 主体ずれ |
+| D3006 | X-MS-Exchange-CrossTenant-AuthSource: の非ホスト名値 (越境認証元欄の値異形) | 認証元ずれ |
+| D2999 | X-MS-Exchange-Organization-MessageDirectionality: の語彙外値 (輸送方向欄の値異形) | 方向ずれ |
+| D3000 | X-MS-Exchange-Organization-AuthMechanism: の非方式番号値 (認証方式欄の値異形) | 方式ずれ |
+| D3001 | X-MS-Office365-Filtering-Correlation-Id: の非GUID値 (関連識別欄の値異形) | 識別ずれ |
+| D3002 | X-MS-Exchange-Organization-ExpirationStartTime: の非日時形値 (失効開始欄の値異形) | 失効ずれ |
+| D3067 | Relay-Version: の非 version site 値 (中継版号欄の値異形) | 中継記録ずれ |
+| D3068 | Posting-Version: の非 version site 値 (投稿版号欄の値異形) | 投稿記録ずれ |
+| D3069 | Date-Received: の非日時形値 (到着日時欄の値異形) | 到着記録ずれ |
+| D3070 | X-Delivered-To: の非宛名形値 (配達宛先欄の値異形) | 配達記録ずれ |

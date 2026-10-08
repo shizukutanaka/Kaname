@@ -4630,3 +4630,42 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 
 問: `Conversion:`/`Conversion-With-Loss:`/`Message-Type:`/`Read-Date:`/`Disclose-Recipients:` の欄があればゲートウェイ交換の規格記録を示すか。
 答: これらは X.400 交換所の通関票 (RFC 2156) — 変換可否は `prohibited`/`allowed`/`allowed with loss` の閉語彙、報告種別は `delivery report` 等の閉語彙、閲読日時は日時形、宛先開示は `yes`/`no`/`prohibited` で、いずれも形が決まっている。どの検出器にも触れられていない完全绿地だったため、形を欠く値を「交換記録を刻んだ体裁」の擬態として D3019–D3022 を追加した。権威の刻印は「値が権威の形をしているか」で問う原則の継続適用。
+
+## ラウンド 470 — 「機器の刻印」の自問自答
+
+問: `X-IronPort-*` や `X-Proofpoint-*` の欄があればゲートウェイ機器が検査済みと信じられるか。
+答: 機器の刻印は形が決まっている — IronPort の判定は真偽値 (`Filtered: true`)、AV 検査は `名=値` の `;` 連接 (`E=Sophos;i="4.98"`)、迷惑結果は長い不透明トークン、Proofpoint の詳細は空白連接の `名=値` 列 (`rule=… score=…`)。形を欠く値は「機器検査を通った体裁」の擬態であり、受信側が自ら刻むべき欄を送信側が自称した上に値まで崩れている。Barracuda 等の prefix は存在検出済みだったが IronPort/Proofpoint は绿地だったため、値文法として D3007–D3010 を追加した。
+
+## ラウンド 471 — 「経路の陪席記録」の自問自答
+
+問: `X-MS-Exchange-MessageSentRepresentingEmailAddress`/`Parent-Message-Id`/`ForwardedLoop`/`X-Exchange-Processed-By-BccFoldering` の欄があれば組織の経路追跡を示すか。
+答: これらは組織の内部機構が刻む陪席記録で形が決まっている — 代理送信元・巡回先は宛名、親識別子・Bcc処理モジュールは GUID。org_claim の prefix 検出群に含まれない绿地だったため、形を欠く値を「経路追跡を刻んだ体裁」の擬態として D3011–D3014 を追加した。権威の刻印は「値が権威の形をしているか」で問う原則の継続適用。
+
+## ラウンド 467 — 「体裁の必須部品と経路が刻む語彙」の自問自答
+
+問: `Autocrypt: addr=a@x` は交渉として成り立つか。`OpenPGP: preference=sign` は鍵を指すか。`Mail-Followup-To: a@x, junk` は宛名列か。Microsoft の輸送記録欄の値は語彙内か。
+答: いずれも必須部品を欠いていた — `Autocrypt:` は `keydata=` 無しに交渉に使えず、`OpenPGP:` は `preference=` だけでは鍵を特定できず、宛名列は要素ごとに問わねば中に非宛名を忍ばせられる。体裁の文法は「部品の有無」まで問う必要があった (Devin Review #803 より修正)。同じ問いを Microsoft 365 の組織処理欄へ向けると — `X-MS-PublicTrafficType:` は `Email` 固定、`AuthAs:` は Internal/Anonymous/External の語彙、CrossTenant-OriginalArrivalTime は日時形、X-Forefront-PRVS は16進値と、権威の刻む値はすべて形が決まっている。存在検出だけでは「語彙外の値を置く擬態」を見逃すため、値文法として D2995–D2998 を追加した。あわせてヘッダ検査の走査範囲を本文全体変換から生バイト境界検出へ変え、大きな本文を持つ入力での解析コストを削った。
+
+## ラウンド 469 — 「越境の証明書」の自問自答
+
+問: `X-MS-Exchange-CrossTenant-*` の欄があれば組織をまたいだ正規の到着を示すか。
+答: 越境記録はテナントID (GUID)・接続IP (`[IP]` リテラル)・認証主体 (Internal/Anonymous/External)・認証元ホスト (FQDN) の4つの形で刻まれる — いずれも形が閉じており、形を欠く値は「正当な越境を演出する擬態」。`x-ms-exchange-crosstenant` の存在検出だけでは語彙外・形を欠く値を見逃すため、値文法として D3003–D3006 を追加した。権威の刻む欄は「値が権威の形をしているか」で問うという同じ原則を、組織内欄 (D2999–D3002) に続き越境欄にも展開した。
+
+## ラウンド 468 — 「権威が刻む語彙と番号」の自問自答
+
+問: `X-MS-Exchange-Organization-*`/`X-MS-Office365-Filtering-*` の欄があれば輸送記録として足りるか。
+答: 欄名の存在と値の正当性は別の問題だった — `MessageDirectionality:` は Originating/Incoming の2語彙、`AuthMechanism:` は 00–10 の番号語彙、`Filtering-Correlation-Id:` は GUID、`ExpirationStartTime:` は日時形と、Exchange の輸送が刻む値はすべて形が閉じている。存在検出 (`has_exchange_org_claim`) だけでは語彙外の値を置く擬態を見逃すため、値文法として D2999–D3002 を追加した。体裁は「欄があること」ではなく「値が権威の刻む形をしていること」で問う — 同じ問いを前ラウンドの暗号・交渉欄 (必須部品の有無) にも当てはめ、指摘された3件のすり抜けを修正した。
+
+## ラウンド 485 — 「配達係の控え」
+
+問: 荷印・焼印を張ったあと、封筒の表に残る空白は。
+答: 配達係の控えだ。`Relay-Version:`/`Posting-Version:` は Usenet 網で各中継局が捺す版号と局名、`Date-Received:` は最終局が捺す到着日時、`X-Delivered-To:` は配達先が自ら捺す実配達記録。いずれも検査が届いていなかった。
+
+問: 控えを読む第一原理は。
+答: 控えは形式が決まっている——版号と局名の二項、月年日時の日時、宛名の一つ。機械が捺す記録は必ず定形を守る。定形を欠く控えは機械の記録ではなく、後から書き添えられた偽記録だ。
+
+問: 4件は要か。
+答: 要る。全てコード内ゼロヒットの完全绿地で、正常値 (`B2.12 news.example.com`/`01 Oct 2026 10:30:00`/`user@example.com`) は不発火、異形のみが発火する。配達係の控えまで読めれば、封筒の移動履歴は隠すところがない。
+
+問: 問い足りない仮定は。
+答: 「古い欄はもう使われないから放っておいていい」。だが Usenet 欄が SMTP メールに現れること自体が異常であり、さらに値が異形なら二重に異常だ。検査の範囲は「あるべき姿」のみでなく「あり得ない姿」にも及ぶ。
