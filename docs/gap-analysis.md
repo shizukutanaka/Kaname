@@ -2354,6 +2354,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3080 | X-Sent-To: の非宛名形値 (配送宛名欄の値異形) | 配送宛名ずれ |
 | D3081 | X-Originating-Domain: の非FQDNトークン値 (発信局名欄の値異形) | 発信局名ずれ |
 | D3082 | X-Message-UUID: の非GUID形値 (配送識別欄の値異形) | 配送識別ずれ |
+| D3099 | X-Barracuda-Envelope-From:/Envelope-To: の非 <>/宛名形値 (検疫網封書欄の値異形) | 検疫網封書ずれ |
+| D3100 | X-Barracuda-Connect-IP: の非IP値 (検疫網接続元欄の値異形) | 検疫網接続元ずれ |
+| D3101 | X-Barracuda-Start-Time: の非数値 (検疫網開始刻印欄の値異形) | 検疫網開始刻印ずれ |
+| D3102 | X-Barracuda-Spam: の非 Yes/No 値 (検疫網迷惑印欄の値異形) | 検疫網迷惑印ずれ |
 | D3071 | X-Primary-IP: の非IPv4値 (発信原局欄の値異形) | 発信原局ずれ |
 | D3072 | X-Old-Message-ID: の非msgid形値 (書換識別欄の値異形) | 書換識別ずれ |
 | D3073 | X-Bounce-Address: の非宛名形値 (返送記録欄の値異形) | 返送記録ずれ |
