@@ -3371,6 +3371,14 @@ pub struct Envelope {
     pub drcv_bad: bool,
     /// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
     pub xdto_bad: bool,
+    /// `X-Primary-IP:` 欄の値が IPv4 形でない (D3071 — 発信原局ずれ)。
+    pub xpip_bad: bool,
+    /// `X-Old-Message-ID:` 欄の値が msgid 形でない (D3072 — 書換識別ずれ)。
+    pub xomsg_bad: bool,
+    /// `X-Bounce-Address:` 欄の値が宛名形でない (D3073 — 返送記録ずれ)。
+    pub xbadrs_bad: bool,
+    /// `X-VHost:` 欄の値が局名トークン形でない (D3074 — 仮想局ずれ)。
+    pub xvhost_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7356,6 +7364,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let pver_bad = has_pver_bad(bytes);
     let drcv_bad = has_drcv_bad(bytes);
     let xdto_bad = has_xdto_bad(bytes);
+    let xpip_bad = has_xpip_bad(bytes);
+    let xomsg_bad = has_xomsg_bad(bytes);
+    let xbadrs_bad = has_xbadrs_bad(bytes);
+    let xvhost_bad = has_xvhost_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -9047,6 +9059,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         pver_bad,
         drcv_bad,
         xdto_bad,
+        xpip_bad,
+        xomsg_bad,
+        xbadrs_bad,
+        xvhost_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -52762,7 +52778,8 @@ fn dc_hdr_end(bytes: &[u8]) -> usize {
 fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> bool {
     let end = dc_hdr_end(bytes);
     let text = String::from_utf8_lossy(&bytes[..end]);
-    for ln in text.lines() {
+    let mut it = text.lines().peekable();
+    while let Some(ln) = it.next() {
         let l = ln.trim_start();
         if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
             continue;
@@ -52770,7 +52787,17 @@ fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> boo
         let low = l.to_lowercase();
         for name in names {
             if let Some(v) = low.strip_prefix(name) {
-                if f(v.trim()) {
+                let mut val = v.trim().to_string();
+                while let Some(nl) = it.peek() {
+                    if nl.starts_with(' ') || nl.starts_with('\t') {
+                        val.push(' ');
+                        val.push_str(nl.trim());
+                        it.next();
+                    } else {
+                        break;
+                    }
+                }
+                if f(&val) {
                     return true;
                 }
             }
@@ -52782,7 +52809,7 @@ fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> boo
 /// `version site` 形でなければ真 (NNTP 中継・投稿記録用)。
 fn dc_ver_site_bad(t: &str) -> bool {
     let w: Vec<&str> = t.split_whitespace().collect();
-    w.len() < 2
+    w.len() != 2
         || !(w[0].chars().any(|c| c.is_ascii_digit())
             && (w[0].contains('.')
                 || w[0].chars().any(|c| c.is_ascii_alphabetic())))
@@ -52830,7 +52857,50 @@ fn has_drcv_bad(bytes: &[u8]) -> bool {
 /// `X-Delivered-To:` 欄の値が宛名形でない (D3070 — 配達記録ずれ)。
 fn has_xdto_bad(bytes: &[u8]) -> bool {
     dc_each(bytes, &["x-delivered-to:"], |t| {
-        !t.contains('@') || t.starts_with('@') || t.ends_with('@')
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-Primary-IP:` 欄の値が IPv4 ドット区切り形でない (D3071 — 発信原局ずれ)。
+fn has_xpip_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-primary-ip:"], |t| {
+        let t = t.trim();
+        let t = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')).unwrap_or(t);
+        let parts: Vec<&str> = t.split('.').collect();
+        parts.len() != 4
+            || !parts.iter().all(|p| {
+                (1..=3).contains(&p.len())
+                    && p.bytes().all(|b| b.is_ascii_digit())
+                    && p.parse::<u16>().map_or(false, |n| n <= 255)
+            })
+    })
+}
+
+/// `X-Old-Message-ID:` 欄の値が `<id@…>` msgid 形でない (D3072 — 書換識別ずれ)。
+fn has_xomsg_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-old-message-id:"], |t| {
+        let t = t.trim();
+        !(t.starts_with('<')
+            && t.ends_with('>')
+            && t.len() > 3
+            && t[1..t.len() - 1].contains('@')
+            && t[1..t.len() - 1].chars().all(|c| c.is_ascii_graphic()))
+    })
+}
+
+/// `X-Bounce-Address:` 欄の値が宛名形でない (D3073 — 返送記録ずれ)。
+fn has_xbadrs_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-bounce-address:"], |t| t.matches('@').count() != 1)
+}
+
+/// `X-VHost:` 欄の値が単一局名トークン形でない (D3074 — 仮想局ずれ)。
+fn has_xvhost_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-vhost:"], |t| {
+        t.is_empty()
+            || t.split_whitespace().count() != 1
+            || !t
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
     })
 }
 
@@ -133493,3 +133563,61 @@ fn 投稿機欄が異形なら発火() {
         assert!(!has_xdto_bad(b"From: a@b\r\n\r\nbody"));
     }
 
+    #[test]
+    fn d3071_xpip_bad() {
+        assert!(has_xpip_bad(b"X-Primary-IP: not.an.ip\r\n\r\nbody"));
+        assert!(has_xpip_bad(b"X-Primary-IP: 999.1.1.1\r\n\r\nbody"));
+        assert!(has_xpip_bad(b"X-Primary-IP:\r\n\r\nbody"));
+        assert!(!has_xpip_bad(b"X-Primary-IP: 192.0.2.1\r\n\r\nbody"));
+        assert!(!has_xpip_bad(b"X-Primary-IP: [192.0.2.1]\r\n\r\nbody"));
+        assert!(!has_xpip_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3072_xomsg_bad() {
+        assert!(has_xomsg_bad(b"X-Old-Message-ID: not msgid\r\n\r\nbody"));
+        assert!(has_xomsg_bad(b"X-Old-Message-ID: <noatsign>\r\n\r\nbody"));
+        assert!(has_xomsg_bad(b"X-Old-Message-ID:\r\n\r\nbody"));
+        assert!(!has_xomsg_bad(
+            b"X-Old-Message-ID: <abc123@news.example>\r\n\r\nbody"
+        ));
+        assert!(!has_xomsg_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3073_xbadrs_bad() {
+        assert!(has_xbadrs_bad(b"X-Bounce-Address: not addr\r\n\r\nbody"));
+        assert!(has_xbadrs_bad(b"X-Bounce-Address: a@@x.com\r\n\r\nbody"));
+        assert!(has_xbadrs_bad(b"X-Bounce-Address:\r\n\r\nbody"));
+        assert!(!has_xbadrs_bad(
+            b"X-Bounce-Address: bounces-42=a.com@b.com\r\n\r\nbody"
+        ));
+        assert!(!has_xbadrs_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3074_xvhost_bad() {
+        assert!(has_xvhost_bad(b"X-VHost: not host name\r\n\r\nbody"));
+        assert!(has_xvhost_bad(b"X-VHost: bad@host\r\n\r\nbody"));
+        assert!(has_xvhost_bad(b"X-VHost:\r\n\r\nbody"));
+        assert!(!has_xvhost_bad(b"X-VHost: mx1.example.com\r\n\r\nbody"));
+        assert!(!has_xvhost_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn r486_review_fixes() {
+        // #822 Devin Review: 折り畳み継続行・二重アット・3語版号を補強
+        assert!(has_xdto_bad(b"X-Delivered-To: user@@example.com\r\n\r\nbody"));
+        assert!(has_xdto_bad(
+            b"X-Delivered-To:\r\n not-an-addr\r\n\r\nbody"
+        ));
+        assert!(has_rver_bad(
+            b"Relay-Version: B2.12 host.example.com extra\r\n\r\nbody"
+        ));
+        assert!(!has_rver_bad(
+            b"Relay-Version: B2.12 host.example.com\r\n\r\nbody"
+        ));
+        assert!(!has_xdto_bad(
+            b"X-Delivered-To:\r\n user@example.com\r\n\r\nbody"
+        ));
+    }
