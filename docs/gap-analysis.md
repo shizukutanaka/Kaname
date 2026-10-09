@@ -2326,6 +2326,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2992 | OpenPGP: の非 名=値/鍵要素値 (鍵識別欄の値異形) | 鍵識別ずれ |
 | D2993 | Content-Return: の語彙外値 (本文返却欄の値異形) | 返却ずれ |
 | D2994 | Mail-Followup-To:/Mail-Reply-To: の非宛名値 (追従先欄の値異形) | 追従ずれ |
+| D3015 | Content-Translation-Type: の語彙外値 (翻訳種別欄の値異形) | 翻訳ずれ |
+| D3016 | Content-Duration: の非数値 (長尺欄の値異形) | 長尺ずれ |
+| D3017 | Content-Script-Type:/Content-Style-Type: の非媒体型値 (既定媒型欄の値異形) | 媒型ずれ |
+| D3018 | X-SES-Outgoing: の非版号印値 (送出記録欄の値異形) | 送出ずれ |
 | D3007 | X-IronPort-Anti-Spam-Filtered: の非真偽値 (機器判定欄の値異形) | 判定ずれ |
 | D3008 | X-IronPort-AV: の非 名=値 連接値 (機器検査欄の値異形) | 検査ずれ |
 | D3009 | X-IronPort-Anti-Spam-Result: の非base64形値 (機器結果欄の値異形) | 結果ずれ |

@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3015: `Content-Translation-Type:` 欄の語彙外値 (`8BIT`/`7BIT`/`BINARY` 以外) を翻訳ずれとして検出 — `Envelope` に `content_ttype_bad` を追加。
+### Security — D3016: `Content-Duration:` 欄の非数値を長尺ずれとして検出 — `Envelope` に `content_dur_bad` を追加。
+### Security — D3017: `Content-Script-Type:`/`Content-Style-Type:` 欄の非 `型/下位型` 値を媒型ずれとして検出 — `Envelope` に `content_styp_bad` を追加。
+### Security — D3018: `X-SES-Outgoing:` 欄の非 `YYYY.MM.DD-NN.NN` 版号印値を送出ずれとして検出 — `Envelope` に `x_ses_bad` を追加。
+
 ### Security — D2999: `X-MS-Exchange-Organization-MessageDirectionality:` 欄の語彙外値 (`Originating`/`Incoming` 以外) を輸送方向ずれとして検出 — `Envelope` に `ms_dir_bad` を追加。
 ### Security — D3000: `X-MS-Exchange-Organization-AuthMechanism:` 欄の非方式番号値 (1–2桁の 0–10 以外) を認証方式ずれとして検出 — `Envelope` に `ms_authmech_bad` を追加。
 ### Security — D3001: `X-MS-Office365-Filtering-Correlation-Id:` 欄の非GUID値を関連識別ずれとして検出 — `Envelope` に `ms_corr_id_bad` を追加。

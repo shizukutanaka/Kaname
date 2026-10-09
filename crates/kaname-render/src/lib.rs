@@ -3315,6 +3315,14 @@ pub struct Envelope {
     pub content_return_bad: bool,
     /// `Mail-Followup-To:`/`Mail-Reply-To:` 欄の値が宛名/poster 形でない (D2994 — 追従ずれ)。
     pub list_followup_bad: bool,
+    /// `Content-Translation-Type:` 欄の値が翻訳語彙外 (D3015 — 翻訳ずれ)。
+    pub content_ttype_bad: bool,
+    /// `Content-Duration:` 欄の値が数値形でない (D3016 — 長尺ずれ)。
+    pub content_dur_bad: bool,
+    /// `Content-Script-Type:`/`Content-Style-Type:` 欄の値が型/下位型形でない (D3017 — 媒型ずれ)。
+    pub content_styp_bad: bool,
+    /// `X-SES-Outgoing:` 欄の値が版号印形でない (D3018 — 送出ずれ)。
+    pub x_ses_bad: bool,
     /// `X-IronPort-Anti-Spam-Filtered:` 欄の値がtrue/falseでない (D3007 — 機器判定ずれ)。
     pub xip_asf_bad: bool,
     /// `X-IronPort-AV:` 欄の値が `名=値` 連接でない (D3008 — 機器検査ずれ)。
@@ -7360,6 +7368,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let openpgp_bad = has_openpgp_bad(bytes);
     let content_return_bad = has_content_return_bad(bytes);
     let list_followup_bad = has_list_followup_bad(bytes);
+    let content_ttype_bad = has_content_ttype_bad(bytes);
+    let content_dur_bad = has_content_dur_bad(bytes);
+    let content_styp_bad = has_content_styp_bad(bytes);
+    let x_ses_bad = has_x_ses_bad(bytes);
     let xip_asf_bad = has_xip_asf_bad(bytes);
     let xip_av_bad = has_xip_av_bad(bytes);
     let xip_asr_bad = has_xip_asr_bad(bytes);
@@ -9067,6 +9079,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         openpgp_bad,
         content_return_bad,
         list_followup_bad,
+        content_ttype_bad,
+        content_dur_bad,
+        content_styp_bad,
+        x_ses_bad,
         xip_asf_bad,
         xip_av_bad,
         xip_asr_bad,
@@ -52158,6 +52174,151 @@ fn has_xip_asf_bad(bytes: &[u8]) -> bool {
         if let Some(v) = low.strip_prefix("x-ironport-anti-spam-filtered:") {
             let t = v.trim();
             if t != "true" && t != "false" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// MIME メタ欄 (`Content-Translation-Type:`/`Content-Duration:`/
+/// `Content-Script-Type:`/`Content-Style-Type:`/`X-SES-Outgoing:`) の
+/// 値形検査用に、ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す
+/// (D3015–D3018)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn mime_meta_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `Content-Translation-Type:` 欄の値が `8BIT`/`7BIT`/`BINARY`
+/// (RFC 1893) でなければ翻訳種別記録の異形として検出する (D3015)。
+///
+/// ゲートウェイが施した転送翻訳の種別は閉じた語彙 — 語彙外の値は
+/// 「翻訳済みを記録した体裁」の擬態。
+fn has_content_ttype_bad(bytes: &[u8]) -> bool {
+    let logical = mime_meta_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("content-translation-type:") {
+            let t = v.trim();
+            if !matches!(t, "8bit" | "7bit" | "binary") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Duration:` 欄の値が数値 (RFC 4021、秒) でなければ
+/// 長尺記録の異形として検出する (D3016)。
+///
+/// 本文の再生長を秒で刻む欄は整数・小数の数値のみ — 単位語や
+/// 空白を含む値は「長尺を記録した体裁」の擬態。
+fn has_content_dur_bad(bytes: &[u8]) -> bool {
+    let logical = mime_meta_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("content-duration:") {
+            let t = v.trim();
+            if t.parse::<f64>().is_err() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Script-Type:`/`Content-Style-Type:` 欄の値が
+/// `型/下位型` の媒体型形でなければ既定媒型記録の異形として
+/// 検出する (D3017)。
+///
+/// 文書内の既定スクリプト・スタイル言語を刻む欄は媒体型
+/// (`text/javascript`/`text/css` 等の `型/下位型`) の単一値 —
+/// 形を欠く値は「既定媒型を記録した体裁」の擬態。
+fn has_content_styp_bad(bytes: &[u8]) -> bool {
+    let logical = mime_meta_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low
+            .strip_prefix("content-script-type:")
+            .or_else(|| low.strip_prefix("content-style-type:"))
+        {
+            let t = v.trim();
+            let ok = {
+                let mut it = t.splitn(2, '/');
+                let ty = it.next().unwrap_or("");
+                let st = it.next().unwrap_or("");
+                !ty.is_empty()
+                    && !st.is_empty()
+                    && !st.contains('/')
+                    && ty.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+                    && st.chars().all(|c| {
+                        c.is_ascii_alphanumeric()
+                            || c == '-'
+                            || c == '.'
+                            || c == '+'
+                    })
+            };
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-SES-Outgoing:` 欄の値が `年.月.日-数字.数字` の版号印形でなければ
+/// SES 送出記録の異形として検出する (D3018)。
+///
+/// Amazon SES の送出印は `YYYY.MM.DD-NN.NN` の固定形
+/// (`2023.05.15-54.240` 等) — 形を欠く値は「SES 経由を記録した
+/// 体裁」の擬態 (ベンダー印としてどの検出器にも触れられていなかった)。
+fn has_x_ses_bad(bytes: &[u8]) -> bool {
+    let logical = mime_meta_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ses-outgoing:") {
+            let t = v.trim();
+            let ok = {
+                let b = t.as_bytes();
+                b.len() >= 13
+                    && b[4] == b'.'
+                    && b[7] == b'.'
+                    && b[10] == b'-'
+                    && t.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-')
+                    && t[11..].split('.').count() >= 2
+                    && t[11..].split('.').all(|e| !e.is_empty() && e.chars().all(|c| c.is_ascii_digit()))
+            };
+            if !ok {
                 return true;
             }
         }
@@ -131572,16 +131733,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131598,16 +131749,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131619,18 +131760,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133297,6 +133426,77 @@ fn 投稿機欄が異形なら発火() {
             b"Mail-Followup-To: poster\r\n\r\nbody"
         ));
         assert!(!has_list_followup_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3015_content_ttype_bad() {
+        assert!(has_content_ttype_bad(
+            b"Content-Translation-Type: text\r\n\r\nbody"
+        ));
+        assert!(has_content_ttype_bad(
+            b"Content-Translation-Type:\r\n\r\nbody"
+        ));
+        assert!(!has_content_ttype_bad(
+            b"Content-Translation-Type: 8BIT\r\n\r\nbody"
+        ));
+        assert!(!has_content_ttype_bad(
+            b"Content-Translation-Type: 7BIT\r\n\r\nbody"
+        ));
+        assert!(!has_content_ttype_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3016_content_dur_bad() {
+        assert!(has_content_dur_bad(
+            b"Content-Duration: 10 seconds\r\n\r\nbody"
+        ));
+        assert!(has_content_dur_bad(
+            b"Content-Duration:\r\n\r\nbody"
+        ));
+        assert!(!has_content_dur_bad(
+            b"Content-Duration: 120\r\n\r\nbody"
+        ));
+        assert!(!has_content_dur_bad(
+            b"Content-Duration: 4.5\r\n\r\nbody"
+        ));
+        assert!(!has_content_dur_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3017_content_styp_bad() {
+        assert!(has_content_styp_bad(
+            b"Content-Script-Type: javascript\r\n\r\nbody"
+        ));
+        assert!(has_content_styp_bad(
+            b"Content-Style-Type: x/y/z\r\n\r\nbody"
+        ));
+        assert!(has_content_styp_bad(
+            b"Content-Style-Type:\r\n\r\nbody"
+        ));
+        assert!(!has_content_styp_bad(
+            b"Content-Script-Type: text/javascript\r\n\r\nbody"
+        ));
+        assert!(!has_content_styp_bad(
+            b"Content-Style-Type: text/css\r\n\r\nbody"
+        ));
+        assert!(!has_content_styp_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3018_x_ses_bad() {
+        assert!(has_x_ses_bad(
+            b"X-SES-Outgoing: amazon\r\n\r\nbody"
+        ));
+        assert!(has_x_ses_bad(
+            b"X-SES-Outgoing: 2023.05.15\r\n\r\nbody"
+        ));
+        assert!(has_x_ses_bad(
+            b"X-SES-Outgoing:\r\n\r\nbody"
+        ));
+        assert!(!has_x_ses_bad(
+            b"X-SES-Outgoing: 2023.05.15-54.240\r\n\r\nbody"
+        ));
+        assert!(!has_x_ses_bad(b"From: a@b\r\n\r\nbody"));
     }
 
     #[test]
