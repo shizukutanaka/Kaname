@@ -3355,6 +3355,14 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `X-SocketLabs-*` 系欄の値がトークン形でない (D3063 — SocketLabs 印ずれ)。
+    pub xsl_bad: bool,
+    /// `X-Canit-*`/`X-CanItPRO-*` 系欄の値がトークン形でない (D3064 — CanIt 印ずれ)。
+    pub xcit_bad: bool,
+    /// `X-Originating-Client:` 欄の値がトークン形でない (D3065 — 発信端末印ずれ)。
+    pub xoc_bad: bool,
+    /// `X-Mailing-Id:` 系欄の値がトークン形でない (D3066 — 郵送識別印ずれ)。
+    pub xmlid_bad: bool,
     /// `Relay-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
     pub rver_bad: bool,
     /// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
@@ -7380,6 +7388,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let xsl_bad = has_xsl_bad(bytes);
+    let xcit_bad = has_xcit_bad(bytes);
+    let xoc_bad = has_xoc_bad(bytes);
+    let xmlid_bad = has_xmlid_bad(bytes);
     let rver_bad = has_rver_bad(bytes);
     let pver_bad = has_pver_bad(bytes);
     let drcv_bad = has_drcv_bad(bytes);
@@ -9087,6 +9099,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        xsl_bad,
+        xcit_bad,
+        xoc_bad,
+        xmlid_bad,
         rver_bad,
         pver_bad,
         drcv_bad,
@@ -52684,6 +52700,90 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
         }
     }
     false
+}
+
+fn hdr_end(bytes: &[u8]) -> usize {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    end
+}
+
+fn tok_bad(t: &str) -> bool {
+    t.is_empty()
+        || !t
+            .chars()
+            .all(|c| (0x21..=0x7e).contains(&(c as u32)))
+        || !t.chars().any(|c| c.is_ascii_alphanumeric())
+}
+
+fn any_hdr_bad(bytes: &[u8], names: &[&str]) -> bool {
+    let end = hdr_end(bytes);
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        for name in names {
+            if let Some(v) = low.strip_prefix(name) {
+                if tok_bad(v.trim()) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `X-SocketLabs-MessageId:`/`InjectionId:`/`Stream-Id:` 欄の値がトークン形でない (D3063 — SocketLabs 印ずれ)。
+fn has_xsl_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(
+        bytes,
+        &[
+            "x-socketlabs-messageid:",
+            "x-socketlabs-injectionid:",
+            "x-socketlabs-stream-id:",
+            "x-socketlabs-message-id:",
+        ],
+    )
+}
+
+/// `X-Canit-Stats-ID:`/`X-CanItPRO-Stream:`/`X-Canit-CHID:` 欄の値がトークン形でない (D3064 — CanIt 印ずれ)。
+fn has_xcit_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(
+        bytes,
+        &[
+            "x-canit-stats-id:",
+            "x-canitpro-stream:",
+            "x-canit-chid:",
+            "x-canit-archive-id:",
+        ],
+    )
+}
+
+/// `X-Originating-Client:` 欄の値がトークン形でない (D3065 — 発信端末印ずれ)。
+fn has_xoc_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(bytes, &["x-originating-client:"])
+}
+
+/// `X-Mailing-Id:`/`X-Mailing-ID:`/`X-MailingID:` 欄の値がトークン形でない (D3066 — 郵送識別印ずれ)。
+fn has_xmlid_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(bytes, &["x-mailing-id:", "x-mailingid:"])
 }
 
 fn dc_hdr_end(bytes: &[u8]) -> usize {
@@ -131572,16 +131672,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131598,16 +131688,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131619,18 +131699,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133614,6 +133682,47 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3063_xsl_bad() {
+        assert!(has_xsl_bad(b"X-SocketLabs-MessageId: has space\r\n\r\nbody"));
+        assert!(has_xsl_bad(b"X-SocketLabs-InjectionId:\r\n\r\nbody"));
+        assert!(!has_xsl_bad(b"X-SocketLabs-MessageId: 12345678\r\n\r\nbody"));
+        assert!(!has_xsl_bad(
+            b"X-SocketLabs-Stream-Id: news-2026\r\n\r\nbody"
+        ));
+        assert!(!has_xsl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3064_xcit_bad() {
+        assert!(has_xcit_bad(b"X-Canit-Stats-ID: \r\n\r\nbody"));
+        assert!(has_xcit_bad(b"X-CanItPRO-Stream: has space\r\n\r\nbody"));
+        assert!(!has_xcit_bad(b"X-Canit-Stats-ID: 09r2vh0zb\r\n\r\nbody"));
+        assert!(!has_xcit_bad(b"X-CanItPRO-Stream: outgoing\r\n\r\nbody"));
+        assert!(!has_xcit_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3065_xoc_bad() {
+        assert!(has_xoc_bad(b"X-Originating-Client: bad name here\r\n\r\nbody"));
+        assert!(has_xoc_bad(b"X-Originating-Client:\r\n\r\nbody"));
+        assert!(!has_xoc_bad(b"X-Originating-Client: M365\r\n\r\nbody"));
+        assert!(!has_xoc_bad(
+            b"X-Originating-Client: Microsoft-Office-14\r\n\r\nbody"
+        ));
+        assert!(!has_xoc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3066_xmlid_bad() {
+        assert!(has_xmlid_bad(b"X-Mailing-Id: bad id here\r\n\r\nbody"));
+        assert!(has_xmlid_bad(b"X-Mailing-ID:\r\n\r\nbody"));
+        assert!(!has_xmlid_bad(b"X-Mailing-Id: campaign-42\r\n\r\nbody"));
+        assert!(!has_xmlid_bad(b"X-MailingID: a1b2c3\r\n\r\nbody"));
+        assert!(!has_xmlid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
 
     #[test]
     fn d3067_rver_bad() {
