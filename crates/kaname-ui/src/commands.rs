@@ -9445,6 +9445,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.ms_ct_asrc_bad {
         render_risks.push("越境認証元欄の値がホスト名形でないです—認証元の扱いで経路評価がずれます".to_string());
     }
+    if env.x_amzrc_bad {
+        render_risks.push("元宛記録欄の値が宛名形でないです—元宛の扱いで経路評価がずれます".to_string());
+    }
+    if env.x_fbl_bad {
+        render_risks.push("報告機名欄の値がトークン形でないです—報告機の扱いで照合がずれます".to_string());
+    }
+    if env.x_mcs_bad {
+        render_risks.push("疑い度欄の値が整数形でないです—疑い度の扱いで発信元評価がずれます".to_string());
+    }
+    if env.x_hamr_bad {
+        render_risks.push("判定経緯欄の値が報告構造形でないです—経緯の扱いで発信元評価がずれます".to_string());
+    }
     if env.ms_dir_bad {
         render_risks.push("輸送方向欄の値が語彙外です—方向判定の扱いで発信元評価がずれます".to_string());
     }

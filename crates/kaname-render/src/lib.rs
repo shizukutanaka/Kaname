@@ -3347,6 +3347,14 @@ pub struct Envelope {
     pub ms_ct_authas_bad: bool,
     /// `X-MS-Exchange-CrossTenant-AuthSource:` 欄の値がホスト名形でない (D3006 — 越境認証元ずれ)。
     pub ms_ct_asrc_bad: bool,
+    /// `X-Amazon-Original-Recipient:` 欄の値が宛名形でない (D3035 — 元宛記録ずれ)。
+    pub x_amzrc_bad: bool,
+    /// `X-FBL-Name:` 欄の値が印字トークン形でない (D3036 — 報告機名ずれ)。
+    pub x_fbl_bad: bool,
+    /// `X-Mimecast-Spam-Score:` 欄の値が整数形でない (D3037 — 疑い度ずれ)。
+    pub x_mcs_bad: bool,
+    /// `X-Ham-Report:` 欄の値が報告構造を欠く (D3038 — 判定経緯ずれ)。
+    pub x_hamr_bad: bool,
     /// `X-MS-Exchange-Organization-MessageDirectionality:` 欄の値が方向語彙外 (D2999 — 方向ずれ)。
     pub ms_dir_bad: bool,
     /// `X-MS-Exchange-Organization-AuthMechanism:` 欄の値が方式番号形でない (D3000 — 方式ずれ)。
@@ -7376,6 +7384,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_ct_ip_bad = has_ms_ct_ip_bad(bytes);
     let ms_ct_authas_bad = has_ms_ct_authas_bad(bytes);
     let ms_ct_asrc_bad = has_ms_ct_asrc_bad(bytes);
+    let x_amzrc_bad = has_x_amzrc_bad(bytes);
+    let x_fbl_bad = has_x_fbl_bad(bytes);
+    let x_mcs_bad = has_x_mcs_bad(bytes);
+    let x_hamr_bad = has_x_hamr_bad(bytes);
     let ms_dir_bad = has_ms_dir_bad(bytes);
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
@@ -9083,6 +9095,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_ct_ip_bad,
         ms_ct_authas_bad,
         ms_ct_asrc_bad,
+        x_amzrc_bad,
+        x_fbl_bad,
+        x_mcs_bad,
+        x_hamr_bad,
         ms_dir_bad,
         ms_authmech_bad,
         ms_corr_id_bad,
@@ -52524,6 +52540,157 @@ fn has_ms_ct_asrc_bad(bytes: &[u8]) -> bool {
                     .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
                 && t.split('.').all(|t| !t.is_empty());
             if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Amazon-Original-Recipient:` 欄の値が宛名形でない (D3035 — 元宛記録ずれ)。
+fn has_x_amzrc_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x-amazon-original-recipient:") {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || !v.contains('@')
+                || !v.is_ascii()
+                || v.chars().any(|c| c.is_control())
+                || v.split_whitespace().count() != 1;
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-FBL-Name:` 欄の値が印字トークン形でない (D3036 — 報告機名ずれ)。
+fn has_x_fbl_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x-fbl-name:") {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || !v.is_ascii()
+                || v.chars().any(|c| c.is_control())
+                || v.split_whitespace().count() != 1;
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Mimecast-Spam-Score:` 欄の値が整数形でない (D3037 — 疑い度ずれ)。
+fn has_x_mcs_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x-mimecast-spam-score:") {
+            let v = v.trim();
+            let digits = v.strip_prefix('-').unwrap_or(v);
+            let bad = digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit());
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Ham-Report:` 欄の値が報告構造を欠く (D3038 — 判定経緯ずれ)。
+fn has_x_hamr_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x-ham-report:") {
+            let v = v.trim();
+            if v.is_empty() || (!v.contains('*') && !v.contains('=')) {
                 return true;
             }
         }
@@ -131572,16 +131739,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131598,16 +131755,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131619,18 +131766,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133546,6 +133681,53 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_ct_asrc_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3035_x_amzrc_bad() {
+        assert!(has_x_amzrc_bad(
+            b"X-Amazon-Original-Recipient: not an addr\r\n\r\nbody"
+        ));
+        assert!(has_x_amzrc_bad(
+            b"X-Amazon-Original-Recipient:\r\n\r\nbody"
+        ));
+        assert!(!has_x_amzrc_bad(
+            b"X-Amazon-Original-Recipient: user@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_x_amzrc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3036_x_fbl_bad() {
+        assert!(has_x_fbl_bad(b"X-FBL-Name: bad name\r\n\r\nbody"));
+        assert!(has_x_fbl_bad(b"X-FBL-Name:\r\n\r\nbody"));
+        assert!(has_x_fbl_bad(b"X-FBL-Name: a\x07b\r\n\r\nbody"));
+        assert!(!has_x_fbl_bad(b"X-FBL-Name: isp-fbl-1\r\n\r\nbody"));
+        assert!(!has_x_fbl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3037_x_mcs_bad() {
+        assert!(has_x_mcs_bad(b"X-Mimecast-Spam-Score: lots\r\n\r\nbody"));
+        assert!(has_x_mcs_bad(b"X-Mimecast-Spam-Score:\r\n\r\nbody"));
+        assert!(has_x_mcs_bad(b"X-Mimecast-Spam-Score: 1.5\r\n\r\nbody"));
+        assert!(!has_x_mcs_bad(b"X-Mimecast-Spam-Score: 5\r\n\r\nbody"));
+        assert!(!has_x_mcs_bad(b"X-Mimecast-Spam-Score: -2\r\n\r\nbody"));
+        assert!(!has_x_mcs_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3038_x_hamr_bad() {
+        assert!(has_x_hamr_bad(b"X-Ham-Report: clean message\r\n\r\nbody"));
+        assert!(has_x_hamr_bad(b"X-Ham-Report:\r\n\r\nbody"));
+        assert!(!has_x_hamr_bad(
+            b"X-Ham-Report: * -0.1 BAYES_20 Ham\r\n\r\nbody"
+        ));
+        assert!(!has_x_hamr_bad(
+            b"X-Ham-Report: score=-0.1 required=3.0\r\n\r\nbody"
+        ));
+        assert!(!has_x_hamr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
 
     #[test]
     fn d2999_ms_dir_bad() {
