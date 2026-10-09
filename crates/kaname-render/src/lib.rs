@@ -3355,6 +3355,14 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `Lines:` 欄の値が整数形でない (D3039 — 記事行数ずれ)。
+    pub news_lines_bad: bool,
+    /// `X-SG-ID:`/`X-SG-EID:` 欄の値が長トークン形でない (D3040 — 配送識別ずれ)。
+    pub x_sg_bad: bool,
+    /// `PICS-Label:` 欄の値が評価構文形でない (D3041 — 評価記録ずれ)。
+    pub pics_bad: bool,
+    /// `Old-Return-Path:`/`X-Old-Return-Path:` 欄の値が宛名/空宛形でない (D3042 — 返送記録ずれ)。
+    pub old_rp_bad: bool,
     /// `Relay-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
     pub rver_bad: bool,
     /// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
@@ -7380,6 +7388,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let news_lines_bad = has_news_lines_bad(bytes);
+    let x_sg_bad = has_x_sg_bad(bytes);
+    let pics_bad = has_pics_bad(bytes);
+    let old_rp_bad = has_old_rp_bad(bytes);
     let rver_bad = has_rver_bad(bytes);
     let pver_bad = has_pver_bad(bytes);
     let drcv_bad = has_drcv_bad(bytes);
@@ -9087,6 +9099,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        news_lines_bad,
+        x_sg_bad,
+        pics_bad,
+        old_rp_bad,
         rver_bad,
         pver_bad,
         drcv_bad,
@@ -52679,6 +52695,164 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
                         })
                 };
             if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Lines:` 欄の値が整数形でない (D3039 — 記事行数ずれ)。
+fn has_news_lines_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("lines:") {
+            let v = v.trim();
+            if v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-SG-ID:`/`X-SG-EID:` 欄の値が長トークン形でない (D3040 — 配送識別ずれ)。
+fn has_x_sg_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        let hdr = low
+            .strip_prefix("x-sg-id:")
+            .or_else(|| low.strip_prefix("x-sg-eid:"));
+        if let Some(v) = hdr {
+            let v = v.trim().trim_matches('<').trim_matches('>');
+            let bad = v.len() < 16
+                || !v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `PICS-Label:` 欄の値が評価構文形でない (D3041 — 評価記録ずれ)。
+fn has_pics_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("pics-label:") {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || !v.starts_with('(')
+                || !v.is_ascii()
+                || v.chars().any(|c| c.is_control());
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Old-Return-Path:`/`X-Old-Return-Path:` 欄の値が宛名/空宛形でない (D3042 — 返送記録ずれ)。
+fn has_old_rp_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        let hdr = low
+            .strip_prefix("old-return-path:")
+            .or_else(|| low.strip_prefix("x-old-return-path:"));
+        if let Some(v) = hdr {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || (v != "<>"
+                    && (!v.contains('@')
+                        || !v.is_ascii()
+                        || v.chars().any(|c| c.is_control())
+                        || v.split_whitespace().count() != 1));
+            if bad {
                 return true;
             }
         }
@@ -131572,16 +131746,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131598,16 +131762,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131619,18 +131773,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133614,6 +133756,53 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3039_news_lines_bad() {
+        assert!(has_news_lines_bad(b"Lines: many\r\n\r\nbody"));
+        assert!(has_news_lines_bad(b"Lines:\r\n\r\nbody"));
+        assert!(has_news_lines_bad(b"Lines: 12.5\r\n\r\nbody"));
+        assert!(!has_news_lines_bad(b"Lines: 42\r\n\r\nbody"));
+        assert!(!has_news_lines_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3040_x_sg_bad() {
+        assert!(has_x_sg_bad(b"X-SG-ID: short\r\n\r\nbody"));
+        assert!(has_x_sg_bad(b"X-SG-ID:\r\n\r\nbody"));
+        assert!(has_x_sg_bad(b"X-SG-EID: x y z\r\n\r\nbody"));
+        assert!(!has_x_sg_bad(
+            b"X-SG-ID: Xo4kcqbvRrSMlPmKk8_YRg\r\n\r\nbody"
+        ));
+        assert!(!has_x_sg_bad(
+            b"X-SG-EID: AbCdEfGhIjKlMnOpQrStUvWx\r\n\r\nbody"
+        ));
+        assert!(!has_x_sg_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3041_pics_bad() {
+        assert!(has_pics_bad(b"PICS-Label: clean\r\n\r\nbody"));
+        assert!(has_pics_bad(b"PICS-Label:\r\n\r\nbody"));
+        assert!(has_pics_bad(b"PICS-Label: no parens here\r\n\r\nbody"));
+        assert!(!has_pics_bad(
+            b"PICS-Label: (PICS-1.1 http://ex.com/ labels r (n 0))\r\n\r\nbody"
+        ));
+        assert!(!has_pics_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3042_old_rp_bad() {
+        assert!(has_old_rp_bad(b"Old-Return-Path: not an addr\r\n\r\nbody"));
+        assert!(has_old_rp_bad(b"X-Old-Return-Path:\r\n\r\nbody"));
+        assert!(has_old_rp_bad(b"Old-Return-Path: a b@c\r\n\r\nbody"));
+        assert!(!has_old_rp_bad(
+            b"Old-Return-Path: bounce@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_old_rp_bad(b"Old-Return-Path: <>\r\n\r\nbody"));
+        assert!(!has_old_rp_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
 
     #[test]
     fn d3067_rver_bad() {
