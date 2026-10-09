@@ -3371,6 +3371,14 @@ pub struct Envelope {
     pub xodom_bad: bool,
     /// `X-Message-UUID:` 欄の値が GUID 形でない (D3082 — 配送識別ずれ)。
     pub xmuuid_bad: bool,
+    /// `X-Spamd-Check-By:` 欄の値が単一印字トークンでない (D3111 — 検疫機署名ずれ)。
+    pub xsdby_bad: bool,
+    /// `X-Spamd-Processing-Time:` 欄の値が数値形でない (D3112 — 検疫機工数ずれ)。
+    pub xsdpt_bad: bool,
+    /// `X-Spamd-Bar:` 欄の値が `+`/`-` 列でない (D3113 — 検疫機目盛ずれ)。
+    pub xsdbar_bad: bool,
+    /// `X-Amavis-SpamScore:`/`X-Amavis-Score:` 欄の値が数値形でない (D3114 — 検疫機得点ずれ)。
+    pub xamsc_bad: bool,
     /// `X-MS-Exchange-Organization-OriginalSize:` 欄の値が整数形でない (D3119 — 組織元寸法ずれ)。
     pub msos_bad: bool,
     /// `X-MS-Exchange-Organization-SCLThreshold:` 欄の値が整数形でない (D3120 — 組織閾値ずれ)。
@@ -7388,6 +7396,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xsentto_bad = has_xsentto_bad(bytes);
     let xodom_bad = has_xodom_bad(bytes);
     let xmuuid_bad = has_xmuuid_bad(bytes);
+    let xsdby_bad = has_xsdby_bad(bytes);
+    let xsdpt_bad = has_xsdpt_bad(bytes);
+    let xsdbar_bad = has_xsdbar_bad(bytes);
+    let xamsc_bad = has_xamsc_bad(bytes);
     let msos_bad = has_msos_bad(bytes);
     let msst_bad = has_msst_bad(bytes);
     let mscts_bad = has_mscts_bad(bytes);
@@ -9095,6 +9107,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xsentto_bad,
         xodom_bad,
         xmuuid_bad,
+        xsdby_bad,
+        xsdpt_bad,
+        xsdbar_bad,
+        xamsc_bad,
         msos_bad,
         msst_bad,
         mscts_bad,
@@ -52874,6 +52890,36 @@ fn has_xmuuid_bad(bytes: &[u8]) -> bool {
         let lens: Vec<usize> = seg.iter().map(|s| s.len()).collect();
         lens != [8, 4, 4, 4, 12]
     })
+}
+
+/// `X-Spamd-Check-By:` 欄の値が単一印字トークンでない (D3111 — 検疫機署名ずれ)。
+fn has_xsdby_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-spamd-check-by:"], |t| {
+        t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+    })
+}
+
+/// `X-Spamd-Processing-Time:` 欄の値が数値形でない (D3112 — 検疫機工数ずれ)。
+fn has_xsdpt_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-spamd-processing-time:"], |t| {
+        t.is_empty() || t.parse::<f64>().is_err()
+    })
+}
+
+/// `X-Spamd-Bar:` 欄の値が `+`/`-` 列でない (D3113 — 検疫機目盛ずれ)。
+fn has_xsdbar_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-spamd-bar:"], |t| {
+        t.is_empty() || t.bytes().any(|b| b != b'+' && b != b'-')
+    })
+}
+
+/// `X-Amavis-SpamScore:`/`X-Amavis-Score:` 欄の値が数値形でない (D3114 — 検疫機得点ずれ)。
+fn has_xamsc_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-amavis-spamscore:", "x-amavis-score:"],
+        |t| t.is_empty() || t.parse::<f64>().is_err(),
+    )
 }
 
 /// `X-MS-Exchange-Organization-OriginalSize:` 欄の値が整数形でない (D3119 — 組織元寸法ずれ)。
@@ -133753,6 +133799,42 @@ fn d3082_xmuuid_bad() {
             b"X-Delivered-To:\r\n user@example.com\r\n\r\nbody"
         ));
     }
+
+#[test]
+fn d3111_xsdby_bad() {
+    assert!(has_xsdby_bad(b"X-Spamd-Check-By: not host here\r\n\r\nbody"));
+    assert!(has_xsdby_bad(b"X-Spamd-Check-By:\r\n\r\nbody"));
+    assert!(!has_xsdby_bad(b"X-Spamd-Check-By: mx.example.com\r\n\r\nbody"));
+    assert!(!has_xsdby_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3112_xsdpt_bad() {
+    assert!(has_xsdpt_bad(b"X-Spamd-Processing-Time: not num\r\n\r\nbody"));
+    assert!(has_xsdpt_bad(b"X-Spamd-Processing-Time:\r\n\r\nbody"));
+    assert!(!has_xsdpt_bad(b"X-Spamd-Processing-Time: 0.42\r\n\r\nbody"));
+    assert!(!has_xsdpt_bad(b"X-Spamd-Processing-Time: 12\r\n\r\nbody"));
+    assert!(!has_xsdpt_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3113_xsdbar_bad() {
+    assert!(has_xsdbar_bad(b"X-Spamd-Bar: not bar\r\n\r\nbody"));
+    assert!(has_xsdbar_bad(b"X-Spamd-Bar: ++x\r\n\r\nbody"));
+    assert!(has_xsdbar_bad(b"X-Spamd-Bar:\r\n\r\nbody"));
+    assert!(!has_xsdbar_bad(b"X-Spamd-Bar: ++++++\r\n\r\nbody"));
+    assert!(!has_xsdbar_bad(b"X-Spamd-Bar: -\r\n\r\nbody"));
+    assert!(!has_xsdbar_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3114_xamsc_bad() {
+    assert!(has_xamsc_bad(b"X-Amavis-SpamScore: not num\r\n\r\nbody"));
+    assert!(has_xamsc_bad(b"X-Amavis-Score:\r\n\r\nbody"));
+    assert!(!has_xamsc_bad(b"X-Amavis-SpamScore: 5.1\r\n\r\nbody"));
+    assert!(!has_xamsc_bad(b"X-Amavis-Score: -0.002\r\n\r\nbody"));
+    assert!(!has_xamsc_bad(b"From: a@b\r\n\r\nbody"));
+}
 
 #[test]
 fn d3119_msos_bad() {
