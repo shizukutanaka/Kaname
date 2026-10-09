@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3019: `Conversion:` 欄の語彙外値 (X.400 変換指定異形) を変換ずれとして検出 — `Envelope` に `conversion_bad` を追加。
+### Security — D3020: `Conversion-With-Loss:` 欄の語彙外値 (X.400 損失変換指定異形) を損失変換ずれとして検出 — `Envelope` に `conversion_loss_bad` を追加。
+### Security — D3021: `Message-Type:` 欄の語彙外値 (報告種別異形) を報告種別ずれとして検出 — `Envelope` に `message_type_bad` を追加。
+### Security — D3022: `Read-Date:` 欄の非日時形/`Disclose-Recipients:` 欄の語彙外値 (閲読記録異形) を閲読記録ずれとして検出 — `Envelope` に `read_rec_bad` を追加。
+
 ### Security — D2999: `X-MS-Exchange-Organization-MessageDirectionality:` 欄の語彙外値 (`Originating`/`Incoming` 以外) を輸送方向ずれとして検出 — `Envelope` に `ms_dir_bad` を追加。
 ### Security — D3000: `X-MS-Exchange-Organization-AuthMechanism:` 欄の非方式番号値 (1–2桁の 0–10 以外) を認証方式ずれとして検出 — `Envelope` に `ms_authmech_bad` を追加。
 ### Security — D3001: `X-MS-Office365-Filtering-Correlation-Id:` 欄の非GUID値を関連識別ずれとして検出 — `Envelope` に `ms_corr_id_bad` を追加。

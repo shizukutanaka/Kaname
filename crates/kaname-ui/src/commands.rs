@@ -9397,6 +9397,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.list_followup_bad {
         render_risks.push("追従先欄の値が異形です—追従値の扱いで返信経路がずれます".to_string());
     }
+    if env.conversion_bad {
+        render_risks.push("変換指定欄の値が語彙外です—変換値の扱いで経路評価がずれます".to_string());
+    }
+    if env.conversion_loss_bad {
+        render_risks.push("損失変換欄の値が語彙外です—損失値の扱いで経路評価がずれます".to_string());
+    }
+    if env.message_type_bad {
+        render_risks.push("報告種別欄の値が語彙外です—種別値の扱いで経路評価がずれます".to_string());
+    }
+    if env.read_rec_bad {
+        render_risks.push("閲読記録欄の値が異形です—閲読値の扱いで経路評価がずれます".to_string());
+    }
     if env.xip_asf_bad {
         render_risks.push("機器判定欄の値が真偽形でないです—判定値の扱いで経路評価がずれます".to_string());
     }

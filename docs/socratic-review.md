@@ -4626,6 +4626,11 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 問: `Autocrypt:`/`OpenPGP:`/`Content-Return:`/`Mail-Followup-To:`/`Mail-Reply-To:` の値の形は検査済みか。
 答: 未検出だった — 鍵素材・返却方針・追従先を送信側が自称する欄は値の文法が绿地だった。`名=値` 連接・`addr=` 宛名・`allowed|prohibited` 語彙・宛名/poster 形の外れを異形として D2991–D2994 を追加。交渉の体裁だけを真似る擬態へ面を広げた。
 
+## ラウンド 473 — 「交換所の通関票」の自問自答
+
+問: `Conversion:`/`Conversion-With-Loss:`/`Message-Type:`/`Read-Date:`/`Disclose-Recipients:` の欄があればゲートウェイ交換の規格記録を示すか。
+答: これらは X.400 交換所の通関票 (RFC 2156) — 変換可否は `prohibited`/`allowed`/`allowed with loss` の閉語彙、報告種別は `delivery report` 等の閉語彙、閲読日時は日時形、宛先開示は `yes`/`no`/`prohibited` で、いずれも形が決まっている。どの検出器にも触れられていない完全绿地だったため、形を欠く値を「交換記録を刻んだ体裁」の擬態として D3019–D3022 を追加した。権威の刻印は「値が権威の形をしているか」で問う原則の継続適用。
+
 ## ラウンド 470 — 「機器の刻印」の自問自答
 
 問: `X-IronPort-*` や `X-Proofpoint-*` の欄があればゲートウェイ機器が検査済みと信じられるか。
