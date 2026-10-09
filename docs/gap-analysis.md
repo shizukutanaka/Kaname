@@ -2346,6 +2346,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3000 | X-MS-Exchange-Organization-AuthMechanism: の非方式番号値 (認証方式欄の値異形) | 方式ずれ |
 | D3001 | X-MS-Office365-Filtering-Correlation-Id: の非GUID値 (関連識別欄の値異形) | 識別ずれ |
 | D3002 | X-MS-Exchange-Organization-ExpirationStartTime: の非日時形値 (失効開始欄の値異形) | 失効ずれ |
+| D3059 | X-PM-Message-Id:/X-Postmark-Message-Id: の非トークン値 (配送業者識別欄の値異形) | 識別ずれ |
+| D3060 | X-PM-RCPT: の非宛名形値 (配送業者宛先欄の値異形) | 宛先ずれ |
+| D3061 | X-ExclaimerHostedSignatures-MessageProcessed: 系の非真偽値 (署印処理欄の値異形) | 署印ずれ |
+| D3062 | X-Message-ID: の非msgid形値 (配送識別欄の値異形) | 識別ずれ |
 | D3067 | Relay-Version: の非 version site 値 (中継版号欄の値異形) | 中継記録ずれ |
 | D3068 | Posting-Version: の非 version site 値 (投稿版号欄の値異形) | 投稿記録ずれ |
 | D3069 | Date-Received: の非日時形値 (到着日時欄の値異形) | 到着記録ずれ |

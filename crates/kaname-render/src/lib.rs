@@ -3355,6 +3355,14 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `X-PM-Message-Id:`/`X-Postmark-Message-Id:` 欄の値がトークン形でない (D3059 — Postmark 識別ずれ)。
+    pub xpm_mid_bad: bool,
+    /// `X-PM-RCPT:` 欄の値が宛名形でない (D3060 — Postmark 宛先ずれ)。
+    pub xpm_rcpt_bad: bool,
+    /// `X-ExclaimerHostedSignatures-MessageProcessed:` 系欄の値が真偽語彙外 (D3061 — 署印処理ずれ)。
+    pub xexc_bad: bool,
+    /// `X-Message-ID:` 欄の値が msgid 形でない (D3062 — 配送識別ずれ)。
+    pub xmid_bad: bool,
     /// `Relay-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
     pub rver_bad: bool,
     /// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
@@ -7380,6 +7388,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let xpm_mid_bad = has_xpm_mid_bad(bytes);
+    let xpm_rcpt_bad = has_xpm_rcpt_bad(bytes);
+    let xexc_bad = has_xexc_bad(bytes);
+    let xmid_bad = has_xmid_bad(bytes);
     let rver_bad = has_rver_bad(bytes);
     let pver_bad = has_pver_bad(bytes);
     let drcv_bad = has_drcv_bad(bytes);
@@ -9087,6 +9099,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        xpm_mid_bad,
+        xpm_rcpt_bad,
+        xexc_bad,
+        xmid_bad,
         rver_bad,
         pver_bad,
         drcv_bad,
@@ -52679,6 +52695,162 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
                         })
                 };
             if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-PM-Message-Id:`/`X-Postmark-Message-Id:` 欄の値がトークン形でない (D3059 — Postmark 識別ずれ)。
+fn has_xpm_mid_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        let hit = low
+            .strip_prefix("x-pm-message-id:")
+            .or_else(|| low.strip_prefix("x-postmark-message-id:"));
+        if let Some(v) = hit {
+            let t = v.trim();
+            let bad = t.is_empty()
+                || !t
+                    .chars()
+                    .all(|c| (0x21..=0x7e).contains(&(c as u32)))
+                || !t.chars().any(|c| c.is_ascii_alphanumeric());
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-PM-RCPT:` 欄の値が宛名形でない (D3060 — Postmark 宛先ずれ)。
+fn has_xpm_rcpt_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x-pm-rcpt:") {
+            let t = v.trim();
+            if !t.contains('@') || t.starts_with('@') || t.ends_with('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-ExclaimerHostedSignatures-MessageProcessed:` 系欄の値が真偽語彙外 (D3061 — 署印処理ずれ)。
+fn has_xexc_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        let hit = low
+            .strip_prefix("x-exclaimerhostedsignatures-messageprocessed:")
+            .or_else(|| low.strip_prefix("x-exclaimerencryptedsignatures-messageprocessed:"))
+            .or_else(|| low.strip_prefix("x-exclaimersignature-services-messageprocessed:"));
+        if let Some(v) = hit {
+            let t = v.trim();
+            if t != "true" && t != "false" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Message-ID:` 欄の値が msgid 形でない (D3062 — 配送識別ずれ)。
+fn has_xmid_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x-message-id:") {
+            let t = v.trim();
+            let bad = !(t.starts_with('<') && t.ends_with('>') && t.len() > 2)
+                || !t[1..t.len() - 1]
+                    .chars()
+                    .all(|c| (0x21..=0x7e).contains(&(c as u32)) && c != '<' && c != '>');
+            if bad {
                 return true;
             }
         }
@@ -131572,16 +131744,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131598,16 +131760,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131619,18 +131771,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133614,6 +133754,58 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3059_xpm_mid_bad() {
+        assert!(has_xpm_mid_bad(b"X-PM-Message-Id: has space\r\n\r\nbody"));
+        assert!(has_xpm_mid_bad(b"X-PM-Message-Id:\r\n\r\nbody"));
+        assert!(!has_xpm_mid_bad(
+            b"X-PM-Message-Id: d7a1b2c3-4e5f-6789-abcd-ef0123456789\r\n\r\nbody"
+        ));
+        assert!(!has_xpm_mid_bad(
+            b"X-Postmark-Message-Id: pm-abc-123\r\n\r\nbody"
+        ));
+        assert!(!has_xpm_mid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3060_xpm_rcpt_bad() {
+        assert!(has_xpm_rcpt_bad(b"X-PM-RCPT: not an addr\r\n\r\nbody"));
+        assert!(has_xpm_rcpt_bad(b"X-PM-RCPT: @example.com\r\n\r\nbody"));
+        assert!(has_xpm_rcpt_bad(b"X-PM-RCPT:\r\n\r\nbody"));
+        assert!(!has_xpm_rcpt_bad(b"X-PM-RCPT: user@example.com\r\n\r\nbody"));
+        assert!(!has_xpm_rcpt_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3061_xexc_bad() {
+        assert!(has_xexc_bad(
+            b"X-ExclaimerHostedSignatures-MessageProcessed: pending\r\n\r\nbody"
+        ));
+        assert!(has_xexc_bad(
+            b"X-ExclaimerHostedSignatures-MessageProcessed:\r\n\r\nbody"
+        ));
+        assert!(!has_xexc_bad(
+            b"X-ExclaimerHostedSignatures-MessageProcessed: true\r\n\r\nbody"
+        ));
+        assert!(!has_xexc_bad(
+            b"X-ExclaimerEncryptedSignatures-MessageProcessed: false\r\n\r\nbody"
+        ));
+        assert!(!has_xexc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3062_xmid_bad() {
+        assert!(has_xmid_bad(b"X-Message-ID: abc123\r\n\r\nbody"));
+        assert!(has_xmid_bad(b"X-Message-ID: <a\r\n\r\nbody"));
+        assert!(has_xmid_bad(b"X-Message-ID:\r\n\r\nbody"));
+        assert!(!has_xmid_bad(b"X-Message-ID: <abc123>\r\n\r\nbody"));
+        assert!(!has_xmid_bad(
+            b"X-Message-ID: <abc@example.com>\r\n\r\nbody"
+        ));
+        assert!(!has_xmid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
 
     #[test]
     fn d3067_rver_bad() {

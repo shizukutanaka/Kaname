@@ -9457,6 +9457,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.ms_exp_time_bad {
         render_risks.push("失効開始欄の値が日時形でないです—失効時刻の扱いで経路時系列がずれます".to_string());
     }
+    if env.xpm_mid_bad {
+        render_risks.push("配送業者識別欄の値がトークン形でないです—配送記録の扱いで照合がずれます".to_string());
+    }
+    if env.xpm_rcpt_bad {
+        render_risks.push("配送業者宛先欄の値が宛名形でないです—配送記録の扱いで照合がずれます".to_string());
+    }
+    if env.xexc_bad {
+        render_risks.push("署印処理欄の値が真偽語彙外です—署印処理の扱いで経路評価がずれます".to_string());
+    }
+    if env.xmid_bad {
+        render_risks.push("配送識別欄の値が識別子形でないです—配送記録の扱いで照合がずれます".to_string());
+    }
     if env.rver_bad {
         render_risks.push("中継版号欄の値が 版号 局名 形でないです—中継記録の扱いで経路時系列がずれます".to_string());
     }
