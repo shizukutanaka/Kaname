@@ -20,6 +20,10 @@
 ### Security — D3124: `X-MIME-Autoconverted:` 欄の非 `from 型 to 型` 値を変換記録ずれとして検出 — `Envelope` に `xmato_bad` を追加。
 ### Security — D3125: `X-Spam-Relay-Country:` 欄の非国コード連接値を中継国ずれとして検出 — `Envelope` に `xsrc_bad` を追加。
 ### Security — D3126: `X-EVP-Envelope-ID:` 欄の非単一印字トークン値を封書識別ずれとして検出 — `Envelope` に `xeid_bad` を追加。
+### Security — D3127: `X-MS-Exchange-Transport-OriginalRecipient:` 欄の非宛名値を組織元宛先ずれとして検出 — `Envelope` に `msorc_bad` を追加。
+### Security — D3128: `X-MS-Exchange-Organization-OriginalArrivalTime:` 欄の非日時形値を組織元到着ずれとして検出 — `Envelope` に `msoat_bad` を追加。
+### Security — D3129: `X-MS-Exchange-Organization-AuthSource-Lob:` 欄の非ホスト名値を組織認証元ずれとして検出 — `Envelope` に `mslob_bad` を追加。
+### Security — D3130: `X-MS-Exchange-Organization-AVStamp-Service:` 欄の非単一印字トークン値を組織検査印ずれとして検出 — `Envelope` に `msav_bad` を追加。
 ### Security — D3071: `X-Primary-IP:` 欄の非IPv4値を発信原局ずれとして検出 — `Envelope` に `xpip_bad` を追加。
 ### Security — D3072: `X-Old-Message-ID:` 欄の非msgid形値を書換識別ずれとして検出 — `Envelope` に `xomsg_bad` を追加。
 ### Security — D3073: `X-Bounce-Address:` 欄の非宛名形値を返送記録ずれとして検出 — `Envelope` に `xbadrs_bad` を追加。

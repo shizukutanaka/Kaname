@@ -3387,6 +3387,14 @@ pub struct Envelope {
     pub xsrc_bad: bool,
     /// `X-EVP-Envelope-ID:` 欄の値が単一印字トークンでない (D3126 — 封書識別ずれ)。
     pub xeid_bad: bool,
+    /// `X-MS-Exchange-Transport-OriginalRecipient:` 欄の値が宛名形でない (D3127 — 組織元宛先ずれ)。
+    pub msorc_bad: bool,
+    /// `X-MS-Exchange-Organization-OriginalArrivalTime:` 欄の値が `DD Mon YYYY HH:MM:SS` 形でない (D3128 — 組織元到着ずれ)。
+    pub msoat_bad: bool,
+    /// `X-MS-Exchange-Organization-AuthSource-Lob:` 欄の値がホスト名形でない (D3129 — 組織認証元ずれ)。
+    pub mslob_bad: bool,
+    /// `X-MS-Exchange-Organization-AVStamp-Service:` 欄の値が単一印字トークンでない (D3130 — 組織検査印ずれ)。
+    pub msav_bad: bool,
     /// `X-Primary-IP:` 欄の値が IPv4 形でない (D3071 — 発信原局ずれ)。
     pub xpip_bad: bool,
     /// `X-Old-Message-ID:` 欄の値が msgid 形でない (D3072 — 書換識別ずれ)。
@@ -7388,6 +7396,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xmato_bad = has_xmato_bad(bytes);
     let xsrc_bad = has_xsrc_bad(bytes);
     let xeid_bad = has_xeid_bad(bytes);
+    let msorc_bad = has_msorc_bad(bytes);
+    let msoat_bad = has_msoat_bad(bytes);
+    let mslob_bad = has_mslob_bad(bytes);
+    let msav_bad = has_msav_bad(bytes);
     let xpip_bad = has_xpip_bad(bytes);
     let xomsg_bad = has_xomsg_bad(bytes);
     let xbadrs_bad = has_xbadrs_bad(bytes);
@@ -9091,6 +9103,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xmato_bad,
         xsrc_bad,
         xeid_bad,
+        msorc_bad,
+        msoat_bad,
+        mslob_bad,
+        msav_bad,
         xpip_bad,
         xomsg_bad,
         xbadrs_bad,
@@ -52911,8 +52927,8 @@ fn has_xmdsc_bad(bytes: &[u8]) -> bool {
 /// `X-MIME-Autoconverted:` 欄の値が `from 型 to 型` 形でない (D3124 — 変換記録ずれ)。
 fn has_xmato_bad(bytes: &[u8]) -> bool {
     dc_each(bytes, &["x-mime-autoconverted:"], |t| {
-        let l = t.to_ascii_lowercase();
-        !(l.starts_with("from ") && l[5..].contains(" to "))
+        let w: Vec<&str> = t.split_whitespace().collect();
+        !(w.len() >= 4 && w[0] == "from" && w[2] == "to")
     })
 }
 
@@ -52930,6 +52946,60 @@ fn has_xsrc_bad(bytes: &[u8]) -> bool {
 /// `X-EVP-Envelope-ID:` 欄の値が単一印字トークンでない (D3126 — 封書識別ずれ)。
 fn has_xeid_bad(bytes: &[u8]) -> bool {
     dc_each(bytes, &["x-evp-envelope-id:"], |t| {
+        t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+    })
+}
+
+/// `X-MS-Exchange-Transport-OriginalRecipient:` 欄の値が宛名形でない (D3127 — 組織元宛先ずれ)。
+fn has_msorc_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-ms-exchange-transport-originalrecipient:"], |t| {
+        let t = t.strip_prefix('<').and_then(|s| s.strip_suffix('>')).unwrap_or(t);
+        t.is_empty() || t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-MS-Exchange-Organization-OriginalArrivalTime:` 欄の値が `DD Mon YYYY HH:MM:SS` 形でない (D3128 — 組織元到着ずれ)。
+fn has_msoat_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-ms-exchange-organization-originalarrivaltime:"],
+        |t| {
+            let w: Vec<&str> = t.split_whitespace().collect();
+            let months = [
+                "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep",
+                "oct", "nov", "dec",
+            ];
+            !(w.len() >= 4
+                && w[0].len() == 2
+                && w[0].bytes().all(|b| b.is_ascii_digit())
+                && months.contains(&w[1])
+                && w[2].len() == 4
+                && w[2].bytes().all(|b| b.is_ascii_digit())
+                && {
+                    let tp: Vec<&str> = w[3].split(':').collect();
+                    tp.len() == 3
+                        && tp.iter().all(|p| {
+                            let p = p.split('.').next().unwrap_or(p);
+                            p.len() == 2 && p.bytes().all(|b| b.is_ascii_digit())
+                        })
+                })
+        },
+    )
+}
+
+/// `X-MS-Exchange-Organization-AuthSource-Lob:` 欄の値がホスト名形でない (D3129 — 組織認証元ずれ)。
+fn has_mslob_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-ms-exchange-organization-authsource-lob:"], |t| {
+        t.is_empty()
+            || !t.contains('.')
+            || t.contains('@')
+            || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+    })
+}
+
+/// `X-MS-Exchange-Organization-AVStamp-Service:` 欄の値が単一印字トークンでない (D3130 — 組織検査印ずれ)。
+fn has_msav_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-ms-exchange-organization-avstamp-service:"], |t| {
         t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
     })
 }
@@ -133736,8 +133806,10 @@ fn d3123_xmdsc_bad() {
 fn d3124_xmato_bad() {
     assert!(has_xmato_bad(b"X-MIME-Autoconverted: garbage\r\n\r\nbody"));
     assert!(has_xmato_bad(b"X-MIME-Autoconverted:\r\n\r\nbody"));
+    assert!(has_xmato_bad(b"X-MIME-Autoconverted: from  to \r\n\r\nbody"));
     assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from 8bit to quoted-printable\r\n\r\nbody"));
     assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from quoted-printable to 8bit by sendmail\r\n\r\nbody"));
+    assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from\t8bit to 7bit\r\n\r\nbody"));
     assert!(!has_xmato_bad(b"From: a@b\r\n\r\nbody"));
 }
 
@@ -133766,4 +133838,42 @@ fn d3122_msoip_ipv6_ok() {
     assert!(!has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Server-IP: ::1\r\n\r\nbody"));
     assert!(has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: 999.1.2.3\r\n\r\nbody"));
     assert!(has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: not ip\r\n\r\nbody"));
+}
+
+#[test]
+fn d3127_msorc_bad() {
+    assert!(has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: not addr\r\n\r\nbody"));
+    assert!(has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: a@@x.com\r\n\r\nbody"));
+    assert!(has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient:\r\n\r\nbody"));
+    assert!(!has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: user@example.com\r\n\r\nbody"));
+    assert!(!has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: <user@example.com>\r\n\r\nbody"));
+    assert!(!has_msorc_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3128_msoat_bad() {
+    assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: not date\r\n\r\nbody"));
+    assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 2026-10-01\r\n\r\nbody"));
+    assert!(!has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00\r\n\r\nbody"));
+    assert!(!has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00.123\r\n\r\nbody"));
+    assert!(!has_msoat_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3129_mslob_bad() {
+    assert!(has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: not host\r\n\r\nbody"));
+    assert!(has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: a@b\r\n\r\nbody"));
+    assert!(has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob:\r\n\r\nbody"));
+    assert!(!has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: prod.outlook.com\r\n\r\nbody"));
+    assert!(!has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: mx1.example.co.jp\r\n\r\nbody"));
+    assert!(!has_mslob_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3130_msav_bad() {
+    assert!(has_msav_bad(b"X-MS-Exchange-Organization-AVStamp-Service: not token\r\n\r\nbody"));
+    assert!(has_msav_bad(b"X-MS-Exchange-Organization-AVStamp-Service:\r\n\r\nbody"));
+    assert!(!has_msav_bad(b"X-MS-Exchange-Organization-AVStamp-Service: 1.0.0.0\r\n\r\nbody"));
+    assert!(!has_msav_bad(b"X-MS-Exchange-Organization-AVStamp-Service: 2.4.12345.9\r\n\r\nbody"));
+    assert!(!has_msav_bad(b"From: a@b\r\n\r\nbody"));
 }

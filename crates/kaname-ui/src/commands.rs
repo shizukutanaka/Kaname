@@ -9505,6 +9505,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.xeid_bad {
         render_risks.push("封書識別欄の値が単一印字トークンでないです—封書記録の扱いで識別照合がずれます".to_string());
     }
+    if env.msorc_bad {
+        render_risks.push("組織元宛先欄の値が宛名形でないです—組織記録の扱いで宛先照合がずれます".to_string());
+    }
+    if env.msoat_bad {
+        render_risks.push("組織元到着欄の値が日時形でないです—組織記録の扱いで到着照合がずれます".to_string());
+    }
+    if env.mslob_bad {
+        render_risks.push("組織認証元欄の値がホスト名形でないです—組織記録の扱いで認証元照合がずれます".to_string());
+    }
+    if env.msav_bad {
+        render_risks.push("組織検査印欄の値が単一印字トークンでないです—組織記録の扱いで検査印照合がずれます".to_string());
+    }
     if env.xpip_bad {
         render_risks.push("発信原局欄の値が IPv4 形でないです—経路記録の扱いで発信元特定がずれます".to_string());
     }
