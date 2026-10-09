@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3031: `X-Sieve-Redirected-From:` 欄の非宛名値を転送記録ずれとして検出 — `Envelope` に `x_sieve_bad` を追加。
+### Security — D3032: `X-Resolved-To:` 欄の非宛名値を配達記録ずれとして検出 — `Envelope` に `x_resolved_bad` を追加。
+### Security — D3033: `X-SES-Receipt:` 欄の非受領トークン値を受領記録ずれとして検出 — `Envelope` に `x_sesrc_bad` を追加。
+### Security — D3034: `X-Env-Sender:` 欄の非宛名値を封書差出人ずれとして検出 — `Envelope` に `x_envsnd_bad` を追加。
+
 ### Security — D2999: `X-MS-Exchange-Organization-MessageDirectionality:` 欄の語彙外値 (`Originating`/`Incoming` 以外) を輸送方向ずれとして検出 — `Envelope` に `ms_dir_bad` を追加。
 ### Security — D3000: `X-MS-Exchange-Organization-AuthMechanism:` 欄の非方式番号値 (1–2桁の 0–10 以外) を認証方式ずれとして検出 — `Envelope` に `ms_authmech_bad` を追加。
 ### Security — D3001: `X-MS-Office365-Filtering-Correlation-Id:` 欄の非GUID値を関連識別ずれとして検出 — `Envelope` に `ms_corr_id_bad` を追加。

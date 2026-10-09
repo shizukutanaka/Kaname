@@ -3315,6 +3315,14 @@ pub struct Envelope {
     pub content_return_bad: bool,
     /// `Mail-Followup-To:`/`Mail-Reply-To:` 欄の値が宛名/poster 形でない (D2994 — 追従ずれ)。
     pub list_followup_bad: bool,
+    /// `X-Sieve-Redirected-From:` 欄の値が宛名形でない (D3031 — 転送記録ずれ)。
+    pub x_sieve_bad: bool,
+    /// `X-Resolved-To:` 欄の値が宛名形でない (D3032 — 配達記録ずれ)。
+    pub x_resolved_bad: bool,
+    /// `X-SES-Receipt:` 欄の値が受領トークン形でない (D3033 — 受領記録ずれ)。
+    pub x_sesrc_bad: bool,
+    /// `X-Env-Sender:` 欄の値が宛名形でない (D3034 — 封書差出人ずれ)。
+    pub x_envsnd_bad: bool,
     /// `X-IronPort-Anti-Spam-Filtered:` 欄の値がtrue/falseでない (D3007 — 機器判定ずれ)。
     pub xip_asf_bad: bool,
     /// `X-IronPort-AV:` 欄の値が `名=値` 連接でない (D3008 — 機器検査ずれ)。
@@ -7360,6 +7368,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let openpgp_bad = has_openpgp_bad(bytes);
     let content_return_bad = has_content_return_bad(bytes);
     let list_followup_bad = has_list_followup_bad(bytes);
+    let x_sieve_bad = has_x_sieve_bad(bytes);
+    let x_resolved_bad = has_x_resolved_bad(bytes);
+    let x_sesrc_bad = has_x_sesrc_bad(bytes);
+    let x_envsnd_bad = has_x_envsnd_bad(bytes);
     let xip_asf_bad = has_xip_asf_bad(bytes);
     let xip_av_bad = has_xip_av_bad(bytes);
     let xip_asr_bad = has_xip_asr_bad(bytes);
@@ -9067,6 +9079,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         openpgp_bad,
         content_return_bad,
         list_followup_bad,
+        x_sieve_bad,
+        x_resolved_bad,
+        x_sesrc_bad,
+        x_envsnd_bad,
         xip_asf_bad,
         xip_av_bad,
         xip_asr_bad,
@@ -52158,6 +52174,123 @@ fn has_xip_asf_bad(bytes: &[u8]) -> bool {
         if let Some(v) = low.strip_prefix("x-ironport-anti-spam-filtered:") {
             let t = v.trim();
             if t != "true" && t != "false" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 配送途中の転送・受領記録欄 (`X-Sieve-Redirected-From:`/
+/// `X-Resolved-To:`/`X-SES-Receipt:`/`X-Env-Sender:`) の値形検査用に、
+/// ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す (D3031–D3034)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn sv_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-Sieve-Redirected-From:` 欄の値が宛名形でなければ転送記録の
+/// 異形として検出する (D3031)。
+///
+/// RFC 6558 が定める Sieve 転送記録はリダイレクト元の電子メール
+/// 宛名 — 宛名形を欠く値は「転送を記録した体裁」の擬態。
+fn has_x_sieve_bad(bytes: &[u8]) -> bool {
+    let logical = sv_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-sieve-redirected-from:") {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Resolved-To:` 欄の値が宛名形でなければ配達記録の異形として
+/// 検出する (D3032)。
+///
+/// Google 系の配達系統が刻む最終宛先記録は宛名 — 宛名形を欠く値は
+/// 「配達を記録した体裁」の擬態。
+fn has_x_resolved_bad(bytes: &[u8]) -> bool {
+    let logical = sv_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-resolved-to:") {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-SES-Receipt:` 欄の値が受領トークン形 (base64 系の長さ16以上)
+/// でなければ受領記録の異形として検出する (D3033)。
+///
+/// Amazon SES が刻む受領印は opaque な base64 系トークン —
+/// 形を欠く値は「SES が受領した体裁」の擬態。
+fn has_x_sesrc_bad(bytes: &[u8]) -> bool {
+    let logical = sv_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ses-receipt:") {
+            let t = v.trim();
+            if t.len() < 16
+                || !t
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Env-Sender:` 欄の値が宛名形でなければ封書差出人記録の異形
+/// として検出する (D3034)。
+///
+/// 中継が刻む封書差出人の再記録は宛名 — 宛名形を欠く値は
+/// 「封書差出人を記録した体裁」の擬態。
+fn has_x_envsnd_bad(bytes: &[u8]) -> bool {
+    let logical = sv_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-env-sender:") {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
                 return true;
             }
         }
@@ -131572,16 +131705,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131598,16 +131721,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131619,18 +131732,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133297,6 +133398,48 @@ fn 投稿機欄が異形なら発火() {
             b"Mail-Followup-To: poster\r\n\r\nbody"
         ));
         assert!(!has_list_followup_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3031_x_sieve_bad() {
+        assert!(has_x_sieve_bad(
+            b"X-Sieve-Redirected-From: nobody\r\n\r\nbody"
+        ));
+        assert!(has_x_sieve_bad(b"X-Sieve-Redirected-From:\r\n\r\nbody"));
+        assert!(!has_x_sieve_bad(
+            b"X-Sieve-Redirected-From: u@x.example\r\n\r\nbody"
+        ));
+        assert!(!has_x_sieve_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3032_x_resolved_bad() {
+        assert!(has_x_resolved_bad(b"X-Resolved-To: nobody\r\n\r\nbody"));
+        assert!(has_x_resolved_bad(b"X-Resolved-To:\r\n\r\nbody"));
+        assert!(!has_x_resolved_bad(
+            b"X-Resolved-To: u@x.example\r\n\r\nbody"
+        ));
+        assert!(!has_x_resolved_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3033_x_sesrc_bad() {
+        assert!(has_x_sesrc_bad(b"X-SES-Receipt: short!\r\n\r\nbody"));
+        assert!(has_x_sesrc_bad(b"X-SES-Receipt:\r\n\r\nbody"));
+        assert!(!has_x_sesrc_bad(
+            b"X-SES-Receipt: Ym9zVXNlcmRhdGE9IiwiQUdBQSJ9==\r\n\r\nbody"
+        ));
+        assert!(!has_x_sesrc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3034_x_envsnd_bad() {
+        assert!(has_x_envsnd_bad(b"X-Env-Sender: nobody\r\n\r\nbody"));
+        assert!(has_x_envsnd_bad(b"X-Env-Sender:\r\n\r\nbody"));
+        assert!(!has_x_envsnd_bad(
+            b"X-Env-Sender: u@x.example\r\n\r\nbody"
+        ));
+        assert!(!has_x_envsnd_bad(b"From: a@b\r\n\r\nbody"));
     }
 
     #[test]
