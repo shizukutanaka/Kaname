@@ -4,6 +4,10 @@
 ### Security — D3000: `X-MS-Exchange-Organization-AuthMechanism:` 欄の非方式番号値 (1–2桁の 0–10 以外) を認証方式ずれとして検出 — `Envelope` に `ms_authmech_bad` を追加。
 ### Security — D3001: `X-MS-Office365-Filtering-Correlation-Id:` 欄の非GUID値を関連識別ずれとして検出 — `Envelope` に `ms_corr_id_bad` を追加。
 ### Security — D3002: `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の非日時形値を失効開始ずれとして検出 — `Envelope` に `ms_exp_time_bad` を追加。
+### Security — D3047: `Return-Of-Content:` 欄の語彙外値 (`yes`/`no` 以外) を本文返却指定ずれとして検出 — `Envelope` に `x4_roc_bad` を追加。
+### Security — D3048: `Incomplete-Copy:` 欄の語彙外値を抜粋指定ずれとして検出 — `Envelope` に `x4_inc_bad` を追加。
+### Security — D3049: `Auto-Forwarded:` 欄の語彙外値を自動転送指定ずれとして検出 — `Envelope` に `x4_afwd_bad` を追加。
+### Security — D3050: `Obsoletes:` 欄の非識別子連接値を廃棄指示ずれとして検出 — `Envelope` に `x4_obs_bad` を追加。
 ### Security — D3067: `Relay-Version:` 欄の非 `version site` 値を中継記録ずれとして検出 — `Envelope` に `rver_bad` を追加。
 ### Security — D3068: `Posting-Version:` 欄の非 `version site` 値を投稿記録ずれとして検出 — `Envelope` に `pver_bad` を追加。
 ### Security — D3069: `Date-Received:` 欄の非日時形値を到着記録ずれとして検出 — `Envelope` に `drcv_bad` を追加。
