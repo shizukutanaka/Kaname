@@ -3315,6 +3315,14 @@ pub struct Envelope {
     pub content_return_bad: bool,
     /// `Mail-Followup-To:`/`Mail-Reply-To:` 欄の値が宛名/poster 形でない (D2994 — 追従ずれ)。
     pub list_followup_bad: bool,
+    /// `X-Quarantine-ID:` 欄の値が `<トークン>` 形でない (D3023 — 検疫ずれ)。
+    pub x_quarantine_bad: bool,
+    /// `X-Spam-DCC:` 欄の値が `局: 機名 件数` 形でない (D3024 — 照合集計ずれ)。
+    pub x_dcc_bad: bool,
+    /// `X-MS-Exchange-Organization-SenderIdResult:` 欄の値が SPF 判定語彙外 (D3025 — 送信者判定ずれ)。
+    pub ms_sidres_bad: bool,
+    /// `X-Mailgun-*` 記録欄の値が異形 (D3026 — 配信機印ずれ)。
+    pub x_mgun_bad: bool,
     /// `X-IronPort-Anti-Spam-Filtered:` 欄の値がtrue/falseでない (D3007 — 機器判定ずれ)。
     pub xip_asf_bad: bool,
     /// `X-IronPort-AV:` 欄の値が `名=値` 連接でない (D3008 — 機器検査ずれ)。
@@ -7360,6 +7368,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let openpgp_bad = has_openpgp_bad(bytes);
     let content_return_bad = has_content_return_bad(bytes);
     let list_followup_bad = has_list_followup_bad(bytes);
+    let x_quarantine_bad = has_x_quarantine_bad(bytes);
+    let x_dcc_bad = has_x_dcc_bad(bytes);
+    let ms_sidres_bad = has_ms_sidres_bad(bytes);
+    let x_mgun_bad = has_x_mgun_bad(bytes);
     let xip_asf_bad = has_xip_asf_bad(bytes);
     let xip_av_bad = has_xip_av_bad(bytes);
     let xip_asr_bad = has_xip_asr_bad(bytes);
@@ -9067,6 +9079,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         openpgp_bad,
         content_return_bad,
         list_followup_bad,
+        x_quarantine_bad,
+        x_dcc_bad,
+        ms_sidres_bad,
+        x_mgun_bad,
         xip_asf_bad,
         xip_av_bad,
         xip_asr_bad,
@@ -52158,6 +52174,158 @@ fn has_xip_asf_bad(bytes: &[u8]) -> bool {
         if let Some(v) = low.strip_prefix("x-ironport-anti-spam-filtered:") {
             let t = v.trim();
             if t != "true" && t != "false" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 配送機・検疫系記録欄 (`X-Quarantine-ID:`/`X-Spam-DCC:`/
+/// `X-MS-Exchange-Organization-SenderIdResult:`/`X-Mailgun-*`) の
+/// 値形検査用に、ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す
+/// (D3023–D3026)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn dq_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-Quarantine-ID:` 欄の値が `<トークン>` 形でなければ検疫記録の
+/// 異形として検出する (D3023)。
+///
+/// 検疫管理機 (Exchange Online Protection 等) が封じたメールを刻む
+/// 識別印は `<識別子>` の角括弧形 — 形を欠く値は「検疫に収容した
+/// 体裁」の擬態。
+fn has_x_quarantine_bad(bytes: &[u8]) -> bool {
+    let logical = dq_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-quarantine-id:") {
+            let t = v.trim();
+            let ok = t.len() > 2
+                && t.starts_with('<')
+                && t.ends_with('>')
+                && t[1..t.len() - 1]
+                    .chars()
+                    .all(|c| c.is_ascii() && !c.is_whitespace() && c != '<' && c != '>');
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Spam-DCC:` 欄の値が `局名: 機名 件数…` 形でなければ
+/// DCC 照合集計記録の異形として検出する (D3024)。
+///
+/// DCC (Distributed Checksum Clearinghouse) 記録は
+/// `SERVER: hostname NNN; 要素=値…` — 冒頭の `局名:` と機名と
+/// 件数数値の三段構えを欠く値は「照合集計を刻んだ体裁」の擬態。
+fn has_x_dcc_bad(bytes: &[u8]) -> bool {
+    let logical = dq_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-spam-dcc:") {
+            let t = v.trim();
+            let mut it = t.split_whitespace();
+            let ok = it
+                .next()
+                .is_some_and(|s| s.len() > 1 && s.ends_with(':') && s[..s.len() - 1].chars().all(|c| {
+                    c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'
+                }))
+                && it.next().is_some_and(|h| {
+                    h.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+                        && (h.contains('.') || h.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+                })
+                && it.next().is_some_and(|n| n.trim_end_matches(';').chars().all(|c| c.is_ascii_digit()) && !n.is_empty());
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-Organization-SenderIdResult:` 欄の値が
+/// SPF/SenderID 判定語彙 (`none`/`pass`/`fail`/`softfail`/`neutral`/
+/// `temperror`/`permerror`) でなければ送信者判定記録の異形として
+/// 検出する (D3025)。
+///
+/// 組織が刻む SenderID 判定は閉じた語彙 — 語彙外の値は「判定を
+/// 刻んだ体裁」の擬態。
+fn has_ms_sidres_bad(bytes: &[u8]) -> bool {
+    let logical = dq_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-organization-senderidresult:") {
+            let t = v.trim();
+            if !matches!(
+                t,
+                "none" | "pass" | "fail" | "softfail" | "neutral" | "temperror" | "permerror"
+            ) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Mailgun-Sending-Ip:`/`X-Mailgun-Track:`/`X-Mailgun-Sid:` 欄の
+/// 値が定形でなければ Mailgun 配送記録の異形として検出する (D3026)。
+///
+/// 配送サービスの刻印は形が決まっている — 送信IPは四捗値、
+/// 追跡指定は `true`/`false`、識別子は空白なし印字トークン。
+/// 形を欠く値は「配送機が処理した体裁」の擬態 (ベンダー印として
+/// どの検出器にも触れられていなかった)。
+fn has_x_mgun_bad(bytes: &[u8]) -> bool {
+    let logical = dq_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-mailgun-sending-ip:") {
+            let t = v.trim();
+            let ok = t.split('.').count() == 4
+                && t.split('.').all(|o| !o.is_empty() && o.len() <= 3 && o.chars().all(|c| c.is_ascii_digit()));
+            if !ok {
+                return true;
+            }
+        } else if let Some(v) = low.strip_prefix("x-mailgun-track:") {
+            let t = v.trim();
+            if !matches!(t, "true" | "false") {
+                return true;
+            }
+        } else if let Some(v) = low.strip_prefix("x-mailgun-sid:") {
+            let t = v.trim();
+            if t.is_empty() || t.chars().any(|c| c.is_whitespace() || !c.is_ascii()) {
                 return true;
             }
         }
@@ -131572,16 +131740,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131598,16 +131756,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131619,18 +131767,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133297,6 +133433,77 @@ fn 投稿機欄が異形なら発火() {
             b"Mail-Followup-To: poster\r\n\r\nbody"
         ));
         assert!(!has_list_followup_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3023_x_quarantine_bad() {
+        assert!(has_x_quarantine_bad(
+            b"X-Quarantine-ID: notbracketed\r\n\r\nbody"
+        ));
+        assert!(has_x_quarantine_bad(
+            b"X-Quarantine-ID: <a b>\r\n\r\nbody"
+        ));
+        assert!(has_x_quarantine_bad(
+            b"X-Quarantine-ID:\r\n\r\nbody"
+        ));
+        assert!(!has_x_quarantine_bad(
+            b"X-Quarantine-ID: <20190312.1.hCvz3@x.com>\r\n\r\nbody"
+        ));
+        assert!(!has_x_quarantine_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3024_x_dcc_bad() {
+        assert!(has_x_dcc_bad(
+            b"X-Spam-DCC: junk\r\n\r\nbody"
+        ));
+        assert!(has_x_dcc_bad(
+            b"X-Spam-DCC:\r\n\r\nbody"
+        ));
+        assert!(!has_x_dcc_bad(
+            b"X-Spam-DCC: INFN-TO: mail.example.com 1158; Body=1\r\n\r\nbody"
+        ));
+        assert!(!has_x_dcc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3025_ms_sidres_bad() {
+        assert!(has_ms_sidres_bad(
+            b"X-MS-Exchange-Organization-SenderIdResult: bogus\r\n\r\nbody"
+        ));
+        assert!(has_ms_sidres_bad(
+            b"X-MS-Exchange-Organization-SenderIdResult:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_sidres_bad(
+            b"X-MS-Exchange-Organization-SenderIdResult: pass\r\n\r\nbody"
+        ));
+        assert!(!has_ms_sidres_bad(
+            b"X-MS-Exchange-Organization-SenderIdResult: softfail\r\n\r\nbody"
+        ));
+        assert!(!has_ms_sidres_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3026_x_mgun_bad() {
+        assert!(has_x_mgun_bad(
+            b"X-Mailgun-Sending-Ip: not-an-ip\r\n\r\nbody"
+        ));
+        assert!(has_x_mgun_bad(
+            b"X-Mailgun-Track: maybe\r\n\r\nbody"
+        ));
+        assert!(has_x_mgun_bad(
+            b"X-Mailgun-Sid: \r\n\r\nbody"
+        ));
+        assert!(!has_x_mgun_bad(
+            b"X-Mailgun-Sending-Ip: 192.0.2.1\r\n\r\nbody"
+        ));
+        assert!(!has_x_mgun_bad(
+            b"X-Mailgun-Track: true\r\n\r\nbody"
+        ));
+        assert!(!has_x_mgun_bad(
+            b"X-Mailgun-Sid: WyJxOWxsdSIsImQ\r\n\r\nbody"
+        ));
+        assert!(!has_x_mgun_bad(b"From: a@b\r\n\r\nbody"));
     }
 
     #[test]

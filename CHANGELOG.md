@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3023: `X-Quarantine-ID:` 欄の非 `<トークン>` 値を検疫ずれとして検出 — `Envelope` に `x_quarantine_bad` を追加。
+### Security — D3024: `X-Spam-DCC:` 欄の非 `局: 機名 件数` 値を照合集計ずれとして検出 — `Envelope` に `x_dcc_bad` を追加。
+### Security — D3025: `X-MS-Exchange-Organization-SenderIdResult:` 欄の語彙外値を送信者判定ずれとして検出 — `Envelope` に `ms_sidres_bad` を追加。
+### Security — D3026: `X-Mailgun-Sending-Ip:`/`X-Mailgun-Track:`/`X-Mailgun-Sid:` 欄の値異形を配信機印ずれとして検出 — `Envelope` に `x_mgun_bad` を追加。
+
 ### Security — D2999: `X-MS-Exchange-Organization-MessageDirectionality:` 欄の語彙外値 (`Originating`/`Incoming` 以外) を輸送方向ずれとして検出 — `Envelope` に `ms_dir_bad` を追加。
 ### Security — D3000: `X-MS-Exchange-Organization-AuthMechanism:` 欄の非方式番号値 (1–2桁の 0–10 以外) を認証方式ずれとして検出 — `Envelope` に `ms_authmech_bad` を追加。
 ### Security — D3001: `X-MS-Office365-Filtering-Correlation-Id:` 欄の非GUID値を関連識別ずれとして検出 — `Envelope` に `ms_corr_id_bad` を追加。
