@@ -3371,6 +3371,14 @@ pub struct Envelope {
     pub xodom_bad: bool,
     /// `X-Message-UUID:` 欄の値が GUID 形でない (D3082 — 配送識別ずれ)。
     pub xmuuid_bad: bool,
+    /// `X-Spamd-Checker-Version:` 欄の値が `SpamAssassin` 始まりでない (D3115 — 検疫機名乗りずれ)。
+    pub xsdcv_bad: bool,
+    /// `X-Amavis-Original-Mail-From:`/`X-Amavis-Original-To:` 欄の値が `<>` でも宛名連接形でもない (D3116 — 検疫機元封書ずれ)。
+    pub xamaddr_bad: bool,
+    /// `X-Amavis-Checker-Version:` 欄の値が `Amavisd` 始まりでない (D3117 — 検疫機版号名乗りずれ)。
+    pub xamcv_bad: bool,
+    /// `X-Rspamd-User:` 欄の値が単一印字トークンでない (D3118 — 検疫機使用者ずれ)。
+    pub xrpusr_bad: bool,
     /// `X-MS-Exchange-Organization-OriginalSize:` 欄の値が整数形でない (D3119 — 組織元寸法ずれ)。
     pub msos_bad: bool,
     /// `X-MS-Exchange-Organization-SCLThreshold:` 欄の値が整数形でない (D3120 — 組織閾値ずれ)。
@@ -7388,6 +7396,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xsentto_bad = has_xsentto_bad(bytes);
     let xodom_bad = has_xodom_bad(bytes);
     let xmuuid_bad = has_xmuuid_bad(bytes);
+    let xsdcv_bad = has_xsdcv_bad(bytes);
+    let xamaddr_bad = has_xamaddr_bad(bytes);
+    let xamcv_bad = has_xamcv_bad(bytes);
+    let xrpusr_bad = has_xrpusr_bad(bytes);
     let msos_bad = has_msos_bad(bytes);
     let msst_bad = has_msst_bad(bytes);
     let mscts_bad = has_mscts_bad(bytes);
@@ -9095,6 +9107,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xsentto_bad,
         xodom_bad,
         xmuuid_bad,
+        xsdcv_bad,
+        xamaddr_bad,
+        xamcv_bad,
+        xrpusr_bad,
         msos_bad,
         msst_bad,
         mscts_bad,
@@ -52873,6 +52889,51 @@ fn has_xmuuid_bad(bytes: &[u8]) -> bool {
         }
         let lens: Vec<usize> = seg.iter().map(|s| s.len()).collect();
         lens != [8, 4, 4, 4, 12]
+    })
+}
+
+/// `X-Spamd-Checker-Version:` 欄の値が `SpamAssassin` 始まりでない (D3115 — 検疫機名乗りずれ)。
+fn has_xsdcv_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-spamd-checker-version:"], |t| {
+        !t.to_ascii_lowercase().starts_with("spamassassin")
+    })
+}
+
+/// `X-Amavis-Original-Mail-From:`/`X-Amavis-Original-To:` 欄の値が `<>` でも宛名連接形でもない (D3116 — 検疫機元封書ずれ)。
+fn has_xamaddr_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-amavis-original-mail-from:", "x-amavis-original-to:"],
+        |t| {
+            if t == "<>" {
+                return false;
+            }
+            t.split(',').any(|a| {
+                let a = a.trim();
+                let a = a
+                    .strip_prefix('<')
+                    .and_then(|s| s.strip_suffix('>'))
+                    .unwrap_or(a);
+                a.is_empty()
+                    || a.matches('@').count() != 1
+                    || a.starts_with('@')
+                    || a.ends_with('@')
+            })
+        },
+    )
+}
+
+/// `X-Amavis-Checker-Version:` 欄の値が `Amavisd` 始まりでない (D3117 — 検疫機版号名乗りずれ)。
+fn has_xamcv_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-amavis-checker-version:"], |t| {
+        !t.to_ascii_lowercase().starts_with("amavisd")
+    })
+}
+
+/// `X-Rspamd-User:` 欄の値が単一印字トークンでない (D3118 — 検疫機使用者ずれ)。
+fn has_xrpusr_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-rspamd-user:"], |t| {
+        t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
     })
 }
 
@@ -133753,6 +133814,43 @@ fn d3082_xmuuid_bad() {
             b"X-Delivered-To:\r\n user@example.com\r\n\r\nbody"
         ));
     }
+
+#[test]
+fn d3115_xsdcv_bad() {
+    assert!(has_xsdcv_bad(b"X-Spamd-Checker-Version: not sa\r\n\r\nbody"));
+    assert!(has_xsdcv_bad(b"X-Spamd-Checker-Version:\r\n\r\nbody"));
+    assert!(!has_xsdcv_bad(b"X-Spamd-Checker-Version: SpamAssassin 3.4.6 (2021-04-09)\r\n\r\nbody"));
+    assert!(!has_xsdcv_bad(b"X-Spamd-Checker-Version: spamassassin 3.4.6\r\n\r\nbody"));
+    assert!(!has_xsdcv_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3116_xamaddr_bad() {
+    assert!(has_xamaddr_bad(b"X-Amavis-Original-Mail-From: not addr\r\n\r\nbody"));
+    assert!(has_xamaddr_bad(b"X-Amavis-Original-To: u@x.com, bad@\r\n\r\nbody"));
+    assert!(has_xamaddr_bad(b"X-Amavis-Original-To:\r\n\r\nbody"));
+    assert!(!has_xamaddr_bad(b"X-Amavis-Original-Mail-From: <>\r\n\r\nbody"));
+    assert!(!has_xamaddr_bad(b"X-Amavis-Original-To: u@x.com, <v@y.com>\r\n\r\nbody"));
+    assert!(!has_xamaddr_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3117_xamcv_bad() {
+    assert!(has_xamcv_bad(b"X-Amavis-Checker-Version: not av\r\n\r\nbody"));
+    assert!(has_xamcv_bad(b"X-Amavis-Checker-Version:\r\n\r\nbody"));
+    assert!(!has_xamcv_bad(b"X-Amavis-Checker-Version: Amavisd-new 2.11.0 (20210929)\r\n\r\nbody"));
+    assert!(!has_xamcv_bad(b"X-Amavis-Checker-Version: amavisd-new 2.11.0\r\n\r\nbody"));
+    assert!(!has_xamcv_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3118_xrpusr_bad() {
+    assert!(has_xrpusr_bad(b"X-Rspamd-User: not user here\r\n\r\nbody"));
+    assert!(has_xrpusr_bad(b"X-Rspamd-User:\r\n\r\nbody"));
+    assert!(!has_xrpusr_bad(b"X-Rspamd-User: user@example.com\r\n\r\nbody"));
+    assert!(!has_xrpusr_bad(b"X-Rspamd-User: daemon\r\n\r\nbody"));
+    assert!(!has_xrpusr_bad(b"From: a@b\r\n\r\nbody"));
+}
 
 #[test]
 fn d3119_msos_bad() {
