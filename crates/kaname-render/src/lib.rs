@@ -3371,6 +3371,14 @@ pub struct Envelope {
     pub xodom_bad: bool,
     /// `X-Message-UUID:` 欄の値が GUID 形でない (D3082 — 配送識別ずれ)。
     pub xmuuid_bad: bool,
+    /// `X-MS-Exchange-Organization-OriginalClientIpAddress:`/`OriginalServerIpAddress:` 欄の値がIPアドレス形でない (D3091 — 発信接続元ずれ)。
+    pub xmsip_bad: bool,
+    /// `X-MS-Exchange-GeneratedBySourceMailbox:` 欄の値が GUID 形でない (D3092 — 元受信箱ずれ)。
+    pub xmsmbx_bad: bool,
+    /// `X-Remote-Addr:`/`X-Real-IP:`/`X-Client-Addr:` 欄の値がIPアドレス形でない (D3093 — 接続元ずれ)。
+    pub xraddr_bad: bool,
+    /// `X-Return-Path:` 欄の値が `<>` でも宛名形でもない (D3094 — 返送先裏控ずれ)。
+    pub xrtpath_bad: bool,
     /// `X-MS-Exchange-Organization-OriginalSize:` 欄の値が整数形でない (D3119 — 組織元寸法ずれ)。
     pub msos_bad: bool,
     /// `X-MS-Exchange-Organization-SCLThreshold:` 欄の値が整数形でない (D3120 — 組織閾値ずれ)。
@@ -7388,6 +7396,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xsentto_bad = has_xsentto_bad(bytes);
     let xodom_bad = has_xodom_bad(bytes);
     let xmuuid_bad = has_xmuuid_bad(bytes);
+    let xmsip_bad = has_xmsip_bad(bytes);
+    let xmsmbx_bad = has_xmsmbx_bad(bytes);
+    let xraddr_bad = has_xraddr_bad(bytes);
+    let xrtpath_bad = has_xrtpath_bad(bytes);
     let msos_bad = has_msos_bad(bytes);
     let msst_bad = has_msst_bad(bytes);
     let mscts_bad = has_mscts_bad(bytes);
@@ -9095,6 +9107,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xsentto_bad,
         xodom_bad,
         xmuuid_bad,
+        xmsip_bad,
+        xmsmbx_bad,
+        xraddr_bad,
+        xrtpath_bad,
         msos_bad,
         msst_bad,
         mscts_bad,
@@ -52873,6 +52889,57 @@ fn has_xmuuid_bad(bytes: &[u8]) -> bool {
         }
         let lens: Vec<usize> = seg.iter().map(|s| s.len()).collect();
         lens != [8, 4, 4, 4, 12]
+    })
+}
+
+/// `X-MS-Exchange-Organization-OriginalClientIpAddress:`/`OriginalServerIpAddress:` 欄の値がIPアドレス形でない (D3091 — 発信接続元ずれ)。
+fn has_xmsip_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &[
+            "x-ms-exchange-organization-originalclientipaddress:",
+            "x-ms-exchange-organization-originalserveripaddress:",
+        ],
+        |t| t.parse::<std::net::IpAddr>().is_err(),
+    )
+}
+
+/// `X-MS-Exchange-GeneratedBySourceMailbox:` 欄の値が GUID 形でない (D3092 — 元受信箱ずれ)。
+fn has_xmsmbx_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-ms-exchange-generatedbysourcemailbox:"], |t| {
+        let t = t
+            .strip_prefix('{')
+            .and_then(|s| s.strip_suffix('}'))
+            .unwrap_or(t);
+        let seg: Vec<&str> = t.split('-').collect();
+        if seg.len() != 5 || seg.iter().any(|s| s.is_empty() || !s.bytes().all(|b| b.is_ascii_hexdigit())) {
+            return true;
+        }
+        let lens: Vec<usize> = seg.iter().map(|s| s.len()).collect();
+        lens != [8, 4, 4, 4, 12]
+    })
+}
+
+/// `X-Remote-Addr:`/`X-Real-IP:`/`X-Client-Addr:` 欄の値がIPアドレス形でない (D3093 — 接続元ずれ)。
+fn has_xraddr_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-remote-addr:", "x-real-ip:", "x-client-addr:"],
+        |t| t.parse::<std::net::IpAddr>().is_err(),
+    )
+}
+
+/// `X-Return-Path:` 欄の値が `<>` でも宛名形でもない (D3094 — 返送先裏控ずれ)。
+fn has_xrtpath_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-return-path:"], |t| {
+        if t == "<>" {
+            return false;
+        }
+        let t = t
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(t);
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
     })
 }
 
@@ -133753,6 +133820,64 @@ fn d3082_xmuuid_bad() {
             b"X-Delivered-To:\r\n user@example.com\r\n\r\nbody"
         ));
     }
+
+#[test]
+fn d3091_xmsip_bad() {
+    assert!(has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalClientIpAddress: not ip\r\n\r\nbody"
+    ));
+    assert!(has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalServerIpAddress: 999.1.2.3\r\n\r\nbody"
+    ));
+    assert!(has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalClientIpAddress:\r\n\r\nbody"
+    ));
+    assert!(!has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalClientIpAddress: 192.0.2.1\r\n\r\nbody"
+    ));
+    assert!(!has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalServerIpAddress: 2001:db8::1\r\n\r\nbody"
+    ));
+    assert!(!has_xmsip_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3092_xmsmbx_bad() {
+    assert!(has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: not-a-guid\r\n\r\nbody"
+    ));
+    assert!(has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: 8-4-4-4-12\r\n\r\nbody"
+    ));
+    assert!(!has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: 550e8400-e29b-41d4-a716-446655440000\r\n\r\nbody"
+    ));
+    assert!(!has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: {550E8400-E29B-41D4-A716-446655440000}\r\n\r\nbody"
+    ));
+    assert!(!has_xmsmbx_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3093_xraddr_bad() {
+    assert!(has_xraddr_bad(b"X-Remote-Addr: not ip\r\n\r\nbody"));
+    assert!(has_xraddr_bad(b"X-Real-IP: 999.1.2.3\r\n\r\nbody"));
+    assert!(has_xraddr_bad(b"X-Client-Addr:\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"X-Remote-Addr: 192.0.2.1\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"X-Real-IP: 2001:db8::1\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"X-Client-Addr: 10.0.0.1\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3094_xrtpath_bad() {
+    assert!(has_xrtpath_bad(b"X-Return-Path: not addr\r\n\r\nbody"));
+    assert!(has_xrtpath_bad(b"X-Return-Path: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"X-Return-Path: <>\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"X-Return-Path: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"X-Return-Path: u@x.com\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"From: a@b\r\n\r\nbody"));
+}
 
 #[test]
 fn d3119_msos_bad() {
