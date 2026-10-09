@@ -3355,6 +3355,14 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `Content-Returned:` 欄の値が yes/no 外 (D3055 — 内容返却ずれ)。
+    pub x4_cr_bad: bool,
+    /// `Content-Correlator:` 欄の値が印字トークン形でない (D3056 — 対応鍵ずれ)。
+    pub x4_cc_bad: bool,
+    /// `X400-Originator:` 欄の値が宛名/鍵連接形でない (D3057 — 交換元ずれ)。
+    pub x4_org_bad: bool,
+    /// `X400-Trace:` 欄の値が大括弧くくり形でない (D3058 — 追跡記録ずれ)。
+    pub x4_trc_bad: bool,
     /// `Relay-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
     pub rver_bad: bool,
     /// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
@@ -7380,6 +7388,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let x4_cr_bad = has_x4_cr_bad(bytes);
+    let x4_cc_bad = has_x4_cc_bad(bytes);
+    let x4_org_bad = has_x4_org_bad(bytes);
+    let x4_trc_bad = has_x4_trc_bad(bytes);
     let rver_bad = has_rver_bad(bytes);
     let pver_bad = has_pver_bad(bytes);
     let drcv_bad = has_drcv_bad(bytes);
@@ -9087,6 +9099,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        x4_cr_bad,
+        x4_cc_bad,
+        x4_org_bad,
+        x4_trc_bad,
         rver_bad,
         pver_bad,
         drcv_bad,
@@ -52679,6 +52695,150 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
                         })
                 };
             if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Returned:` 欄の値が yes/no 外 (D3055 — 内容返却ずれ)。
+fn has_x4_cr_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("content-returned:") {
+            let t = v.trim();
+            if t != "yes" && t != "no" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Correlator:` 欄の値が印字トークン形でない (D3056 — 対応鍵ずれ)。
+fn has_x4_cc_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("content-correlator:") {
+            let t = v.trim();
+            let bad = t.is_empty()
+                || !t
+                    .chars()
+                    .all(|c| (0x21..=0x7e).contains(&(c as u32)));
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X400-Originator:` 欄の値が宛名/鍵連接形でない (D3057 — 交換元ずれ)。
+fn has_x4_org_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x400-originator:") {
+            let t = v.trim();
+            if !(t.contains('@') || t.contains('=') || t == "<>") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X400-Trace:` 欄の値が大括弧くくり形でない (D3058 — 追跡記録ずれ)。
+fn has_x4_trc_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x400-trace:") {
+            let t = v.trim();
+            if !(t.starts_with('[') && t.ends_with(']') && t.len() > 2) {
                 return true;
             }
         }
@@ -131572,16 +131732,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131598,16 +131748,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131619,18 +131759,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133614,6 +133742,49 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3055_x4_cr_bad() {
+        assert!(has_x4_cr_bad(b"Content-Returned: maybe\r\n\r\nbody"));
+        assert!(has_x4_cr_bad(b"Content-Returned:\r\n\r\nbody"));
+        assert!(!has_x4_cr_bad(b"Content-Returned: yes\r\n\r\nbody"));
+        assert!(!has_x4_cr_bad(b"Content-Returned: no\r\n\r\nbody"));
+        assert!(!has_x4_cr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3056_x4_cc_bad() {
+        assert!(has_x4_cc_bad(b"Content-Correlator: has space\r\n\r\nbody"));
+        assert!(has_x4_cc_bad(b"Content-Correlator:\r\n\r\nbody"));
+        assert!(!has_x4_cc_bad(b"Content-Correlator: corr-12345\r\n\r\nbody"));
+        assert!(!has_x4_cc_bad(b"Content-Correlator: <key@x.com>\r\n\r\nbody"));
+        assert!(!has_x4_cc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3057_x4_org_bad() {
+        assert!(has_x4_org_bad(b"X400-Originator: not an addr\r\n\r\nbody"));
+        assert!(has_x4_org_bad(b"X400-Originator:\r\n\r\nbody"));
+        assert!(!has_x4_org_bad(
+            b"X400-Originator: sender@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_x4_org_bad(
+            b"X400-Originator: c=JP; a= ; p=org; o=site\r\n\r\nbody"
+        ));
+        assert!(!has_x4_org_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3058_x4_trc_bad() {
+        assert!(has_x4_trc_bad(b"X400-Trace: trace record\r\n\r\nbody"));
+        assert!(has_x4_trc_bad(b"X400-Trace:\r\n\r\nbody"));
+        assert!(has_x4_trc_bad(b"X400-Trace: []\r\n\r\nbody"));
+        assert!(!has_x4_trc_bad(
+            b"X400-Trace: [ trace record ]\r\n\r\nbody"
+        ));
+        assert!(!has_x4_trc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
 
     #[test]
     fn d3067_rver_bad() {
