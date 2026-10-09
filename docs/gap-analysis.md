@@ -2354,6 +2354,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3080 | X-Sent-To: の非宛名形値 (配送宛名欄の値異形) | 配送宛名ずれ |
 | D3081 | X-Originating-Domain: の非FQDNトークン値 (発信局名欄の値異形) | 発信局名ずれ |
 | D3082 | X-Message-UUID: の非GUID形値 (配送識別欄の値異形) | 配送識別ずれ |
+| D3103 | X-MailScanner-From: の非 <>/宛名形値 (走査機封書元宛欄の値異形) | 走査機封書元宛ずれ |
+| D3104 | X-MailScanner-To: の非宛名連接値 (走査機封書宛先欄の値異形) | 走査機封書宛先ずれ |
+| D3105 | X-MailScanner-ID:/QueueID: の非単一印字トークン値 (走査機識別欄の値異形) | 走査機識別ずれ |
+| D3106 | X-MailScanner-SpamCheck: の非 spam/not spam 始まり値 (走査機判定詳細欄の値異形) | 走査機判定詳細ずれ |
 | D3119 | X-MS-Exchange-Organization-OriginalSize: の非整数値 (組織元寸法欄の値異形) | 組織元寸法ずれ |
 | D3120 | X-MS-Exchange-Organization-SCLThreshold: の非整数値 (組織閾値欄の値異形) | 組織閾値ずれ |
 | D3121 | X-MS-Exchange-Transport-CrossTenantHeadersStripped: の非 true/false 値 (組織越境除去欄の値異形) | 組織越境除去ずれ |
