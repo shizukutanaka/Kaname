@@ -3371,6 +3371,14 @@ pub struct Envelope {
     pub xodom_bad: bool,
     /// `X-Message-UUID:` 欄の値が GUID 形でない (D3082 — 配送識別ずれ)。
     pub xmuuid_bad: bool,
+    /// `X-Rspamd-Queue-Id:`/`X-Rspamd-Id:` 欄の値が単一印字トークンでない (D3107 — 走査機番号ずれ)。
+    pub xrpid_bad: bool,
+    /// `X-Rspamd-Score:`/`X-Rspamd-Ip-Score:` 欄の値が数値形でない (D3108 — 走査機得点ずれ)。
+    pub xrpsc_bad: bool,
+    /// `X-Rspamd-Version:` 欄の値が版号形でない (D3109 — 走査機版号ずれ)。
+    pub xrpv_bad: bool,
+    /// `X-Rspamd-From:`/`X-Rspamd-Rcpt:` 欄の値が `<>` でも宛名連接形でもない (D3110 — 走査機封書ずれ)。
+    pub xrpaddr_bad: bool,
     /// `X-MS-Exchange-Organization-OriginalSize:` 欄の値が整数形でない (D3119 — 組織元寸法ずれ)。
     pub msos_bad: bool,
     /// `X-MS-Exchange-Organization-SCLThreshold:` 欄の値が整数形でない (D3120 — 組織閾値ずれ)。
@@ -7388,6 +7396,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xsentto_bad = has_xsentto_bad(bytes);
     let xodom_bad = has_xodom_bad(bytes);
     let xmuuid_bad = has_xmuuid_bad(bytes);
+    let xrpid_bad = has_xrpid_bad(bytes);
+    let xrpsc_bad = has_xrpsc_bad(bytes);
+    let xrpv_bad = has_xrpv_bad(bytes);
+    let xrpaddr_bad = has_xrpaddr_bad(bytes);
     let msos_bad = has_msos_bad(bytes);
     let msst_bad = has_msst_bad(bytes);
     let mscts_bad = has_mscts_bad(bytes);
@@ -9095,6 +9107,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xsentto_bad,
         xodom_bad,
         xmuuid_bad,
+        xrpid_bad,
+        xrpsc_bad,
+        xrpv_bad,
+        xrpaddr_bad,
         msos_bad,
         msst_bad,
         mscts_bad,
@@ -52873,6 +52889,48 @@ fn has_xmuuid_bad(bytes: &[u8]) -> bool {
         }
         let lens: Vec<usize> = seg.iter().map(|s| s.len()).collect();
         lens != [8, 4, 4, 4, 12]
+    })
+}
+
+/// `X-Rspamd-Queue-Id:`/`X-Rspamd-Id:` 欄の値が単一印字トークンでない (D3107 — 走査機番号ずれ)。
+fn has_xrpid_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-rspamd-queue-id:", "x-rspamd-id:"],
+        |t| t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b)),
+    )
+}
+
+/// `X-Rspamd-Score:`/`X-Rspamd-Ip-Score:` 欄の値が数値形でない (D3108 — 走査機得点ずれ)。
+fn has_xrpsc_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-rspamd-score:", "x-rspamd-ip-score:"],
+        |t| t.is_empty() || t.parse::<f64>().is_err(),
+    )
+}
+
+/// `X-Rspamd-Version:` 欄の値が版号形でない (D3109 — 走査機版号ずれ)。
+fn has_xrpv_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-rspamd-version:"], |t| {
+        t.split('.').any(|s| s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()))
+    })
+}
+
+/// `X-Rspamd-From:`/`X-Rspamd-Rcpt:` 欄の値が `<>` でも宛名連接形でもない (D3110 — 走査機封書ずれ)。
+fn has_xrpaddr_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-rspamd-from:", "x-rspamd-rcpt:"], |t| {
+        if t == "<>" {
+            return false;
+        }
+        t.split(',').any(|a| {
+            let a = a.trim();
+            let a = a
+                .strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+                .unwrap_or(a);
+            a.is_empty() || a.matches('@').count() != 1 || a.starts_with('@') || a.ends_with('@')
+        })
     })
 }
 
@@ -133753,6 +133811,47 @@ fn d3082_xmuuid_bad() {
             b"X-Delivered-To:\r\n user@example.com\r\n\r\nbody"
         ));
     }
+
+#[test]
+fn d3107_xrpid_bad() {
+    assert!(has_xrpid_bad(b"X-Rspamd-Queue-Id: not id here\r\n\r\nbody"));
+    assert!(has_xrpid_bad(b"X-Rspamd-Id: \r\n\r\nbody"));
+    assert!(has_xrpid_bad(b"X-Rspamd-Queue-Id:\r\n\r\nbody"));
+    assert!(!has_xrpid_bad(b"X-Rspamd-Queue-Id: A1B2C3D4E5\r\n\r\nbody"));
+    assert!(!has_xrpid_bad(b"X-Rspamd-Id: a1b2.c3-d4\r\n\r\nbody"));
+    assert!(!has_xrpid_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3108_xrpsc_bad() {
+    assert!(has_xrpsc_bad(b"X-Rspamd-Score: not num\r\n\r\nbody"));
+    assert!(has_xrpsc_bad(b"X-Rspamd-Ip-Score:\r\n\r\nbody"));
+    assert!(!has_xrpsc_bad(b"X-Rspamd-Score: 10.5\r\n\r\nbody"));
+    assert!(!has_xrpsc_bad(b"X-Rspamd-Score: -1.234\r\n\r\nbody"));
+    assert!(!has_xrpsc_bad(b"X-Rspamd-Ip-Score: NaN\r\n\r\nbody"));
+    assert!(!has_xrpsc_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3109_xrpv_bad() {
+    assert!(has_xrpv_bad(b"X-Rspamd-Version: not ver\r\n\r\nbody"));
+    assert!(has_xrpv_bad(b"X-Rspamd-Version: 3.7.x\r\n\r\nbody"));
+    assert!(has_xrpv_bad(b"X-Rspamd-Version: .3.7\r\n\r\nbody"));
+    assert!(!has_xrpv_bad(b"X-Rspamd-Version: 3.7.5\r\n\r\nbody"));
+    assert!(!has_xrpv_bad(b"X-Rspamd-Version: 3.14\r\n\r\nbody"));
+    assert!(!has_xrpv_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3110_xrpaddr_bad() {
+    assert!(has_xrpaddr_bad(b"X-Rspamd-From: not addr\r\n\r\nbody"));
+    assert!(has_xrpaddr_bad(b"X-Rspamd-Rcpt: u@x.com, bad@\r\n\r\nbody"));
+    assert!(has_xrpaddr_bad(b"X-Rspamd-Rcpt:\r\n\r\nbody"));
+    assert!(!has_xrpaddr_bad(b"X-Rspamd-From: <>\r\n\r\nbody"));
+    assert!(!has_xrpaddr_bad(b"X-Rspamd-From: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xrpaddr_bad(b"X-Rspamd-Rcpt: v@y.com, <w@z.com>\r\n\r\nbody"));
+    assert!(!has_xrpaddr_bad(b"From: a@b\r\n\r\nbody"));
+}
 
 #[test]
 fn d3119_msos_bad() {

@@ -12,6 +12,10 @@
 ### Security — D3080: `X-Sent-To:` 欄の非宛名形値を配送宛名ずれとして検出 — `Envelope` に `xsentto_bad` を追加。
 ### Security — D3081: `X-Originating-Domain:` 欄の非FQDNトークン値を発信局名ずれとして検出 — `Envelope` に `xodom_bad` を追加。
 ### Security — D3082: `X-Message-UUID:` 欄の非GUID形値を配送識別ずれとして検出 — `Envelope` に `xmuuid_bad` を追加。
+### Security — D3107: `X-Rspamd-Queue-Id:`/`X-Rspamd-Id:` 欄の非単一印字トークン値を走査機番号ずれとして検出 — `Envelope` に `xrpid_bad` を追加。
+### Security — D3108: `X-Rspamd-Score:`/`X-Rspamd-Ip-Score:` 欄の非数値を走査機得点ずれとして検出 — `Envelope` に `xrpsc_bad` を追加。
+### Security — D3109: `X-Rspamd-Version:` 欄の非版号値を走査機版号ずれとして検出 — `Envelope` に `xrpv_bad` を追加。
+### Security — D3110: `X-Rspamd-From:`/`X-Rspamd-Rcpt:` 欄の非 `<>`/宛名連接値を走査機封書ずれとして検出 — `Envelope` に `xrpaddr_bad` を追加。
 ### Security — D3119: `X-MS-Exchange-Organization-OriginalSize:` 欄の非整数値を組織元寸法ずれとして検出 — `Envelope` に `msos_bad` を追加。
 ### Security — D3120: `X-MS-Exchange-Organization-SCLThreshold:` 欄の非整数値を組織閾値ずれとして検出 — `Envelope` に `msst_bad` を追加。
 ### Security — D3121: `X-MS-Exchange-Transport-CrossTenantHeadersStripped:` 欄の非 `true`/`false` 値を組織越境除去ずれとして検出 — `Envelope` に `mscts_bad` を追加。
