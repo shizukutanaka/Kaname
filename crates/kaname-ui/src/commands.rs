@@ -9481,6 +9481,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.xmuuid_bad {
         render_risks.push("配送識別欄の値がGUID形でないです—配送記録の扱いで照合がずれます".to_string());
     }
+    if env.xbcenv_bad {
+        render_risks.push("検疫網封書欄の値が宛名形でないです—検査記録の扱いで封書照合がずれます".to_string());
+    }
+    if env.xbcip_bad {
+        render_risks.push("検疫網接続元欄の値がIPアドレス形でないです—検査記録の扱いで接続元特定がずれます".to_string());
+    }
+    if env.xbctime_bad {
+        render_risks.push("検疫網開始刻印欄の値が数値形でないです—検査記録の扱いで時刻照合がずれます".to_string());
+    }
+    if env.xbcspam_bad {
+        render_risks.push("検疫網迷惑印欄の値が Yes/No でないです—検査記録の扱いで判定確認がずれます".to_string());
+    }
     if env.msos_bad {
         render_risks.push("組織元寸法欄の値が整数形でないです—組織記録の扱いで寸法照合がずれます".to_string());
     }
