@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3027: `X-MS-Exchange-Organization-PCL:` 欄の非数値を疑い度ずれとして検出 — `Envelope` に `ms_pcl_bad` を追加。
+### Security — D3028: `X-MS-Exchange-CrossTenant-Message-Id:` 欄の非GUID値を越境識別ずれとして検出 — `Envelope` に `ms_ctmid_bad` を追加。
+### Security — D3029: `X-MS-Office365-Filtering-Correlation-Id-Prvs:` 欄の非16進値を照合鍵ずれとして検出 — `Envelope` に `ms_prvscid_bad` を追加。
+### Security — D3030: `X-MS-Exchange-CrossTenant-FromEntityHeader:` 欄の語彙外値を由来ずれとして検出 — `Envelope` に `ms_entity_bad` を追加。
+
 ### Security — D2999: `X-MS-Exchange-Organization-MessageDirectionality:` 欄の語彙外値 (`Originating`/`Incoming` 以外) を輸送方向ずれとして検出 — `Envelope` に `ms_dir_bad` を追加。
 ### Security — D3000: `X-MS-Exchange-Organization-AuthMechanism:` 欄の非方式番号値 (1–2桁の 0–10 以外) を認証方式ずれとして検出 — `Envelope` に `ms_authmech_bad` を追加。
 ### Security — D3001: `X-MS-Office365-Filtering-Correlation-Id:` 欄の非GUID値を関連識別ずれとして検出 — `Envelope` に `ms_corr_id_bad` を追加。
