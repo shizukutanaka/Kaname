@@ -9529,6 +9529,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.xvhost_bad {
         render_risks.push("仮想局欄の値が単一局名形でないです—配送記録の扱いで経路把握がずれます".to_string());
     }
+    if env.xrfrom_bad {
+        render_risks.push("実差出人欄の値が宛名形でないです—転送記録の扱いで差出人照合がずれます".to_string());
+    }
+    if env.xrto_bad {
+        render_risks.push("実宛先欄の値が宛名形でないです—転送記録の扱いで宛先照合がずれます".to_string());
+    }
+    if env.xfby_bad {
+        render_risks.push("転送局欄の値が局名形でないです—転送記録の扱いで経路特定がずれます".to_string());
+    }
+    if env.xfhost_bad {
+        render_risks.push("転送経路局欄の値が局名形でないです—転送記録の扱いで経路特定がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

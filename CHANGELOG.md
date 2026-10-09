@@ -28,6 +28,10 @@
 ### Security — D3072: `X-Old-Message-ID:` 欄の非msgid形値を書換識別ずれとして検出 — `Envelope` に `xomsg_bad` を追加。
 ### Security — D3073: `X-Bounce-Address:` 欄の非宛名形値を返送記録ずれとして検出 — `Envelope` に `xbadrs_bad` を追加。
 ### Security — D3074: `X-VHost:` 欄の非局名トークン値を仮想局ずれとして検出 — `Envelope` に `xvhost_bad` を追加。
+### Security — D3087: `X-Real-From:` 欄の非宛名形値を実差出人ずれとして検出 — `Envelope` に `xrfrom_bad` を追加。
+### Security — D3088: `X-Real-To:`/`X-Real-RCPT:` 欄の非宛名形値を実宛先ずれとして検出 — `Envelope` に `xrto_bad` を追加。
+### Security — D3089: `X-Forwarded-By:` 欄の非局名/IPリテラル値を転送局ずれとして検出 — `Envelope` に `xfby_bad` を追加。
+### Security — D3090: `X-Forwarded-Host:`/`X-Forwarded-Server:` 欄の非局名/IPリテラル値を転送経路局ずれとして検出 — `Envelope` に `xfhost_bad` を追加。
 ### Fixed — Devin Review (#822): `dc_each` が折り畳み継続行を読み飛ばし継続行内の異形値を見逃す隙間、`X-Delivered-To:` の二重アット (`a@@x`) 偽陰性、`Relay-Version:`/`Posting-Version:` の3語目混入偽陰性を修正。
 
 ### Security — D3003: `X-MS-Exchange-CrossTenant-Id:` 欄の非GUID値を越境識別ずれとして検出 — `Envelope` に `ms_ct_id_bad` を追加。
