@@ -2326,6 +2326,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2992 | OpenPGP: の非 名=値/鍵要素値 (鍵識別欄の値異形) | 鍵識別ずれ |
 | D2993 | Content-Return: の語彙外値 (本文返却欄の値異形) | 返却ずれ |
 | D2994 | Mail-Followup-To:/Mail-Reply-To: の非宛名値 (追従先欄の値異形) | 追従ずれ |
+| D3027 | X-MS-Exchange-Organization-PCL: の非数値 (疑い度欄の値異形) | 疑い度ずれ |
+| D3028 | X-MS-Exchange-CrossTenant-Message-Id: の非GUID値 (越境識別欄の値異形) | 越境識別ずれ |
+| D3029 | X-MS-Office365-Filtering-Correlation-Id-Prvs: の非16進値 (照合鍵欄の値異形) | 照合鍵ずれ |
+| D3030 | X-MS-Exchange-CrossTenant-FromEntityHeader: の語彙外値 (越境由来欄の値異形) | 越境由来ずれ |
 | D3007 | X-IronPort-Anti-Spam-Filtered: の非真偽値 (機器判定欄の値異形) | 判定ずれ |
 | D3008 | X-IronPort-AV: の非 名=値 連接値 (機器検査欄の値異形) | 検査ずれ |
 | D3009 | X-IronPort-Anti-Spam-Result: の非base64形値 (機器結果欄の値異形) | 結果ずれ |
@@ -2346,6 +2350,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3000 | X-MS-Exchange-Organization-AuthMechanism: の非方式番号値 (認証方式欄の値異形) | 方式ずれ |
 | D3001 | X-MS-Office365-Filtering-Correlation-Id: の非GUID値 (関連識別欄の値異形) | 識別ずれ |
 | D3002 | X-MS-Exchange-Organization-ExpirationStartTime: の非日時形値 (失効開始欄の値異形) | 失効ずれ |
+| D3059 | X-PM-Message-Id:/X-Postmark-Message-Id: の非トークン値 (配送業者識別欄の値異形) | 識別ずれ |
+| D3060 | X-PM-RCPT: の非宛名形値 (配送業者宛先欄の値異形) | 宛先ずれ |
+| D3061 | X-ExclaimerHostedSignatures-MessageProcessed: 系の非真偽値 (署印処理欄の値異形) | 署印ずれ |
+| D3062 | X-Message-ID: の非msgid形値 (配送識別欄の値異形) | 識別ずれ |
 | D3067 | Relay-Version: の非 version site 値 (中継版号欄の値異形) | 中継記録ずれ |
 | D3068 | Posting-Version: の非 version site 値 (投稿版号欄の値異形) | 投稿記録ずれ |
 | D3069 | Date-Received: の非日時形値 (到着日時欄の値異形) | 到着記録ずれ |
@@ -2354,6 +2362,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3080 | X-Sent-To: の非宛名形値 (配送宛名欄の値異形) | 配送宛名ずれ |
 | D3081 | X-Originating-Domain: の非FQDNトークン値 (発信局名欄の値異形) | 発信局名ずれ |
 | D3082 | X-Message-UUID: の非GUID形値 (配送識別欄の値異形) | 配送識別ずれ |
+| D3115 | X-Spamd-Checker-Version: の非 SpamAssassin 始まり値 (検疫機名乗り欄の値異形) | 検疫機名乗りずれ |
+| D3116 | X-Amavis-Original-Mail-From:/Original-To: の非 <>/宛名連接値 (検疫機元封書欄の値異形) | 検疫機元封書ずれ |
+| D3117 | X-Amavis-Checker-Version: の非 Amavisd 始まり値 (検疫機版号名乗り欄の値異形) | 検疫機版号名乗りずれ |
+| D3118 | X-Rspamd-User: の非単一印字トークン値 (検疫機使用者欄の値異形) | 検疫機使用者ずれ |
 | D3099 | X-Barracuda-Envelope-From:/Envelope-To: の非 <>/宛名形値 (検疫網封書欄の値異形) | 検疫網封書ずれ |
 | D3100 | X-Barracuda-Connect-IP: の非IP値 (検疫網接続元欄の値異形) | 検疫網接続元ずれ |
 | D3101 | X-Barracuda-Start-Time: の非数値 (検疫網開始刻印欄の値異形) | 検疫網開始刻印ずれ |
@@ -2361,7 +2373,15 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3119 | X-MS-Exchange-Organization-OriginalSize: の非整数値 (組織元寸法欄の値異形) | 組織元寸法ずれ |
 | D3120 | X-MS-Exchange-Organization-SCLThreshold: の非整数値 (組織閾値欄の値異形) | 組織閾値ずれ |
 | D3121 | X-MS-Exchange-Transport-CrossTenantHeadersStripped: の非 true/false 値 (組織越境除去欄の値異形) | 組織越境除去ずれ |
-| D3122 | X-MS-Exchange-Organization-Original-SMTP-Client-IP:/Server-IP: の非IPv4値 (組織元接続IP欄の値異形) | 組織元接続IPずれ |
+| D3122 | X-MS-Exchange-Organization-Original-SMTP-Client-IP:/Server-IP: の非IP値 (組織元接続IP欄の値異形) | 組織元接続IPずれ |
+| D3123 | X-MIMEDefang-Spam-Score:/X-Fortimail-Spam-Score: の非数値値 (検疫機得点欄の値異形) | 検疫機得点ずれ |
+| D3124 | X-MIME-Autoconverted: の非 from 型 to 型 値 (変換記録欄の値異形) | 変換記録ずれ |
+| D3125 | X-Spam-Relay-Country: の非国コード連接値 (中継国欄の値異形) | 中継国ずれ |
+| D3126 | X-EVP-Envelope-ID: の非単一印字トークン値 (封書識別欄の値異形) | 封書識別ずれ |
+| D3127 | X-MS-Exchange-Transport-OriginalRecipient: の非宛名値 (組織元宛先欄の値異形) | 組織元宛先ずれ |
+| D3128 | X-MS-Exchange-Organization-OriginalArrivalTime: の非日時形値 (組織元到着欄の値異形) | 組織元到着ずれ |
+| D3129 | X-MS-Exchange-Organization-AuthSource-Lob: の非ホスト名値 (組織認証元欄の値異形) | 組織認証元ずれ |
+| D3130 | X-MS-Exchange-Organization-AVStamp-Service: の非単一印字トークン値 (組織検査印欄の値異形) | 組織検査印ずれ |
 | D3071 | X-Primary-IP: の非IPv4値 (発信原局欄の値異形) | 発信原局ずれ |
 | D3072 | X-Old-Message-ID: の非msgid形値 (書換識別欄の値異形) | 書換識別ずれ |
 | D3073 | X-Bounce-Address: の非宛名形値 (返送記録欄の値異形) | 返送記録ずれ |
