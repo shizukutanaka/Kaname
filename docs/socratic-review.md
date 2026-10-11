@@ -4631,6 +4631,11 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 問: `Content-Translation-Type:`/`Content-Duration:`/`Content-Script-Type:`/`Content-Style-Type:`/`X-SES-Outgoing:` の欄があれば仕様どおりのメタ記録を示すか。
 答: これらは MIME の属性帳 — 翻訳種別は `8BIT`/`7BIT`/`BINARY` の閉語彙 (RFC 1893)、長尺は数値、既定媒型は `型/下位型` の媒体型、SES 送出印は `YYYY.MM.DD-NN.NN` の固定印で、いずれも形が決まっている。どの検出器にも触れられていない绿地だったため、形を欠く値を「属性を記録した体裁」の擬態として D3015–D3018 を追加した。`Content-Length:` は D1344 が HTTP 由来として、`Content-Alternative:` は D1382 が自称印として既に捕捉するため対象外 — 権威の刻印は「値が権威の形をしているか」で問う原則の継続適用。
 
+## ラウンド 475 — 「組織の鑑定印」の自問自答
+
+問: `X-MS-Exchange-Organization-PCL:`/`X-MS-Exchange-CrossTenant-Message-Id:`/`X-MS-Office365-Filtering-Correlation-Id-Prvs:`/`X-MS-Exchange-CrossTenant-FromEntityHeader:` の欄があれば組織輸送の鑑定を示すか。
+答: これらは輸送所が捺す鑑定印 — PCL は整数の疑い度、越境識別子は GUID、PRVS 相関鍵は16進、FromEntityHeader は Internet/Hosted 等の由来語彙で、いずれも形が決まっている。どの検出器にも触れられていない绿地だったため、形を欠く値を「組織が鑑定した体裁」の擬態として D3027–D3030 を追加した。権威の刻印は「値が権威の形をしているか」で問う原則の継続適用。
+
 ## ラウンド 470 — 「機器の刻印」の自問自答
 
 問: `X-IronPort-*` や `X-Proofpoint-*` の欄があればゲートウェイ機器が検査済みと信じられるか。
@@ -4655,6 +4660,20 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 
 問: `X-MS-Exchange-Organization-*`/`X-MS-Office365-Filtering-*` の欄があれば輸送記録として足りるか。
 答: 欄名の存在と値の正当性は別の問題だった — `MessageDirectionality:` は Originating/Incoming の2語彙、`AuthMechanism:` は 00–10 の番号語彙、`Filtering-Correlation-Id:` は GUID、`ExpirationStartTime:` は日時形と、Exchange の輸送が刻む値はすべて形が閉じている。存在検出 (`has_exchange_org_claim`) だけでは語彙外の値を置く擬態を見逃すため、値文法として D2999–D3002 を追加した。体裁は「欄があること」ではなく「値が権威の刻む形をしていること」で問う — 同じ問いを前ラウンドの暗号・交渉欄 (必須部品の有無) にも当てはめ、指摘された3件のすり抜けを修正した。
+
+## ラウンド 483 — 「配送業者の荷印」
+
+問: X.400 交換所の帳簿は表裏ともに張られた。封筒に残る検査の空白はどこか。
+答: 配送業者の荷印だ。`X-PM-Message-Id:`/`X-PM-RCPT:` は Postmark が捺す配送印、`X-ExclaimerHostedSignatures-MessageProcessed:` は署名加工所の印、`X-Message-ID:` は古くからある配送識別の補助印。いずれも検査の目が届いていなかった。
+
+問: 荷印を追う第一原理は。
+答: 荷印は業者ごとの定形だ。識別子は空白なしトークン、宛先は宛名、処理印は `true`/`false`、ID は `<…>` のくくり。定形を外れた荷印は、有名業者の印鑑を写した粗悪な擬装だ。
+
+問: 4件は原則に照らして要か。
+答: 要る。全てコード内ゼロヒットの完全绿地で、正常値 (UUID形・宛名・`true`・`<abc123>`) は不発火、異形のみが発火する。業者印の定形を知ることは、荷物の来歴を読む視力になる。
+
+問: 問い足りない仮定は。
+答: 「業者印は機器が打つから改竄できない」という思い込み。印は文字列に過ぎず、受け取る側が定形を知らなければ偽物も本物も同じ文字に見える。定形の知識なしに、印鑑は飾りだ。
 
 ## ラウンド 485 — 「配達係の控え」
 
@@ -4697,3 +4716,45 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 
 問: 問い足りない仮定は。
 答: 「ヘッダは一行で書かれる」。だが RFC 5322 の折り畳みでは値は継続行へ逃げられる。検査が物理行を読むか論理行を読むかは、控えを裏返して読むか否かの差だ。
+
+## ラウンド 498 — 「組織の残票」
+
+問: 台帳の次に、組織処理に残る票は。
+答: Exchange の組織印には `X-MS-Exchange-Organization-OriginalSize:` (元寸法)・`X-MS-Exchange-Organization-SCLThreshold:` (閾値)・`X-MS-Exchange-Transport-CrossTenantHeadersStripped:` (越境除去の有無)・`X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` (元接続IP) が残る。`has_exchange_org_claim` の存在検出はあったが、票面の値形を検める者はいなかった。
+
+問: 残票を検める第一原理は。
+答: 票は型からしか出ない——寸法と閾値は数字列、除去印は `true`/`false`、元接続IPは四節の数値点。型の外の字は票ではない。
+
+問: 4件は要か。
+答: 要る。値文法としては完全绿地 (コード内ゼロヒット) で、正常値 (`12345`/`0`/`5`/`9`/`true`/`FALSE`/`10.1.2.3`/`192.168.0.1`) は不発火、`1.5`・`999.1.2.3`・`1.2.3` のような形だけの擬態も発火する。寸法・閾値・除去・元接続——一通の処理票として自足する最小組だ。
+
+問: 問い足りない仮定は。
+答: 「数値欄は読み手が量と信じ込む」。だが小数を整数欄に書く者は量のふりをする——寸法を読ませるなら、先にそれが整数か問うべきだ。
+
+## ラウンド 499 — 「検疫機の別記票」
+
+問: 台帳と計量の次に、検疫機の残る別記票は。
+答: `X-MIMEDefang-Spam-Score:`/`X-Fortimail-Spam-Score:` (検疫機得点)・`X-MIME-Autoconverted:` (変換記録)・`X-Spam-Relay-Country:` (中継国)・`X-EVP-Envelope-ID:` (封書識別) が残る。`X-Fortimail-*` プレフィックスの存在検出はあるが値文法は绿地、残り3欄はコード内ゼロヒットの完全绿地だった。
+
+問: 別記票を検める第一原理は。
+答: 票は型からしか出ない——得点は数値、変換は `from 型 to 型`、中継国は二字の国コードまたは `--`、封書識別は単一印字トークン。型の外の字は票ではない。
+
+問: 4件は要か。
+答: 要る。4欄とも完全绿地で、正常値 (`12.5`/`-0.42`/`NaN`/`from 8bit to quoted-printable`/`US DE CN`/`--`/`f47e9ab1-0002-4c55`) は全不発火、`not num`・空値・壊れた連接は発火する。得点・変換・中継国・識別——検疫記票として自足する最小組だ。
+
+問: 問い足りない仮定は。
+答: 「接続元はIPv4と決まっている」。だが越境する接続はIPv6でも来る——`999.1.2.3` のような形だけの擬態を拒みつつ `2001:db8::1` を通すには、IPv4の形ではなく「IPアドレスであること」を問うべきだった (D3122 の補強)。
+
+## ラウンド 500 — 「組織の最終票」
+
+問: 別記票の次に、組織処理に残る最終の票は。
+答: `X-MS-Exchange-Transport-OriginalRecipient:` (元宛先)・`X-MS-Exchange-Organization-OriginalArrivalTime:` (元到着時刻)・`X-MS-Exchange-Organization-AuthSource-Lob:` (認証元ホスト)・`X-MS-Exchange-Organization-AVStamp-Service:` (検査印) が残る。いずれもコード内ゼロヒットの完全绿地だった。
+
+問: 最終票を検める第一原理は。
+答: 票は型からしか出ない——宛先は宛名、到着は `DD Mon YYYY HH:MM:SS`、認証元はドットを持つホスト名、検査印は単一印字トークン。型の外の字は票ではない。
+
+問: 4件は要か。
+答: 要る。4欄とも完全绿地で、正常値 (`user@example.com`/`<user@example.com>`/`01 Oct 2026 10:30:00.123`/`prod.outlook.com`/`2.4.12345.9`) は全不発火、`a@@x.com`・`2026-10-01` (ISO形だが組織書式でない)・`a@b` (ホストでない)・空値は発火する。宛先・到着・認証元・検査印——組織処理の最終票として自足する最小組だ。
+
+問: 問い足りない仮定は。
+答: 「語の切れ目は空白だけ」。だが票にはタブも来る——`from\t8bit` のように印字区切りを空白と決めつけると正当な票を偽票���読み違える。区切りは印字空白類 (`split_whitespace`) で問うべきだった (D3124 の補強)。
