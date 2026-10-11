@@ -3315,6 +3315,14 @@ pub struct Envelope {
     pub content_return_bad: bool,
     /// `Mail-Followup-To:`/`Mail-Reply-To:` 欄の値が宛名/poster 形でない (D2994 — 追従ずれ)。
     pub list_followup_bad: bool,
+    /// `X-MS-Exchange-Organization-PCL:` 欄の値が数値形でない (D3027 — 疑い度ずれ)。
+    pub ms_pcl_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-Message-Id:` 欄の値が GUID 形でない (D3028 — 越境識別ずれ)。
+    pub ms_ctmid_bad: bool,
+    /// `X-MS-Office365-Filtering-Correlation-Id-Prvs:` 欄の値が16進形でない (D3029 — 照合鍵ずれ)。
+    pub ms_prvscid_bad: bool,
+    /// `X-MS-Exchange-CrossTenant-FromEntityHeader:` 欄の値が由来語彙外 (D3030 — 由来ずれ)。
+    pub ms_entity_bad: bool,
     /// `X-IronPort-Anti-Spam-Filtered:` 欄の値がtrue/falseでない (D3007 — 機器判定ずれ)。
     pub xip_asf_bad: bool,
     /// `X-IronPort-AV:` 欄の値が `名=値` 連接でない (D3008 — 機器検査ずれ)。
@@ -3355,6 +3363,14 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `X-PM-Message-Id:`/`X-Postmark-Message-Id:` 欄の値がトークン形でない (D3059 — Postmark 識別ずれ)。
+    pub xpm_mid_bad: bool,
+    /// `X-PM-RCPT:` 欄の値が宛名形でない (D3060 — Postmark 宛先ずれ)。
+    pub xpm_rcpt_bad: bool,
+    /// `X-ExclaimerHostedSignatures-MessageProcessed:` 系欄の値が真偽語彙外 (D3061 — 署印処理ずれ)。
+    pub xexc_bad: bool,
+    /// `X-Message-ID:` 欄の値が msgid 形でない (D3062 — 配送識別ずれ)。
+    pub xmid_bad: bool,
     /// `Relay-Version:` 欄の値が `version site` 形でない (D3067 — 中継記録ずれ)。
     pub rver_bad: bool,
     /// `Posting-Version:` 欄の値が `version site` 形でない (D3068 — 投稿記録ずれ)。
@@ -3387,14 +3403,46 @@ pub struct Envelope {
     pub xsaev_bad: bool,
     /// `X-SA-Exim-Scanned:` 欄の値が `Yes`/`No` 始まりでない (D3098 — 検疫機走査印ずれ)。
     pub xsaes_bad: bool,
+    /// `X-Spamd-Checker-Version:` 欄の値が `SpamAssassin` 始まりでない (D3115 — 検疫機名乗りずれ)。
+    pub xsdcv_bad: bool,
+    /// `X-Amavis-Original-Mail-From:`/`X-Amavis-Original-To:` 欄の値が `<>` でも宛名連接形でもない (D3116 — 検疫機元封書ずれ)。
+    pub xamaddr_bad: bool,
+    /// `X-Amavis-Checker-Version:` 欄の値が `Amavisd` 始まりでない (D3117 — 検疫機版号名乗りずれ)。
+    pub xamcv_bad: bool,
+    /// `X-Rspamd-User:` 欄の値が単一印字トークンでない (D3118 — 検疫機使用者ずれ)。
+    pub xrpusr_bad: bool,
+    /// `X-Barracuda-Envelope-From:`/`X-Barracuda-Envelope-To:` 欄の値が `<>` でも宛名形でもない (D3099 — 検疫網封書ずれ)。
+    pub xbcenv_bad: bool,
+    /// `X-Barracuda-Connect-IP:` 欄の値がIPアドレス形でない (D3100 — 検疫網接続元ずれ)。
+    pub xbcip_bad: bool,
+    /// `X-Barracuda-Start-Time:` 欄の値が数値形でない (D3101 — 検疫網開始刻印ずれ)。
+    pub xbctime_bad: bool,
+    /// `X-Barracuda-Spam:` 欄の値が `Yes`/`No` でない (D3102 — 検疫網迷惑印ずれ)。
+    pub xbcspam_bad: bool,
     /// `X-MS-Exchange-Organization-OriginalSize:` 欄の値が整数形でない (D3119 — 組織元寸法ずれ)。
     pub msos_bad: bool,
     /// `X-MS-Exchange-Organization-SCLThreshold:` 欄の値が整数形でない (D3120 — 組織閾値ずれ)。
     pub msst_bad: bool,
     /// `X-MS-Exchange-Transport-CrossTenantHeadersStripped:` 欄の値が `true`/`false` でない (D3121 — 組織越境除去ずれ)。
     pub mscts_bad: bool,
-    /// `X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` 欄の値がIPv4形でない (D3122 — 組織元接続IPずれ)。
+    /// `X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` 欄の値がIP形でない (D3122 — 組織元接続IPずれ)。
     pub msoip_bad: bool,
+    /// `X-MIMEDefang-Spam-Score:`/`X-Fortimail-Spam-Score:` 欄の値が数値形でない (D3123 — 検疫機得点ずれ)。
+    pub xmdsc_bad: bool,
+    /// `X-MIME-Autoconverted:` 欄の値が `from 型 to 型` 形でない (D3124 — 変換記録ずれ)。
+    pub xmato_bad: bool,
+    /// `X-Spam-Relay-Country:` 欄の値が国コード連接形でない (D3125 — 中継国ずれ)。
+    pub xsrc_bad: bool,
+    /// `X-EVP-Envelope-ID:` 欄の値が単一印字トークンでない (D3126 — 封書識別ずれ)。
+    pub xeid_bad: bool,
+    /// `X-MS-Exchange-Transport-OriginalRecipient:` 欄の値が宛名形でない (D3127 — 組織元宛先ずれ)。
+    pub msorc_bad: bool,
+    /// `X-MS-Exchange-Organization-OriginalArrivalTime:` 欄の値が `DD Mon YYYY HH:MM:SS` 形でない (D3128 — 組織元到着ずれ)。
+    pub msoat_bad: bool,
+    /// `X-MS-Exchange-Organization-AuthSource-Lob:` 欄の値がホスト名形でない (D3129 — 組織認証元ずれ)。
+    pub mslob_bad: bool,
+    /// `X-MS-Exchange-Organization-AVStamp-Service:` 欄の値が単一印字トークンでない (D3130 — 組織検査印ずれ)。
+    pub msav_bad: bool,
     /// `X-Primary-IP:` 欄の値が IPv4 形でない (D3071 — 発信原局ずれ)。
     pub xpip_bad: bool,
     /// `X-Old-Message-ID:` 欄の値が msgid 形でない (D3072 — 書換識別ずれ)。
@@ -7360,6 +7408,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let openpgp_bad = has_openpgp_bad(bytes);
     let content_return_bad = has_content_return_bad(bytes);
     let list_followup_bad = has_list_followup_bad(bytes);
+    let ms_pcl_bad = has_ms_pcl_bad(bytes);
+    let ms_ctmid_bad = has_ms_ctmid_bad(bytes);
+    let ms_prvscid_bad = has_ms_prvscid_bad(bytes);
+    let ms_entity_bad = has_ms_entity_bad(bytes);
     let xip_asf_bad = has_xip_asf_bad(bytes);
     let xip_av_bad = has_xip_av_bad(bytes);
     let xip_asr_bad = has_xip_asr_bad(bytes);
@@ -7380,6 +7432,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let xpm_mid_bad = has_xpm_mid_bad(bytes);
+    let xpm_rcpt_bad = has_xpm_rcpt_bad(bytes);
+    let xexc_bad = has_xexc_bad(bytes);
+    let xmid_bad = has_xmid_bad(bytes);
     let rver_bad = has_rver_bad(bytes);
     let pver_bad = has_pver_bad(bytes);
     let drcv_bad = has_drcv_bad(bytes);
@@ -7396,10 +7452,26 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xsaer_bad = has_xsaer_bad(bytes);
     let xsaev_bad = has_xsaev_bad(bytes);
     let xsaes_bad = has_xsaes_bad(bytes);
+    let xsdcv_bad = has_xsdcv_bad(bytes);
+    let xamaddr_bad = has_xamaddr_bad(bytes);
+    let xamcv_bad = has_xamcv_bad(bytes);
+    let xrpusr_bad = has_xrpusr_bad(bytes);
+    let xbcenv_bad = has_xbcenv_bad(bytes);
+    let xbcip_bad = has_xbcip_bad(bytes);
+    let xbctime_bad = has_xbctime_bad(bytes);
+    let xbcspam_bad = has_xbcspam_bad(bytes);
     let msos_bad = has_msos_bad(bytes);
     let msst_bad = has_msst_bad(bytes);
     let mscts_bad = has_mscts_bad(bytes);
     let msoip_bad = has_msoip_bad(bytes);
+    let xmdsc_bad = has_xmdsc_bad(bytes);
+    let xmato_bad = has_xmato_bad(bytes);
+    let xsrc_bad = has_xsrc_bad(bytes);
+    let xeid_bad = has_xeid_bad(bytes);
+    let msorc_bad = has_msorc_bad(bytes);
+    let msoat_bad = has_msoat_bad(bytes);
+    let mslob_bad = has_mslob_bad(bytes);
+    let msav_bad = has_msav_bad(bytes);
     let xpip_bad = has_xpip_bad(bytes);
     let xomsg_bad = has_xomsg_bad(bytes);
     let xbadrs_bad = has_xbadrs_bad(bytes);
@@ -9067,6 +9139,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         openpgp_bad,
         content_return_bad,
         list_followup_bad,
+        ms_pcl_bad,
+        ms_ctmid_bad,
+        ms_prvscid_bad,
+        ms_entity_bad,
         xip_asf_bad,
         xip_av_bad,
         xip_asr_bad,
@@ -9087,6 +9163,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        xpm_mid_bad,
+        xpm_rcpt_bad,
+        xexc_bad,
+        xmid_bad,
         rver_bad,
         pver_bad,
         drcv_bad,
@@ -9103,10 +9183,26 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xsaer_bad,
         xsaev_bad,
         xsaes_bad,
+        xsdcv_bad,
+        xamaddr_bad,
+        xamcv_bad,
+        xrpusr_bad,
+        xbcenv_bad,
+        xbcip_bad,
+        xbctime_bad,
+        xbcspam_bad,
         msos_bad,
         msst_bad,
         mscts_bad,
         msoip_bad,
+        xmdsc_bad,
+        xmato_bad,
+        xsrc_bad,
+        xeid_bad,
+        msorc_bad,
+        msoat_bad,
+        mslob_bad,
+        msav_bad,
         xpip_bad,
         xomsg_bad,
         xbadrs_bad,
@@ -52165,6 +52261,133 @@ fn has_xip_asf_bad(bytes: &[u8]) -> bool {
     false
 }
 
+/// MS 組織処理欄の残り (`X-MS-Exchange-Organization-PCL:`/
+/// `X-MS-Exchange-CrossTenant-Message-Id:`/
+/// `X-MS-Office365-Filtering-Correlation-Id-Prvs:`/
+/// `X-MS-Exchange-CrossTenant-FromEntityHeader:`) の値形検査用に、
+/// ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す (D3027–D3030)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn ms3_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-MS-Exchange-Organization-PCL:` 欄の値が数値 (Phishing
+/// Confidence Level) でなければ疑い度記録の異形として検出する
+/// (D3027)。
+///
+/// 組織が刻むフィッシング疑い度は整数値 — 語句や空値は「疑い度を
+/// 刻んだ体裁」の擬態。
+fn has_ms_pcl_bad(bytes: &[u8]) -> bool {
+    let logical = ms3_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-organization-pcl:") {
+            let t = v.trim();
+            if t.parse::<i32>().is_err() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-Message-Id:` 欄の値が GUID 形
+/// (`8-4-4-4-12` の16進、波括弧許容) でなければ越境識別記録の
+/// 異形として検出する (D3028)。
+///
+/// 越境処理が刻む相関識別子は GUID — 語句や空値は「越境識別を
+/// 刻んだ体裁」の擬態。
+fn has_ms_ctmid_bad(bytes: &[u8]) -> bool {
+    let logical = ms3_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-crosstenant-message-id:") {
+            let v = v.trim();
+            let v = v.strip_prefix('{').and_then(|r| r.strip_suffix('}')).unwrap_or(v);
+            let b = v.as_bytes();
+            let ok = b.len() == 36
+                && b[8] == b'-'
+                && b[13] == b'-'
+                && b[18] == b'-'
+                && b[23] == b'-'
+                && v.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Office365-Filtering-Correlation-Id-Prvs:` 欄の値が
+/// 16進トークン (8桁以上) でなければ照合鍵記録の異形として
+/// 検出する (D3029)。
+///
+/// PRVS 系の相関鍵は `X-Forefront-PRVS:` (D2998) と同じ16進語形 —
+/// 形を欠く値は「照合鍵を刻んだ体裁」の擬態。
+fn has_ms_prvscid_bad(bytes: &[u8]) -> bool {
+    let logical = ms3_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-office365-filtering-correlation-id-prvs:") {
+            let t = v.trim();
+            if t.len() < 8 || !t.chars().all(|c| c.is_ascii_hexdigit()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-MS-Exchange-CrossTenant-FromEntityHeader:` 欄の値が
+/// `Internet`/`Hosted`/`Hybrid`/`None` の由来語彙外なら
+/// 越境由来記録の異形として検出する (D3030)。
+///
+/// 越境メールの由来区分は閉じた語彙 — 語彙外の値は「越境由来を
+/// 刻んだ体裁」の擬態。
+fn has_ms_entity_bad(bytes: &[u8]) -> bool {
+    let logical = ms3_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ms-exchange-crosstenant-fromentityheader:") {
+            let t = v.trim();
+            if !matches!(t, "internet" | "hosted" | "hybrid" | "none") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// `X-IronPort-AV:` 欄の値が `名=値` の `;` 連接でなければ
 /// IronPort アンチウイルス検査記録の異形として検出する (D3008)。
 ///
@@ -52686,6 +52909,162 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
     false
 }
 
+/// `X-PM-Message-Id:`/`X-Postmark-Message-Id:` 欄の値がトークン形でない (D3059 — Postmark 識別ずれ)。
+fn has_xpm_mid_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        let hit = low
+            .strip_prefix("x-pm-message-id:")
+            .or_else(|| low.strip_prefix("x-postmark-message-id:"));
+        if let Some(v) = hit {
+            let t = v.trim();
+            let bad = t.is_empty()
+                || !t
+                    .chars()
+                    .all(|c| (0x21..=0x7e).contains(&(c as u32)))
+                || !t.chars().any(|c| c.is_ascii_alphanumeric());
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-PM-RCPT:` 欄の値が宛名形でない (D3060 — Postmark 宛先ずれ)。
+fn has_xpm_rcpt_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x-pm-rcpt:") {
+            let t = v.trim();
+            if !t.contains('@') || t.starts_with('@') || t.ends_with('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-ExclaimerHostedSignatures-MessageProcessed:` 系欄の値が真偽語彙外 (D3061 — 署印処理ずれ)。
+fn has_xexc_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        let hit = low
+            .strip_prefix("x-exclaimerhostedsignatures-messageprocessed:")
+            .or_else(|| low.strip_prefix("x-exclaimerencryptedsignatures-messageprocessed:"))
+            .or_else(|| low.strip_prefix("x-exclaimersignature-services-messageprocessed:"));
+        if let Some(v) = hit {
+            let t = v.trim();
+            if t != "true" && t != "false" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Message-ID:` 欄の値が msgid 形でない (D3062 — 配送識別ずれ)。
+fn has_xmid_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x-message-id:") {
+            let t = v.trim();
+            let bad = !(t.starts_with('<') && t.ends_with('>') && t.len() > 2)
+                || !t[1..t.len() - 1]
+                    .chars()
+                    .all(|c| (0x21..=0x7e).contains(&(c as u32)) && c != '<' && c != '>');
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn dc_hdr_end(bytes: &[u8]) -> usize {
     let mut end = bytes.len();
     for w in bytes.windows(4) {
@@ -52969,6 +53348,90 @@ fn has_xsaes_bad(bytes: &[u8]) -> bool {
     })
 }
 
+/// `X-Spamd-Checker-Version:` 欄の値が `SpamAssassin` 始まりでない (D3115 — 検疫機名乗りずれ)。
+fn has_xsdcv_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-spamd-checker-version:"], |t| {
+        !t.to_ascii_lowercase().starts_with("spamassassin")
+    })
+}
+
+/// `X-Amavis-Original-Mail-From:`/`X-Amavis-Original-To:` 欄の値が `<>` でも宛名連接形でもない (D3116 — 検疫機元封書ずれ)。
+fn has_xamaddr_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-amavis-original-mail-from:", "x-amavis-original-to:"],
+        |t| {
+            if t == "<>" {
+                return false;
+            }
+            t.split(',').any(|a| {
+                let a = a.trim();
+                let a = a
+                    .strip_prefix('<')
+                    .and_then(|s| s.strip_suffix('>'))
+                    .unwrap_or(a);
+                a.is_empty()
+                    || a.matches('@').count() != 1
+                    || a.starts_with('@')
+                    || a.ends_with('@')
+            })
+        },
+    )
+}
+
+/// `X-Amavis-Checker-Version:` 欄の値が `Amavisd` 始まりでない (D3117 — 検疫機版号名乗りずれ)。
+fn has_xamcv_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-amavis-checker-version:"], |t| {
+        !t.to_ascii_lowercase().starts_with("amavisd")
+    })
+}
+
+/// `X-Rspamd-User:` 欄の値が単一印字トークンでない (D3118 — 検疫機使用者ずれ)。
+fn has_xrpusr_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-rspamd-user:"], |t| {
+        t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+    })
+}
+
+/// `X-Barracuda-Envelope-From:`/`X-Barracuda-Envelope-To:` 欄の値が `<>` でも宛名形でもない (D3099 — 検疫網封書ずれ)。
+fn has_xbcenv_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-barracuda-envelope-from:", "x-barracuda-envelope-to:"],
+        |t| {
+            if t == "<>" {
+                return false;
+            }
+            let t = t
+                .strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+                .unwrap_or(t);
+            t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+        },
+    )
+}
+
+/// `X-Barracuda-Connect-IP:` 欄の値がIPアドレス形でない (D3100 — 検疫網接続元ずれ)。
+fn has_xbcip_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-barracuda-connect-ip:"], |t| {
+        t.parse::<std::net::IpAddr>().is_err()
+    })
+}
+
+/// `X-Barracuda-Start-Time:` 欄の値が数値形でない (D3101 — 検疫網開始刻印ずれ)。
+fn has_xbctime_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-barracuda-start-time:"], |t| {
+        t.is_empty() || t.parse::<f64>().is_err()
+    })
+}
+
+/// `X-Barracuda-Spam:` 欄の値が `Yes`/`No` でない (D3102 — 検疫網迷惑印ずれ)。
+fn has_xbcspam_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-barracuda-spam:"], |t| {
+        !t.eq_ignore_ascii_case("yes") && !t.eq_ignore_ascii_case("no")
+    })
+}
+
 /// `X-MS-Exchange-Organization-OriginalSize:` 欄の値が整数形でない (D3119 — 組織元寸法ずれ)。
 fn has_msos_bad(bytes: &[u8]) -> bool {
     dc_each(
@@ -52996,7 +53459,7 @@ fn has_mscts_bad(bytes: &[u8]) -> bool {
     )
 }
 
-/// `X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` 欄の値がIPv4形でない (D3122 — 組織元接続IPずれ)。
+/// `X-MS-Exchange-Organization-Original-SMTP-Client-IP:`/`Original-SMTP-Server-IP:` 欄の値がIP形でない (D3122 — 組織元接続IPずれ)。
 fn has_msoip_bad(bytes: &[u8]) -> bool {
     dc_each(
         bytes,
@@ -53004,15 +53467,97 @@ fn has_msoip_bad(bytes: &[u8]) -> bool {
             "x-ms-exchange-organization-original-smtp-client-ip:",
             "x-ms-exchange-organization-original-smtp-server-ip:",
         ],
+        |t| t.parse::<std::net::IpAddr>().is_err(),
+    )
+}
+
+/// `X-MIMEDefang-Spam-Score:`/`X-Fortimail-Spam-Score:` 欄の値が数値形でない (D3123 — 検疫機得点ずれ)。
+fn has_xmdsc_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-mimedefang-spam-score:", "x-fortimail-spam-score:"],
+        |t| t.is_empty() || t.parse::<f64>().is_err(),
+    )
+}
+
+/// `X-MIME-Autoconverted:` 欄の値が `from 型 to 型` 形でない (D3124 — 変換記録ずれ)。
+fn has_xmato_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-mime-autoconverted:"], |t| {
+        let w: Vec<&str> = t.split_whitespace().collect();
+        !(w.len() >= 4 && w[0] == "from" && w[2] == "to")
+    })
+}
+
+/// `X-Spam-Relay-Country:` 欄の値が国コード連接形でない (D3125 — 中継国ずれ)。
+fn has_xsrc_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-spam-relay-country:"], |t| {
+        t.is_empty()
+            || t.split_whitespace().any(|w| {
+                w != "--"
+                    && !(w.len() == 2 && w.bytes().all(|b| b.is_ascii_alphabetic()))
+            })
+    })
+}
+
+/// `X-EVP-Envelope-ID:` 欄の値が単一印字トークンでない (D3126 — 封書識別ずれ)。
+fn has_xeid_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-evp-envelope-id:"], |t| {
+        t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+    })
+}
+
+/// `X-MS-Exchange-Transport-OriginalRecipient:` 欄の値が宛名形でない (D3127 — 組織元宛先ずれ)。
+fn has_msorc_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-ms-exchange-transport-originalrecipient:"], |t| {
+        let t = t.strip_prefix('<').and_then(|s| s.strip_suffix('>')).unwrap_or(t);
+        t.is_empty() || t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-MS-Exchange-Organization-OriginalArrivalTime:` 欄の値が `DD Mon YYYY HH:MM:SS` 形でない (D3128 — 組織元到着ずれ)。
+fn has_msoat_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-ms-exchange-organization-originalarrivaltime:"],
         |t| {
-            let oct: Vec<&str> = t.split('.').collect();
-            oct.len() != 4
-                || oct.iter().any(|o| {
-                    o.is_empty() || !o.bytes().all(|b| b.is_ascii_digit())
-                        || o.parse::<u8>().is_err()
+            let w: Vec<&str> = t.split_whitespace().collect();
+            let months = [
+                "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep",
+                "oct", "nov", "dec",
+            ];
+            !(w.len() >= 4
+                && w[0].len() == 2
+                && w[0].bytes().all(|b| b.is_ascii_digit())
+                && months.contains(&w[1])
+                && w[2].len() == 4
+                && w[2].bytes().all(|b| b.is_ascii_digit())
+                && {
+                    let tp: Vec<&str> = w[3].split(':').collect();
+                    tp.len() == 3
+                        && tp.iter().all(|p| {
+                            let p = p.split('.').next().unwrap_or(p);
+                            p.len() == 2 && p.bytes().all(|b| b.is_ascii_digit())
+                        })
                 })
         },
     )
+}
+
+/// `X-MS-Exchange-Organization-AuthSource-Lob:` 欄の値がホスト名形でない (D3129 — 組織認証元ずれ)。
+fn has_mslob_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-ms-exchange-organization-authsource-lob:"], |t| {
+        t.is_empty()
+            || !t.contains('.')
+            || t.contains('@')
+            || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+    })
+}
+
+/// `X-MS-Exchange-Organization-AVStamp-Service:` 欄の値が単一印字トークンでない (D3130 — 組織検査印ずれ)。
+fn has_msav_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-ms-exchange-organization-avstamp-service:"], |t| {
+        t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+    })
 }
 
 /// (D2635)。
@@ -131583,16 +132128,6 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
     #[test]
-    fn ampm_time_ampm記号を検出する() {
-        // D1665 — `12:00 PM`
-        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
-        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
-        // 24時間・ゾーン名・他欄は不発火
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
-        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
-    }
-    #[test]
     fn conflicting_mime_headers_は重複と不正cteを検出する() {
         // D1285 — 重複 CTE (noxxi Dubious MIME)
         let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
@@ -131609,16 +132144,6 @@ body";
         assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
     }
     #[test]
-    fn cte_param_cte値paramを検出する() {
-        // D1655 — `base64; x`
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
-        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
-        // 通常値・CT 欄の param・他欄は不発火
-        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
-        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
-        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
-    }
-    #[test]
     fn dup_mime_headers_は外側mime欄重複を検出する() {
         // D1401 — 外側の CT/CD/CTE 二重
         assert!(has_dup_mime_headers(
@@ -131630,18 +132155,6 @@ body";
         assert!(!has_dup_mime_headers(
             b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
         ));
-    }
-    #[test]
-    fn empty_mime_field_mime欄空値を検出する() {
-        // D1645 — CT/CD/CTE の空値
-        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
-        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
-        // 値あり・他欄空値は不発火
-        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
-        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
     }
     #[test]
     fn encoded_multipart_container_はmultipart上のcteを検出する() {
@@ -133311,6 +133824,65 @@ fn 投稿機欄が異形なら発火() {
     }
 
     #[test]
+    fn d3027_ms_pcl_bad() {
+        assert!(has_ms_pcl_bad(
+            b"X-MS-Exchange-Organization-PCL: high\r\n\r\nbody"
+        ));
+        assert!(has_ms_pcl_bad(
+            b"X-MS-Exchange-Organization-PCL:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pcl_bad(
+            b"X-MS-Exchange-Organization-PCL: 3\r\n\r\nbody"
+        ));
+        assert!(!has_ms_pcl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3028_ms_ctmid_bad() {
+        assert!(has_ms_ctmid_bad(
+            b"X-MS-Exchange-CrossTenant-Message-Id: not-a-guid\r\n\r\nbody"
+        ));
+        assert!(has_ms_ctmid_bad(
+            b"X-MS-Exchange-CrossTenant-Message-Id:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ctmid_bad(
+            b"X-MS-Exchange-CrossTenant-Message-Id: {12345678-1234-1234-1234-123456789012}\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ctmid_bad(
+            b"X-MS-Exchange-CrossTenant-Message-Id: 12345678-1234-1234-1234-123456789012\r\n\r\nbody"
+        ));
+        assert!(!has_ms_ctmid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3029_ms_prvscid_bad() {
+        assert!(has_ms_prvscid_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id-Prvs: nothex!\r\n\r\nbody"
+        ));
+        assert!(has_ms_prvscid_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id-Prvs: 12\r\n\r\nbody"
+        ));
+        assert!(!has_ms_prvscid_bad(
+            b"X-MS-Office365-Filtering-Correlation-Id-Prvs: E5B3AB4F7F4E4B4A\r\n\r\nbody"
+        ));
+        assert!(!has_ms_prvscid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3030_ms_entity_bad() {
+        assert!(has_ms_entity_bad(
+            b"X-MS-Exchange-CrossTenant-FromEntityHeader: smtp\r\n\r\nbody"
+        ));
+        assert!(has_ms_entity_bad(
+            b"X-MS-Exchange-CrossTenant-FromEntityHeader:\r\n\r\nbody"
+        ));
+        assert!(!has_ms_entity_bad(
+            b"X-MS-Exchange-CrossTenant-FromEntityHeader: Internet\r\n\r\nbody"
+        ));
+        assert!(!has_ms_entity_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
     fn d3007_xip_asf_bad() {
         assert!(has_xip_asf_bad(
             b"X-IronPort-Anti-Spam-Filtered: yes\r\n\r\nbody"
@@ -133627,6 +134199,58 @@ fn 投稿機欄が異形なら発火() {
     }
 
     #[test]
+    fn d3059_xpm_mid_bad() {
+        assert!(has_xpm_mid_bad(b"X-PM-Message-Id: has space\r\n\r\nbody"));
+        assert!(has_xpm_mid_bad(b"X-PM-Message-Id:\r\n\r\nbody"));
+        assert!(!has_xpm_mid_bad(
+            b"X-PM-Message-Id: d7a1b2c3-4e5f-6789-abcd-ef0123456789\r\n\r\nbody"
+        ));
+        assert!(!has_xpm_mid_bad(
+            b"X-Postmark-Message-Id: pm-abc-123\r\n\r\nbody"
+        ));
+        assert!(!has_xpm_mid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3060_xpm_rcpt_bad() {
+        assert!(has_xpm_rcpt_bad(b"X-PM-RCPT: not an addr\r\n\r\nbody"));
+        assert!(has_xpm_rcpt_bad(b"X-PM-RCPT: @example.com\r\n\r\nbody"));
+        assert!(has_xpm_rcpt_bad(b"X-PM-RCPT:\r\n\r\nbody"));
+        assert!(!has_xpm_rcpt_bad(b"X-PM-RCPT: user@example.com\r\n\r\nbody"));
+        assert!(!has_xpm_rcpt_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3061_xexc_bad() {
+        assert!(has_xexc_bad(
+            b"X-ExclaimerHostedSignatures-MessageProcessed: pending\r\n\r\nbody"
+        ));
+        assert!(has_xexc_bad(
+            b"X-ExclaimerHostedSignatures-MessageProcessed:\r\n\r\nbody"
+        ));
+        assert!(!has_xexc_bad(
+            b"X-ExclaimerHostedSignatures-MessageProcessed: true\r\n\r\nbody"
+        ));
+        assert!(!has_xexc_bad(
+            b"X-ExclaimerEncryptedSignatures-MessageProcessed: false\r\n\r\nbody"
+        ));
+        assert!(!has_xexc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3062_xmid_bad() {
+        assert!(has_xmid_bad(b"X-Message-ID: abc123\r\n\r\nbody"));
+        assert!(has_xmid_bad(b"X-Message-ID: <a\r\n\r\nbody"));
+        assert!(has_xmid_bad(b"X-Message-ID:\r\n\r\nbody"));
+        assert!(!has_xmid_bad(b"X-Message-ID: <abc123>\r\n\r\nbody"));
+        assert!(!has_xmid_bad(
+            b"X-Message-ID: <abc@example.com>\r\n\r\nbody"
+        ));
+        assert!(!has_xmid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+
+    #[test]
     fn d3067_rver_bad() {
         assert!(has_rver_bad(b"Relay-Version: onlyversion\r\n\r\nbody"));
         assert!(has_rver_bad(b"Relay-Version: site host\r\n\r\nbody"));
@@ -133863,6 +134487,82 @@ fn d3098_xsaes_bad() {
 }
 
 #[test]
+fn d3115_xsdcv_bad() {
+    assert!(has_xsdcv_bad(b"X-Spamd-Checker-Version: not sa\r\n\r\nbody"));
+    assert!(has_xsdcv_bad(b"X-Spamd-Checker-Version:\r\n\r\nbody"));
+    assert!(!has_xsdcv_bad(b"X-Spamd-Checker-Version: SpamAssassin 3.4.6 (2021-04-09)\r\n\r\nbody"));
+    assert!(!has_xsdcv_bad(b"X-Spamd-Checker-Version: spamassassin 3.4.6\r\n\r\nbody"));
+    assert!(!has_xsdcv_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3116_xamaddr_bad() {
+    assert!(has_xamaddr_bad(b"X-Amavis-Original-Mail-From: not addr\r\n\r\nbody"));
+    assert!(has_xamaddr_bad(b"X-Amavis-Original-To: u@x.com, bad@\r\n\r\nbody"));
+    assert!(has_xamaddr_bad(b"X-Amavis-Original-To:\r\n\r\nbody"));
+    assert!(!has_xamaddr_bad(b"X-Amavis-Original-Mail-From: <>\r\n\r\nbody"));
+    assert!(!has_xamaddr_bad(b"X-Amavis-Original-To: u@x.com, <v@y.com>\r\n\r\nbody"));
+    assert!(!has_xamaddr_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3117_xamcv_bad() {
+    assert!(has_xamcv_bad(b"X-Amavis-Checker-Version: not av\r\n\r\nbody"));
+    assert!(has_xamcv_bad(b"X-Amavis-Checker-Version:\r\n\r\nbody"));
+    assert!(!has_xamcv_bad(b"X-Amavis-Checker-Version: Amavisd-new 2.11.0 (20210929)\r\n\r\nbody"));
+    assert!(!has_xamcv_bad(b"X-Amavis-Checker-Version: amavisd-new 2.11.0\r\n\r\nbody"));
+    assert!(!has_xamcv_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3118_xrpusr_bad() {
+    assert!(has_xrpusr_bad(b"X-Rspamd-User: not user here\r\n\r\nbody"));
+    assert!(has_xrpusr_bad(b"X-Rspamd-User:\r\n\r\nbody"));
+    assert!(!has_xrpusr_bad(b"X-Rspamd-User: user@example.com\r\n\r\nbody"));
+    assert!(!has_xrpusr_bad(b"X-Rspamd-User: daemon\r\n\r\nbody"));
+    assert!(!has_xrpusr_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3099_xbcenv_bad() {
+    assert!(has_xbcenv_bad(b"X-Barracuda-Envelope-From: not addr\r\n\r\nbody"));
+    assert!(has_xbcenv_bad(b"X-Barracuda-Envelope-To: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xbcenv_bad(b"X-Barracuda-Envelope-From: <>\r\n\r\nbody"));
+    assert!(!has_xbcenv_bad(b"X-Barracuda-Envelope-From: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xbcenv_bad(b"X-Barracuda-Envelope-To: u@x.com\r\n\r\nbody"));
+    assert!(!has_xbcenv_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3100_xbcip_bad() {
+    assert!(has_xbcip_bad(b"X-Barracuda-Connect-IP: not ip\r\n\r\nbody"));
+    assert!(has_xbcip_bad(b"X-Barracuda-Connect-IP: 999.1.2.3\r\n\r\nbody"));
+    assert!(has_xbcip_bad(b"X-Barracuda-Connect-IP:\r\n\r\nbody"));
+    assert!(!has_xbcip_bad(b"X-Barracuda-Connect-IP: 192.0.2.1\r\n\r\nbody"));
+    assert!(!has_xbcip_bad(b"X-Barracuda-Connect-IP: 2001:db8::1\r\n\r\nbody"));
+    assert!(!has_xbcip_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3101_xbctime_bad() {
+    assert!(has_xbctime_bad(b"X-Barracuda-Start-Time: not time\r\n\r\nbody"));
+    assert!(has_xbctime_bad(b"X-Barracuda-Start-Time:\r\n\r\nbody"));
+    assert!(!has_xbctime_bad(b"X-Barracuda-Start-Time: 1791432808.123\r\n\r\nbody"));
+    assert!(!has_xbctime_bad(b"X-Barracuda-Start-Time: 1791432808\r\n\r\nbody"));
+    assert!(!has_xbctime_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3102_xbcspam_bad() {
+    assert!(has_xbcspam_bad(b"X-Barracuda-Spam: maybe\r\n\r\nbody"));
+    assert!(has_xbcspam_bad(b"X-Barracuda-Spam:\r\n\r\nbody"));
+    assert!(!has_xbcspam_bad(b"X-Barracuda-Spam: Yes\r\n\r\nbody"));
+    assert!(!has_xbcspam_bad(b"X-Barracuda-Spam: No\r\n\r\nbody"));
+    assert!(!has_xbcspam_bad(b"X-Barracuda-Spam: no\r\n\r\nbody"));
+    assert!(!has_xbcspam_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
 fn d3119_msos_bad() {
     assert!(has_msos_bad(b"X-MS-Exchange-Organization-OriginalSize: not num\r\n\r\nbody"));
     assert!(has_msos_bad(b"X-MS-Exchange-Organization-OriginalSize: 1.5\r\n\r\nbody"));
@@ -133898,4 +134598,90 @@ fn d3122_msoip_bad() {
     assert!(!has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: 10.1.2.3\r\n\r\nbody"));
     assert!(!has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Server-IP: 192.168.0.1\r\n\r\nbody"));
     assert!(!has_msoip_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3123_xmdsc_bad() {
+    assert!(has_xmdsc_bad(b"X-MIMEDefang-Spam-Score: not num\r\n\r\nbody"));
+    assert!(has_xmdsc_bad(b"X-Fortimail-Spam-Score:\r\n\r\nbody"));
+    assert!(!has_xmdsc_bad(b"X-MIMEDefang-Spam-Score: 12.5\r\n\r\nbody"));
+    assert!(!has_xmdsc_bad(b"X-Fortimail-Spam-Score: -0.42\r\n\r\nbody"));
+    assert!(!has_xmdsc_bad(b"X-MIMEDefang-Spam-Score: NaN\r\n\r\nbody"));
+    assert!(!has_xmdsc_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3124_xmato_bad() {
+    assert!(has_xmato_bad(b"X-MIME-Autoconverted: garbage\r\n\r\nbody"));
+    assert!(has_xmato_bad(b"X-MIME-Autoconverted:\r\n\r\nbody"));
+    assert!(has_xmato_bad(b"X-MIME-Autoconverted: from  to \r\n\r\nbody"));
+    assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from 8bit to quoted-printable\r\n\r\nbody"));
+    assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from quoted-printable to 8bit by sendmail\r\n\r\nbody"));
+    assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from\t8bit to 7bit\r\n\r\nbody"));
+    assert!(!has_xmato_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3125_xsrc_bad() {
+    assert!(has_xsrc_bad(b"X-Spam-Relay-Country: notacountry\r\n\r\nbody"));
+    assert!(has_xsrc_bad(b"X-Spam-Relay-Country:\r\n\r\nbody"));
+    assert!(!has_xsrc_bad(b"X-Spam-Relay-Country: US\r\n\r\nbody"));
+    assert!(!has_xsrc_bad(b"X-Spam-Relay-Country: US DE CN\r\n\r\nbody"));
+    assert!(!has_xsrc_bad(b"X-Spam-Relay-Country: --\r\n\r\nbody"));
+    assert!(!has_xsrc_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3126_xeid_bad() {
+    assert!(has_xeid_bad(b"X-EVP-Envelope-ID: not token\r\n\r\nbody"));
+    assert!(has_xeid_bad(b"X-EVP-Envelope-ID:\r\n\r\nbody"));
+    assert!(!has_xeid_bad(b"X-EVP-Envelope-ID: f47e9ab1-0002-4c55\r\n\r\nbody"));
+    assert!(!has_xeid_bad(b"X-EVP-Envelope-ID: ABC123\r\n\r\nbody"));
+    assert!(!has_xeid_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3122_msoip_ipv6_ok() {
+    assert!(!has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: 2001:db8::1\r\n\r\nbody"));
+    assert!(!has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Server-IP: ::1\r\n\r\nbody"));
+    assert!(has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: 999.1.2.3\r\n\r\nbody"));
+    assert!(has_msoip_bad(b"X-MS-Exchange-Organization-Original-SMTP-Client-IP: not ip\r\n\r\nbody"));
+}
+
+#[test]
+fn d3127_msorc_bad() {
+    assert!(has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: not addr\r\n\r\nbody"));
+    assert!(has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: a@@x.com\r\n\r\nbody"));
+    assert!(has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient:\r\n\r\nbody"));
+    assert!(!has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: user@example.com\r\n\r\nbody"));
+    assert!(!has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: <user@example.com>\r\n\r\nbody"));
+    assert!(!has_msorc_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3128_msoat_bad() {
+    assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: not date\r\n\r\nbody"));
+    assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 2026-10-01\r\n\r\nbody"));
+    assert!(!has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00\r\n\r\nbody"));
+    assert!(!has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00.123\r\n\r\nbody"));
+    assert!(!has_msoat_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3129_mslob_bad() {
+    assert!(has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: not host\r\n\r\nbody"));
+    assert!(has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: a@b\r\n\r\nbody"));
+    assert!(has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob:\r\n\r\nbody"));
+    assert!(!has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: prod.outlook.com\r\n\r\nbody"));
+    assert!(!has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: mx1.example.co.jp\r\n\r\nbody"));
+    assert!(!has_mslob_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3130_msav_bad() {
+    assert!(has_msav_bad(b"X-MS-Exchange-Organization-AVStamp-Service: not token\r\n\r\nbody"));
+    assert!(has_msav_bad(b"X-MS-Exchange-Organization-AVStamp-Service:\r\n\r\nbody"));
+    assert!(!has_msav_bad(b"X-MS-Exchange-Organization-AVStamp-Service: 1.0.0.0\r\n\r\nbody"));
+    assert!(!has_msav_bad(b"X-MS-Exchange-Organization-AVStamp-Service: 2.4.12345.9\r\n\r\nbody"));
+    assert!(!has_msav_bad(b"From: a@b\r\n\r\nbody"));
 }

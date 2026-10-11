@@ -9397,6 +9397,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.list_followup_bad {
         render_risks.push("追従先欄の値が異形です—追従値の扱いで返信経路がずれます".to_string());
     }
+    if env.ms_pcl_bad {
+        render_risks.push("疑い度欄の値が数値形でないです—疑い値の扱いで発信元評価がずれます".to_string());
+    }
+    if env.ms_ctmid_bad {
+        render_risks.push("越境識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
+    }
+    if env.ms_prvscid_bad {
+        render_risks.push("照合鍵欄の値が16進形でないです—鍵値の扱いで照合がずれます".to_string());
+    }
+    if env.ms_entity_bad {
+        render_risks.push("越境由来欄の値が語彙外です—由来値の扱いで経路評価がずれます".to_string());
+    }
     if env.xip_asf_bad {
         render_risks.push("機器判定欄の値が真偽形でないです—判定値の扱いで経路評価がずれます".to_string());
     }
@@ -9457,6 +9469,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.ms_exp_time_bad {
         render_risks.push("失効開始欄の値が日時形でないです—失効時刻の扱いで経路時系列がずれます".to_string());
     }
+    if env.xpm_mid_bad {
+        render_risks.push("配送業者識別欄の値がトークン形でないです—配送記録の扱いで照合がずれます".to_string());
+    }
+    if env.xpm_rcpt_bad {
+        render_risks.push("配送業者宛先欄の値が宛名形でないです—配送記録の扱いで照合がずれます".to_string());
+    }
+    if env.xexc_bad {
+        render_risks.push("署印処理欄の値が真偽語彙外です—署印処理の扱いで経路評価がずれます".to_string());
+    }
+    if env.xmid_bad {
+        render_risks.push("配送識別欄の値が識別子形でないです—配送記録の扱いで照合がずれます".to_string());
+    }
     if env.rver_bad {
         render_risks.push("中継版号欄の値が 版号 局名 形でないです—中継記録の扱いで経路時系列がずれます".to_string());
     }
@@ -9505,6 +9529,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.xsaes_bad {
         render_risks.push("検疫機走査印欄の値が Yes/No 始まりでないです—検査記録の扱いで走査確認がずれます".to_string());
     }
+    if env.xsdcv_bad {
+        render_risks.push("検疫機名乗り欄の値が SpamAssassin 始まりでないです—検査記録の扱いで検査機照合がずれます".to_string());
+    }
+    if env.xamaddr_bad {
+        render_risks.push("検疫機元封書欄の値が宛名連接形でないです—検査記録の扱いで元封書照合がずれます".to_string());
+    }
+    if env.xamcv_bad {
+        render_risks.push("検疫機版号名乗り欄の値が Amavisd 始まりでないです—検査記録の扱いで走査機識別がずれます".to_string());
+    }
+    if env.xrpusr_bad {
+        render_risks.push("検疫機使用者欄の値が単一印字トークンでないです—検査記録の扱いで使用者照合がずれます".to_string());
+    }
+    if env.xbcenv_bad {
+        render_risks.push("検疫網封書欄の値が宛名形でないです—検査記録の扱いで封書照合がずれます".to_string());
+    }
+    if env.xbcip_bad {
+        render_risks.push("検疫網接続元欄の値がIPアドレス形でないです—検査記録の扱いで接続元特定がずれます".to_string());
+    }
+    if env.xbctime_bad {
+        render_risks.push("検疫網開始刻印欄の値が数値形でないです—検査記録の扱いで時刻照合がずれます".to_string());
+    }
+    if env.xbcspam_bad {
+        render_risks.push("検疫網迷惑印欄の値が Yes/No でないです—検査記録の扱いで判定確認がずれます".to_string());
+    }
     if env.msos_bad {
         render_risks.push("組織元寸法欄の値が整数形でないです—組織記録の扱いで寸法照合がずれます".to_string());
     }
@@ -9515,7 +9563,31 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("組織越境除去欄の値が true/false でないです—組織記録の扱いで除去照合がずれます".to_string());
     }
     if env.msoip_bad {
-        render_risks.push("組織元接続IP欄の値がIPv4形でないです—組織記録の扱いで接続元照合がずれます".to_string());
+        render_risks.push("組織元接続IP欄の値がIP形でないです—組織記録の扱いで接続元照合がずれます".to_string());
+    }
+    if env.xmdsc_bad {
+        render_risks.push("検疫機得点欄の値が数値形でないです—検疫記録の扱いで得点照合がずれます".to_string());
+    }
+    if env.xmato_bad {
+        render_risks.push("変換記録欄の値が from 型 to 型 でないです—変換記録の扱いで変換照合がずれます".to_string());
+    }
+    if env.xsrc_bad {
+        render_risks.push("中継国欄の値が国コード連接形でないです—中継記録の扱いで国コード照合がずれます".to_string());
+    }
+    if env.xeid_bad {
+        render_risks.push("封書識別欄の値が単一印字トークンでないです—封書記録の扱いで識別照合がずれます".to_string());
+    }
+    if env.msorc_bad {
+        render_risks.push("組織元宛先欄の値が宛名形でないです—組織記録の扱いで宛先照合がずれます".to_string());
+    }
+    if env.msoat_bad {
+        render_risks.push("組織元到着欄の値が日時形でないです—組織記録の扱いで到着照合がずれます".to_string());
+    }
+    if env.mslob_bad {
+        render_risks.push("組織認証元欄の値がホスト名形でないです—組織記録の扱いで認証元照合がずれます".to_string());
+    }
+    if env.msav_bad {
+        render_risks.push("組織検査印欄の値が単一印字トークンでないです—組織記録の扱いで検査印照合がずれます".to_string());
     }
     if env.xpip_bad {
         render_risks.push("発信原局欄の値が IPv4 形でないです—経路記録の扱いで発信元特定がずれます".to_string());
