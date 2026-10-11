@@ -25,6 +25,10 @@
 ### Security — D3116: `X-Amavis-Original-Mail-From:`/`X-Amavis-Original-To:` 欄の非 `<>`/宛名連接値を検疫機元封書ずれとして検出 — `Envelope` に `xamaddr_bad` を追加。
 ### Security — D3117: `X-Amavis-Checker-Version:` 欄の非 `Amavisd` 始まり値を検疫機版号名乗りずれとして検出 — `Envelope` に `xamcv_bad` を追加。
 ### Security — D3118: `X-Rspamd-User:` 欄の非単一印字トークン値を検疫機使用者ずれとして検出 — `Envelope` に `xrpusr_bad` を追加。
+### Security — D3099: `X-Barracuda-Envelope-From:`/`X-Barracuda-Envelope-To:` 欄の非 `<>`/宛名形値を検疫網封書ずれとして検出 — `Envelope` に `xbcenv_bad` を追加。
+### Security — D3100: `X-Barracuda-Connect-IP:` 欄の非IPアドレス値を検疫網接続元ずれとして検出 — `Envelope` に `xbcip_bad` を追加。
+### Security — D3101: `X-Barracuda-Start-Time:` 欄の非数値を検疫網開始刻印ずれとして検出 — `Envelope` に `xbctime_bad` を追加。
+### Security — D3102: `X-Barracuda-Spam:` 欄の非 `Yes`/`No` 値を検疫網迷惑印ずれとして検出 — `Envelope` に `xbcspam_bad` を追加。
 ### Security — D3119: `X-MS-Exchange-Organization-OriginalSize:` 欄の非整数値を組織元寸法ずれとして検出 — `Envelope` に `msos_bad` を追加。
 ### Security — D3120: `X-MS-Exchange-Organization-SCLThreshold:` 欄の非整数値を組織閾値ずれとして検出 — `Envelope` に `msst_bad` を追加。
 ### Security — D3121: `X-MS-Exchange-Transport-CrossTenantHeadersStripped:` 欄の非 `true`/`false` 値を組織越境除去ずれとして検出 — `Envelope` に `mscts_bad` を追加。

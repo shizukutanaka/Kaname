@@ -2366,6 +2366,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3116 | X-Amavis-Original-Mail-From:/Original-To: の非 <>/宛名連接値 (検疫機元封書欄の値異形) | 検疫機元封書ずれ |
 | D3117 | X-Amavis-Checker-Version: の非 Amavisd 始まり値 (検疫機版号名乗り欄の値異形) | 検疫機版号名乗りずれ |
 | D3118 | X-Rspamd-User: の非単一印字トークン値 (検疫機使用者欄の値異形) | 検疫機使用者ずれ |
+| D3099 | X-Barracuda-Envelope-From:/Envelope-To: の非 <>/宛名形値 (検疫網封書欄の値異形) | 検疫網封書ずれ |
+| D3100 | X-Barracuda-Connect-IP: の非IP値 (検疫網接続元欄の値異形) | 検疫網接続元ずれ |
+| D3101 | X-Barracuda-Start-Time: の非数値 (検疫網開始刻印欄の値異形) | 検疫網開始刻印ずれ |
+| D3102 | X-Barracuda-Spam: の非 Yes/No 値 (検疫網迷惑印欄の値異形) | 検疫網迷惑印ずれ |
 | D3119 | X-MS-Exchange-Organization-OriginalSize: の非整数値 (組織元寸法欄の値異形) | 組織元寸法ずれ |
 | D3120 | X-MS-Exchange-Organization-SCLThreshold: の非整数値 (組織閾値欄の値異形) | 組織閾値ずれ |
 | D3121 | X-MS-Exchange-Transport-CrossTenantHeadersStripped: の非 true/false 値 (組織越境除去欄の値異形) | 組織越境除去ずれ |

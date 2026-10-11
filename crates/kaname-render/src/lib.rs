@@ -3395,6 +3395,14 @@ pub struct Envelope {
     pub xamcv_bad: bool,
     /// `X-Rspamd-User:` 欄の値が単一印字トークンでない (D3118 — 検疫機使用者ずれ)。
     pub xrpusr_bad: bool,
+    /// `X-Barracuda-Envelope-From:`/`X-Barracuda-Envelope-To:` 欄の値が `<>` でも宛名形でもない (D3099 — 検疫網封書ずれ)。
+    pub xbcenv_bad: bool,
+    /// `X-Barracuda-Connect-IP:` 欄の値がIPアドレス形でない (D3100 — 検疫網接続元ずれ)。
+    pub xbcip_bad: bool,
+    /// `X-Barracuda-Start-Time:` 欄の値が数値形でない (D3101 — 検疫網開始刻印ずれ)。
+    pub xbctime_bad: bool,
+    /// `X-Barracuda-Spam:` 欄の値が `Yes`/`No` でない (D3102 — 検疫網迷惑印ずれ)。
+    pub xbcspam_bad: bool,
     /// `X-MS-Exchange-Organization-OriginalSize:` 欄の値が整数形でない (D3119 — 組織元寸法ずれ)。
     pub msos_bad: bool,
     /// `X-MS-Exchange-Organization-SCLThreshold:` 欄の値が整数形でない (D3120 — 組織閾値ずれ)。
@@ -7424,6 +7432,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xamaddr_bad = has_xamaddr_bad(bytes);
     let xamcv_bad = has_xamcv_bad(bytes);
     let xrpusr_bad = has_xrpusr_bad(bytes);
+    let xbcenv_bad = has_xbcenv_bad(bytes);
+    let xbcip_bad = has_xbcip_bad(bytes);
+    let xbctime_bad = has_xbctime_bad(bytes);
+    let xbcspam_bad = has_xbcspam_bad(bytes);
     let msos_bad = has_msos_bad(bytes);
     let msst_bad = has_msst_bad(bytes);
     let mscts_bad = has_mscts_bad(bytes);
@@ -9143,6 +9155,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xamaddr_bad,
         xamcv_bad,
         xrpusr_bad,
+        xbcenv_bad,
+        xbcip_bad,
+        xbctime_bad,
+        xbcspam_bad,
         msos_bad,
         msst_bad,
         mscts_bad,
@@ -53249,6 +53265,45 @@ fn has_xamcv_bad(bytes: &[u8]) -> bool {
 fn has_xrpusr_bad(bytes: &[u8]) -> bool {
     dc_each(bytes, &["x-rspamd-user:"], |t| {
         t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+    })
+}
+
+/// `X-Barracuda-Envelope-From:`/`X-Barracuda-Envelope-To:` 欄の値が `<>` でも宛名形でもない (D3099 — 検疫網封書ずれ)。
+fn has_xbcenv_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-barracuda-envelope-from:", "x-barracuda-envelope-to:"],
+        |t| {
+            if t == "<>" {
+                return false;
+            }
+            let t = t
+                .strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+                .unwrap_or(t);
+            t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+        },
+    )
+}
+
+/// `X-Barracuda-Connect-IP:` 欄の値がIPアドレス形でない (D3100 — 検疫網接続元ずれ)。
+fn has_xbcip_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-barracuda-connect-ip:"], |t| {
+        t.parse::<std::net::IpAddr>().is_err()
+    })
+}
+
+/// `X-Barracuda-Start-Time:` 欄の値が数値形でない (D3101 — 検疫網開始刻印ずれ)。
+fn has_xbctime_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-barracuda-start-time:"], |t| {
+        t.is_empty() || t.parse::<f64>().is_err()
+    })
+}
+
+/// `X-Barracuda-Spam:` 欄の値が `Yes`/`No` でない (D3102 — 検疫網迷惑印ずれ)。
+fn has_xbcspam_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-barracuda-spam:"], |t| {
+        !t.eq_ignore_ascii_case("yes") && !t.eq_ignore_ascii_case("no")
     })
 }
 
@@ -134244,6 +134299,45 @@ fn d3118_xrpusr_bad() {
     assert!(!has_xrpusr_bad(b"X-Rspamd-User: user@example.com\r\n\r\nbody"));
     assert!(!has_xrpusr_bad(b"X-Rspamd-User: daemon\r\n\r\nbody"));
     assert!(!has_xrpusr_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3099_xbcenv_bad() {
+    assert!(has_xbcenv_bad(b"X-Barracuda-Envelope-From: not addr\r\n\r\nbody"));
+    assert!(has_xbcenv_bad(b"X-Barracuda-Envelope-To: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xbcenv_bad(b"X-Barracuda-Envelope-From: <>\r\n\r\nbody"));
+    assert!(!has_xbcenv_bad(b"X-Barracuda-Envelope-From: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xbcenv_bad(b"X-Barracuda-Envelope-To: u@x.com\r\n\r\nbody"));
+    assert!(!has_xbcenv_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3100_xbcip_bad() {
+    assert!(has_xbcip_bad(b"X-Barracuda-Connect-IP: not ip\r\n\r\nbody"));
+    assert!(has_xbcip_bad(b"X-Barracuda-Connect-IP: 999.1.2.3\r\n\r\nbody"));
+    assert!(has_xbcip_bad(b"X-Barracuda-Connect-IP:\r\n\r\nbody"));
+    assert!(!has_xbcip_bad(b"X-Barracuda-Connect-IP: 192.0.2.1\r\n\r\nbody"));
+    assert!(!has_xbcip_bad(b"X-Barracuda-Connect-IP: 2001:db8::1\r\n\r\nbody"));
+    assert!(!has_xbcip_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3101_xbctime_bad() {
+    assert!(has_xbctime_bad(b"X-Barracuda-Start-Time: not time\r\n\r\nbody"));
+    assert!(has_xbctime_bad(b"X-Barracuda-Start-Time:\r\n\r\nbody"));
+    assert!(!has_xbctime_bad(b"X-Barracuda-Start-Time: 1791432808.123\r\n\r\nbody"));
+    assert!(!has_xbctime_bad(b"X-Barracuda-Start-Time: 1791432808\r\n\r\nbody"));
+    assert!(!has_xbctime_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3102_xbcspam_bad() {
+    assert!(has_xbcspam_bad(b"X-Barracuda-Spam: maybe\r\n\r\nbody"));
+    assert!(has_xbcspam_bad(b"X-Barracuda-Spam:\r\n\r\nbody"));
+    assert!(!has_xbcspam_bad(b"X-Barracuda-Spam: Yes\r\n\r\nbody"));
+    assert!(!has_xbcspam_bad(b"X-Barracuda-Spam: No\r\n\r\nbody"));
+    assert!(!has_xbcspam_bad(b"X-Barracuda-Spam: no\r\n\r\nbody"));
+    assert!(!has_xbcspam_bad(b"From: a@b\r\n\r\nbody"));
 }
 
 #[test]
