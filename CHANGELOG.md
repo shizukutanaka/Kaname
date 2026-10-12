@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3031: `X-Sieve-Redirected-From:` 欄の非宛名値を転送記録ずれとして検出 — `Envelope` に `x_sieve_bad` を追加。
+### Security — D3032: `X-Resolved-To:` 欄の非宛名値を配達記録ずれとして検出 — `Envelope` に `x_resolved_bad` を追加。
+### Security — D3033: `X-SES-Receipt:` 欄の非受領トークン値を受領記録ずれとして検出 — `Envelope` に `x_sesrc_bad` を追加。
+### Security — D3034: `X-Env-Sender:` 欄の非宛名値を封書差出人ずれとして検出 — `Envelope` に `x_envsnd_bad` を追加。
+
 ### Security — D3015: `Content-Translation-Type:` 欄の語彙外値 (`8BIT`/`7BIT`/`BINARY` 以外) を翻訳ずれとして検出 — `Envelope` に `content_ttype_bad` を追加。
 ### Security — D3016: `Content-Duration:` 欄の非数値を長尺ずれとして検出 — `Envelope` に `content_dur_bad` を追加。
 ### Security — D3017: `Content-Script-Type:`/`Content-Style-Type:` 欄の非 `型/下位型` 値を媒型ずれとして検出 — `Envelope` に `content_styp_bad` を追加。

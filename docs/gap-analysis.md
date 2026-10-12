@@ -2326,6 +2326,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2992 | OpenPGP: の非 名=値/鍵要素値 (鍵識別欄の値異形) | 鍵識別ずれ |
 | D2993 | Content-Return: の語彙外値 (本文返却欄の値異形) | 返却ずれ |
 | D2994 | Mail-Followup-To:/Mail-Reply-To: の非宛名値 (追従先欄の値異形) | 追従ずれ |
+| D3031 | X-Sieve-Redirected-From: の非宛名値 (転送記録欄の値異形) | 転送記録ずれ |
+| D3032 | X-Resolved-To: の非宛名値 (配達記録欄の値異形) | 配達記録ずれ |
+| D3033 | X-SES-Receipt: の非受領トークン値 (受領記録欄の値異形) | 受領記録ずれ |
+| D3034 | X-Env-Sender: の非宛名値 (封書差出人欄の値異形) | 封書差出人ずれ |
 | D3015 | Content-Translation-Type: の語彙外値 (翻訳種別欄の値異形) | 翻訳ずれ |
 | D3016 | Content-Duration: の非数値 (長尺欄の値異形) | 長尺ずれ |
 | D3017 | Content-Script-Type:/Content-Style-Type: の非媒体型値 (既定媒型欄の値異形) | 媒型ずれ |
