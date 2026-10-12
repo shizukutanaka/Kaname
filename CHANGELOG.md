@@ -5,6 +5,11 @@
 ### Security — D3025: `X-MS-Exchange-Organization-SenderIdResult:` 欄の語彙外値を送信者判定ずれとして検出 — `Envelope` に `ms_sidres_bad` を追加。
 ### Security — D3026: `X-Mailgun-Sending-Ip:`/`X-Mailgun-Track:`/`X-Mailgun-Sid:` 欄の値異形を配信機印ずれとして検出 — `Envelope` に `x_mgun_bad` を追加。
 
+### Security — D3019: `Conversion:` 欄の語彙外値 (X.400 変換指定異形) を変換ずれとして検出 — `Envelope` に `conversion_bad` を追加。
+### Security — D3020: `Conversion-With-Loss:` 欄の語彙外値 (X.400 損失変換指定異形) を損失変換ずれとして検出 — `Envelope` に `conversion_loss_bad` を追加。
+### Security — D3021: `Message-Type:` 欄の語彙外値 (報告種別異形) を報告種別ずれとして検出 — `Envelope` に `message_type_bad` を追加。
+### Security — D3022: `Read-Date:` 欄の非日時形/`Disclose-Recipients:` 欄の語彙外値 (閲読記録異形) を閲読記録ずれとして検出 — `Envelope` に `read_rec_bad` を追加。
+
 ### Security — D3027: `X-MS-Exchange-Organization-PCL:` 欄の非数値を疑い度ずれとして検出 — `Envelope` に `ms_pcl_bad` を追加。
 ### Security — D3028: `X-MS-Exchange-CrossTenant-Message-Id:` 欄の非GUID値を越境識別ずれとして検出 — `Envelope` に `ms_ctmid_bad` を追加。
 ### Security — D3029: `X-MS-Office365-Filtering-Correlation-Id-Prvs:` 欄の非16進値を照合鍵ずれとして検出 — `Envelope` に `ms_prvscid_bad` を追加。
@@ -26,6 +31,14 @@
 ### Security — D3080: `X-Sent-To:` 欄の非宛名形値を配送宛名ずれとして検出 — `Envelope` に `xsentto_bad` を追加。
 ### Security — D3081: `X-Originating-Domain:` 欄の非FQDNトークン値を発信局名ずれとして検出 — `Envelope` に `xodom_bad` を追加。
 ### Security — D3082: `X-Message-UUID:` 欄の非GUID形値を配送識別ずれとして検出 — `Envelope` に `xmuuid_bad` を追加。
+### Security — D3115: `X-Spamd-Checker-Version:` 欄の非 `SpamAssassin` 始まり値を検疫機名乗りずれとして検出 — `Envelope` に `xsdcv_bad` を追加。
+### Security — D3116: `X-Amavis-Original-Mail-From:`/`X-Amavis-Original-To:` 欄の非 `<>`/宛名連接値を検疫機元封書ずれとして検出 — `Envelope` に `xamaddr_bad` を追加。
+### Security — D3117: `X-Amavis-Checker-Version:` 欄の非 `Amavisd` 始まり値を検疫機版号名乗りずれとして検出 — `Envelope` に `xamcv_bad` を追加。
+### Security — D3118: `X-Rspamd-User:` 欄の非単一印字トークン値を検疫機使用者ずれとして検出 — `Envelope` に `xrpusr_bad` を追加。
+### Security — D3099: `X-Barracuda-Envelope-From:`/`X-Barracuda-Envelope-To:` 欄の非 `<>`/宛名形値を検疫網封書ずれとして検出 — `Envelope` に `xbcenv_bad` を追加。
+### Security — D3100: `X-Barracuda-Connect-IP:` 欄の非IPアドレス値を検疫網接続元ずれとして検出 — `Envelope` に `xbcip_bad` を追加。
+### Security — D3101: `X-Barracuda-Start-Time:` 欄の非数値を検疫網開始刻印ずれとして検出 — `Envelope` に `xbctime_bad` を追加。
+### Security — D3102: `X-Barracuda-Spam:` 欄の非 `Yes`/`No` 値を検疫網迷惑印ずれとして検出 — `Envelope` に `xbcspam_bad` を追加。
 ### Security — D3119: `X-MS-Exchange-Organization-OriginalSize:` 欄の非整数値を組織元寸法ずれとして検出 — `Envelope` に `msos_bad` を追加。
 ### Security — D3120: `X-MS-Exchange-Organization-SCLThreshold:` 欄の非整数値を組織閾値ずれとして検出 — `Envelope` に `msst_bad` を追加。
 ### Security — D3121: `X-MS-Exchange-Transport-CrossTenantHeadersStripped:` 欄の非 `true`/`false` 値を組織越境除去ずれとして検出 — `Envelope` に `mscts_bad` を追加。
@@ -48,6 +61,10 @@
 ### Security — D3004: `X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP:` 欄の非 `[IP]` 値を越境接続ずれとして検出 — `Envelope` に `ms_ct_ip_bad` を追加。
 ### Security — D3005: `X-MS-Exchange-CrossTenant-AuthAs:` 欄の語彙外値 (`Internal`/`Anonymous`/`External` 以外) を越境認証主体ずれとして検出 — `Envelope` に `ms_ct_authas_bad` を追加。
 ### Security — D3006: `X-MS-Exchange-CrossTenant-AuthSource:` 欄の非ホスト名値を越境認証元ずれとして検出 — `Envelope` に `ms_ct_asrc_bad` を追加。
+### Security — D3035: `X-Amazon-Original-Recipient:` 欄の非宛名値を元宛記録ずれとして検出 — `Envelope` に `x_amzrc_bad` を追加。
+### Security — D3036: `X-FBL-Name:` 欄の非印字トークン値を報告機名ずれとして検出 — `Envelope` に `x_fbl_bad` を追加。
+### Security — D3037: `X-Mimecast-Spam-Score:` 欄の非整数値を疑い度ずれとして検出 — `Envelope` に `x_mcs_bad` を追加。
+### Security — D3038: `X-Ham-Report:` 欄の報告構造欠落値を判定経緯ずれとして検出 — `Envelope` に `x_hamr_bad` を追加。
 
 ### Fixed — Devin Review (#803): `Autocrypt:` は `keydata=` 必須化・`OpenPGP:` は `id=`/`url=` 必須化 (`preference=` 単独を異形へ)・`Mail-Followup-To:`/`Mail-Reply-To:` は宛名列を要素ごとに検査・自己申告欄のヘッダ走査を本文全体変換から生バイト境界検出へ変更 (解析コスト削減)。
 ### Security — D2995: `X-MS-PublicTrafficType:` 欄の非 `Email` 値を輸送種別ずれとして検出 — `Envelope` に `ms_ptt_bad` を追加。

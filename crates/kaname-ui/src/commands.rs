@@ -9409,6 +9409,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_mgun_bad {
         render_risks.push("配信機印欄の値が異形です—機印値の扱いで経路評価がずれます".to_string());
     }
+    if env.conversion_bad {
+        render_risks.push("変換指定欄の値が語彙外です—変換値の扱いで経路評価がずれます".to_string());
+    }
+    if env.conversion_loss_bad {
+        render_risks.push("損失変換欄の値が語彙外です—損失値の扱いで経路評価がずれます".to_string());
+    }
+    if env.message_type_bad {
+        render_risks.push("報告種別欄の値が語彙外です—種別値の扱いで経路評価がずれます".to_string());
+    }
+    if env.read_rec_bad {
+        render_risks.push("閲読記録欄の値が異形です—閲読値の扱いで経路評価がずれます".to_string());
+    }
     if env.ms_pcl_bad {
         render_risks.push("疑い度欄の値が数値形でないです—疑い値の扱いで発信元評価がずれます".to_string());
     }
@@ -9469,6 +9481,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.ms_ct_asrc_bad {
         render_risks.push("越境認証元欄の値がホスト名形でないです—認証元の扱いで経路評価がずれます".to_string());
     }
+    if env.x_amzrc_bad {
+        render_risks.push("元宛記録欄の値が宛名形でないです—元宛の扱いで経路評価がずれます".to_string());
+    }
+    if env.x_fbl_bad {
+        render_risks.push("報告機名欄の値がトークン形でないです—報告機の扱いで照合がずれます".to_string());
+    }
+    if env.x_mcs_bad {
+        render_risks.push("疑い度欄の値が整数形でないです—疑い度の扱いで発信元評価がずれます".to_string());
+    }
+    if env.x_hamr_bad {
+        render_risks.push("判定経緯欄の値が報告構造形でないです—経緯の扱いで発信元評価がずれます".to_string());
+    }
     if env.ms_dir_bad {
         render_risks.push("輸送方向欄の値が語彙外です—方向判定の扱いで発信元評価がずれます".to_string());
     }
@@ -9516,6 +9540,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     if env.xmuuid_bad {
         render_risks.push("配送識別欄の値がGUID形でないです—配送記録の扱いで照合がずれます".to_string());
+    }
+    if env.xsdcv_bad {
+        render_risks.push("検疫機名乗り欄の値が SpamAssassin 始まりでないです—検査記録の扱いで検査機照合がずれます".to_string());
+    }
+    if env.xamaddr_bad {
+        render_risks.push("検疫機元封書欄の値が宛名連接形でないです—検査記録の扱いで元封書照合がずれます".to_string());
+    }
+    if env.xamcv_bad {
+        render_risks.push("検疫機版号名乗り欄の値が Amavisd 始まりでないです—検査記録の扱いで走査機識別がずれます".to_string());
+    }
+    if env.xrpusr_bad {
+        render_risks.push("検疫機使用者欄の値が単一印字トークンでないです—検査記録の扱いで使用者照合がずれます".to_string());
+    }
+    if env.xbcenv_bad {
+        render_risks.push("検疫網封書欄の値が宛名形でないです—検査記録の扱いで封書照合がずれます".to_string());
+    }
+    if env.xbcip_bad {
+        render_risks.push("検疫網接続元欄の値がIPアドレス形でないです—検査記録の扱いで接続元特定がずれます".to_string());
+    }
+    if env.xbctime_bad {
+        render_risks.push("検疫網開始刻印欄の値が数値形でないです—検査記録の扱いで時刻照合がずれます".to_string());
+    }
+    if env.xbcspam_bad {
+        render_risks.push("検疫網迷惑印欄の値が Yes/No でないです—検査記録の扱いで判定確認がずれます".to_string());
     }
     if env.msos_bad {
         render_risks.push("組織元寸法欄の値が整数形でないです—組織記録の扱いで寸法照合がずれます".to_string());
