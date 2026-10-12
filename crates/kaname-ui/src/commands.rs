@@ -9397,6 +9397,42 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.list_followup_bad {
         render_risks.push("追従先欄の値が異形です—追従値の扱いで返信経路がずれます".to_string());
     }
+    if env.x_sieve_bad {
+        render_risks.push("転送記録欄の値が宛名形でないです—転送値の扱いで経路評価がずれます".to_string());
+    }
+    if env.x_resolved_bad {
+        render_risks.push("配達記録欄の値が宛名形でないです—配達値の扱いで経路評価がずれます".to_string());
+    }
+    if env.x_sesrc_bad {
+        render_risks.push("受領記録欄の値が受領トークン形でないです—受領値の扱いで照合がずれます".to_string());
+    }
+    if env.x_envsnd_bad {
+        render_risks.push("封書差出人欄の値が宛名形でないです—封書値の扱いで経路評価がずれます".to_string());
+    }
+    if env.content_ttype_bad {
+        render_risks.push("翻訳種別欄の値が語彙外です—翻訳値の扱いで内容評価がずれます".to_string());
+    }
+    if env.content_dur_bad {
+        render_risks.push("長尺欄の値が数値形でないです—長尺値の扱いで内容評価がずれます".to_string());
+    }
+    if env.content_styp_bad {
+        render_risks.push("既定媒型欄の値が媒体型形でないです—媒型値の扱いで内容評価がずれます".to_string());
+    }
+    if env.x_ses_bad {
+        render_risks.push("送出記録欄の値が版号印形でないです—送出値の扱いで経路評価がずれます".to_string());
+    }
+    if env.conversion_bad {
+        render_risks.push("変換指定欄の値が語彙外です—変換値の扱いで経路評価がずれます".to_string());
+    }
+    if env.conversion_loss_bad {
+        render_risks.push("損失変換欄の値が語彙外です—損失値の扱いで経路評価がずれます".to_string());
+    }
+    if env.message_type_bad {
+        render_risks.push("報告種別欄の値が語彙外です—種別値の扱いで経路評価がずれます".to_string());
+    }
+    if env.read_rec_bad {
+        render_risks.push("閲読記録欄の値が異形です—閲読値の扱いで経路評価がずれます".to_string());
+    }
     if env.ms_pcl_bad {
         render_risks.push("疑い度欄の値が数値形でないです—疑い値の扱いで発信元評価がずれます".to_string());
     }
@@ -9456,6 +9492,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     if env.ms_ct_asrc_bad {
         render_risks.push("越境認証元欄の値がホスト名形でないです—認証元の扱いで経路評価がずれます".to_string());
+    }
+    if env.x_amzrc_bad {
+        render_risks.push("元宛記録欄の値が宛名形でないです—元宛の扱いで経路評価がずれます".to_string());
+    }
+    if env.x_fbl_bad {
+        render_risks.push("報告機名欄の値がトークン形でないです—報告機の扱いで照合がずれます".to_string());
+    }
+    if env.x_mcs_bad {
+        render_risks.push("疑い度欄の値が整数形でないです—疑い度の扱いで発信元評価がずれます".to_string());
+    }
+    if env.x_hamr_bad {
+        render_risks.push("判定経緯欄の値が報告構造形でないです—経緯の扱いで発信元評価がずれます".to_string());
     }
     if env.ms_dir_bad {
         render_risks.push("輸送方向欄の値が語彙外です—方向判定の扱いで発信元評価がずれます".to_string());

@@ -2326,6 +2326,18 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D2992 | OpenPGP: の非 名=値/鍵要素値 (鍵識別欄の値異形) | 鍵識別ずれ |
 | D2993 | Content-Return: の語彙外値 (本文返却欄の値異形) | 返却ずれ |
 | D2994 | Mail-Followup-To:/Mail-Reply-To: の非宛名値 (追従先欄の値異形) | 追従ずれ |
+| D3031 | X-Sieve-Redirected-From: の非宛名値 (転送記録欄の値異形) | 転送記録ずれ |
+| D3032 | X-Resolved-To: の非宛名値 (配達記録欄の値異形) | 配達記録ずれ |
+| D3033 | X-SES-Receipt: の非受領トークン値 (受領記録欄の値異形) | 受領記録ずれ |
+| D3034 | X-Env-Sender: の非宛名値 (封書差出人欄の値異形) | 封書差出人ずれ |
+| D3015 | Content-Translation-Type: の語彙外値 (翻訳種別欄の値異形) | 翻訳ずれ |
+| D3016 | Content-Duration: の非数値 (長尺欄の値異形) | 長尺ずれ |
+| D3017 | Content-Script-Type:/Content-Style-Type: の非媒体型値 (既定媒型欄の値異形) | 媒型ずれ |
+| D3018 | X-SES-Outgoing: の非版号印値 (送出記録欄の値異形) | 送出ずれ |
+| D3019 | Conversion: の語彙外値 (変換指定欄の値異形) | 変換ずれ |
+| D3020 | Conversion-With-Loss: の語彙外値 (損失変換欄の値異形) | 損失変換ずれ |
+| D3021 | Message-Type: の語彙外値 (報告種別欄の値異形) | 報告種別ずれ |
+| D3022 | Read-Date:/Disclose-Recipients: の異形値 (閲読記録欄の値異形) | 閲読記録ずれ |
 | D3027 | X-MS-Exchange-Organization-PCL: の非数値 (疑い度欄の値異形) | 疑い度ずれ |
 | D3028 | X-MS-Exchange-CrossTenant-Message-Id: の非GUID値 (越境識別欄の値異形) | 越境識別ずれ |
 | D3029 | X-MS-Office365-Filtering-Correlation-Id-Prvs: の非16進値 (照合鍵欄の値異形) | 照合鍵ずれ |
@@ -2346,6 +2358,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3004 | X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: の非[IP]値 (越境接続欄の値異形) | 接続ずれ |
 | D3005 | X-MS-Exchange-CrossTenant-AuthAs: の語彙外値 (越境認証主体欄の値異形) | 主体ずれ |
 | D3006 | X-MS-Exchange-CrossTenant-AuthSource: の非ホスト名値 (越境認証元欄の値異形) | 認証元ずれ |
+| D3035 | X-Amazon-Original-Recipient: の非宛名値 (元宛記録欄の値異形) | 元宛ずれ |
+| D3036 | X-FBL-Name: の非印字トークン値 (報告機名欄の値異形) | 報告機ずれ |
+| D3037 | X-Mimecast-Spam-Score: の非整数値 (疑い度欄の値異形) | 疑い度ずれ |
+| D3038 | X-Ham-Report: の報告構造欠落値 (判定経緯欄の値異形) | 経緯ずれ |
 | D2999 | X-MS-Exchange-Organization-MessageDirectionality: の語彙外値 (輸送方向欄の値異形) | 方向ずれ |
 | D3000 | X-MS-Exchange-Organization-AuthMechanism: の非方式番号値 (認証方式欄の値異形) | 方式ずれ |
 | D3001 | X-MS-Office365-Filtering-Correlation-Id: の非GUID値 (関連識別欄の値異形) | 識別ずれ |
