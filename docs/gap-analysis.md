@@ -2330,6 +2330,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3032 | X-Resolved-To: の非宛名値 (配達記録欄の値異形) | 配達記録ずれ |
 | D3033 | X-SES-Receipt: の非受領トークン値 (受領記録欄の値異形) | 受領記録ずれ |
 | D3034 | X-Env-Sender: の非宛名値 (封書差出人欄の値異形) | 封書差出人ずれ |
+| D3019 | Conversion: の語彙外値 (変換指定欄の値異形) | 変換ずれ |
+| D3020 | Conversion-With-Loss: の語彙外値 (損失変換欄の値異形) | 損失変換ずれ |
+| D3021 | Message-Type: の語彙外値 (報告種別欄の値異形) | 報告種別ずれ |
+| D3022 | Read-Date:/Disclose-Recipients: の異形値 (閲読記録欄の値異形) | 閲読記録ずれ |
 | D3027 | X-MS-Exchange-Organization-PCL: の非数値 (疑い度欄の値異形) | 疑い度ずれ |
 | D3028 | X-MS-Exchange-CrossTenant-Message-Id: の非GUID値 (越境識別欄の値異形) | 越境識別ずれ |
 | D3029 | X-MS-Office365-Filtering-Correlation-Id-Prvs: の非16進値 (照合鍵欄の値異形) | 照合鍵ずれ |
@@ -2350,6 +2354,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3004 | X-MS-Exchange-CrossTenant-OriginalAttributedConnectingIP: の非[IP]値 (越境接続欄の値異形) | 接続ずれ |
 | D3005 | X-MS-Exchange-CrossTenant-AuthAs: の語彙外値 (越境認証主体欄の値異形) | 主体ずれ |
 | D3006 | X-MS-Exchange-CrossTenant-AuthSource: の非ホスト名値 (越境認証元欄の値異形) | 認証元ずれ |
+| D3035 | X-Amazon-Original-Recipient: の非宛名値 (元宛記録欄の値異形) | 元宛ずれ |
+| D3036 | X-FBL-Name: の非印字トークン値 (報告機名欄の値異形) | 報告機ずれ |
+| D3037 | X-Mimecast-Spam-Score: の非整数値 (疑い度欄の値異形) | 疑い度ずれ |
+| D3038 | X-Ham-Report: の報告構造欠落値 (判定経緯欄の値異形) | 経緯ずれ |
 | D2999 | X-MS-Exchange-Organization-MessageDirectionality: の語彙外値 (輸送方向欄の値異形) | 方向ずれ |
 | D3000 | X-MS-Exchange-Organization-AuthMechanism: の非方式番号値 (認証方式欄の値異形) | 方式ずれ |
 | D3001 | X-MS-Office365-Filtering-Correlation-Id: の非GUID値 (関連識別欄の値異形) | 識別ずれ |
@@ -2366,6 +2374,14 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3080 | X-Sent-To: の非宛名形値 (配送宛名欄の値異形) | 配送宛名ずれ |
 | D3081 | X-Originating-Domain: の非FQDNトークン値 (発信局名欄の値異形) | 発信局名ずれ |
 | D3082 | X-Message-UUID: の非GUID形値 (配送識別欄の値異形) | 配送識別ずれ |
+| D3115 | X-Spamd-Checker-Version: の非 SpamAssassin 始まり値 (検疫機名乗り欄の値異形) | 検疫機名乗りずれ |
+| D3116 | X-Amavis-Original-Mail-From:/Original-To: の非 <>/宛名連接値 (検疫機元封書欄の値異形) | 検疫機元封書ずれ |
+| D3117 | X-Amavis-Checker-Version: の非 Amavisd 始まり値 (検疫機版号名乗り欄の値異形) | 検疫機版号名乗りずれ |
+| D3118 | X-Rspamd-User: の非単一印字トークン値 (検疫機使用者欄の値異形) | 検疫機使用者ずれ |
+| D3099 | X-Barracuda-Envelope-From:/Envelope-To: の非 <>/宛名形値 (検疫網封書欄の値異形) | 検疫網封書ずれ |
+| D3100 | X-Barracuda-Connect-IP: の非IP値 (検疫網接続元欄の値異形) | 検疫網接続元ずれ |
+| D3101 | X-Barracuda-Start-Time: の非数値 (検疫網開始刻印欄の値異形) | 検疫網開始刻印ずれ |
+| D3102 | X-Barracuda-Spam: の非 Yes/No 値 (検疫網迷惑印欄の値異形) | 検疫網迷惑印ずれ |
 | D3119 | X-MS-Exchange-Organization-OriginalSize: の非整数値 (組織元寸法欄の値異形) | 組織元寸法ずれ |
 | D3120 | X-MS-Exchange-Organization-SCLThreshold: の非整数値 (組織閾値欄の値異形) | 組織閾値ずれ |
 | D3121 | X-MS-Exchange-Transport-CrossTenantHeadersStripped: の非 true/false 値 (組織越境除去欄の値異形) | 組織越境除去ずれ |
