@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3023: `X-Quarantine-ID:` 欄の非 `<トークン>` 値を検疫ずれとして検出 — `Envelope` に `x_quarantine_bad` を追加。
+### Security — D3024: `X-Spam-DCC:` 欄の非 `局: 機名 件数` 値を照合集計ずれとして検出 — `Envelope` に `x_dcc_bad` を追加。
+### Security — D3025: `X-MS-Exchange-Organization-SenderIdResult:` 欄の語彙外値を送信者判定ずれとして検出 — `Envelope` に `ms_sidres_bad` を追加。
+### Security — D3026: `X-Mailgun-Sending-Ip:`/`X-Mailgun-Track:`/`X-Mailgun-Sid:` 欄の値異形を配信機印ずれとして検出 — `Envelope` に `x_mgun_bad` を追加。
+
 ### Security — D3031: `X-Sieve-Redirected-From:` 欄の非宛名値を転送記録ずれとして検出 — `Envelope` に `x_sieve_bad` を追加。
 ### Security — D3032: `X-Resolved-To:` 欄の非宛名値を配達記録ずれとして検出 — `Envelope` に `x_resolved_bad` を追加。
 ### Security — D3033: `X-SES-Receipt:` 欄の非受領トークン値を受領記録ずれとして検出 — `Envelope` に `x_sesrc_bad` を追加。
