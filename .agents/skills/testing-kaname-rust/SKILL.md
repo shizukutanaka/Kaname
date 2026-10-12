@@ -131,3 +131,10 @@ s = re.sub(r'^\s*#\[error\([^\]]*\)\]\n', '', s, flags=re.M)
 ```
 
 Check which path the harness actually includes (`grep 'include!' harness_rNN.rs`) — `/tmp/kv/inc/quishing.rs` vs `quishing_stripped.rs` are different files. If a NEW detector's test fails AND the PR's own verbatim test fails identically, suspect stale include BEFORE suspecting product bug — diff the include against current source.
+
+## Round-501+ notes
+
+- **Fixtures authored from spec**: when a round hardens existing detectors, author fixtures directly from the finding text (vectors like `"sales@east"@example.com`, `99 Oct 2026 99:99:99`, `mx.example.com;spoofed`, folded `from 8bit`+`To 7bit`) — no need to copy the review's file.
+- **Gate**: `cargo test --offline -p kaname-render --lib` is the full-suite gate (2410 tests as of r501); filter `--lib dNN` for scoped reruns.
+- **vite :1420 recurring down**: `npm run dev` dies between rounds (3 consecutive). Check `curl -s -o /dev/null -w '%{http_code}' localhost:1420` first; if 000, restart `npm run dev` before the UI pass.
+- **Folded-continuation fixtures**: write real CRLF + leading-WSP lines (`hdr: a\r\n\tB`) — continuation lowercase is applied in `dc_each`; hostname-grammar detectors should FIRE on folded mid-token values (space survives unfolding).
