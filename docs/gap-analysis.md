@@ -2370,6 +2370,14 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3052 | Originator-Return-Address: の非宛名形値 (返送対象欄の値異形) | 返送ずれ |
 | D3053 | Original-Encoded-Information-Types: の非種別連接値 (符号種別欄の値異形) | 種別ずれ |
 | D3054 | Content-Identifier: の非印字トークン値 (本文識別欄の値異形) | 識別ずれ |
+| D3039 | Lines: の非整数値 (記事行数欄の値異形) | 行数ずれ |
+| D3040 | X-SG-ID:/X-SG-EID: の非長トークン値 (配送識別欄の値異形) | 識別ずれ |
+| D3041 | PICS-Label: の非評価構文値 (評価記録欄の値異形) | 評価ずれ |
+| D3042 | Old-Return-Path:/X-Old-Return-Path: の非宛名値 (返送記録欄の値異形) | 返送ずれ |
+| D3043 | Deferred-Delivery: の非日時形値 (留置時刻欄の値異形) | 留置ずれ |
+| D3044 | Latest-Delivery-Time: の非日時形値 (最終期限欄の値異形) | 期限ずれ |
+| D3045 | Alternate-Recipient: の非宛名値 (代宛先欄の値異形) | 代宛先ずれ |
+| D3046 | Prevent-NonDelivery-Report: の語彙外値 (報告抑止欄の値異形) | 抑止ずれ |
 | D3055 | Content-Returned: の語彙外値 (内容返却欄の値異形) | 返却ずれ |
 | D3056 | Content-Correlator: の非印字トークン値 (対応鍵欄の値異形) | 対応ずれ |
 | D3057 | X400-Originator: の非宛名値 (交換元欄の値異形) | 交換元ずれ |
