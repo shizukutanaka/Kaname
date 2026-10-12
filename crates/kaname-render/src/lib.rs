@@ -3395,6 +3395,14 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `X-SocketLabs-*` 系欄の値がトークン形でない (D3063 — SocketLabs 印ずれ)。
+    pub xsl_bad: bool,
+    /// `X-Canit-*`/`X-CanItPRO-*` 系欄の値がトークン形でない (D3064 — CanIt 印ずれ)。
+    pub xcit_bad: bool,
+    /// `X-Originating-Client:` 欄の値がトークン形でない (D3065 — 発信端末印ずれ)。
+    pub xoc_bad: bool,
+    /// `X-Mailing-Id:` 系欄の値がトークン形でない (D3066 — 郵送識別印ずれ)。
+    pub xmlid_bad: bool,
     /// `Delivery-Report:` 欄の値が yes/no 外 (D3051 — 配送報告指定ずれ)。
     pub x4_dr_bad: bool,
     /// `Originator-Return-Address:` 欄の値が宛名形でない (D3052 — 返送対象ずれ)。
@@ -7536,6 +7544,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let xsl_bad = has_xsl_bad(bytes);
+    let xcit_bad = has_xcit_bad(bytes);
+    let xoc_bad = has_xoc_bad(bytes);
+    let xmlid_bad = has_xmlid_bad(bytes);
     let x4_dr_bad = has_x4_dr_bad(bytes);
     let x4_ora_bad = has_x4_ora_bad(bytes);
     let x4_oeit_bad = has_x4_oeit_bad(bytes);
@@ -9311,6 +9323,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        xsl_bad,
+        xcit_bad,
+        xoc_bad,
+        xmlid_bad,
         x4_dr_bad,
         x4_ora_bad,
         x4_oeit_bad,
@@ -53634,6 +53650,90 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
         }
     }
     false
+}
+
+fn hdr_end(bytes: &[u8]) -> usize {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    end
+}
+
+fn tok_bad(t: &str) -> bool {
+    t.is_empty()
+        || !t
+            .chars()
+            .all(|c| (0x21..=0x7e).contains(&(c as u32)))
+        || !t.chars().any(|c| c.is_ascii_alphanumeric())
+}
+
+fn any_hdr_bad(bytes: &[u8], names: &[&str]) -> bool {
+    let end = hdr_end(bytes);
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        for name in names {
+            if let Some(v) = low.strip_prefix(name) {
+                if tok_bad(v.trim()) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `X-SocketLabs-MessageId:`/`InjectionId:`/`Stream-Id:` 欄の値がトークン形でない (D3063 — SocketLabs 印ずれ)。
+fn has_xsl_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(
+        bytes,
+        &[
+            "x-socketlabs-messageid:",
+            "x-socketlabs-injectionid:",
+            "x-socketlabs-stream-id:",
+            "x-socketlabs-message-id:",
+        ],
+    )
+}
+
+/// `X-Canit-Stats-ID:`/`X-CanItPRO-Stream:`/`X-Canit-CHID:` 欄の値がトークン形でない (D3064 — CanIt 印ずれ)。
+fn has_xcit_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(
+        bytes,
+        &[
+            "x-canit-stats-id:",
+            "x-canitpro-stream:",
+            "x-canit-chid:",
+            "x-canit-archive-id:",
+        ],
+    )
+}
+
+/// `X-Originating-Client:` 欄の値がトークン形でない (D3065 — 発信端末印ずれ)。
+fn has_xoc_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(bytes, &["x-originating-client:"])
+}
+
+/// `X-Mailing-Id:`/`X-Mailing-ID:`/`X-MailingID:` 欄の値がトークン形でない (D3066 — 郵送識別印ずれ)。
+fn has_xmlid_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(bytes, &["x-mailing-id:", "x-mailingid:"])
 }
 
 /// `Delivery-Report:` 欄の値が yes/no 外 (D3051 — 配送報告指定ずれ)。
@@ -136002,6 +136102,47 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3063_xsl_bad() {
+        assert!(has_xsl_bad(b"X-SocketLabs-MessageId: has space\r\n\r\nbody"));
+        assert!(has_xsl_bad(b"X-SocketLabs-InjectionId:\r\n\r\nbody"));
+        assert!(!has_xsl_bad(b"X-SocketLabs-MessageId: 12345678\r\n\r\nbody"));
+        assert!(!has_xsl_bad(
+            b"X-SocketLabs-Stream-Id: news-2026\r\n\r\nbody"
+        ));
+        assert!(!has_xsl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3064_xcit_bad() {
+        assert!(has_xcit_bad(b"X-Canit-Stats-ID: \r\n\r\nbody"));
+        assert!(has_xcit_bad(b"X-CanItPRO-Stream: has space\r\n\r\nbody"));
+        assert!(!has_xcit_bad(b"X-Canit-Stats-ID: 09r2vh0zb\r\n\r\nbody"));
+        assert!(!has_xcit_bad(b"X-CanItPRO-Stream: outgoing\r\n\r\nbody"));
+        assert!(!has_xcit_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3065_xoc_bad() {
+        assert!(has_xoc_bad(b"X-Originating-Client: bad name here\r\n\r\nbody"));
+        assert!(has_xoc_bad(b"X-Originating-Client:\r\n\r\nbody"));
+        assert!(!has_xoc_bad(b"X-Originating-Client: M365\r\n\r\nbody"));
+        assert!(!has_xoc_bad(
+            b"X-Originating-Client: Microsoft-Office-14\r\n\r\nbody"
+        ));
+        assert!(!has_xoc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3066_xmlid_bad() {
+        assert!(has_xmlid_bad(b"X-Mailing-Id: bad id here\r\n\r\nbody"));
+        assert!(has_xmlid_bad(b"X-Mailing-ID:\r\n\r\nbody"));
+        assert!(!has_xmlid_bad(b"X-Mailing-Id: campaign-42\r\n\r\nbody"));
+        assert!(!has_xmlid_bad(b"X-MailingID: a1b2c3\r\n\r\nbody"));
+        assert!(!has_xmlid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
 
     #[test]
     fn d3051_x4_dr_bad() {
