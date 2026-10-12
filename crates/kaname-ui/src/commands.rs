@@ -9517,6 +9517,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.ms_exp_time_bad {
         render_risks.push("失効開始欄の値が日時形でないです—失効時刻の扱いで経路時系列がずれます".to_string());
     }
+    if env.xsl_bad {
+        render_risks.push("SocketLabs配送印欄の値が識別子形でないです—配送記録の扱いで照合がずれます".to_string());
+    }
+    if env.xcit_bad {
+        render_risks.push("CanIt処理印欄の値が識別子形でないです—検査機記録の扱いで照合がずれます".to_string());
+    }
+    if env.xoc_bad {
+        render_risks.push("発信端末印欄の値が識別子形でないです—発信端末記録の扱いで照合がずれます".to_string());
+    }
+    if env.xmlid_bad {
+        render_risks.push("郵送識別印欄の値が識別子形でないです—郵送記録の扱いで照合がずれます".to_string());
+    }
+    if env.x4_dr_bad {
+        render_risks.push("配送報告欄の値が語彙外です—報告指定の扱いで経路評価がずれます".to_string());
+    }
+    if env.x4_ora_bad {
+        render_risks.push("返送対象欄の値が宛名形でないです—返送先の扱いで照合がずれます".to_string());
+    }
+    if env.x4_oeit_bad {
+        render_risks.push("元符号種別欄の値が種別連接形でないです—符号種別の扱いで変換評価がずれます".to_string());
+    }
+    if env.x4_cid_bad {
+        render_risks.push("本文識別欄の値が印字トークン形でないです—識別記録の扱いで照合がずれます".to_string());
+    }
     if env.news_lines_bad {
         render_risks.push("記事行数欄の値が整数形でないです—行数の扱いで記事把握がずれます".to_string());
     }
@@ -9600,6 +9624,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     if env.xmuuid_bad {
         render_risks.push("配送識別欄の値がGUID形でないです—配送記録の扱いで照合がずれます".to_string());
+    }
+    if env.xsdby_bad {
+        render_risks.push("検疫機署名欄の値が単一印字トークンでないです—検査記録の扱いで検査機照合がずれます".to_string());
+    }
+    if env.xsdpt_bad {
+        render_risks.push("検疫機工数欄の値が数値形でないです—検査記録の扱いで計時照合がずれます".to_string());
+    }
+    if env.xsdbar_bad {
+        render_risks.push("検疫機目盛欄の値がプラス/マイナス列でないです—検査記録の扱いで目盛照合がずれます".to_string());
+    }
+    if env.xamsc_bad {
+        render_risks.push("検疫機得点欄の値が数値形でないです—検査記録の扱いで得点照合がずれます".to_string());
     }
     if env.xmsip_bad {
         render_risks.push("発信接続元欄の値がIPアドレス形でないです—組織記録の扱いで発信元特定がずれます".to_string());
