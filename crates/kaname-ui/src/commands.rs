@@ -9409,6 +9409,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.x_envsnd_bad {
         render_risks.push("封書差出人欄の値が宛名形でないです—封書値の扱いで経路評価がずれます".to_string());
     }
+    if env.content_ttype_bad {
+        render_risks.push("翻訳種別欄の値が語彙外です—翻訳値の扱いで内容評価がずれます".to_string());
+    }
+    if env.content_dur_bad {
+        render_risks.push("長尺欄の値が数値形でないです—長尺値の扱いで内容評価がずれます".to_string());
+    }
+    if env.content_styp_bad {
+        render_risks.push("既定媒型欄の値が媒体型形でないです—媒型値の扱いで内容評価がずれます".to_string());
+    }
+    if env.x_ses_bad {
+        render_risks.push("送出記録欄の値が版号印形でないです—送出値の扱いで経路評価がずれます".to_string());
+    }
     if env.conversion_bad {
         render_risks.push("変換指定欄の値が語彙外です—変換値の扱いで経路評価がずれます".to_string());
     }
