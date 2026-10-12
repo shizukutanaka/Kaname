@@ -3395,6 +3395,14 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `Deferred-Delivery:` 欄の値が日時形でない (D3043 — 留置時刻ずれ)。
+    pub x4_defd_bad: bool,
+    /// `Latest-Delivery-Time:` 欄の値が日時形でない (D3044 — 最終期限ずれ)。
+    pub x4_ldt_bad: bool,
+    /// `Alternate-Recipient:` 欄の値が宛名形でない (D3045 — 代宛先ずれ)。
+    pub x4_altr_bad: bool,
+    /// `Prevent-NonDelivery-Report:` 欄の値が yes/no 外 (D3046 — 報告抑止ずれ)。
+    pub x4_pndr_bad: bool,
     /// `Content-Returned:` 欄の値が yes/no 外 (D3055 — 内容返却ずれ)。
     pub x4_cr_bad: bool,
     /// `Content-Correlator:` 欄の値が印字トークン形でない (D3056 — 対応鍵ずれ)。
@@ -7488,6 +7496,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let x4_defd_bad = has_x4_defd_bad(bytes);
+    let x4_ldt_bad = has_x4_ldt_bad(bytes);
+    let x4_altr_bad = has_x4_altr_bad(bytes);
+    let x4_pndr_bad = has_x4_pndr_bad(bytes);
     let x4_cr_bad = has_x4_cr_bad(bytes);
     let x4_cc_bad = has_x4_cc_bad(bytes);
     let x4_org_bad = has_x4_org_bad(bytes);
@@ -9239,6 +9251,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        x4_defd_bad,
+        x4_ldt_bad,
+        x4_altr_bad,
+        x4_pndr_bad,
         x4_cr_bad,
         x4_cc_bad,
         x4_org_bad,
@@ -53533,6 +53549,159 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
                         })
                 };
             if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// X.400 交換欄の日時形判定 — 数字10桁以上の X.400 時刻か `:` を含む RFC822 時刻。
+fn x4_is_timeish(v: &str) -> bool {
+    let t = v.trim();
+    if t.is_empty() || !t.is_ascii() || t.chars().any(|c| c.is_control()) {
+        return false;
+    }
+    let digits: usize = t.bytes().filter(|b| b.is_ascii_digit()).count();
+    digits >= 10 || (digits >= 4 && t.contains(':'))
+}
+
+/// `Deferred-Delivery:` 欄の値が日時形でない (D3043 — 留置時刻ずれ)。
+fn has_x4_defd_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("deferred-delivery:") {
+            if !x4_is_timeish(v) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Latest-Delivery-Time:` 欄の値が日時形でない (D3044 — 最終期限ずれ)。
+fn has_x4_ldt_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("latest-delivery-time:") {
+            if !x4_is_timeish(v) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Alternate-Recipient:` 欄の値が宛名形でない (D3045 — 代宛先ずれ)。
+fn has_x4_altr_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("alternate-recipient:") {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || !v.contains('@')
+                || !v.is_ascii()
+                || v.chars().any(|c| c.is_control())
+                || v.split_whitespace().count() != 1;
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Prevent-NonDelivery-Report:` 欄の値が yes/no 外 (D3046 — 報告抑止ずれ)。
+fn has_x4_pndr_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("prevent-nondelivery-report:") {
+            let v = v.trim();
+            if v != "yes" && v != "no" {
                 return true;
             }
         }
@@ -135301,6 +135470,59 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3043_x4_defd_bad() {
+        assert!(has_x4_defd_bad(b"Deferred-Delivery: soon\r\n\r\nbody"));
+        assert!(has_x4_defd_bad(b"Deferred-Delivery:\r\n\r\nbody"));
+        assert!(!has_x4_defd_bad(
+            b"Deferred-Delivery: 261001120000Z\r\n\r\nbody"
+        ));
+        assert!(!has_x4_defd_bad(
+            b"Deferred-Delivery: 01 Oct 2026 12:00:00 +0000\r\n\r\nbody"
+        ));
+        assert!(!has_x4_defd_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3044_x4_ldt_bad() {
+        assert!(has_x4_ldt_bad(b"Latest-Delivery-Time: later\r\n\r\nbody"));
+        assert!(has_x4_ldt_bad(b"Latest-Delivery-Time:\r\n\r\nbody"));
+        assert!(!has_x4_ldt_bad(
+            b"Latest-Delivery-Time: 261002120000Z\r\n\r\nbody"
+        ));
+        assert!(!has_x4_ldt_bad(
+            b"Latest-Delivery-Time: 02 Oct 2026 12:00:00 +0000\r\n\r\nbody"
+        ));
+        assert!(!has_x4_ldt_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3045_x4_altr_bad() {
+        assert!(has_x4_altr_bad(b"Alternate-Recipient: not an addr\r\n\r\nbody"));
+        assert!(has_x4_altr_bad(b"Alternate-Recipient:\r\n\r\nbody"));
+        assert!(has_x4_altr_bad(b"Alternate-Recipient: a b@c\r\n\r\nbody"));
+        assert!(!has_x4_altr_bad(
+            b"Alternate-Recipient: delegate@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_x4_altr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3046_x4_pndr_bad() {
+        assert!(has_x4_pndr_bad(
+            b"Prevent-NonDelivery-Report: maybe\r\n\r\nbody"
+        ));
+        assert!(has_x4_pndr_bad(b"Prevent-NonDelivery-Report:\r\n\r\nbody"));
+        assert!(!has_x4_pndr_bad(
+            b"Prevent-NonDelivery-Report: yes\r\n\r\nbody"
+        ));
+        assert!(!has_x4_pndr_bad(
+            b"Prevent-NonDelivery-Report: no\r\n\r\nbody"
+        ));
+        assert!(!has_x4_pndr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
 
     #[test]
     fn d3055_x4_cr_bad() {
