@@ -5,6 +5,16 @@
 ### Security — D3025: `X-MS-Exchange-Organization-SenderIdResult:` 欄の語彙外値を送信者判定ずれとして検出 — `Envelope` に `ms_sidres_bad` を追加。
 ### Security — D3026: `X-Mailgun-Sending-Ip:`/`X-Mailgun-Track:`/`X-Mailgun-Sid:` 欄の値異形を配信機印ずれとして検出 — `Envelope` に `x_mgun_bad` を追加。
 
+### Security — D3031: `X-Sieve-Redirected-From:` 欄の非宛名値を転送記録ずれとして検出 — `Envelope` に `x_sieve_bad` を追加。
+### Security — D3032: `X-Resolved-To:` 欄の非宛名値を配達記録ずれとして検出 — `Envelope` に `x_resolved_bad` を追加。
+### Security — D3033: `X-SES-Receipt:` 欄の非受領トークン値を受領記録ずれとして検出 — `Envelope` に `x_sesrc_bad` を追加。
+### Security — D3034: `X-Env-Sender:` 欄の非宛名値を封書差出人ずれとして検出 — `Envelope` に `x_envsnd_bad` を追加。
+
+### Security — D3015: `Content-Translation-Type:` 欄の語彙外値 (`8BIT`/`7BIT`/`BINARY` 以外) を翻訳ずれとして検出 — `Envelope` に `content_ttype_bad` を追加。
+### Security — D3016: `Content-Duration:` 欄の非数値を長尺ずれとして検出 — `Envelope` に `content_dur_bad` を追加。
+### Security — D3017: `Content-Script-Type:`/`Content-Style-Type:` 欄の非 `型/下位型` 値を媒型ずれとして検出 — `Envelope` に `content_styp_bad` を追加。
+### Security — D3018: `X-SES-Outgoing:` 欄の非 `YYYY.MM.DD-NN.NN` 版号印値を送出ずれとして検出 — `Envelope` に `x_ses_bad` を追加。
+
 ### Security — D3019: `Conversion:` 欄の語彙外値 (X.400 変換指定異形) を変換ずれとして検出 — `Envelope` に `conversion_bad` を追加。
 ### Security — D3020: `Conversion-With-Loss:` 欄の語彙外値 (X.400 損失変換指定異形) を損失変換ずれとして検出 — `Envelope` に `conversion_loss_bad` を追加。
 ### Security — D3021: `Message-Type:` 欄の語彙外値 (報告種別異形) を報告種別ずれとして検出 — `Envelope` に `message_type_bad` を追加。

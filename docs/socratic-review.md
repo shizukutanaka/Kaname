@@ -4631,6 +4631,16 @@ SCL (スパム信頼度) は -1 から 9 の整数、Network-Message-Id は GUID
 問: `X-Quarantine-ID:`/`X-Spam-DCC:`/`X-MS-Exchange-Organization-SenderIdResult:`/`X-Mailgun-*` の欄があれば配送機・検疫機の処理を示すか。
 答: これらは配送機が捺す検印 — 検疫識別は `<識別子>` の角括弧形、DCC 照合集計は `局名: 機名 件数` の三段形、SenderID 判定は SPF 語彙、Mailgun は IPv4/`true|false`/トークンで、いずれも形が決まっている。Network-Message-Id (D2924) や SenderIdResult を除きどの検出器にも触れられていない绿地だったため、形を欠く値を「配送機が検印した体裁」の擬態として D3023–D3026 を追加した。権威の刻印は「値が権威の形をしているか」で問う原則の継続適用。
 
+## ラウンド 476 — 「中継の荷札」の自問自答
+
+問: `X-Sieve-Redirected-From:`/`X-Resolved-To:`/`X-SES-Receipt:`/`X-Env-Sender:` の欄があれば中継の処理を示すか。
+答: これらは中継が括り付ける荷札 — Sieve 転送記録 (RFC 6558)・配達系統の最終宛先・封書差出人の再記録は宛名、SES 受領印は opaque な base64 系トークンで、いずれも形が決まっている。どの検出器にも触れられていない绿地だったため、形を欠く値を「中継が荷札を付した体裁」の擬態として D3031–D3034 を追加した。権威の刻印は「値が権威の形をしているか」で問う原則の継続適用。
+
+## ラウンド 472 — 「媒型の属性帳」の自問自答
+
+問: `Content-Translation-Type:`/`Content-Duration:`/`Content-Script-Type:`/`Content-Style-Type:`/`X-SES-Outgoing:` の欄があれば仕様どおりのメタ記録を示すか。
+答: これらは MIME の属性帳 — 翻訳種別は `8BIT`/`7BIT`/`BINARY` の閉語彙 (RFC 1893)、長尺は数値、既定媒型は `型/下位型` の媒体型、SES 送出印は `YYYY.MM.DD-NN.NN` の固定印で、いずれも形が決まっている。どの検出器にも触れられていない绿地だったため、形を欠く値を「属性を記録した体裁」の擬態として D3015–D3018 を追加した。`Content-Length:` は D1344 が HTTP 由来として、`Content-Alternative:` は D1382 が自称印として既に捕捉するため対象外 — 権威の刻印は「値が権威の形をしているか」で問う原則の継続適用。
+
 ## ラウンド 473 — 「交換所の通関票」の自問自答
 
 問: `Conversion:`/`Conversion-With-Loss:`/`Message-Type:`/`Read-Date:`/`Disclose-Recipients:` の欄があればゲートウェイ交換の規格記録を示すか。

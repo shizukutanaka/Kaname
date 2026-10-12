@@ -3323,6 +3323,22 @@ pub struct Envelope {
     pub ms_sidres_bad: bool,
     /// `X-Mailgun-*` 記録欄の値が異形 (D3026 — 配信機印ずれ)。
     pub x_mgun_bad: bool,
+    /// `X-Sieve-Redirected-From:` 欄の値が宛名形でない (D3031 — 転送記録ずれ)。
+    pub x_sieve_bad: bool,
+    /// `X-Resolved-To:` 欄の値が宛名形でない (D3032 — 配達記録ずれ)。
+    pub x_resolved_bad: bool,
+    /// `X-SES-Receipt:` 欄の値が受領トークン形でない (D3033 — 受領記録ずれ)。
+    pub x_sesrc_bad: bool,
+    /// `X-Env-Sender:` 欄の値が宛名形でない (D3034 — 封書差出人ずれ)。
+    pub x_envsnd_bad: bool,
+    /// `Content-Translation-Type:` 欄の値が翻訳語彙外 (D3015 — 翻訳ずれ)。
+    pub content_ttype_bad: bool,
+    /// `Content-Duration:` 欄の値が数値形でない (D3016 — 長尺ずれ)。
+    pub content_dur_bad: bool,
+    /// `Content-Script-Type:`/`Content-Style-Type:` 欄の値が型/下位型形でない (D3017 — 媒型ずれ)。
+    pub content_styp_bad: bool,
+    /// `X-SES-Outgoing:` 欄の値が版号印形でない (D3018 — 送出ずれ)。
+    pub x_ses_bad: bool,
     /// `Conversion:` 欄の値が交換語彙外 (D3019 — 変換ずれ)。
     pub conversion_bad: bool,
     /// `Conversion-With-Loss:` 欄の値が交換語彙外 (D3020 — 損失変換ずれ)。
@@ -7420,6 +7436,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let x_dcc_bad = has_x_dcc_bad(bytes);
     let ms_sidres_bad = has_ms_sidres_bad(bytes);
     let x_mgun_bad = has_x_mgun_bad(bytes);
+    let x_sieve_bad = has_x_sieve_bad(bytes);
+    let x_resolved_bad = has_x_resolved_bad(bytes);
+    let x_sesrc_bad = has_x_sesrc_bad(bytes);
+    let x_envsnd_bad = has_x_envsnd_bad(bytes);
+    let content_ttype_bad = has_content_ttype_bad(bytes);
+    let content_dur_bad = has_content_dur_bad(bytes);
+    let content_styp_bad = has_content_styp_bad(bytes);
+    let x_ses_bad = has_x_ses_bad(bytes);
     let conversion_bad = has_conversion_bad(bytes);
     let conversion_loss_bad = has_conversion_loss_bad(bytes);
     let message_type_bad = has_message_type_bad(bytes);
@@ -9155,6 +9179,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         x_dcc_bad,
         ms_sidres_bad,
         x_mgun_bad,
+        x_sieve_bad,
+        x_resolved_bad,
+        x_sesrc_bad,
+        x_envsnd_bad,
+        content_ttype_bad,
+        content_dur_bad,
+        content_styp_bad,
+        x_ses_bad,
         conversion_bad,
         conversion_loss_bad,
         message_type_bad,
@@ -52422,6 +52454,268 @@ fn has_x_mgun_bad(bytes: &[u8]) -> bool {
         } else if let Some(v) = low.strip_prefix("x-mailgun-sid:") {
             let t = v.trim();
             if t.is_empty() || t.chars().any(|c| c.is_whitespace() || !c.is_ascii()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 配送途中の転送・受領記録欄 (`X-Sieve-Redirected-From:`/
+/// `X-Resolved-To:`/`X-SES-Receipt:`/`X-Env-Sender:`) の値形検査用に、
+/// ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す (D3031–D3034)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn sv_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `X-Sieve-Redirected-From:` 欄の値が宛名形でなければ転送記録の
+/// 異形として検出する (D3031)。
+///
+/// RFC 6558 が定める Sieve 転送記録はリダイレクト元の電子メール
+/// 宛名 — 宛名形を欠く値は「転送を記録した体裁」の擬態。
+fn has_x_sieve_bad(bytes: &[u8]) -> bool {
+    let logical = sv_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-sieve-redirected-from:") {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Resolved-To:` 欄の値が宛名形でなければ配達記録の異形として
+/// 検出する (D3032)。
+///
+/// Google 系の配達系統が刻む最終宛先記録は宛名 — 宛名形を欠く値は
+/// 「配達を記録した体裁」の擬態。
+fn has_x_resolved_bad(bytes: &[u8]) -> bool {
+    let logical = sv_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-resolved-to:") {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-SES-Receipt:` 欄の値が受領トークン形 (base64 系の長さ16以上)
+/// でなければ受領記録の異形として検出する (D3033)。
+///
+/// Amazon SES が刻む受領印は opaque な base64 系トークン —
+/// 形を欠く値は「SES が受領した体裁」の擬態。
+fn has_x_sesrc_bad(bytes: &[u8]) -> bool {
+    let logical = sv_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ses-receipt:") {
+            let t = v.trim();
+            if t.len() < 16
+                || !t
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-Env-Sender:` 欄の値が宛名形でなければ封書差出人記録の異形
+/// として検出する (D3034)。
+///
+/// 中継が刻む封書差出人の再記録は宛名 — 宛名形を欠く値は
+/// 「封書差出人を記録した体裁」の擬態。
+fn has_x_envsnd_bad(bytes: &[u8]) -> bool {
+    let logical = sv_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-env-sender:") {
+            let t = v.trim();
+            if t.is_empty() || !t.contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// MIME メタ欄 (`Content-Translation-Type:`/`Content-Duration:`/
+/// `Content-Script-Type:`/`Content-Style-Type:`/`X-SES-Outgoing:`) の
+/// 値形検査用に、ヘッダ部を論理行 (折り畳みを継続行へ展開) へ直す
+/// (D3015–D3018)。
+///
+/// 本文境界は生バイトで最初の `\r\n\r\n`/`\n\n` の早い方で決め、
+/// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
+/// 本文全体の文字列化・書換を避けるため。
+fn mime_meta_hdr_text(bytes: &[u8]) -> String {
+    let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf = bytes.windows(2).position(|w| w == b"\n\n");
+    let end = match (crlf, lf) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => bytes.len(),
+    };
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    let mut logical = String::with_capacity(text.len() + 1);
+    let mut first = true;
+    for l in text.split('\n') {
+        let l = l.strip_suffix('\r').unwrap_or(l);
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+}
+
+/// `Content-Translation-Type:` 欄の値が `8BIT`/`7BIT`/`BINARY`
+/// (RFC 1893) でなければ翻訳種別記録の異形として検出する (D3015)。
+///
+/// ゲートウェイが施した転送翻訳の種別は閉じた語彙 — 語彙外の値は
+/// 「翻訳済みを記録した体裁」の擬態。
+fn has_content_ttype_bad(bytes: &[u8]) -> bool {
+    let logical = mime_meta_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("content-translation-type:") {
+            let t = v.trim();
+            if !matches!(t, "8bit" | "7bit" | "binary") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Duration:` 欄の値が数値 (RFC 4021、秒) でなければ
+/// 長尺記録の異形として検出する (D3016)。
+///
+/// 本文の再生長を秒で刻む欄は整数・小数の数値のみ — 単位語や
+/// 空白を含む値は「長尺を記録した体裁」の擬態。
+fn has_content_dur_bad(bytes: &[u8]) -> bool {
+    let logical = mime_meta_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("content-duration:") {
+            let t = v.trim();
+            if t.parse::<f64>().is_err() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Script-Type:`/`Content-Style-Type:` 欄の値が
+/// `型/下位型` の媒体型形でなければ既定媒型記録の異形として
+/// 検出する (D3017)。
+///
+/// 文書内の既定スクリプト・スタイル言語を刻む欄は媒体型
+/// (`text/javascript`/`text/css` 等の `型/下位型`) の単一値 —
+/// 形を欠く値は「既定媒型を記録した体裁」の擬態。
+fn has_content_styp_bad(bytes: &[u8]) -> bool {
+    let logical = mime_meta_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low
+            .strip_prefix("content-script-type:")
+            .or_else(|| low.strip_prefix("content-style-type:"))
+        {
+            let t = v.trim();
+            let ok = {
+                let mut it = t.splitn(2, '/');
+                let ty = it.next().unwrap_or("");
+                let st = it.next().unwrap_or("");
+                !ty.is_empty()
+                    && !st.is_empty()
+                    && !st.contains('/')
+                    && ty.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+                    && st.chars().all(|c| {
+                        c.is_ascii_alphanumeric()
+                            || c == '-'
+                            || c == '.'
+                            || c == '+'
+                    })
+            };
+            if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-SES-Outgoing:` 欄の値が `年.月.日-数字.数字` の版号印形でなければ
+/// SES 送出記録の異形として検出する (D3018)。
+///
+/// Amazon SES の送出印は `YYYY.MM.DD-NN.NN` の固定形
+/// (`2023.05.15-54.240` 等) — 形を欠く値は「SES 経由を記録した
+/// 体裁」の擬態 (ベンダー印としてどの検出器にも触れられていなかった)。
+fn has_x_ses_bad(bytes: &[u8]) -> bool {
+    let logical = mime_meta_hdr_text(bytes);
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("x-ses-outgoing:") {
+            let t = v.trim();
+            let ok = {
+                let b = t.as_bytes();
+                b.len() >= 13
+                    && b[4] == b'.'
+                    && b[7] == b'.'
+                    && b[10] == b'-'
+                    && t.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-')
+                    && t[11..].split('.').count() >= 2
+                    && t[11..].split('.').all(|e| !e.is_empty() && e.chars().all(|c| c.is_ascii_digit()))
+            };
+            if !ok {
                 return true;
             }
         }
@@ -134256,6 +134550,119 @@ fn 投稿機欄が異形なら発火() {
             b"X-Mailgun-Sid: WyJxOWxsdSIsImQ\r\n\r\nbody"
         ));
         assert!(!has_x_mgun_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3031_x_sieve_bad() {
+        assert!(has_x_sieve_bad(
+            b"X-Sieve-Redirected-From: nobody\r\n\r\nbody"
+        ));
+        assert!(has_x_sieve_bad(b"X-Sieve-Redirected-From:\r\n\r\nbody"));
+        assert!(!has_x_sieve_bad(
+            b"X-Sieve-Redirected-From: u@x.example\r\n\r\nbody"
+        ));
+        assert!(!has_x_sieve_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3032_x_resolved_bad() {
+        assert!(has_x_resolved_bad(b"X-Resolved-To: nobody\r\n\r\nbody"));
+        assert!(has_x_resolved_bad(b"X-Resolved-To:\r\n\r\nbody"));
+        assert!(!has_x_resolved_bad(
+            b"X-Resolved-To: u@x.example\r\n\r\nbody"
+        ));
+        assert!(!has_x_resolved_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3033_x_sesrc_bad() {
+        assert!(has_x_sesrc_bad(b"X-SES-Receipt: short!\r\n\r\nbody"));
+        assert!(has_x_sesrc_bad(b"X-SES-Receipt:\r\n\r\nbody"));
+        assert!(!has_x_sesrc_bad(
+            b"X-SES-Receipt: Ym9zVXNlcmRhdGE9IiwiQUdBQSJ9==\r\n\r\nbody"
+        ));
+        assert!(!has_x_sesrc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3034_x_envsnd_bad() {
+        assert!(has_x_envsnd_bad(b"X-Env-Sender: nobody\r\n\r\nbody"));
+        assert!(has_x_envsnd_bad(b"X-Env-Sender:\r\n\r\nbody"));
+        assert!(!has_x_envsnd_bad(
+            b"X-Env-Sender: u@x.example\r\n\r\nbody"
+        ));
+        assert!(!has_x_envsnd_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3015_content_ttype_bad() {
+        assert!(has_content_ttype_bad(
+            b"Content-Translation-Type: text\r\n\r\nbody"
+        ));
+        assert!(has_content_ttype_bad(
+            b"Content-Translation-Type:\r\n\r\nbody"
+        ));
+        assert!(!has_content_ttype_bad(
+            b"Content-Translation-Type: 8BIT\r\n\r\nbody"
+        ));
+        assert!(!has_content_ttype_bad(
+            b"Content-Translation-Type: 7BIT\r\n\r\nbody"
+        ));
+        assert!(!has_content_ttype_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3016_content_dur_bad() {
+        assert!(has_content_dur_bad(
+            b"Content-Duration: 10 seconds\r\n\r\nbody"
+        ));
+        assert!(has_content_dur_bad(
+            b"Content-Duration:\r\n\r\nbody"
+        ));
+        assert!(!has_content_dur_bad(
+            b"Content-Duration: 120\r\n\r\nbody"
+        ));
+        assert!(!has_content_dur_bad(
+            b"Content-Duration: 4.5\r\n\r\nbody"
+        ));
+        assert!(!has_content_dur_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3017_content_styp_bad() {
+        assert!(has_content_styp_bad(
+            b"Content-Script-Type: javascript\r\n\r\nbody"
+        ));
+        assert!(has_content_styp_bad(
+            b"Content-Style-Type: x/y/z\r\n\r\nbody"
+        ));
+        assert!(has_content_styp_bad(
+            b"Content-Style-Type:\r\n\r\nbody"
+        ));
+        assert!(!has_content_styp_bad(
+            b"Content-Script-Type: text/javascript\r\n\r\nbody"
+        ));
+        assert!(!has_content_styp_bad(
+            b"Content-Style-Type: text/css\r\n\r\nbody"
+        ));
+        assert!(!has_content_styp_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3018_x_ses_bad() {
+        assert!(has_x_ses_bad(
+            b"X-SES-Outgoing: amazon\r\n\r\nbody"
+        ));
+        assert!(has_x_ses_bad(
+            b"X-SES-Outgoing: 2023.05.15\r\n\r\nbody"
+        ));
+        assert!(has_x_ses_bad(
+            b"X-SES-Outgoing:\r\n\r\nbody"
+        ));
+        assert!(!has_x_ses_bad(
+            b"X-SES-Outgoing: 2023.05.15-54.240\r\n\r\nbody"
+        ));
+        assert!(!has_x_ses_bad(b"From: a@b\r\n\r\nbody"));
     }
 
     #[test]
