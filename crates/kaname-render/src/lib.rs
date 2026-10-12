@@ -3459,6 +3459,30 @@ pub struct Envelope {
     pub xodom_bad: bool,
     /// `X-Message-UUID:` 欄の値が GUID 形でない (D3082 — 配送識別ずれ)。
     pub xmuuid_bad: bool,
+    /// `X-MS-Exchange-Organization-OriginalClientIpAddress:`/`OriginalServerIpAddress:` 欄の値がIPアドレス形でない (D3091 — 発信接続元ずれ)。
+    pub xmsip_bad: bool,
+    /// `X-MS-Exchange-GeneratedBySourceMailbox:` 欄の値が GUID 形でない (D3092 — 元受信箱ずれ)。
+    pub xmsmbx_bad: bool,
+    /// `X-Remote-Addr:`/`X-Real-IP:`/`X-Client-Addr:` 欄の値がIPアドレス形でない (D3093 — 接続元ずれ)。
+    pub xraddr_bad: bool,
+    /// `X-Return-Path:` 欄の値が `<>` でも宛名形でもない (D3094 — 返送先裏控ずれ)。
+    pub xrtpath_bad: bool,
+    /// `X-SA-Exim-Mail-From:` 欄の値が `<>` でも宛名形でもない (D3095 — 検疫機元宛ずれ)。
+    pub xsaef_bad: bool,
+    /// `X-SA-Exim-Rcpt:` 欄の値が宛名連接形でない (D3096 — 検疫機宛先ずれ)。
+    pub xsaer_bad: bool,
+    /// `X-SA-Exim-Version:` 欄の値が版号形でない (D3097 — 検疫機版号ずれ)。
+    pub xsaev_bad: bool,
+    /// `X-SA-Exim-Scanned:` 欄の値が `Yes`/`No` 始まりでない (D3098 — 検疫機走査印ずれ)。
+    pub xsaes_bad: bool,
+    /// `X-MailScanner-From:` 欄の値が `<>` でも宛名形でもない (D3103 — 走査機封書元宛ずれ)。
+    pub xmsf_bad: bool,
+    /// `X-MailScanner-To:` 欄の値が宛名連接形でない (D3104 — 走査機封書宛先ずれ)。
+    pub xmst_bad: bool,
+    /// `X-MailScanner-ID:`/`X-MailScanner-QueueID:` 欄の値が単一印字トークンでない (D3105 — 走査機識別ずれ)。
+    pub xmsid_bad: bool,
+    /// `X-MailScanner-SpamCheck:` 欄の値が `spam`/`not spam` 始まりでない (D3106 — 走査機判定詳細ずれ)。
+    pub xmssc_bad: bool,
     /// `X-Rspamd-Queue-Id:`/`X-Rspamd-Id:` 欄の値が単一印字トークンでない (D3107 — 走査機番号ずれ)。
     pub xrpid_bad: bool,
     /// `X-Rspamd-Score:`/`X-Rspamd-Ip-Score:` 欄の値が数値形でない (D3108 — 走査機得点ずれ)。
@@ -7544,6 +7568,18 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xsentto_bad = has_xsentto_bad(bytes);
     let xodom_bad = has_xodom_bad(bytes);
     let xmuuid_bad = has_xmuuid_bad(bytes);
+    let xmsip_bad = has_xmsip_bad(bytes);
+    let xmsmbx_bad = has_xmsmbx_bad(bytes);
+    let xraddr_bad = has_xraddr_bad(bytes);
+    let xrtpath_bad = has_xrtpath_bad(bytes);
+    let xsaef_bad = has_xsaef_bad(bytes);
+    let xsaer_bad = has_xsaer_bad(bytes);
+    let xsaev_bad = has_xsaev_bad(bytes);
+    let xsaes_bad = has_xsaes_bad(bytes);
+    let xmsf_bad = has_xmsf_bad(bytes);
+    let xmst_bad = has_xmst_bad(bytes);
+    let xmsid_bad = has_xmsid_bad(bytes);
+    let xmssc_bad = has_xmssc_bad(bytes);
     let xrpid_bad = has_xrpid_bad(bytes);
     let xrpsc_bad = has_xrpsc_bad(bytes);
     let xrpv_bad = has_xrpv_bad(bytes);
@@ -9307,6 +9343,18 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xsentto_bad,
         xodom_bad,
         xmuuid_bad,
+        xmsip_bad,
+        xmsmbx_bad,
+        xraddr_bad,
+        xrtpath_bad,
+        xsaef_bad,
+        xsaer_bad,
+        xsaev_bad,
+        xsaes_bad,
+        xmsf_bad,
+        xmst_bad,
+        xmsid_bad,
+        xmssc_bad,
         xrpid_bad,
         xrpsc_bad,
         xrpv_bad,
@@ -54685,6 +54733,147 @@ fn has_xmuuid_bad(bytes: &[u8]) -> bool {
         }
         let lens: Vec<usize> = seg.iter().map(|s| s.len()).collect();
         lens != [8, 4, 4, 4, 12]
+    })
+}
+
+/// `X-MS-Exchange-Organization-OriginalClientIpAddress:`/`OriginalServerIpAddress:` 欄の値がIPアドレス形でない (D3091 — 発信接続元ずれ)。
+fn has_xmsip_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &[
+            "x-ms-exchange-organization-originalclientipaddress:",
+            "x-ms-exchange-organization-originalserveripaddress:",
+        ],
+        |t| t.parse::<std::net::IpAddr>().is_err(),
+    )
+}
+
+/// `X-MS-Exchange-GeneratedBySourceMailbox:` 欄の値が GUID 形でない (D3092 — 元受信箱ずれ)。
+fn has_xmsmbx_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-ms-exchange-generatedbysourcemailbox:"], |t| {
+        let t = t
+            .strip_prefix('{')
+            .and_then(|s| s.strip_suffix('}'))
+            .unwrap_or(t);
+        let seg: Vec<&str> = t.split('-').collect();
+        if seg.len() != 5 || seg.iter().any(|s| s.is_empty() || !s.bytes().all(|b| b.is_ascii_hexdigit())) {
+            return true;
+        }
+        let lens: Vec<usize> = seg.iter().map(|s| s.len()).collect();
+        lens != [8, 4, 4, 4, 12]
+    })
+}
+
+/// `X-Remote-Addr:`/`X-Real-IP:`/`X-Client-Addr:` 欄の値がIPアドレス形でない (D3093 — 接続元ずれ)。
+fn has_xraddr_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-remote-addr:", "x-real-ip:", "x-client-addr:"],
+        |t| t.parse::<std::net::IpAddr>().is_err(),
+    )
+}
+
+/// `X-Return-Path:` 欄の値が `<>` でも宛名形でもない (D3094 — 返送先裏控ずれ)。
+fn has_xrtpath_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-return-path:"], |t| {
+        if t == "<>" {
+            return false;
+        }
+        let t = t
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(t);
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-SA-Exim-Mail-From:` 欄の値が `<>` でも宛名形でもない (D3095 — 検疫機元宛ずれ)。
+fn has_xsaef_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-mail-from:"], |t| {
+        if t == "<>" {
+            return false;
+        }
+        let t = t
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(t);
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-SA-Exim-Rcpt:` 欄の値が宛名連接形でない (D3096 — 検疫機宛先ずれ)。
+fn has_xsaer_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-rcpt:"], |t| {
+        t.split(',').any(|a| {
+            let a = a.trim()
+                .strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+                .unwrap_or_else(|| a.trim());
+            a.is_empty() || a.matches('@').count() != 1 || a.starts_with('@') || a.ends_with('@')
+        })
+    })
+}
+
+/// `X-SA-Exim-Version:` 欄の値が版号形でない (D3097 — 検疫機版号ずれ)。
+fn has_xsaev_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-version:"], |t| {
+        t.split('.').any(|s| s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()))
+    })
+}
+
+/// `X-SA-Exim-Scanned:` 欄の値が `Yes`/`No` 始まりでない (D3098 — 検疫機走査印ずれ)。
+fn has_xsaes_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-scanned:"], |t| {
+        let l = t.to_ascii_lowercase();
+        !(l.starts_with("yes") || l.starts_with("no"))
+    })
+}
+
+/// `X-MailScanner-From:` 欄の値が `<>` でも宛名形でもない (D3103 — 走査機封書元宛ずれ)。
+fn has_xmsf_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-mailscanner-from:"], |t| {
+        if t == "<>" {
+            return false;
+        }
+        let t = t
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(t);
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-MailScanner-To:` 欄の値が宛名連接形でない (D3104 — 走査機封書宛先ずれ)。
+fn has_xmst_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-mailscanner-to:"], |t| {
+        t.split(',').any(|a| {
+            let a = a.trim();
+            let a = a
+                .strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+                .unwrap_or(a);
+            a.is_empty() || a.matches('@').count() != 1 || a.starts_with('@') || a.ends_with('@')
+        })
+    })
+}
+
+/// `X-MailScanner-ID:`/`X-MailScanner-QueueID:` 欄の値が単一印字トークンでない (D3105 — 走査機識別ずれ)。
+fn has_xmsid_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-mailscanner-id:", "x-mailscanner-queueid:"],
+        |t| {
+            t.is_empty()
+                || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+        },
+    )
+}
+
+/// `X-MailScanner-SpamCheck:` 欄の値が `spam`/`not spam` 始まりでない (D3106 — 走査機判定詳細ずれ)。
+fn has_xmssc_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-mailscanner-spamcheck:"], |t| {
+        let l = t.to_ascii_lowercase();
+        !(l.starts_with("spam") || l.starts_with("not spam"))
     })
 }
 
@@ -136241,6 +136430,142 @@ fn d3082_xmuuid_bad() {
             b"X-Delivered-To:\r\n user@example.com\r\n\r\nbody"
         ));
     }
+
+#[test]
+fn d3091_xmsip_bad() {
+    assert!(has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalClientIpAddress: not ip\r\n\r\nbody"
+    ));
+    assert!(has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalServerIpAddress: 999.1.2.3\r\n\r\nbody"
+    ));
+    assert!(has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalClientIpAddress:\r\n\r\nbody"
+    ));
+    assert!(!has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalClientIpAddress: 192.0.2.1\r\n\r\nbody"
+    ));
+    assert!(!has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalServerIpAddress: 2001:db8::1\r\n\r\nbody"
+    ));
+    assert!(!has_xmsip_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3092_xmsmbx_bad() {
+    assert!(has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: not-a-guid\r\n\r\nbody"
+    ));
+    assert!(has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: 8-4-4-4-12\r\n\r\nbody"
+    ));
+    assert!(!has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: 550e8400-e29b-41d4-a716-446655440000\r\n\r\nbody"
+    ));
+    assert!(!has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: {550E8400-E29B-41D4-A716-446655440000}\r\n\r\nbody"
+    ));
+    assert!(!has_xmsmbx_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3093_xraddr_bad() {
+    assert!(has_xraddr_bad(b"X-Remote-Addr: not ip\r\n\r\nbody"));
+    assert!(has_xraddr_bad(b"X-Real-IP: 999.1.2.3\r\n\r\nbody"));
+    assert!(has_xraddr_bad(b"X-Client-Addr:\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"X-Remote-Addr: 192.0.2.1\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"X-Real-IP: 2001:db8::1\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"X-Client-Addr: 10.0.0.1\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3094_xrtpath_bad() {
+    assert!(has_xrtpath_bad(b"X-Return-Path: not addr\r\n\r\nbody"));
+    assert!(has_xrtpath_bad(b"X-Return-Path: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"X-Return-Path: <>\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"X-Return-Path: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"X-Return-Path: u@x.com\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3095_xsaef_bad() {
+    assert!(has_xsaef_bad(b"X-SA-Exim-Mail-From: not addr\r\n\r\nbody"));
+    assert!(has_xsaef_bad(b"X-SA-Exim-Mail-From: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"X-SA-Exim-Mail-From: <>\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"X-SA-Exim-Mail-From: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"X-SA-Exim-Mail-From: u@x.com\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3096_xsaer_bad() {
+    assert!(has_xsaer_bad(b"X-SA-Exim-Rcpt: not addr\r\n\r\nbody"));
+    assert!(has_xsaer_bad(b"X-SA-Exim-Rcpt: u@x.com, bad@\r\n\r\nbody"));
+    assert!(has_xsaer_bad(b"X-SA-Exim-Rcpt:\r\n\r\nbody"));
+    assert!(!has_xsaer_bad(b"X-SA-Exim-Rcpt: u@x.com\r\n\r\nbody"));
+    assert!(!has_xsaer_bad(b"X-SA-Exim-Rcpt: <u@x.com>, v@y.com\r\n\r\nbody"));
+    assert!(!has_xsaer_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3097_xsaev_bad() {
+    assert!(has_xsaev_bad(b"X-SA-Exim-Version: not ver\r\n\r\nbody"));
+    assert!(has_xsaev_bad(b"X-SA-Exim-Version: 4.2.x\r\n\r\nbody"));
+    assert!(has_xsaev_bad(b"X-SA-Exim-Version: .4.2\r\n\r\nbody"));
+    assert!(!has_xsaev_bad(b"X-SA-Exim-Version: 4.2.1\r\n\r\nbody"));
+    assert!(!has_xsaev_bad(b"X-SA-Exim-Version: 4.96\r\n\r\nbody"));
+    assert!(!has_xsaev_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3098_xsaes_bad() {
+    assert!(has_xsaes_bad(b"X-SA-Exim-Scanned: maybe\r\n\r\nbody"));
+    assert!(has_xsaes_bad(b"X-SA-Exim-Scanned:\r\n\r\nbody"));
+    assert!(!has_xsaes_bad(b"X-SA-Exim-Scanned: Yes\r\n\r\nbody"));
+    assert!(!has_xsaes_bad(b"X-SA-Exim-Scanned: No (on relay.example.com)\r\n\r\nbody"));
+    assert!(!has_xsaes_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3103_xmsf_bad() {
+    assert!(has_xmsf_bad(b"X-MailScanner-From: not addr\r\n\r\nbody"));
+    assert!(has_xmsf_bad(b"X-MailScanner-From: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"X-MailScanner-From: <>\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"X-MailScanner-From: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"X-MailScanner-From: u@x.com\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3104_xmst_bad() {
+    assert!(has_xmst_bad(b"X-MailScanner-To: not addr\r\n\r\nbody"));
+    assert!(has_xmst_bad(b"X-MailScanner-To: u@x.com, bad@\r\n\r\nbody"));
+    assert!(has_xmst_bad(b"X-MailScanner-To:\r\n\r\nbody"));
+    assert!(!has_xmst_bad(b"X-MailScanner-To: u@x.com\r\n\r\nbody"));
+    assert!(!has_xmst_bad(b"X-MailScanner-To: <u@x.com>, v@y.com\r\n\r\nbody"));
+    assert!(!has_xmst_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3105_xmsid_bad() {
+    assert!(has_xmsid_bad(b"X-MailScanner-ID: not id here\r\n\r\nbody"));
+    assert!(has_xmsid_bad(b"X-MailScanner-ID:\r\n\r\nbody"));
+    assert!(has_xmsid_bad(b"X-MailScanner-QueueID: id with space\r\n\r\nbody"));
+    assert!(!has_xmsid_bad(b"X-MailScanner-ID: 4xA1B2C3D4E5\r\n\r\nbody"));
+    assert!(!has_xmsid_bad(b"X-MailScanner-QueueID: A1B2C3.D4\r\n\r\nbody"));
+    assert!(!has_xmsid_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3106_xmssc_bad() {
+    assert!(has_xmssc_bad(b"X-MailScanner-SpamCheck: maybe\r\n\r\nbody"));
+    assert!(has_xmssc_bad(b"X-MailScanner-SpamCheck:\r\n\r\nbody"));
+    assert!(!has_xmssc_bad(b"X-MailScanner-SpamCheck: spam, SpamAssassin (score=10.5, required 5)\r\n\r\nbody"));
+    assert!(!has_xmssc_bad(b"X-MailScanner-SpamCheck: not spam, SpamAssassin (score=-1.0, required 5)\r\n\r\nbody"));
+    assert!(!has_xmssc_bad(b"From: a@b\r\n\r\nbody"));
+}
 
 #[test]
 fn d3107_xrpid_bad() {

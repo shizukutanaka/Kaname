@@ -2398,6 +2398,18 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3080 | X-Sent-To: の非宛名形値 (配送宛名欄の値異形) | 配送宛名ずれ |
 | D3081 | X-Originating-Domain: の非FQDNトークン値 (発信局名欄の値異形) | 発信局名ずれ |
 | D3082 | X-Message-UUID: の非GUID形値 (配送識別欄の値異形) | 配送識別ずれ |
+| D3091 | X-MS-Exchange-Organization-OriginalClientIpAddress:/OriginalServerIpAddress: の非IP値 (発信接続元欄の値異形) | 発信接続元ずれ |
+| D3092 | X-MS-Exchange-GeneratedBySourceMailbox: の非GUID値 (元受信箱欄の値異形) | 元受信箱ずれ |
+| D3093 | X-Remote-Addr:/X-Real-IP:/X-Client-Addr: の非IP値 (接続元欄の値異形) | 接続元ずれ |
+| D3094 | X-Return-Path: の非 <>/宛名形値 (返送先裏控欄の値異形) | 返送先裏控ずれ |
+| D3095 | X-SA-Exim-Mail-From: の非 <>/宛名形値 (検疫機元宛欄の値異形) | 検疫機元宛ずれ |
+| D3096 | X-SA-Exim-Rcpt: の非宛名連接値 (検疫機宛先欄の値異形) | 検疫機宛先ずれ |
+| D3097 | X-SA-Exim-Version: の非版号値 (検疫機版号欄の値異形) | 検疫機版号ずれ |
+| D3098 | X-SA-Exim-Scanned: の非 Yes/No 始まり値 (検疫機走査印欄の値異形) | 検疫機走査印ずれ |
+| D3103 | X-MailScanner-From: の非 <>/宛名形値 (走査機封書元宛欄の値異形) | 走査機封書元宛ずれ |
+| D3104 | X-MailScanner-To: の非宛名連接値 (走査機封書宛先欄の値異形) | 走査機封書宛先ずれ |
+| D3105 | X-MailScanner-ID:/QueueID: の非単一印字トークン値 (走査機識別欄の値異形) | 走査機識別ずれ |
+| D3106 | X-MailScanner-SpamCheck: の非 spam/not spam 始まり値 (走査機判定詳細欄の値異形) | 走査機判定詳細ずれ |
 | D3107 | X-Rspamd-Queue-Id:/Id: の非単一印字トークン値 (走査機番号欄の値異形) | 走査機番号ずれ |
 | D3108 | X-Rspamd-Score:/Ip-Score: の非数値 (走査機得点欄の値異形) | 走査機得点ずれ |
 | D3109 | X-Rspamd-Version: の非版号値 (走査機版号欄の値異形) | 走査機版号ずれ |
