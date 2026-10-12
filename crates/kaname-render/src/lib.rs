@@ -3395,6 +3395,14 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `Return-Of-Content:` 欄の値が yes/no 外 (D3047 — 本文返却指定ずれ)。
+    pub x4_roc_bad: bool,
+    /// `Incomplete-Copy:` 欄の値が yes/no 外 (D3048 — 抜粋指定ずれ)。
+    pub x4_inc_bad: bool,
+    /// `Auto-Forwarded:` 欄の値が yes/no 外 (D3049 — 自動転送指定ずれ)。
+    pub x4_afwd_bad: bool,
+    /// `Obsoletes:` 欄の値が識別子連接形でない (D3050 — 廃棄指示ずれ)。
+    pub x4_obs_bad: bool,
     /// `X-PM-Message-Id:`/`X-Postmark-Message-Id:` 欄の値がトークン形でない (D3059 — Postmark 識別ずれ)。
     pub xpm_mid_bad: bool,
     /// `X-PM-RCPT:` 欄の値が宛名形でない (D3060 — Postmark 宛先ずれ)。
@@ -7472,6 +7480,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let x4_roc_bad = has_x4_roc_bad(bytes);
+    let x4_inc_bad = has_x4_inc_bad(bytes);
+    let x4_afwd_bad = has_x4_afwd_bad(bytes);
+    let x4_obs_bad = has_x4_obs_bad(bytes);
     let xpm_mid_bad = has_xpm_mid_bad(bytes);
     let xpm_rcpt_bad = has_xpm_rcpt_bad(bytes);
     let xexc_bad = has_xexc_bad(bytes);
@@ -9215,6 +9227,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        x4_roc_bad,
+        x4_inc_bad,
+        x4_afwd_bad,
+        x4_obs_bad,
         xpm_mid_bad,
         xpm_rcpt_bad,
         xexc_bad,
@@ -53501,6 +53517,152 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
                         })
                 };
             if !ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// X.400 交換欄の yes/no 判定。
+fn x4_is_yesno(v: &str) -> bool {
+    let t = v.trim();
+    t == "yes" || t == "no"
+}
+
+/// `Return-Of-Content:` 欄の値が yes/no 外 (D3047 — 本文返却指定ずれ)。
+fn has_x4_roc_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("return-of-content:") {
+            if !x4_is_yesno(v) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Incomplete-Copy:` 欄の値が yes/no 外 (D3048 — 抜粋指定ずれ)。
+fn has_x4_inc_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("incomplete-copy:") {
+            if !x4_is_yesno(v) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Auto-Forwarded:` 欄の値が yes/no 外 (D3049 — 自動転送指定ずれ)。
+fn has_x4_afwd_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("auto-forwarded:") {
+            if !x4_is_yesno(v) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Obsoletes:` 欄の値が識別子連接形でない (D3050 — 廃棄指示ずれ)。
+fn has_x4_obs_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("obsoletes:") {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || !v.contains('@')
+                || v.split_whitespace().any(|t| !t.starts_with('<') || !t.ends_with('>'));
+            if bad {
                 return true;
             }
         }
@@ -134979,6 +135141,46 @@ fn 投稿機欄が異形なら発火() {
         ));
         assert!(!has_ms_exp_time_bad(b"From: a@b\r\n\r\nbody"));
     }
+
+    #[test]
+    fn d3047_x4_roc_bad() {
+        assert!(has_x4_roc_bad(b"Return-Of-Content: maybe\r\n\r\nbody"));
+        assert!(has_x4_roc_bad(b"Return-Of-Content:\r\n\r\nbody"));
+        assert!(!has_x4_roc_bad(b"Return-Of-Content: yes\r\n\r\nbody"));
+        assert!(!has_x4_roc_bad(b"Return-Of-Content: no\r\n\r\nbody"));
+        assert!(!has_x4_roc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3048_x4_inc_bad() {
+        assert!(has_x4_inc_bad(b"Incomplete-Copy: partial\r\n\r\nbody"));
+        assert!(has_x4_inc_bad(b"Incomplete-Copy:\r\n\r\nbody"));
+        assert!(!has_x4_inc_bad(b"Incomplete-Copy: yes\r\n\r\nbody"));
+        assert!(!has_x4_inc_bad(b"Incomplete-Copy: no\r\n\r\nbody"));
+        assert!(!has_x4_inc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3049_x4_afwd_bad() {
+        assert!(has_x4_afwd_bad(b"Auto-Forwarded: perhaps\r\n\r\nbody"));
+        assert!(has_x4_afwd_bad(b"Auto-Forwarded:\r\n\r\nbody"));
+        assert!(!has_x4_afwd_bad(b"Auto-Forwarded: yes\r\n\r\nbody"));
+        assert!(!has_x4_afwd_bad(b"Auto-Forwarded: no\r\n\r\nbody"));
+        assert!(!has_x4_afwd_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3050_x4_obs_bad() {
+        assert!(has_x4_obs_bad(b"Obsoletes: abc123\r\n\r\nbody"));
+        assert!(has_x4_obs_bad(b"Obsoletes:\r\n\r\nbody"));
+        assert!(has_x4_obs_bad(b"Obsoletes: <a@b> plain\r\n\r\nbody"));
+        assert!(!has_x4_obs_bad(b"Obsoletes: <old-id@example.com>\r\n\r\nbody"));
+        assert!(!has_x4_obs_bad(
+            b"Obsoletes: <a@x.com> <b@x.com>\r\n\r\nbody"
+        ));
+        assert!(!has_x4_obs_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
 
     #[test]
     fn d3059_xpm_mid_bad() {

@@ -24,6 +24,10 @@
 ### Security — D3000: `X-MS-Exchange-Organization-AuthMechanism:` 欄の非方式番号値 (1–2桁の 0–10 以外) を認証方式ずれとして検出 — `Envelope` に `ms_authmech_bad` を追加。
 ### Security — D3001: `X-MS-Office365-Filtering-Correlation-Id:` 欄の非GUID値を関連識別ずれとして検出 — `Envelope` に `ms_corr_id_bad` を追加。
 ### Security — D3002: `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の非日時形値を失効開始ずれとして検出 — `Envelope` に `ms_exp_time_bad` を追加。
+### Security — D3047: `Return-Of-Content:` 欄の語彙外値 (`yes`/`no` 以外) を本文返却指定ずれとして検出 — `Envelope` に `x4_roc_bad` を追加。
+### Security — D3048: `Incomplete-Copy:` 欄の語彙外値を抜粋指定ずれとして検出 — `Envelope` に `x4_inc_bad` を追加。
+### Security — D3049: `Auto-Forwarded:` 欄の語彙外値を自動転送指定ずれとして検出 — `Envelope` に `x4_afwd_bad` を追加。
+### Security — D3050: `Obsoletes:` 欄の非識別子連接値を廃棄指示ずれとして検出 — `Envelope` に `x4_obs_bad` を追加。
 ### Security — D3059: `X-PM-Message-Id:`/`X-Postmark-Message-Id:` 欄の非トークン値を配送識別ずれとして検出 — `Envelope` に `xpm_mid_bad` を追加。
 ### Security — D3060: `X-PM-RCPT:` 欄の非宛名形値を配送宛先ずれとして検出 — `Envelope` に `xpm_rcpt_bad` を追加。
 ### Security — D3061: `X-ExclaimerHostedSignatures-MessageProcessed:` 系欄の非真偽値を署印処理ずれとして検出 — `Envelope` に `xexc_bad` を追加。
