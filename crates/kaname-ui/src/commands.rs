@@ -9529,6 +9529,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.xmlid_bad {
         render_risks.push("郵送識別印欄の値が識別子形でないです—郵送記録の扱いで照合がずれます".to_string());
     }
+    if env.news_lines_bad {
+        render_risks.push("記事行数欄の値が整数形でないです—行数の扱いで記事把握がずれます".to_string());
+    }
+    if env.x_sg_bad {
+        render_risks.push("配送識別欄の値が長トークン形でないです—識別の扱いで照合がずれます".to_string());
+    }
+    if env.pics_bad {
+        render_risks.push("評価記録欄の値が評価構文形でないです—評価の扱いで内容分類がずれます".to_string());
+    }
+    if env.old_rp_bad {
+        render_risks.push("返送記録欄の値が宛名形でないです—返送先の扱いで経路評価がずれます".to_string());
+    }
+    if env.x4_defd_bad {
+        render_risks.push("留置時刻欄の値が日時形でないです—留置時刻の扱いで経路時系列がずれます".to_string());
+    }
+    if env.x4_ldt_bad {
+        render_risks.push("最終期限欄の値が日時形でないです—期限の扱いで経路時系列がずれます".to_string());
+    }
+    if env.x4_altr_bad {
+        render_risks.push("代宛先欄の値が宛名形でないです—代宛先の扱いで経路評価がずれます".to_string());
+    }
+    if env.x4_pndr_bad {
+        render_risks.push("報告抑止欄の値が語彙外です—抑止指定の扱いで経路評価がずれます".to_string());
+    }
     if env.x4_cr_bad {
         render_risks.push("内容返却欄の値が語彙外です—返却指示の扱いで経路評価がずれます".to_string());
     }

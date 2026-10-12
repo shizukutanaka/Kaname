@@ -28,6 +28,14 @@
 ### Security — D3064: `X-Canit-Stats-ID:`/`X-CanItPRO-Stream:` 系欄の非トークン値を処理印ずれとして検出 — `Envelope` に `xcit_bad` を追加。
 ### Security — D3065: `X-Originating-Client:` 欄の非トークン値を発信端末印ずれとして検出 — `Envelope` に `xoc_bad` を追加。
 ### Security — D3066: `X-Mailing-Id:`/`X-MailingID:` 系欄の非トークン値を郵送識別印ずれとして検出 — `Envelope` に `xmlid_bad` を追加。
+### Security — D3039: `Lines:` 欄の非整数値を記事行数ずれとして検出 — `Envelope` に `news_lines_bad` を追加。
+### Security — D3040: `X-SG-ID:`/`X-SG-EID:` 欄の非長トークン値を配送識別ずれとして検出 — `Envelope` に `x_sg_bad` を追加。
+### Security — D3041: `PICS-Label:` 欄の非評価構文値を評価記録ずれとして検出 — `Envelope` に `pics_bad` を追加。
+### Security — D3042: `Old-Return-Path:`/`X-Old-Return-Path:` 欄の非宛名値を返送記録ずれとして検出 — `Envelope` に `old_rp_bad` を追加。
+### Security — D3043: `Deferred-Delivery:` 欄の非日時形値を留置時刻ずれとして検出 — `Envelope` に `x4_defd_bad` を追加。
+### Security — D3044: `Latest-Delivery-Time:` 欄の非日時形値を最終期限ずれとして検出 — `Envelope` に `x4_ldt_bad` を追加。
+### Security — D3045: `Alternate-Recipient:` 欄の非宛名値を代宛先ずれとして検出 — `Envelope` に `x4_altr_bad` を追加。
+### Security — D3046: `Prevent-NonDelivery-Report:` 欄の語彙外値 (`yes`/`no` 以外) を報告抑止ずれとして検出 — `Envelope` に `x4_pndr_bad` を追加。
 ### Security — D3055: `Content-Returned:` 欄の語彙外値 (`yes`/`no` 以外) を内容返却ずれとして検出 — `Envelope` に `x4_cr_bad` を追加。
 ### Security — D3056: `Content-Correlator:` 欄の非印字トークン値を対応鍵ずれとして検出 — `Envelope` に `x4_cc_bad` を追加。
 ### Security — D3057: `X400-Originator:` 欄の非宛名/非鍵連接値を交換元ずれとして検出 — `Envelope` に `x4_org_bad` を追加。
