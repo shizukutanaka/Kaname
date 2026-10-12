@@ -2366,6 +2366,14 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3000 | X-MS-Exchange-Organization-AuthMechanism: の非方式番号値 (認証方式欄の値異形) | 方式ずれ |
 | D3001 | X-MS-Office365-Filtering-Correlation-Id: の非GUID値 (関連識別欄の値異形) | 識別ずれ |
 | D3002 | X-MS-Exchange-Organization-ExpirationStartTime: の非日時形値 (失効開始欄の値異形) | 失効ずれ |
+| D3039 | Lines: の非整数値 (記事行数欄の値異形) | 行数ずれ |
+| D3040 | X-SG-ID:/X-SG-EID: の非長トークン値 (配送識別欄の値異形) | 識別ずれ |
+| D3041 | PICS-Label: の非評価構文値 (評価記録欄の値異形) | 評価ずれ |
+| D3042 | Old-Return-Path:/X-Old-Return-Path: の非宛名値 (返送記録欄の値異形) | 返送ずれ |
+| D3043 | Deferred-Delivery: の非日時形値 (留置時刻欄の値異形) | 留置ずれ |
+| D3044 | Latest-Delivery-Time: の非日時形値 (最終期限欄の値異形) | 期限ずれ |
+| D3045 | Alternate-Recipient: の非宛名値 (代宛先欄の値異形) | 代宛先ずれ |
+| D3046 | Prevent-NonDelivery-Report: の語彙外値 (報告抑止欄の値異形) | 抑止ずれ |
 | D3055 | Content-Returned: の語彙外値 (内容返却欄の値異形) | 返却ずれ |
 | D3056 | Content-Correlator: の非印字トークン値 (対応鍵欄の値異形) | 対応ずれ |
 | D3057 | X400-Originator: の非宛名値 (交換元欄の値異形) | 交換元ずれ |
@@ -2394,6 +2402,10 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D3096 | X-SA-Exim-Rcpt: の非宛名連接値 (検疫機宛先欄の値異形) | 検疫機宛先ずれ |
 | D3097 | X-SA-Exim-Version: の非版号値 (検疫機版号欄の値異形) | 検疫機版号ずれ |
 | D3098 | X-SA-Exim-Scanned: の非 Yes/No 始まり値 (検疫機走査印欄の値異形) | 検疫機走査印ずれ |
+| D3103 | X-MailScanner-From: の非 <>/宛名形値 (走査機封書元宛欄の値異形) | 走査機封書元宛ずれ |
+| D3104 | X-MailScanner-To: の非宛名連接値 (走査機封書宛先欄の値異形) | 走査機封書宛先ずれ |
+| D3105 | X-MailScanner-ID:/QueueID: の非単一印字トークン値 (走査機識別欄の値異形) | 走査機識別ずれ |
+| D3106 | X-MailScanner-SpamCheck: の非 spam/not spam 始まり値 (走査機判定詳細欄の値異形) | 走査機判定詳細ずれ |
 | D3107 | X-Rspamd-Queue-Id:/Id: の非単一印字トークン値 (走査機番号欄の値異形) | 走査機番号ずれ |
 | D3108 | X-Rspamd-Score:/Ip-Score: の非数値 (走査機得点欄の値異形) | 走査機得点ずれ |
 | D3109 | X-Rspamd-Version: の非版号値 (走査機版号欄の値異形) | 走査機版号ずれ |
