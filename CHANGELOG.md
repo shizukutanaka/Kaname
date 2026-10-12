@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Security — D3124補強: `dc_each` が折り畳み継続行を元の大小写のまま連結していたのを修正 — 継続行も小文字化し、`from\t8bit`+`To 7bit` 継続等の正当値が誤発火しないように。
+### Security — D3127補強: `X-MS-Exchange-Transport-OriginalRecipient:` の宛名判定を引用ローカル部対応へ — `"sales@east"@example.com` を受理し、`user@x.com extra` (後続ゴミ) は発火。
+### Security — D3128補強: `X-MS-Exchange-Organization-OriginalArrivalTime:` を `DD Mon YYYY HH:MM:SS` 厳密4語化 — 日 1–31・時 0–23・分秒 0–59 の範囲検査と後続語拒否を追加。
+### Security — D3129補強: `X-MS-Exchange-Organization-AuthSource-Lob:` をホスト名文字集合 (`[a-z0-9.-]`) へ限定 — `mx.example.com;spoofed` を発火。
+
 ### Security — D3023: `X-Quarantine-ID:` 欄の非 `<トークン>` 値を検疫ずれとして検出 — `Envelope` に `x_quarantine_bad` を追加。
 ### Security — D3024: `X-Spam-DCC:` 欄の非 `局: 機名 件数` 値を照合集計ずれとして検出 — `Envelope` に `x_dcc_bad` を追加。
 ### Security — D3025: `X-MS-Exchange-Organization-SenderIdResult:` 欄の語彙外値を送信者判定ずれとして検出 — `Envelope` に `ms_sidres_bad` を追加。
