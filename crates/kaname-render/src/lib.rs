@@ -54882,7 +54882,7 @@ fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> boo
                 while let Some(nl) = it.peek() {
                     if nl.starts_with(' ') || nl.starts_with('\t') {
                         val.push(' ');
-                        val.push_str(nl.trim());
+                        val.push_str(&nl.trim().to_lowercase());
                         it.next();
                     } else {
                         break;
@@ -55459,7 +55459,19 @@ fn has_xeid_bad(bytes: &[u8]) -> bool {
 fn has_msorc_bad(bytes: &[u8]) -> bool {
     dc_each(bytes, &["x-ms-exchange-transport-originalrecipient:"], |t| {
         let t = t.strip_prefix('<').and_then(|s| s.strip_suffix('>')).unwrap_or(t);
-        t.is_empty() || t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+        let mut quoted = false;
+        let mut ats = 0usize;
+        let mut ws = false;
+        for b in t.bytes() {
+            if b == b'"' {
+                quoted = !quoted;
+            } else if !quoted && (b == b' ' || b == b'\t') {
+                ws = true;
+            } else if !quoted && b == b'@' {
+                ats += 1;
+            }
+        }
+        t.is_empty() || ws || ats != 1 || t.starts_with('@') || t.ends_with('@')
     })
 }
 
@@ -55474,18 +55486,19 @@ fn has_msoat_bad(bytes: &[u8]) -> bool {
                 "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep",
                 "oct", "nov", "dec",
             ];
-            !(w.len() >= 4
+            !(w.len() == 4
                 && w[0].len() == 2
-                && w[0].bytes().all(|b| b.is_ascii_digit())
+                && w[0].parse::<u8>().is_ok_and(|d| (1..=31).contains(&d))
                 && months.contains(&w[1])
                 && w[2].len() == 4
                 && w[2].bytes().all(|b| b.is_ascii_digit())
                 && {
                     let tp: Vec<&str> = w[3].split(':').collect();
                     tp.len() == 3
-                        && tp.iter().all(|p| {
+                        && tp.iter().enumerate().all(|(i, p)| {
                             let p = p.split('.').next().unwrap_or(p);
-                            p.len() == 2 && p.bytes().all(|b| b.is_ascii_digit())
+                            let lim = if i == 0 { 23 } else { 59 };
+                            p.len() == 2 && p.parse::<u8>().is_ok_and(|n| n <= lim)
                         })
                 })
         },
@@ -55497,8 +55510,8 @@ fn has_mslob_bad(bytes: &[u8]) -> bool {
     dc_each(bytes, &["x-ms-exchange-organization-authsource-lob:"], |t| {
         t.is_empty()
             || !t.contains('.')
-            || t.contains('@')
-            || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+            || t.bytes()
+                .any(|b| !(b.is_ascii_alphanumeric() || b == b'.' || b == b'-'))
     })
 }
 
@@ -137308,6 +137321,7 @@ fn d3124_xmato_bad() {
     assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from 8bit to quoted-printable\r\n\r\nbody"));
     assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from quoted-printable to 8bit by sendmail\r\n\r\nbody"));
     assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from\t8bit to 7bit\r\n\r\nbody"));
+    assert!(!has_xmato_bad(b"X-MIME-Autoconverted: from 8bit\r\n\tTo 7bit\r\n\r\nbody"));
     assert!(!has_xmato_bad(b"From: a@b\r\n\r\nbody"));
 }
 
@@ -137343,8 +137357,10 @@ fn d3127_msorc_bad() {
     assert!(has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: not addr\r\n\r\nbody"));
     assert!(has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: a@@x.com\r\n\r\nbody"));
     assert!(has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient:\r\n\r\nbody"));
+    assert!(has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: user@example.com extra\r\n\r\nbody"));
     assert!(!has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: user@example.com\r\n\r\nbody"));
     assert!(!has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: <user@example.com>\r\n\r\nbody"));
+    assert!(!has_msorc_bad(b"X-MS-Exchange-Transport-OriginalRecipient: \"sales@east\"@example.com\r\n\r\nbody"));
     assert!(!has_msorc_bad(b"From: a@b\r\n\r\nbody"));
 }
 
@@ -137352,8 +137368,12 @@ fn d3127_msorc_bad() {
 fn d3128_msoat_bad() {
     assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: not date\r\n\r\nbody"));
     assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 2026-10-01\r\n\r\nbody"));
+    assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 99 Oct 2026 10:30:00\r\n\r\nbody"));
+    assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:60\r\n\r\nbody"));
+    assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00 forged\r\n\r\nbody"));
     assert!(!has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00\r\n\r\nbody"));
     assert!(!has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00.123\r\n\r\nbody"));
+    assert!(!has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01\r\n\tOct 2026 10:30:00\r\n\r\nbody"));
     assert!(!has_msoat_bad(b"From: a@b\r\n\r\nbody"));
 }
 
@@ -137362,6 +137382,8 @@ fn d3129_mslob_bad() {
     assert!(has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: not host\r\n\r\nbody"));
     assert!(has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: a@b\r\n\r\nbody"));
     assert!(has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob:\r\n\r\nbody"));
+    assert!(has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: mx.example.com;spoofed\r\n\r\nbody"));
+    assert!(has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: prod.\r\n\tOutlook.com\r\n\r\nbody"));
     assert!(!has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: prod.outlook.com\r\n\r\nbody"));
     assert!(!has_mslob_bad(b"X-MS-Exchange-Organization-AuthSource-Lob: mx1.example.co.jp\r\n\r\nbody"));
     assert!(!has_mslob_bad(b"From: a@b\r\n\r\nbody"));
