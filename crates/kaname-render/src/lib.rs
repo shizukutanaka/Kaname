@@ -3403,6 +3403,54 @@ pub struct Envelope {
     pub ms_corr_id_bad: bool,
     /// `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の値が日時形でない (D3002 — 失効ずれ)。
     pub ms_exp_time_bad: bool,
+    /// `X-SocketLabs-*` 系欄の値がトークン形でない (D3063 — SocketLabs 印ずれ)。
+    pub xsl_bad: bool,
+    /// `X-Canit-*`/`X-CanItPRO-*` 系欄の値がトークン形でない (D3064 — CanIt 印ずれ)。
+    pub xcit_bad: bool,
+    /// `X-Originating-Client:` 欄の値がトークン形でない (D3065 — 発信端末印ずれ)。
+    pub xoc_bad: bool,
+    /// `X-Mailing-Id:` 系欄の値がトークン形でない (D3066 — 郵送識別印ずれ)。
+    pub xmlid_bad: bool,
+    /// `Delivery-Report:` 欄の値が yes/no 外 (D3051 — 配送報告指定ずれ)。
+    pub x4_dr_bad: bool,
+    /// `Originator-Return-Address:` 欄の値が宛名形でない (D3052 — 返送対象ずれ)。
+    pub x4_ora_bad: bool,
+    /// `Original-Encoded-Information-Types:` 欄の値が種別連接形でない (D3053 — 符号種別ずれ)。
+    pub x4_oeit_bad: bool,
+    /// `Content-Identifier:` 欄の値が印字トークン形でない (D3054 — 本文識別ずれ)。
+    pub x4_cid_bad: bool,
+    /// `Lines:` 欄の値が整数形でない (D3039 — 記事行数ずれ)。
+    pub news_lines_bad: bool,
+    /// `X-SG-ID:`/`X-SG-EID:` 欄の値が長トークン形でない (D3040 — 配送識別ずれ)。
+    pub x_sg_bad: bool,
+    /// `PICS-Label:` 欄の値が評価構文形でない (D3041 — 評価記録ずれ)。
+    pub pics_bad: bool,
+    /// `Old-Return-Path:`/`X-Old-Return-Path:` 欄の値が宛名/空宛形でない (D3042 — 返送記録ずれ)。
+    pub old_rp_bad: bool,
+    /// `Deferred-Delivery:` 欄の値が日時形でない (D3043 — 留置時刻ずれ)。
+    pub x4_defd_bad: bool,
+    /// `Latest-Delivery-Time:` 欄の値が日時形でない (D3044 — 最終期限ずれ)。
+    pub x4_ldt_bad: bool,
+    /// `Alternate-Recipient:` 欄の値が宛名形でない (D3045 — 代宛先ずれ)。
+    pub x4_altr_bad: bool,
+    /// `Prevent-NonDelivery-Report:` 欄の値が yes/no 外 (D3046 — 報告抑止ずれ)。
+    pub x4_pndr_bad: bool,
+    /// `Content-Returned:` 欄の値が yes/no 外 (D3055 — 内容返却ずれ)。
+    pub x4_cr_bad: bool,
+    /// `Content-Correlator:` 欄の値が印字トークン形でない (D3056 — 対応鍵ずれ)。
+    pub x4_cc_bad: bool,
+    /// `X400-Originator:` 欄の値が宛名/鍵連接形でない (D3057 — 交換元ずれ)。
+    pub x4_org_bad: bool,
+    /// `X400-Trace:` 欄の値が大括弧くくり形でない (D3058 — 追跡記録ずれ)。
+    pub x4_trc_bad: bool,
+    /// `Return-Of-Content:` 欄の値が yes/no 外 (D3047 — 本文返却指定ずれ)。
+    pub x4_roc_bad: bool,
+    /// `Incomplete-Copy:` 欄の値が yes/no 外 (D3048 — 抜粋指定ずれ)。
+    pub x4_inc_bad: bool,
+    /// `Auto-Forwarded:` 欄の値が yes/no 外 (D3049 — 自動転送指定ずれ)。
+    pub x4_afwd_bad: bool,
+    /// `Obsoletes:` 欄の値が識別子連接形でない (D3050 — 廃棄指示ずれ)。
+    pub x4_obs_bad: bool,
     /// `X-PM-Message-Id:`/`X-Postmark-Message-Id:` 欄の値がトークン形でない (D3059 — Postmark 識別ずれ)。
     pub xpm_mid_bad: bool,
     /// `X-PM-RCPT:` 欄の値が宛名形でない (D3060 — Postmark 宛先ずれ)。
@@ -3427,6 +3475,46 @@ pub struct Envelope {
     pub xodom_bad: bool,
     /// `X-Message-UUID:` 欄の値が GUID 形でない (D3082 — 配送識別ずれ)。
     pub xmuuid_bad: bool,
+    /// `X-Spamd-Check-By:` 欄の値が単一印字トークンでない (D3111 — 検疫機署名ずれ)。
+    pub xsdby_bad: bool,
+    /// `X-Spamd-Processing-Time:` 欄の値が数値形でない (D3112 — 検疫機工数ずれ)。
+    pub xsdpt_bad: bool,
+    /// `X-Spamd-Bar:` 欄の値が `+`/`-` 列でない (D3113 — 検疫機目盛ずれ)。
+    pub xsdbar_bad: bool,
+    /// `X-Amavis-SpamScore:`/`X-Amavis-Score:` 欄の値が数値形でない (D3114 — 検疫機得点ずれ)。
+    pub xamsc_bad: bool,
+    /// `X-MS-Exchange-Organization-OriginalClientIpAddress:`/`OriginalServerIpAddress:` 欄の値がIPアドレス形でない (D3091 — 発信接続元ずれ)。
+    pub xmsip_bad: bool,
+    /// `X-MS-Exchange-GeneratedBySourceMailbox:` 欄の値が GUID 形でない (D3092 — 元受信箱ずれ)。
+    pub xmsmbx_bad: bool,
+    /// `X-Remote-Addr:`/`X-Real-IP:`/`X-Client-Addr:` 欄の値がIPアドレス形でない (D3093 — 接続元ずれ)。
+    pub xraddr_bad: bool,
+    /// `X-Return-Path:` 欄の値が `<>` でも宛名形でもない (D3094 — 返送先裏控ずれ)。
+    pub xrtpath_bad: bool,
+    /// `X-SA-Exim-Mail-From:` 欄の値が `<>` でも宛名形でもない (D3095 — 検疫機元宛ずれ)。
+    pub xsaef_bad: bool,
+    /// `X-SA-Exim-Rcpt:` 欄の値が宛名連接形でない (D3096 — 検疫機宛先ずれ)。
+    pub xsaer_bad: bool,
+    /// `X-SA-Exim-Version:` 欄の値が版号形でない (D3097 — 検疫機版号ずれ)。
+    pub xsaev_bad: bool,
+    /// `X-SA-Exim-Scanned:` 欄の値が `Yes`/`No` 始まりでない (D3098 — 検疫機走査印ずれ)。
+    pub xsaes_bad: bool,
+    /// `X-MailScanner-From:` 欄の値が `<>` でも宛名形でもない (D3103 — 走査機封書元宛ずれ)。
+    pub xmsf_bad: bool,
+    /// `X-MailScanner-To:` 欄の値が宛名連接形でない (D3104 — 走査機封書宛先ずれ)。
+    pub xmst_bad: bool,
+    /// `X-MailScanner-ID:`/`X-MailScanner-QueueID:` 欄の値が単一印字トークンでない (D3105 — 走査機識別ずれ)。
+    pub xmsid_bad: bool,
+    /// `X-MailScanner-SpamCheck:` 欄の値が `spam`/`not spam` 始まりでない (D3106 — 走査機判定詳細ずれ)。
+    pub xmssc_bad: bool,
+    /// `X-Rspamd-Queue-Id:`/`X-Rspamd-Id:` 欄の値が単一印字トークンでない (D3107 — 走査機番号ずれ)。
+    pub xrpid_bad: bool,
+    /// `X-Rspamd-Score:`/`X-Rspamd-Ip-Score:` 欄の値が数値形でない (D3108 — 走査機得点ずれ)。
+    pub xrpsc_bad: bool,
+    /// `X-Rspamd-Version:` 欄の値が版号形でない (D3109 — 走査機版号ずれ)。
+    pub xrpv_bad: bool,
+    /// `X-Rspamd-From:`/`X-Rspamd-Rcpt:` 欄の値が `<>` でも宛名連接形でもない (D3110 — 走査機封書ずれ)。
+    pub xrpaddr_bad: bool,
     /// `X-Spamd-Checker-Version:` 欄の値が `SpamAssassin` 始まりでない (D3115 — 検疫機名乗りずれ)。
     pub xsdcv_bad: bool,
     /// `X-Amavis-Original-Mail-From:`/`X-Amavis-Original-To:` 欄の値が `<>` でも宛名連接形でもない (D3116 — 検疫機元封書ずれ)。
@@ -3475,6 +3563,14 @@ pub struct Envelope {
     pub xbadrs_bad: bool,
     /// `X-VHost:` 欄の値が局名トークン形でない (D3074 — 仮想局ずれ)。
     pub xvhost_bad: bool,
+    /// `X-Real-From:` 欄の値が宛名形でない (D3087 — 実差出人ずれ)。
+    pub xrfrom_bad: bool,
+    /// `X-Real-To:`/`X-Real-RCPT:` 欄の値が宛名形でない (D3088 — 実宛先ずれ)。
+    pub xrto_bad: bool,
+    /// `X-Forwarded-By:` 欄の値が局名またはIPリテラル形でない (D3089 — 転送局ずれ)。
+    pub xfby_bad: bool,
+    /// `X-Forwarded-Host:`/`X-Forwarded-Server:` 欄の値が局名またはIPリテラル形でない (D3090 — 転送経路局ずれ)。
+    pub xfhost_bad: bool,
     /// X-Spam-Report: 系が報告構造を欠く (D2987)。
     pub spam_report_bad: bool,
     /// X-Spam-Checker-Version: が x.y 版番号を欠く (D2988)。
@@ -7476,6 +7572,30 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ms_authmech_bad = has_ms_authmech_bad(bytes);
     let ms_corr_id_bad = has_ms_corr_id_bad(bytes);
     let ms_exp_time_bad = has_ms_exp_time_bad(bytes);
+    let xsl_bad = has_xsl_bad(bytes);
+    let xcit_bad = has_xcit_bad(bytes);
+    let xoc_bad = has_xoc_bad(bytes);
+    let xmlid_bad = has_xmlid_bad(bytes);
+    let x4_dr_bad = has_x4_dr_bad(bytes);
+    let x4_ora_bad = has_x4_ora_bad(bytes);
+    let x4_oeit_bad = has_x4_oeit_bad(bytes);
+    let x4_cid_bad = has_x4_cid_bad(bytes);
+    let news_lines_bad = has_news_lines_bad(bytes);
+    let x_sg_bad = has_x_sg_bad(bytes);
+    let pics_bad = has_pics_bad(bytes);
+    let old_rp_bad = has_old_rp_bad(bytes);
+    let x4_defd_bad = has_x4_defd_bad(bytes);
+    let x4_ldt_bad = has_x4_ldt_bad(bytes);
+    let x4_altr_bad = has_x4_altr_bad(bytes);
+    let x4_pndr_bad = has_x4_pndr_bad(bytes);
+    let x4_cr_bad = has_x4_cr_bad(bytes);
+    let x4_cc_bad = has_x4_cc_bad(bytes);
+    let x4_org_bad = has_x4_org_bad(bytes);
+    let x4_trc_bad = has_x4_trc_bad(bytes);
+    let x4_roc_bad = has_x4_roc_bad(bytes);
+    let x4_inc_bad = has_x4_inc_bad(bytes);
+    let x4_afwd_bad = has_x4_afwd_bad(bytes);
+    let x4_obs_bad = has_x4_obs_bad(bytes);
     let xpm_mid_bad = has_xpm_mid_bad(bytes);
     let xpm_rcpt_bad = has_xpm_rcpt_bad(bytes);
     let xexc_bad = has_xexc_bad(bytes);
@@ -7488,6 +7608,26 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xsentto_bad = has_xsentto_bad(bytes);
     let xodom_bad = has_xodom_bad(bytes);
     let xmuuid_bad = has_xmuuid_bad(bytes);
+    let xsdby_bad = has_xsdby_bad(bytes);
+    let xsdpt_bad = has_xsdpt_bad(bytes);
+    let xsdbar_bad = has_xsdbar_bad(bytes);
+    let xamsc_bad = has_xamsc_bad(bytes);
+    let xmsip_bad = has_xmsip_bad(bytes);
+    let xmsmbx_bad = has_xmsmbx_bad(bytes);
+    let xraddr_bad = has_xraddr_bad(bytes);
+    let xrtpath_bad = has_xrtpath_bad(bytes);
+    let xsaef_bad = has_xsaef_bad(bytes);
+    let xsaer_bad = has_xsaer_bad(bytes);
+    let xsaev_bad = has_xsaev_bad(bytes);
+    let xsaes_bad = has_xsaes_bad(bytes);
+    let xmsf_bad = has_xmsf_bad(bytes);
+    let xmst_bad = has_xmst_bad(bytes);
+    let xmsid_bad = has_xmsid_bad(bytes);
+    let xmssc_bad = has_xmssc_bad(bytes);
+    let xrpid_bad = has_xrpid_bad(bytes);
+    let xrpsc_bad = has_xrpsc_bad(bytes);
+    let xrpv_bad = has_xrpv_bad(bytes);
+    let xrpaddr_bad = has_xrpaddr_bad(bytes);
     let xsdcv_bad = has_xsdcv_bad(bytes);
     let xamaddr_bad = has_xamaddr_bad(bytes);
     let xamcv_bad = has_xamcv_bad(bytes);
@@ -7512,6 +7652,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let xomsg_bad = has_xomsg_bad(bytes);
     let xbadrs_bad = has_xbadrs_bad(bytes);
     let xvhost_bad = has_xvhost_bad(bytes);
+    let xrfrom_bad = has_xrfrom_bad(bytes);
+    let xrto_bad = has_xrto_bad(bytes);
+    let xfby_bad = has_xfby_bad(bytes);
+    let xfhost_bad = has_xfhost_bad(bytes);
     let spam_report_bad = has_spam_report_bad(bytes);
     let spam_ver_bad = has_spam_ver_bad(bytes);
     let beenthere_bad = has_beenthere_bad(bytes);
@@ -9219,6 +9363,30 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_authmech_bad,
         ms_corr_id_bad,
         ms_exp_time_bad,
+        xsl_bad,
+        xcit_bad,
+        xoc_bad,
+        xmlid_bad,
+        x4_dr_bad,
+        x4_ora_bad,
+        x4_oeit_bad,
+        x4_cid_bad,
+        news_lines_bad,
+        x_sg_bad,
+        pics_bad,
+        old_rp_bad,
+        x4_defd_bad,
+        x4_ldt_bad,
+        x4_altr_bad,
+        x4_pndr_bad,
+        x4_cr_bad,
+        x4_cc_bad,
+        x4_org_bad,
+        x4_trc_bad,
+        x4_roc_bad,
+        x4_inc_bad,
+        x4_afwd_bad,
+        x4_obs_bad,
         xpm_mid_bad,
         xpm_rcpt_bad,
         xexc_bad,
@@ -9231,6 +9399,26 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xsentto_bad,
         xodom_bad,
         xmuuid_bad,
+        xsdby_bad,
+        xsdpt_bad,
+        xsdbar_bad,
+        xamsc_bad,
+        xmsip_bad,
+        xmsmbx_bad,
+        xraddr_bad,
+        xrtpath_bad,
+        xsaef_bad,
+        xsaer_bad,
+        xsaev_bad,
+        xsaes_bad,
+        xmsf_bad,
+        xmst_bad,
+        xmsid_bad,
+        xmssc_bad,
+        xrpid_bad,
+        xrpsc_bad,
+        xrpv_bad,
+        xrpaddr_bad,
         xsdcv_bad,
         xamaddr_bad,
         xamcv_bad,
@@ -9255,6 +9443,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         xomsg_bad,
         xbadrs_bad,
         xvhost_bad,
+        xrfrom_bad,
+        xrto_bad,
+        xfby_bad,
+        xfhost_bad,
         spam_report_bad,
         spam_ver_bad,
         beenthere_bad,
@@ -53660,6 +53852,844 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
     false
 }
 
+fn hdr_end(bytes: &[u8]) -> usize {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    end
+}
+
+fn tok_bad(t: &str) -> bool {
+    t.is_empty()
+        || !t
+            .chars()
+            .all(|c| (0x21..=0x7e).contains(&(c as u32)))
+        || !t.chars().any(|c| c.is_ascii_alphanumeric())
+}
+
+fn any_hdr_bad(bytes: &[u8], names: &[&str]) -> bool {
+    let end = hdr_end(bytes);
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        for name in names {
+            if let Some(v) = low.strip_prefix(name) {
+                if tok_bad(v.trim()) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `X-SocketLabs-MessageId:`/`InjectionId:`/`Stream-Id:` 欄の値がトークン形でない (D3063 — SocketLabs 印ずれ)。
+fn has_xsl_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(
+        bytes,
+        &[
+            "x-socketlabs-messageid:",
+            "x-socketlabs-injectionid:",
+            "x-socketlabs-stream-id:",
+            "x-socketlabs-message-id:",
+        ],
+    )
+}
+
+/// `X-Canit-Stats-ID:`/`X-CanItPRO-Stream:`/`X-Canit-CHID:` 欄の値がトークン形でない (D3064 — CanIt 印ずれ)。
+fn has_xcit_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(
+        bytes,
+        &[
+            "x-canit-stats-id:",
+            "x-canitpro-stream:",
+            "x-canit-chid:",
+            "x-canit-archive-id:",
+        ],
+    )
+}
+
+/// `X-Originating-Client:` 欄の値がトークン形でない (D3065 — 発信端末印ずれ)。
+fn has_xoc_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(bytes, &["x-originating-client:"])
+}
+
+/// `X-Mailing-Id:`/`X-Mailing-ID:`/`X-MailingID:` 欄の値がトークン形でない (D3066 — 郵送識別印ずれ)。
+fn has_xmlid_bad(bytes: &[u8]) -> bool {
+    any_hdr_bad(bytes, &["x-mailing-id:", "x-mailingid:"])
+}
+
+/// `Delivery-Report:` 欄の値が yes/no 外 (D3051 — 配送報告指定ずれ)。
+fn has_x4_dr_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("delivery-report:") {
+            let t = v.trim();
+            if t != "yes" && t != "no" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Originator-Return-Address:` 欄の値が宛名形でない (D3052 — 返送対象ずれ)。
+fn has_x4_ora_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("originator-return-address:") {
+            let t = v.trim();
+            if !(t.contains('@') || t == "<>") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Original-Encoded-Information-Types:` 欄の値が種別連接形でない (D3053 — 符号種別ずれ)。
+fn has_x4_oeit_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("original-encoded-information-types:") {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || v.split(',')
+                    .any(|t| {
+                        let t = t.trim();
+                        t.is_empty()
+                            || !t
+                                .chars()
+                                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+                    });
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Identifier:` 欄の値が印字トークン形でない (D3054 — 本文識別ずれ)。
+fn has_x4_cid_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("content-identifier:") {
+            let t = v.trim();
+            let bad = t.is_empty()
+                || !t
+                    .chars()
+                    .all(|c| (0x21..=0x7e).contains(&(c as u32)));
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Lines:` 欄の値が整数形でない (D3039 — 記事行数ずれ)。
+fn has_news_lines_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("lines:") {
+            let v = v.trim();
+            if v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X-SG-ID:`/`X-SG-EID:` 欄の値が長トークン形でない (D3040 — 配送識別ずれ)。
+fn has_x_sg_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        let hdr = low
+            .strip_prefix("x-sg-id:")
+            .or_else(|| low.strip_prefix("x-sg-eid:"));
+        if let Some(v) = hdr {
+            let v = v.trim().trim_matches('<').trim_matches('>');
+            let bad = v.len() < 16
+                || !v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `PICS-Label:` 欄の値が評価構文形でない (D3041 — 評価記録ずれ)。
+fn has_pics_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("pics-label:") {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || !v.starts_with('(')
+                || !v.is_ascii()
+                || v.chars().any(|c| c.is_control());
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Old-Return-Path:`/`X-Old-Return-Path:` 欄の値が宛名/空宛形でない (D3042 — 返送記録ずれ)。
+fn has_old_rp_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        let hdr = low
+            .strip_prefix("old-return-path:")
+            .or_else(|| low.strip_prefix("x-old-return-path:"));
+        if let Some(v) = hdr {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || (v != "<>"
+                    && (!v.contains('@')
+                        || !v.is_ascii()
+                        || v.chars().any(|c| c.is_control())
+                        || v.split_whitespace().count() != 1));
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// X.400 交換欄の日時形判定 — 数字10桁以上の X.400 時刻か `:` を含む RFC822 時刻。
+fn x4_is_timeish(v: &str) -> bool {
+    let t = v.trim();
+    if t.is_empty() || !t.is_ascii() || t.chars().any(|c| c.is_control()) {
+        return false;
+    }
+    let digits: usize = t.bytes().filter(|b| b.is_ascii_digit()).count();
+    digits >= 10 || (digits >= 4 && t.contains(':'))
+}
+
+/// `Deferred-Delivery:` 欄の値が日時形でない (D3043 — 留置時刻ずれ)。
+fn has_x4_defd_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("deferred-delivery:") {
+            if !x4_is_timeish(v) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Latest-Delivery-Time:` 欄の値が日時形でない (D3044 — 最終期限ずれ)。
+fn has_x4_ldt_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("latest-delivery-time:") {
+            if !x4_is_timeish(v) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Alternate-Recipient:` 欄の値が宛名形でない (D3045 — 代宛先ずれ)。
+fn has_x4_altr_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("alternate-recipient:") {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || !v.contains('@')
+                || !v.is_ascii()
+                || v.chars().any(|c| c.is_control())
+                || v.split_whitespace().count() != 1;
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Prevent-NonDelivery-Report:` 欄の値が yes/no 外 (D3046 — 報告抑止ずれ)。
+fn has_x4_pndr_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("prevent-nondelivery-report:") {
+            let v = v.trim();
+            if v != "yes" && v != "no" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Returned:` 欄の値が yes/no 外 (D3055 — 内容返却ずれ)。
+fn has_x4_cr_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("content-returned:") {
+            let t = v.trim();
+            if t != "yes" && t != "no" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Correlator:` 欄の値が印字トークン形でない (D3056 — 対応鍵ずれ)。
+fn has_x4_cc_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("content-correlator:") {
+            let t = v.trim();
+            let bad = t.is_empty()
+                || !t
+                    .chars()
+                    .all(|c| (0x21..=0x7e).contains(&(c as u32)));
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X400-Originator:` 欄の値が宛名/鍵連接形でない (D3057 — 交換元ずれ)。
+fn has_x4_org_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x400-originator:") {
+            let t = v.trim();
+            if !(t.contains('@') || t.contains('=') || t == "<>") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `X400-Trace:` 欄の値が大括弧くくり形でない (D3058 — 追跡記録ずれ)。
+fn has_x4_trc_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("x400-trace:") {
+            let t = v.trim();
+            if !(t.starts_with('[') && t.ends_with(']') && t.len() > 2) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// X.400 交換欄の yes/no 判定。
+fn x4_is_yesno(v: &str) -> bool {
+    let t = v.trim();
+    t == "yes" || t == "no"
+}
+
+/// `Return-Of-Content:` 欄の値が yes/no 外 (D3047 — 本文返却指定ずれ)。
+fn has_x4_roc_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("return-of-content:") {
+            if !x4_is_yesno(v) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Incomplete-Copy:` 欄の値が yes/no 外 (D3048 — 抜粋指定ずれ)。
+fn has_x4_inc_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("incomplete-copy:") {
+            if !x4_is_yesno(v) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Auto-Forwarded:` 欄の値が yes/no 外 (D3049 — 自動転送指定ずれ)。
+fn has_x4_afwd_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("auto-forwarded:") {
+            if !x4_is_yesno(v) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Obsoletes:` 欄の値が識別子連接形でない (D3050 — 廃棄指示ずれ)。
+fn has_x4_obs_bad(bytes: &[u8]) -> bool {
+    let mut end = bytes.len();
+    for w in bytes.windows(4) {
+        if w == b"\r\n\r\n" {
+            end = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            break;
+        }
+    }
+    for w in bytes[..end].windows(2) {
+        if w == b"\n\n" {
+            let p = w.as_ptr() as usize - bytes.as_ptr() as usize;
+            if p < end {
+                end = p;
+            }
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    for ln in text.lines() {
+        let l = ln.trim_start();
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_lowercase();
+        if let Some(v) = low.strip_prefix("obsoletes:") {
+            let v = v.trim();
+            let bad = v.is_empty()
+                || !v.contains('@')
+                || v.split_whitespace().any(|t| !t.starts_with('<') || !t.ends_with('>'));
+            if bad {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// `X-PM-Message-Id:`/`X-Postmark-Message-Id:` 欄の値がトークン形でない (D3059 — Postmark 識別ずれ)。
 fn has_xpm_mid_bad(bytes: &[u8]) -> bool {
     let mut end = bytes.len();
@@ -53965,6 +54995,54 @@ fn has_xvhost_bad(bytes: &[u8]) -> bool {
     })
 }
 
+/// `X-Real-From:` 欄の値が宛名形でない (D3087 — 実差出人ずれ)。
+fn has_xrfrom_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-real-from:"], |t| {
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-Real-To:`/`X-Real-RCPT:` 欄の値が宛名形でない (D3088 — 実宛先ずれ)。
+fn has_xrto_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-real-to:", "x-real-rcpt:"], |t| {
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-Forwarded-By:` 欄の値が局名またはIPリテラル形でない (D3089 — 転送局ずれ)。
+fn has_xfby_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-forwarded-by:"], |t| {
+        if t.split_whitespace().count() != 1 {
+            return true;
+        }
+        if let Some(inner) = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            return inner.split('.').count() != 4
+                || !inner.split('.').all(|o| o.parse::<u8>().is_ok());
+        }
+        t.is_empty()
+            || !t
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_')
+    })
+}
+
+/// `X-Forwarded-Host:`/`X-Forwarded-Server:` 欄の値が局名またはIPリテラル形でない (D3090 — 転送経路局ずれ)。
+fn has_xfhost_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-forwarded-host:", "x-forwarded-server:"], |t| {
+        if t.split_whitespace().count() != 1 {
+            return true;
+        }
+        if let Some(inner) = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            return inner.split('.').count() != 4
+                || !inner.split('.').all(|o| o.parse::<u8>().is_ok());
+        }
+        t.is_empty()
+            || !t
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_')
+    })
+}
+
 /// `X-Originating-Email:` 欄の値が宛名形でない (D3079 — 発信宛名ずれ)。
 fn has_xoemail_bad(bytes: &[u8]) -> bool {
     dc_each(bytes, &["x-originating-email:"], |t| {
@@ -54003,6 +55081,219 @@ fn has_xmuuid_bad(bytes: &[u8]) -> bool {
         }
         let lens: Vec<usize> = seg.iter().map(|s| s.len()).collect();
         lens != [8, 4, 4, 4, 12]
+    })
+}
+
+/// `X-Spamd-Check-By:` 欄の値が単一印字トークンでない (D3111 — 検疫機署名ずれ)。
+fn has_xsdby_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-spamd-check-by:"], |t| {
+        t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+    })
+}
+
+/// `X-Spamd-Processing-Time:` 欄の値が数値形でない (D3112 — 検疫機工数ずれ)。
+fn has_xsdpt_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-spamd-processing-time:"], |t| {
+        t.is_empty() || t.parse::<f64>().is_err()
+    })
+}
+
+/// `X-Spamd-Bar:` 欄の値が `+`/`-` 列でない (D3113 — 検疫機目盛ずれ)。
+fn has_xsdbar_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-spamd-bar:"], |t| {
+        t.is_empty() || t.bytes().any(|b| b != b'+' && b != b'-')
+    })
+}
+
+/// `X-Amavis-SpamScore:`/`X-Amavis-Score:` 欄の値が数値形でない (D3114 — 検疫機得点ずれ)。
+fn has_xamsc_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-amavis-spamscore:", "x-amavis-score:"],
+        |t| t.is_empty() || t.parse::<f64>().is_err(),
+    )
+}
+
+/// `X-MS-Exchange-Organization-OriginalClientIpAddress:`/`OriginalServerIpAddress:` 欄の値がIPアドレス形でない (D3091 — 発信接続元ずれ)。
+fn has_xmsip_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &[
+            "x-ms-exchange-organization-originalclientipaddress:",
+            "x-ms-exchange-organization-originalserveripaddress:",
+        ],
+        |t| t.parse::<std::net::IpAddr>().is_err(),
+    )
+}
+
+/// `X-MS-Exchange-GeneratedBySourceMailbox:` 欄の値が GUID 形でない (D3092 — 元受信箱ずれ)。
+fn has_xmsmbx_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-ms-exchange-generatedbysourcemailbox:"], |t| {
+        let t = t
+            .strip_prefix('{')
+            .and_then(|s| s.strip_suffix('}'))
+            .unwrap_or(t);
+        let seg: Vec<&str> = t.split('-').collect();
+        if seg.len() != 5 || seg.iter().any(|s| s.is_empty() || !s.bytes().all(|b| b.is_ascii_hexdigit())) {
+            return true;
+        }
+        let lens: Vec<usize> = seg.iter().map(|s| s.len()).collect();
+        lens != [8, 4, 4, 4, 12]
+    })
+}
+
+/// `X-Remote-Addr:`/`X-Real-IP:`/`X-Client-Addr:` 欄の値がIPアドレス形でない (D3093 — 接続元ずれ)。
+fn has_xraddr_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-remote-addr:", "x-real-ip:", "x-client-addr:"],
+        |t| t.parse::<std::net::IpAddr>().is_err(),
+    )
+}
+
+/// `X-Return-Path:` 欄の値が `<>` でも宛名形でもない (D3094 — 返送先裏控ずれ)。
+fn has_xrtpath_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-return-path:"], |t| {
+        if t == "<>" {
+            return false;
+        }
+        let t = t
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(t);
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-SA-Exim-Mail-From:` 欄の値が `<>` でも宛名形でもない (D3095 — 検疫機元宛ずれ)。
+fn has_xsaef_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-mail-from:"], |t| {
+        if t == "<>" {
+            return false;
+        }
+        let t = t
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(t);
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-SA-Exim-Rcpt:` 欄の値が宛名連接形でない (D3096 — 検疫機宛先ずれ)。
+fn has_xsaer_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-rcpt:"], |t| {
+        t.split(',').any(|a| {
+            let a = a.trim()
+                .strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+                .unwrap_or_else(|| a.trim());
+            a.is_empty() || a.matches('@').count() != 1 || a.starts_with('@') || a.ends_with('@')
+        })
+    })
+}
+
+/// `X-SA-Exim-Version:` 欄の値が版号形でない (D3097 — 検疫機版号ずれ)。
+fn has_xsaev_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-version:"], |t| {
+        t.split('.').any(|s| s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()))
+    })
+}
+
+/// `X-SA-Exim-Scanned:` 欄の値が `Yes`/`No` 始まりでない (D3098 — 検疫機走査印ずれ)。
+fn has_xsaes_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-sa-exim-scanned:"], |t| {
+        let l = t.to_ascii_lowercase();
+        !(l.starts_with("yes") || l.starts_with("no"))
+    })
+}
+
+/// `X-MailScanner-From:` 欄の値が `<>` でも宛名形でもない (D3103 — 走査機封書元宛ずれ)。
+fn has_xmsf_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-mailscanner-from:"], |t| {
+        if t == "<>" {
+            return false;
+        }
+        let t = t
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(t);
+        t.matches('@').count() != 1 || t.starts_with('@') || t.ends_with('@')
+    })
+}
+
+/// `X-MailScanner-To:` 欄の値が宛名連接形でない (D3104 — 走査機封書宛先ずれ)。
+fn has_xmst_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-mailscanner-to:"], |t| {
+        t.split(',').any(|a| {
+            let a = a.trim();
+            let a = a
+                .strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+                .unwrap_or(a);
+            a.is_empty() || a.matches('@').count() != 1 || a.starts_with('@') || a.ends_with('@')
+        })
+    })
+}
+
+/// `X-MailScanner-ID:`/`X-MailScanner-QueueID:` 欄の値が単一印字トークンでない (D3105 — 走査機識別ずれ)。
+fn has_xmsid_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-mailscanner-id:", "x-mailscanner-queueid:"],
+        |t| {
+            t.is_empty()
+                || t.bytes().any(|b| !(0x21..=0x7e).contains(&b))
+        },
+    )
+}
+
+/// `X-MailScanner-SpamCheck:` 欄の値が `spam`/`not spam` 始まりでない (D3106 — 走査機判定詳細ずれ)。
+fn has_xmssc_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-mailscanner-spamcheck:"], |t| {
+        let l = t.to_ascii_lowercase();
+        !(l.starts_with("spam") || l.starts_with("not spam"))
+    })
+}
+
+/// `X-Rspamd-Queue-Id:`/`X-Rspamd-Id:` 欄の値が単一印字トークンでない (D3107 — 走査機番号ずれ)。
+fn has_xrpid_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-rspamd-queue-id:", "x-rspamd-id:"],
+        |t| t.is_empty() || t.bytes().any(|b| !(0x21..=0x7e).contains(&b)),
+    )
+}
+
+/// `X-Rspamd-Score:`/`X-Rspamd-Ip-Score:` 欄の値が数値形でない (D3108 — 走査機得点ずれ)。
+fn has_xrpsc_bad(bytes: &[u8]) -> bool {
+    dc_each(
+        bytes,
+        &["x-rspamd-score:", "x-rspamd-ip-score:"],
+        |t| t.is_empty() || t.parse::<f64>().is_err(),
+    )
+}
+
+/// `X-Rspamd-Version:` 欄の値が版号形でない (D3109 — 走査機版号ずれ)。
+fn has_xrpv_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-rspamd-version:"], |t| {
+        t.split('.').any(|s| s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()))
+    })
+}
+
+/// `X-Rspamd-From:`/`X-Rspamd-Rcpt:` 欄の値が `<>` でも宛名連接形でもない (D3110 — 走査機封書ずれ)。
+fn has_xrpaddr_bad(bytes: &[u8]) -> bool {
+    dc_each(bytes, &["x-rspamd-from:", "x-rspamd-rcpt:"], |t| {
+        if t == "<>" {
+            return false;
+        }
+        t.split(',').any(|a| {
+            let a = a.trim();
+            let a = a
+                .strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+                .unwrap_or(a);
+            a.is_empty() || a.matches('@').count() != 1 || a.starts_with('@') || a.ends_with('@')
+        })
     })
 }
 
@@ -135162,6 +136453,284 @@ fn 投稿機欄が異形なら発火() {
     }
 
     #[test]
+    fn d3063_xsl_bad() {
+        assert!(has_xsl_bad(b"X-SocketLabs-MessageId: has space\r\n\r\nbody"));
+        assert!(has_xsl_bad(b"X-SocketLabs-InjectionId:\r\n\r\nbody"));
+        assert!(!has_xsl_bad(b"X-SocketLabs-MessageId: 12345678\r\n\r\nbody"));
+        assert!(!has_xsl_bad(
+            b"X-SocketLabs-Stream-Id: news-2026\r\n\r\nbody"
+        ));
+        assert!(!has_xsl_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3064_xcit_bad() {
+        assert!(has_xcit_bad(b"X-Canit-Stats-ID: \r\n\r\nbody"));
+        assert!(has_xcit_bad(b"X-CanItPRO-Stream: has space\r\n\r\nbody"));
+        assert!(!has_xcit_bad(b"X-Canit-Stats-ID: 09r2vh0zb\r\n\r\nbody"));
+        assert!(!has_xcit_bad(b"X-CanItPRO-Stream: outgoing\r\n\r\nbody"));
+        assert!(!has_xcit_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3065_xoc_bad() {
+        assert!(has_xoc_bad(b"X-Originating-Client: bad name here\r\n\r\nbody"));
+        assert!(has_xoc_bad(b"X-Originating-Client:\r\n\r\nbody"));
+        assert!(!has_xoc_bad(b"X-Originating-Client: M365\r\n\r\nbody"));
+        assert!(!has_xoc_bad(
+            b"X-Originating-Client: Microsoft-Office-14\r\n\r\nbody"
+        ));
+        assert!(!has_xoc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3066_xmlid_bad() {
+        assert!(has_xmlid_bad(b"X-Mailing-Id: bad id here\r\n\r\nbody"));
+        assert!(has_xmlid_bad(b"X-Mailing-ID:\r\n\r\nbody"));
+        assert!(!has_xmlid_bad(b"X-Mailing-Id: campaign-42\r\n\r\nbody"));
+        assert!(!has_xmlid_bad(b"X-MailingID: a1b2c3\r\n\r\nbody"));
+        assert!(!has_xmlid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+
+    #[test]
+    fn d3051_x4_dr_bad() {
+        assert!(has_x4_dr_bad(b"Delivery-Report: perhaps\r\n\r\nbody"));
+        assert!(has_x4_dr_bad(b"Delivery-Report:\r\n\r\nbody"));
+        assert!(!has_x4_dr_bad(b"Delivery-Report: yes\r\n\r\nbody"));
+        assert!(!has_x4_dr_bad(b"Delivery-Report: no\r\n\r\nbody"));
+        assert!(!has_x4_dr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3052_x4_ora_bad() {
+        assert!(has_x4_ora_bad(
+            b"Originator-Return-Address: not an addr\r\n\r\nbody"
+        ));
+        assert!(has_x4_ora_bad(b"Originator-Return-Address:\r\n\r\nbody"));
+        assert!(!has_x4_ora_bad(
+            b"Originator-Return-Address: sender@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_x4_ora_bad(b"Originator-Return-Address: <>\r\n\r\nbody"));
+        assert!(!has_x4_ora_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3053_x4_oeit_bad() {
+        assert!(has_x4_oeit_bad(
+            b"Original-Encoded-Information-Types: not a type!\r\n\r\nbody"
+        ));
+        assert!(has_x4_oeit_bad(
+            b"Original-Encoded-Information-Types:\r\n\r\nbody"
+        ));
+        assert!(has_x4_oeit_bad(
+            b"Original-Encoded-Information-Types: ia5-text,,g3-fax\r\n\r\nbody"
+        ));
+        assert!(!has_x4_oeit_bad(
+            b"Original-Encoded-Information-Types: ia5-text\r\n\r\nbody"
+        ));
+        assert!(!has_x4_oeit_bad(
+            b"Original-Encoded-Information-Types: ia5-text, g3-fax\r\n\r\nbody"
+        ));
+        assert!(!has_x4_oeit_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3054_x4_cid_bad() {
+        assert!(has_x4_cid_bad(b"Content-Identifier:\r\n\r\nbody"));
+        assert!(has_x4_cid_bad(b"Content-Identifier: has space\r\n\r\nbody"));
+        assert!(!has_x4_cid_bad(b"Content-Identifier: ipm-12345\r\n\r\nbody"));
+        assert!(!has_x4_cid_bad(
+            b"Content-Identifier: <id@example.com>\r\n\r\nbody"
+        ));
+        assert!(!has_x4_cid_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+
+    #[test]
+    fn d3039_news_lines_bad() {
+        assert!(has_news_lines_bad(b"Lines: many\r\n\r\nbody"));
+        assert!(has_news_lines_bad(b"Lines:\r\n\r\nbody"));
+        assert!(has_news_lines_bad(b"Lines: 12.5\r\n\r\nbody"));
+        assert!(!has_news_lines_bad(b"Lines: 42\r\n\r\nbody"));
+        assert!(!has_news_lines_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3040_x_sg_bad() {
+        assert!(has_x_sg_bad(b"X-SG-ID: short\r\n\r\nbody"));
+        assert!(has_x_sg_bad(b"X-SG-ID:\r\n\r\nbody"));
+        assert!(has_x_sg_bad(b"X-SG-EID: x y z\r\n\r\nbody"));
+        assert!(!has_x_sg_bad(
+            b"X-SG-ID: Xo4kcqbvRrSMlPmKk8_YRg\r\n\r\nbody"
+        ));
+        assert!(!has_x_sg_bad(
+            b"X-SG-EID: AbCdEfGhIjKlMnOpQrStUvWx\r\n\r\nbody"
+        ));
+        assert!(!has_x_sg_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3041_pics_bad() {
+        assert!(has_pics_bad(b"PICS-Label: clean\r\n\r\nbody"));
+        assert!(has_pics_bad(b"PICS-Label:\r\n\r\nbody"));
+        assert!(has_pics_bad(b"PICS-Label: no parens here\r\n\r\nbody"));
+        assert!(!has_pics_bad(
+            b"PICS-Label: (PICS-1.1 http://ex.com/ labels r (n 0))\r\n\r\nbody"
+        ));
+        assert!(!has_pics_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3042_old_rp_bad() {
+        assert!(has_old_rp_bad(b"Old-Return-Path: not an addr\r\n\r\nbody"));
+        assert!(has_old_rp_bad(b"X-Old-Return-Path:\r\n\r\nbody"));
+        assert!(has_old_rp_bad(b"Old-Return-Path: a b@c\r\n\r\nbody"));
+        assert!(!has_old_rp_bad(
+            b"Old-Return-Path: bounce@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_old_rp_bad(b"Old-Return-Path: <>\r\n\r\nbody"));
+        assert!(!has_old_rp_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+
+    #[test]
+    fn d3043_x4_defd_bad() {
+        assert!(has_x4_defd_bad(b"Deferred-Delivery: soon\r\n\r\nbody"));
+        assert!(has_x4_defd_bad(b"Deferred-Delivery:\r\n\r\nbody"));
+        assert!(!has_x4_defd_bad(
+            b"Deferred-Delivery: 261001120000Z\r\n\r\nbody"
+        ));
+        assert!(!has_x4_defd_bad(
+            b"Deferred-Delivery: 01 Oct 2026 12:00:00 +0000\r\n\r\nbody"
+        ));
+        assert!(!has_x4_defd_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3044_x4_ldt_bad() {
+        assert!(has_x4_ldt_bad(b"Latest-Delivery-Time: later\r\n\r\nbody"));
+        assert!(has_x4_ldt_bad(b"Latest-Delivery-Time:\r\n\r\nbody"));
+        assert!(!has_x4_ldt_bad(
+            b"Latest-Delivery-Time: 261002120000Z\r\n\r\nbody"
+        ));
+        assert!(!has_x4_ldt_bad(
+            b"Latest-Delivery-Time: 02 Oct 2026 12:00:00 +0000\r\n\r\nbody"
+        ));
+        assert!(!has_x4_ldt_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3045_x4_altr_bad() {
+        assert!(has_x4_altr_bad(b"Alternate-Recipient: not an addr\r\n\r\nbody"));
+        assert!(has_x4_altr_bad(b"Alternate-Recipient:\r\n\r\nbody"));
+        assert!(has_x4_altr_bad(b"Alternate-Recipient: a b@c\r\n\r\nbody"));
+        assert!(!has_x4_altr_bad(
+            b"Alternate-Recipient: delegate@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_x4_altr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3046_x4_pndr_bad() {
+        assert!(has_x4_pndr_bad(
+            b"Prevent-NonDelivery-Report: maybe\r\n\r\nbody"
+        ));
+        assert!(has_x4_pndr_bad(b"Prevent-NonDelivery-Report:\r\n\r\nbody"));
+        assert!(!has_x4_pndr_bad(
+            b"Prevent-NonDelivery-Report: yes\r\n\r\nbody"
+        ));
+        assert!(!has_x4_pndr_bad(
+            b"Prevent-NonDelivery-Report: no\r\n\r\nbody"
+        ));
+        assert!(!has_x4_pndr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+
+    #[test]
+    fn d3055_x4_cr_bad() {
+        assert!(has_x4_cr_bad(b"Content-Returned: maybe\r\n\r\nbody"));
+        assert!(has_x4_cr_bad(b"Content-Returned:\r\n\r\nbody"));
+        assert!(!has_x4_cr_bad(b"Content-Returned: yes\r\n\r\nbody"));
+        assert!(!has_x4_cr_bad(b"Content-Returned: no\r\n\r\nbody"));
+        assert!(!has_x4_cr_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3056_x4_cc_bad() {
+        assert!(has_x4_cc_bad(b"Content-Correlator: has space\r\n\r\nbody"));
+        assert!(has_x4_cc_bad(b"Content-Correlator:\r\n\r\nbody"));
+        assert!(!has_x4_cc_bad(b"Content-Correlator: corr-12345\r\n\r\nbody"));
+        assert!(!has_x4_cc_bad(b"Content-Correlator: <key@x.com>\r\n\r\nbody"));
+        assert!(!has_x4_cc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3057_x4_org_bad() {
+        assert!(has_x4_org_bad(b"X400-Originator: not an addr\r\n\r\nbody"));
+        assert!(has_x4_org_bad(b"X400-Originator:\r\n\r\nbody"));
+        assert!(!has_x4_org_bad(
+            b"X400-Originator: sender@example.com\r\n\r\nbody"
+        ));
+        assert!(!has_x4_org_bad(
+            b"X400-Originator: c=JP; a= ; p=org; o=site\r\n\r\nbody"
+        ));
+        assert!(!has_x4_org_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3058_x4_trc_bad() {
+        assert!(has_x4_trc_bad(b"X400-Trace: trace record\r\n\r\nbody"));
+        assert!(has_x4_trc_bad(b"X400-Trace:\r\n\r\nbody"));
+        assert!(has_x4_trc_bad(b"X400-Trace: []\r\n\r\nbody"));
+        assert!(!has_x4_trc_bad(
+            b"X400-Trace: [ trace record ]\r\n\r\nbody"
+        ));
+        assert!(!has_x4_trc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+
+    #[test]
+    fn d3047_x4_roc_bad() {
+        assert!(has_x4_roc_bad(b"Return-Of-Content: maybe\r\n\r\nbody"));
+        assert!(has_x4_roc_bad(b"Return-Of-Content:\r\n\r\nbody"));
+        assert!(!has_x4_roc_bad(b"Return-Of-Content: yes\r\n\r\nbody"));
+        assert!(!has_x4_roc_bad(b"Return-Of-Content: no\r\n\r\nbody"));
+        assert!(!has_x4_roc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3048_x4_inc_bad() {
+        assert!(has_x4_inc_bad(b"Incomplete-Copy: partial\r\n\r\nbody"));
+        assert!(has_x4_inc_bad(b"Incomplete-Copy:\r\n\r\nbody"));
+        assert!(!has_x4_inc_bad(b"Incomplete-Copy: yes\r\n\r\nbody"));
+        assert!(!has_x4_inc_bad(b"Incomplete-Copy: no\r\n\r\nbody"));
+        assert!(!has_x4_inc_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3049_x4_afwd_bad() {
+        assert!(has_x4_afwd_bad(b"Auto-Forwarded: perhaps\r\n\r\nbody"));
+        assert!(has_x4_afwd_bad(b"Auto-Forwarded:\r\n\r\nbody"));
+        assert!(!has_x4_afwd_bad(b"Auto-Forwarded: yes\r\n\r\nbody"));
+        assert!(!has_x4_afwd_bad(b"Auto-Forwarded: no\r\n\r\nbody"));
+        assert!(!has_x4_afwd_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn d3050_x4_obs_bad() {
+        assert!(has_x4_obs_bad(b"Obsoletes: abc123\r\n\r\nbody"));
+        assert!(has_x4_obs_bad(b"Obsoletes:\r\n\r\nbody"));
+        assert!(has_x4_obs_bad(b"Obsoletes: <a@b> plain\r\n\r\nbody"));
+        assert!(!has_x4_obs_bad(b"Obsoletes: <old-id@example.com>\r\n\r\nbody"));
+        assert!(!has_x4_obs_bad(
+            b"Obsoletes: <a@x.com> <b@x.com>\r\n\r\nbody"
+        ));
+        assert!(!has_x4_obs_bad(b"From: a@b\r\n\r\nbody"));
+    }
+
+
+    #[test]
     fn d3059_xpm_mid_bad() {
         assert!(has_xpm_mid_bad(b"X-PM-Message-Id: has space\r\n\r\nbody"));
         assert!(has_xpm_mid_bad(b"X-PM-Message-Id:\r\n\r\nbody"));
@@ -135351,6 +136920,261 @@ fn d3082_xmuuid_bad() {
             b"X-Delivered-To:\r\n user@example.com\r\n\r\nbody"
         ));
     }
+
+#[test]
+fn d3087_xrfrom_bad() {
+    assert!(has_xrfrom_bad(b"X-Real-From: not addr\r\n\r\nbody"));
+    assert!(has_xrfrom_bad(b"X-Real-From: a@@x.com\r\n\r\nbody"));
+    assert!(has_xrfrom_bad(b"X-Real-From:\r\n\r\nbody"));
+    assert!(!has_xrfrom_bad(b"X-Real-From: sender@example.com\r\n\r\nbody"));
+    assert!(!has_xrfrom_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3088_xrto_bad() {
+    assert!(has_xrto_bad(b"X-Real-To: not addr\r\n\r\nbody"));
+    assert!(has_xrto_bad(b"X-Real-RCPT: not addr\r\n\r\nbody"));
+    assert!(!has_xrto_bad(b"X-Real-To: u@x.com\r\n\r\nbody"));
+    assert!(!has_xrto_bad(b"X-Real-RCPT: u@x.com\r\n\r\nbody"));
+    assert!(!has_xrto_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3089_xfby_bad() {
+    assert!(has_xfby_bad(b"X-Forwarded-By: bad host\r\n\r\nbody"));
+    assert!(has_xfby_bad(b"X-Forwarded-By: [999.1.2.3]\r\n\r\nbody"));
+    assert!(has_xfby_bad(b"X-Forwarded-By:\r\n\r\nbody"));
+    assert!(!has_xfby_bad(b"X-Forwarded-By: mail.example.com\r\n\r\nbody"));
+    assert!(!has_xfby_bad(b"X-Forwarded-By: [192.0.2.1]\r\n\r\nbody"));
+    assert!(!has_xfby_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3090_xfhost_bad() {
+    assert!(has_xfhost_bad(b"X-Forwarded-Host: bad host\r\n\r\nbody"));
+    assert!(has_xfhost_bad(b"X-Forwarded-Server: bad host\r\n\r\nbody"));
+    assert!(has_xfhost_bad(b"X-Forwarded-Host: [999.1.2.3]\r\n\r\nbody"));
+    assert!(!has_xfhost_bad(
+        b"X-Forwarded-Host: relay.example.com\r\n\r\nbody"
+    ));
+    assert!(!has_xfhost_bad(
+        b"X-Forwarded-Server: [192.0.2.1]\r\n\r\nbody"
+    ));
+    assert!(!has_xfhost_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3111_xsdby_bad() {
+    assert!(has_xsdby_bad(b"X-Spamd-Check-By: not host here\r\n\r\nbody"));
+    assert!(has_xsdby_bad(b"X-Spamd-Check-By:\r\n\r\nbody"));
+    assert!(!has_xsdby_bad(b"X-Spamd-Check-By: mx.example.com\r\n\r\nbody"));
+    assert!(!has_xsdby_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3112_xsdpt_bad() {
+    assert!(has_xsdpt_bad(b"X-Spamd-Processing-Time: not num\r\n\r\nbody"));
+    assert!(has_xsdpt_bad(b"X-Spamd-Processing-Time:\r\n\r\nbody"));
+    assert!(!has_xsdpt_bad(b"X-Spamd-Processing-Time: 0.42\r\n\r\nbody"));
+    assert!(!has_xsdpt_bad(b"X-Spamd-Processing-Time: 12\r\n\r\nbody"));
+    assert!(!has_xsdpt_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3113_xsdbar_bad() {
+    assert!(has_xsdbar_bad(b"X-Spamd-Bar: not bar\r\n\r\nbody"));
+    assert!(has_xsdbar_bad(b"X-Spamd-Bar: ++x\r\n\r\nbody"));
+    assert!(has_xsdbar_bad(b"X-Spamd-Bar:\r\n\r\nbody"));
+    assert!(!has_xsdbar_bad(b"X-Spamd-Bar: ++++++\r\n\r\nbody"));
+    assert!(!has_xsdbar_bad(b"X-Spamd-Bar: -\r\n\r\nbody"));
+    assert!(!has_xsdbar_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3114_xamsc_bad() {
+    assert!(has_xamsc_bad(b"X-Amavis-SpamScore: not num\r\n\r\nbody"));
+    assert!(has_xamsc_bad(b"X-Amavis-Score:\r\n\r\nbody"));
+    assert!(!has_xamsc_bad(b"X-Amavis-SpamScore: 5.1\r\n\r\nbody"));
+    assert!(!has_xamsc_bad(b"X-Amavis-Score: -0.002\r\n\r\nbody"));
+    assert!(!has_xamsc_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3091_xmsip_bad() {
+    assert!(has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalClientIpAddress: not ip\r\n\r\nbody"
+    ));
+    assert!(has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalServerIpAddress: 999.1.2.3\r\n\r\nbody"
+    ));
+    assert!(has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalClientIpAddress:\r\n\r\nbody"
+    ));
+    assert!(!has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalClientIpAddress: 192.0.2.1\r\n\r\nbody"
+    ));
+    assert!(!has_xmsip_bad(
+        b"X-MS-Exchange-Organization-OriginalServerIpAddress: 2001:db8::1\r\n\r\nbody"
+    ));
+    assert!(!has_xmsip_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3092_xmsmbx_bad() {
+    assert!(has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: not-a-guid\r\n\r\nbody"
+    ));
+    assert!(has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: 8-4-4-4-12\r\n\r\nbody"
+    ));
+    assert!(!has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: 550e8400-e29b-41d4-a716-446655440000\r\n\r\nbody"
+    ));
+    assert!(!has_xmsmbx_bad(
+        b"X-MS-Exchange-GeneratedBySourceMailbox: {550E8400-E29B-41D4-A716-446655440000}\r\n\r\nbody"
+    ));
+    assert!(!has_xmsmbx_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3093_xraddr_bad() {
+    assert!(has_xraddr_bad(b"X-Remote-Addr: not ip\r\n\r\nbody"));
+    assert!(has_xraddr_bad(b"X-Real-IP: 999.1.2.3\r\n\r\nbody"));
+    assert!(has_xraddr_bad(b"X-Client-Addr:\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"X-Remote-Addr: 192.0.2.1\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"X-Real-IP: 2001:db8::1\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"X-Client-Addr: 10.0.0.1\r\n\r\nbody"));
+    assert!(!has_xraddr_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3094_xrtpath_bad() {
+    assert!(has_xrtpath_bad(b"X-Return-Path: not addr\r\n\r\nbody"));
+    assert!(has_xrtpath_bad(b"X-Return-Path: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"X-Return-Path: <>\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"X-Return-Path: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"X-Return-Path: u@x.com\r\n\r\nbody"));
+    assert!(!has_xrtpath_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3095_xsaef_bad() {
+    assert!(has_xsaef_bad(b"X-SA-Exim-Mail-From: not addr\r\n\r\nbody"));
+    assert!(has_xsaef_bad(b"X-SA-Exim-Mail-From: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"X-SA-Exim-Mail-From: <>\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"X-SA-Exim-Mail-From: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"X-SA-Exim-Mail-From: u@x.com\r\n\r\nbody"));
+    assert!(!has_xsaef_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3096_xsaer_bad() {
+    assert!(has_xsaer_bad(b"X-SA-Exim-Rcpt: not addr\r\n\r\nbody"));
+    assert!(has_xsaer_bad(b"X-SA-Exim-Rcpt: u@x.com, bad@\r\n\r\nbody"));
+    assert!(has_xsaer_bad(b"X-SA-Exim-Rcpt:\r\n\r\nbody"));
+    assert!(!has_xsaer_bad(b"X-SA-Exim-Rcpt: u@x.com\r\n\r\nbody"));
+    assert!(!has_xsaer_bad(b"X-SA-Exim-Rcpt: <u@x.com>, v@y.com\r\n\r\nbody"));
+    assert!(!has_xsaer_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3097_xsaev_bad() {
+    assert!(has_xsaev_bad(b"X-SA-Exim-Version: not ver\r\n\r\nbody"));
+    assert!(has_xsaev_bad(b"X-SA-Exim-Version: 4.2.x\r\n\r\nbody"));
+    assert!(has_xsaev_bad(b"X-SA-Exim-Version: .4.2\r\n\r\nbody"));
+    assert!(!has_xsaev_bad(b"X-SA-Exim-Version: 4.2.1\r\n\r\nbody"));
+    assert!(!has_xsaev_bad(b"X-SA-Exim-Version: 4.96\r\n\r\nbody"));
+    assert!(!has_xsaev_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3098_xsaes_bad() {
+    assert!(has_xsaes_bad(b"X-SA-Exim-Scanned: maybe\r\n\r\nbody"));
+    assert!(has_xsaes_bad(b"X-SA-Exim-Scanned:\r\n\r\nbody"));
+    assert!(!has_xsaes_bad(b"X-SA-Exim-Scanned: Yes\r\n\r\nbody"));
+    assert!(!has_xsaes_bad(b"X-SA-Exim-Scanned: No (on relay.example.com)\r\n\r\nbody"));
+    assert!(!has_xsaes_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3103_xmsf_bad() {
+    assert!(has_xmsf_bad(b"X-MailScanner-From: not addr\r\n\r\nbody"));
+    assert!(has_xmsf_bad(b"X-MailScanner-From: a@@x.com\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"X-MailScanner-From: <>\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"X-MailScanner-From: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"X-MailScanner-From: u@x.com\r\n\r\nbody"));
+    assert!(!has_xmsf_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3104_xmst_bad() {
+    assert!(has_xmst_bad(b"X-MailScanner-To: not addr\r\n\r\nbody"));
+    assert!(has_xmst_bad(b"X-MailScanner-To: u@x.com, bad@\r\n\r\nbody"));
+    assert!(has_xmst_bad(b"X-MailScanner-To:\r\n\r\nbody"));
+    assert!(!has_xmst_bad(b"X-MailScanner-To: u@x.com\r\n\r\nbody"));
+    assert!(!has_xmst_bad(b"X-MailScanner-To: <u@x.com>, v@y.com\r\n\r\nbody"));
+    assert!(!has_xmst_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3105_xmsid_bad() {
+    assert!(has_xmsid_bad(b"X-MailScanner-ID: not id here\r\n\r\nbody"));
+    assert!(has_xmsid_bad(b"X-MailScanner-ID:\r\n\r\nbody"));
+    assert!(has_xmsid_bad(b"X-MailScanner-QueueID: id with space\r\n\r\nbody"));
+    assert!(!has_xmsid_bad(b"X-MailScanner-ID: 4xA1B2C3D4E5\r\n\r\nbody"));
+    assert!(!has_xmsid_bad(b"X-MailScanner-QueueID: A1B2C3.D4\r\n\r\nbody"));
+    assert!(!has_xmsid_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3106_xmssc_bad() {
+    assert!(has_xmssc_bad(b"X-MailScanner-SpamCheck: maybe\r\n\r\nbody"));
+    assert!(has_xmssc_bad(b"X-MailScanner-SpamCheck:\r\n\r\nbody"));
+    assert!(!has_xmssc_bad(b"X-MailScanner-SpamCheck: spam, SpamAssassin (score=10.5, required 5)\r\n\r\nbody"));
+    assert!(!has_xmssc_bad(b"X-MailScanner-SpamCheck: not spam, SpamAssassin (score=-1.0, required 5)\r\n\r\nbody"));
+    assert!(!has_xmssc_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3107_xrpid_bad() {
+    assert!(has_xrpid_bad(b"X-Rspamd-Queue-Id: not id here\r\n\r\nbody"));
+    assert!(has_xrpid_bad(b"X-Rspamd-Id: \r\n\r\nbody"));
+    assert!(has_xrpid_bad(b"X-Rspamd-Queue-Id:\r\n\r\nbody"));
+    assert!(!has_xrpid_bad(b"X-Rspamd-Queue-Id: A1B2C3D4E5\r\n\r\nbody"));
+    assert!(!has_xrpid_bad(b"X-Rspamd-Id: a1b2.c3-d4\r\n\r\nbody"));
+    assert!(!has_xrpid_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3108_xrpsc_bad() {
+    assert!(has_xrpsc_bad(b"X-Rspamd-Score: not num\r\n\r\nbody"));
+    assert!(has_xrpsc_bad(b"X-Rspamd-Ip-Score:\r\n\r\nbody"));
+    assert!(!has_xrpsc_bad(b"X-Rspamd-Score: 10.5\r\n\r\nbody"));
+    assert!(!has_xrpsc_bad(b"X-Rspamd-Score: -1.234\r\n\r\nbody"));
+    assert!(!has_xrpsc_bad(b"X-Rspamd-Ip-Score: NaN\r\n\r\nbody"));
+    assert!(!has_xrpsc_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3109_xrpv_bad() {
+    assert!(has_xrpv_bad(b"X-Rspamd-Version: not ver\r\n\r\nbody"));
+    assert!(has_xrpv_bad(b"X-Rspamd-Version: 3.7.x\r\n\r\nbody"));
+    assert!(has_xrpv_bad(b"X-Rspamd-Version: .3.7\r\n\r\nbody"));
+    assert!(!has_xrpv_bad(b"X-Rspamd-Version: 3.7.5\r\n\r\nbody"));
+    assert!(!has_xrpv_bad(b"X-Rspamd-Version: 3.14\r\n\r\nbody"));
+    assert!(!has_xrpv_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[test]
+fn d3110_xrpaddr_bad() {
+    assert!(has_xrpaddr_bad(b"X-Rspamd-From: not addr\r\n\r\nbody"));
+    assert!(has_xrpaddr_bad(b"X-Rspamd-Rcpt: u@x.com, bad@\r\n\r\nbody"));
+    assert!(has_xrpaddr_bad(b"X-Rspamd-Rcpt:\r\n\r\nbody"));
+    assert!(!has_xrpaddr_bad(b"X-Rspamd-From: <>\r\n\r\nbody"));
+    assert!(!has_xrpaddr_bad(b"X-Rspamd-From: <u@x.com>\r\n\r\nbody"));
+    assert!(!has_xrpaddr_bad(b"X-Rspamd-Rcpt: v@y.com, <w@z.com>\r\n\r\nbody"));
+    assert!(!has_xrpaddr_bad(b"From: a@b\r\n\r\nbody"));
+}
 
 #[test]
 fn d3115_xsdcv_bad() {
