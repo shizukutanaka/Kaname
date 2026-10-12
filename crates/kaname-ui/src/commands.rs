@@ -9517,6 +9517,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.ms_exp_time_bad {
         render_risks.push("失効開始欄の値が日時形でないです—失効時刻の扱いで経路時系列がずれます".to_string());
     }
+    if env.news_lines_bad {
+        render_risks.push("記事行数欄の値が整数形でないです—行数の扱いで記事把握がずれます".to_string());
+    }
+    if env.x_sg_bad {
+        render_risks.push("配送識別欄の値が長トークン形でないです—識別の扱いで照合がずれます".to_string());
+    }
+    if env.pics_bad {
+        render_risks.push("評価記録欄の値が評価構文形でないです—評価の扱いで内容分類がずれます".to_string());
+    }
+    if env.old_rp_bad {
+        render_risks.push("返送記録欄の値が宛名形でないです—返送先の扱いで経路評価がずれます".to_string());
+    }
+    if env.x4_defd_bad {
+        render_risks.push("留置時刻欄の値が日時形でないです—留置時刻の扱いで経路時系列がずれます".to_string());
+    }
+    if env.x4_ldt_bad {
+        render_risks.push("最終期限欄の値が日時形でないです—期限の扱いで経路時系列がずれます".to_string());
+    }
+    if env.x4_altr_bad {
+        render_risks.push("代宛先欄の値が宛名形でないです—代宛先の扱いで経路評価がずれます".to_string());
+    }
+    if env.x4_pndr_bad {
+        render_risks.push("報告抑止欄の値が語彙外です—抑止指定の扱いで経路評価がずれます".to_string());
+    }
     if env.x4_cr_bad {
         render_risks.push("内容返却欄の値が語彙外です—返却指示の扱いで経路評価がずれます".to_string());
     }
@@ -9588,6 +9612,42 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     if env.xamsc_bad {
         render_risks.push("検疫機得点欄の値が数値形でないです—検査記録の扱いで得点照合がずれます".to_string());
+    }
+    if env.xmsip_bad {
+        render_risks.push("発信接続元欄の値がIPアドレス形でないです—組織記録の扱いで発信元特定がずれます".to_string());
+    }
+    if env.xmsmbx_bad {
+        render_risks.push("元受信箱欄の値がGUID形でないです—組織記録の扱いで受信箱照合がずれます".to_string());
+    }
+    if env.xraddr_bad {
+        render_risks.push("接続元欄の値がIPアドレス形でないです—配送記録の扱いで発信元特定がずれます".to_string());
+    }
+    if env.xrtpath_bad {
+        render_risks.push("返送先裏控欄の値が宛名形でないです—返送記録の扱いで宛先照合がずれます".to_string());
+    }
+    if env.xsaef_bad {
+        render_risks.push("検疫機元宛欄の値が宛名形でないです—検査記録の扱いで送信元照合がずれます".to_string());
+    }
+    if env.xsaer_bad {
+        render_risks.push("検疫機宛先欄の値が宛名連接形でないです—検査記録の扱いで宛先照合がずれます".to_string());
+    }
+    if env.xsaev_bad {
+        render_risks.push("検疫機版号欄の値が版号形でないです—検査記録の扱いで検疫機識別がずれます".to_string());
+    }
+    if env.xsaes_bad {
+        render_risks.push("検疫機走査印欄の値が Yes/No 始まりでないです—検査記録の扱いで走査確認がずれます".to_string());
+    }
+    if env.xmsf_bad {
+        render_risks.push("走査機封書元宛欄の値が宛名形でないです—検査記録の扱いで送信元照合がずれます".to_string());
+    }
+    if env.xmst_bad {
+        render_risks.push("走査機封書宛先欄の値が宛名連接形でないです—検査記録の扱いで宛先照合がずれます".to_string());
+    }
+    if env.xmsid_bad {
+        render_risks.push("走査機識別欄の値が単一印字トークンでないです—検査記録の扱いで書留照合がずれます".to_string());
+    }
+    if env.xmssc_bad {
+        render_risks.push("走査機判定詳細欄の値が spam/not spam 始まりでないです—検査記録の扱いで判定確認がずれます".to_string());
     }
     if env.xrpid_bad {
         render_risks.push("走査機番号欄の値が単一印字トークンでないです—検査記録の扱いで書留照合がずれます".to_string());
