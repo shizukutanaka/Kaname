@@ -24,6 +24,10 @@
 ### Security — D3000: `X-MS-Exchange-Organization-AuthMechanism:` 欄の非方式番号値 (1–2桁の 0–10 以外) を認証方式ずれとして検出 — `Envelope` に `ms_authmech_bad` を追加。
 ### Security — D3001: `X-MS-Office365-Filtering-Correlation-Id:` 欄の非GUID値を関連識別ずれとして検出 — `Envelope` に `ms_corr_id_bad` を追加。
 ### Security — D3002: `X-MS-Exchange-Organization-ExpirationStartTime:` 欄の非日時形値を失効開始ずれとして検出 — `Envelope` に `ms_exp_time_bad` を追加。
+### Security — D3055: `Content-Returned:` 欄の語彙外値 (`yes`/`no` 以外) を内容返却ずれとして検出 — `Envelope` に `x4_cr_bad` を追加。
+### Security — D3056: `Content-Correlator:` 欄の非印字トークン値を対応鍵ずれとして検出 — `Envelope` に `x4_cc_bad` を追加。
+### Security — D3057: `X400-Originator:` 欄の非宛名/非鍵連接値を交換元ずれとして検出 — `Envelope` に `x4_org_bad` を追加。
+### Security — D3058: `X400-Trace:` 欄の非大括弧くくり値を追跡記録ずれとして検出 — `Envelope` に `x4_trc_bad` を追加。
 ### Security — D3047: `Return-Of-Content:` 欄の語彙外値 (`yes`/`no` 以外) を本文返却指定ずれとして検出 — `Envelope` に `x4_roc_bad` を追加。
 ### Security — D3048: `Incomplete-Copy:` 欄の語彙外値を抜粋指定ずれとして検出 — `Envelope` に `x4_inc_bad` を追加。
 ### Security — D3049: `Auto-Forwarded:` 欄の語彙外値を自動転送指定ずれとして検出 — `Envelope` に `x4_afwd_bad` を追加。
