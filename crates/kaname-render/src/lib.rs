@@ -5537,22 +5537,29 @@ fn header_section(raw: &[u8]) -> &[u8] {
     &raw[..end]
 }
 
-pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
-    // S05: サイズ上限チェック (DoS 対策)
-    if raw.is_empty() {
-        return Err(RenderError::Parse("empty message".into()));
-    }
-    if raw.len() > 100 * 1024 * 1024 {
-        return Err(RenderError::Parse("S05: message exceeds 100 MB".into()));
-    }
+struct MimeFields {
+    message_id: Option<String>,
+    from: Vec<Address>,
+    to: Vec<Address>,
+    cc: Vec<Address>,
+    subject: Option<String>,
+    date: Option<i64>,
+    text_body: Option<String>,
+    html_body: Option<RawHtml>,
+    attachments: Vec<AttachmentHeader>,
+    auth_results: AuthResultsHeader,
+    reply_to: Vec<Address>,
+    return_path: Option<Address>,
+    sender: Option<Address>,
+    in_reply_to: Vec<String>,
+    references: Vec<String>,
+    dkim_signature: Option<String>,
+    list_unsubscribe: Option<String>,
+}
 
-    // D570: 155 個の `has_*_marks` はヘッダのみを見るため、ヘッダ部分だけを
-    // 一度切り出して渡す (以前は各関数が本文ごと全体を複製・小文字化していた)。
-    let hdr = header_section(raw);
-    // D系検出器は本文まで含むメッセージ全体を走査する (boundary 行等の
-    // 本文側兆候を見るため、hdr ではなく raw を渡す)。
-    let bytes = raw;
-
+/// parse() フェーズ1: mail-parser による構造抽出 (宛先・本文・添付ヘッダ・認証結果)。
+/// フェーズ2 (バイト列検出器群) とは独立しており、単体でテストできる。
+fn extract_mime_fields(raw: &[u8]) -> Result<MimeFields, RenderError> {
     let msg = MessageParser::default()
         .parse(raw)
         .ok_or_else(|| RenderError::Parse("MIME parse failed".into()))?;
@@ -5679,6 +5686,63 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
 
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
+
+    Ok(MimeFields {
+        message_id,
+        from,
+        to,
+        cc,
+        subject,
+        date,
+        text_body,
+        html_body,
+        attachments,
+        auth_results,
+        reply_to,
+        return_path,
+        sender,
+        in_reply_to,
+        references,
+        dkim_signature,
+        list_unsubscribe,
+    })
+}
+
+pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
+    // S05: サイズ上限チェック (DoS 対策)
+    if raw.is_empty() {
+        return Err(RenderError::Parse("empty message".into()));
+    }
+    if raw.len() > 100 * 1024 * 1024 {
+        return Err(RenderError::Parse("S05: message exceeds 100 MB".into()));
+    }
+
+    // D570: 155 個の `has_*_marks` はヘッダのみを見るため、ヘッダ部分だけを
+    // 一度切り出して渡す (以前は各関数が本文ごと全体を複製・小文字化していた)。
+    let hdr = header_section(raw);
+    // D系検出器は本文まで含むメッセージ全体を走査する (boundary 行等の
+    // 本文側兆候を見るため、hdr ではなく raw を渡す)。
+    let bytes = raw;
+
+    let MimeFields {
+        message_id,
+        from,
+        to,
+        cc,
+        subject,
+        date,
+        text_body,
+        html_body,
+        attachments,
+        auth_results,
+        reply_to,
+        return_path,
+        sender,
+        in_reply_to,
+        references,
+        dkim_signature,
+        list_unsubscribe,
+    } = extract_mime_fields(raw)?;
 
     // D279: boundary= パラメータ欠落
     let missing_boundary_param = has_missing_boundary_param(bytes);
@@ -131419,6 +131483,50 @@ mod tests {
         assert!(has_esim_marks(m1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_esim_marks(clean));
+    }
+
+    #[test]
+    fn extract_mime_fields_は構造フィールドを抽出する() {
+        let raw = b"From: Alice <alice@example.com>\r\n\
+                    To: Bob <bob@example.com>\r\n\
+                    Cc: Carol <carol@example.com>\r\n\
+                    Subject: MIME extraction\r\n\
+                    Message-ID: <split-phase@example.com>\r\n\
+                    MIME-Version: 1.0\r\n\
+                    Content-Type: multipart/mixed; boundary=\"fields\"\r\n\
+                    \r\n\
+                    --fields\r\n\
+                    Content-Type: text/plain; charset=utf-8\r\n\
+                    \r\n\
+                    Extracted body text.\r\n\
+                    --fields\r\n\
+                    Content-Type: application/pdf\r\n\
+                    Content-Disposition: attachment; filename=\"a.pdf\"\r\n\
+                    \r\n\
+                    %PDF-1.4\r\n\
+                    --fields--\r\n";
+        let fields = extract_mime_fields(raw).expect("MIME fields");
+
+        assert_eq!(fields.from[0].addr.as_string(), "alice@example.com");
+        assert_eq!(fields.to[0].addr.as_string(), "bob@example.com");
+        assert_eq!(fields.cc[0].addr.as_string(), "carol@example.com");
+        assert_eq!(fields.subject.as_deref(), Some("MIME extraction"));
+        assert_eq!(
+            fields.message_id.as_deref(),
+            Some("split-phase@example.com")
+        );
+        assert!(
+            fields
+                .text_body
+                .as_deref()
+                .is_some_and(|body| body.contains("Extracted body text."))
+        );
+        assert_eq!(fields.attachments.len(), 1);
+        assert_eq!(fields.attachments[0].filename, "a.pdf");
+        assert_eq!(
+            fields.attachments[0].declared_mime,
+            "application/pdf"
+        );
     }
 }
 
