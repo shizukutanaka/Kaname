@@ -12005,7 +12005,7 @@ mod tests {
     /// フォルダ一括解析は Pro ゲート対象 — ライセンス無しでは
     /// `PRO_REQUIRED:` 接頭辞のエラーで走査本体に到達しない。
     #[tokio::test]
-    async fn mail_scan_folder_はFreeではPro要求エラーを返す() -> Result<(), String> {
+    async fn mail_scan_folder_は無料層ではpro要求エラーを返す() -> Result<(), String> {
         let _serial = test_serial().await;
         reset_globals().await;
         kaname_license::deactivate();
