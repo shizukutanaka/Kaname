@@ -14957,6 +14957,21 @@ const LICENSE_SETTING_KEY: &str = "license_key";
 /// 呼び出し側は `license_lock()` で直列化すること — 解除処理と並行すると
 /// 古い保存値が解除直後に復元される競合がある (Devin Review 指摘)。
 async fn ensure_license_loaded_locked() {
+    // DB が後から開いたとき、未保存のアクティブキーを書き戻す —
+    // 書き戻せなければ persisted=false のまま (Devin Review 指摘:
+    // メモリのみのキーを保存済みと偽らない)。
+    let pending = pending_license_key().lock().await.clone();
+    if let Some(k) = pending {
+        if let Some(store) = store_slot().lock().await.clone() {
+            if store
+                .set_setting("local", LICENSE_SETTING_KEY, &k)
+                .await
+                .is_ok()
+            {
+                *pending_license_key().lock().await = None;
+            }
+        }
+    }
     if kaname_license::status(now_unix()).is_some() {
         return;
     }
@@ -14968,6 +14983,12 @@ async fn ensure_license_loaded_locked() {
             let _ = kaname_license::activate(&key, now_unix());
         }
     }
+}
+
+/// DB 未接続の間に有効化されたキーの遅延保存キュー。
+fn pending_license_key() -> &'static tokio::sync::Mutex<Option<String>> {
+    static P: std::sync::OnceLock<tokio::sync::Mutex<Option<String>>> = std::sync::OnceLock::new();
+    P.get_or_init(|| tokio::sync::Mutex::new(None))
 }
 
 /// ライセンス読み書きを直列化するロック。
@@ -14998,9 +15019,8 @@ pub struct LicenseView {
 pub async fn license_status() -> LicenseView {
     let _guard = license_lock().lock().await;
     ensure_license_loaded_locked().await;
-    // 復元された (永続化された) ライセンスなら persisted=true。
-    // メモリのみの状態は区別できないため、DB が生きているときは
-    // 保存値の有無で判定する。
+    // persisted = 保存済みのキーが今のアクティブキーと一致する場合のみ。
+    // メモリのみの有効化 (DB 未接続) は pending に残り false になる。
     let stored = match store_slot().lock().await.clone() {
         Some(store) => store
             .get_setting("local", LICENSE_SETTING_KEY)
@@ -15009,7 +15029,7 @@ pub async fn license_status() -> LicenseView {
             .flatten()
             .is_some_and(|v| !v.is_empty()),
         None => false,
-    };
+    } && pending_license_key().lock().await.is_none();
     match kaname_license::status(now_unix()) {
         Some(l) => LicenseView {
             tier: "pro".to_string(),
@@ -15037,18 +15057,26 @@ pub async fn license_status() -> LicenseView {
 /// メモリのみ有効化し `persisted=false` で通知する。
 pub async fn license_activate(key: String) -> Result<LicenseView, String> {
     let _guard = license_lock().lock().await;
-    let lic = kaname_license::verify(key.trim(), now_unix()).map_err(|e| e.to_string())?;
+    let trimmed = key.trim().to_string();
+    // 検証は1回だけ — 保存待ちの間に期限が越えても二重判定の不整合は起きない
+    // (Devin Review 指摘: verify 後に activate すると時刻がずれる)。
+    let lic = kaname_license::activate(&trimmed, now_unix()).map_err(|e| e.to_string())?;
     let persisted = match store_slot().lock().await.clone() {
-        Some(store) => {
-            store
-                .set_setting("local", LICENSE_SETTING_KEY, key.trim())
-                .await
-                .map_err(|e| format!("ライセンスの保存に失敗しました: {e}"))?;
-            true
-        }
+        Some(store) => match store
+            .set_setting("local", LICENSE_SETTING_KEY, &trimmed)
+            .await
+        {
+            Ok(_) => true,
+            Err(e) => {
+                // 保存できなかったのに成功を返すと再起動で Free に落ちる —
+                // メモリも戻して不整合を残さない。
+                kaname_license::deactivate();
+                return Err(format!("ライセンスの保存に失敗しました: {e}"));
+            }
+        },
         None => false,
     };
-    let _ = kaname_license::activate(key.trim(), now_unix());
+    *pending_license_key().lock().await = if persisted { None } else { Some(trimmed) };
     info!(tier = "pro", persisted, "license activated");
     Ok(LicenseView {
         tier: "pro".to_string(),
@@ -15070,6 +15098,7 @@ pub async fn license_deactivate() -> Result<(), String> {
             .await
             .map_err(|e| format!("ライセンス解除の保存に失敗しました: {e}"))?;
     }
+    *pending_license_key().lock().await = None;
     kaname_license::deactivate();
     Ok(())
 }

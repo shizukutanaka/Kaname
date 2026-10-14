@@ -55,6 +55,7 @@ rand = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
+kaname-license = { path = "../kaname-license", features = ["testing"] }
 tempfile = { workspace = true }
 
 

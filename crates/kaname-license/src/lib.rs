@@ -47,6 +47,11 @@ pub const ISSUER_PUBLIC_KEY: [u8; 32] = [
 /// 巨大キーによる割当て DoS を防ぐ (実キーは数百字)。
 const MAX_KEY_LEN: usize = 4096;
 
+/// 購入者識別子の上限。payload を丸ごと hex 化するため、ここを絞る
+/// ことで発行キーが必ず MAX_KEY_LEN 以内に収まる (検証を通らない
+/// キーを発行しない — Devin Review 指摘)。
+const MAX_RECIPIENT_LEN: usize = 256;
+
 /// ライセンス階層。`Free` は未登録 (全機能の内、Pro 枠だけが制限される)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -141,8 +146,17 @@ fn issue_nonce(to: &str) -> String {
 ///
 /// クライアントには同梱しない秘密鍵 (32 byte シード) が必要。
 /// 販売フロー (Gumroad 等のキー納品) での手動発行や
-/// 発行スクリプトから呼ぶ。
-pub fn issue(seed: &[u8; 32], to: &str, seats: u32, expires_at: Option<u64>) -> String {
+/// 発行スクリプトから呼ぶ。購入者識別子が長すぎる場合は
+/// `Malformed` を返す — 検証を通らないキーは発行しない。
+pub fn issue(
+    seed: &[u8; 32],
+    to: &str,
+    seats: u32,
+    expires_at: Option<u64>,
+) -> Result<String, LicenseError> {
+    if to.len() > MAX_RECIPIENT_LEN {
+        return Err(LicenseError::Malformed);
+    }
     let payload = Payload {
         v: 1,
         tier: Tier::Pro,
@@ -154,11 +168,11 @@ pub fn issue(seed: &[u8; 32], to: &str, seats: u32, expires_at: Option<u64>) -> 
     let json = serde_json::to_string(&payload).unwrap_or_default();
     let key = SigningKey::from_bytes(seed);
     let sig = key.sign(json.as_bytes());
-    format!(
+    Ok(format!(
         "KANAME-{}.{}",
         to_hex(json.as_bytes()),
         to_hex(&sig.to_bytes())
-    )
+    ))
 }
 
 /// 検証コア: 任意の公開鍵でキーを検証する。
@@ -215,10 +229,16 @@ fn slot() -> &'static RwLock<Option<License>> {
 
 /// キーを検証してアクティブ化する。成功で Pro 機能が開放される。
 pub fn activate(key: &str, now_unix: u64) -> Result<License, LicenseError> {
-    activate_with(key, now_unix, &ISSUER_PUBLIC_KEY)
+    let lic = verify(key, now_unix)?;
+    *slot().write().unwrap_or_else(|e| e.into_inner()) = Some(lic.clone());
+    Ok(lic)
 }
 
-/// 任意の公開鍵で検証・アクティブ化する (発行検証・試験用の注入経路)。
+/// 任意の公開鍵で検証・アクティブ化する。
+///
+/// 署名を迂回して Pro を開放できるため本番 API ではなく、
+/// 発行検証・単体試験専用 — `testing` feature / クレート内 test のみ。
+#[cfg(any(test, feature = "testing"))]
 pub fn activate_with(
     key: &str,
     now_unix: u64,
@@ -229,8 +249,10 @@ pub fn activate_with(
     Ok(lic)
 }
 
-/// 検証済みライセンスを直接投入する (テスト・移行専用経路)。
-/// 署名検証を通さないため、テストコードからのみ使うこと。
+/// 検証済みライセンスを直接投入する (署名検証迂回の試験専用経路)。
+/// `testing` feature / クレート内 test でのみ公開 — 本番ビルドには
+/// 存在しない (Devin Review: 迂回経路を本番 API に残さない)。
+#[cfg(any(test, feature = "testing"))]
 pub fn install_license(lic: License) {
     *slot().write().unwrap_or_else(|e| e.into_inner()) = Some(lic);
 }
@@ -288,14 +310,14 @@ mod tests {
     /// `-- --nocapture issuer_vector` で表示し `ISSUER_PUBLIC_KEY_DEV` に貼る。
     #[test]
     fn issuer_vector() {
-        let key = issue(&TEST_SEED, "dev@example.com", 5, None);
+        let key = issue(&TEST_SEED, "dev@example.com", 5, None).expect("issue ok");
         eprintln!("PUB = {:?}", test_pub());
         eprintln!("KEY = {key}");
     }
 
     #[test]
     fn round_trip_pro() {
-        let key = issue(&TEST_SEED, "team@example.com", 10, None);
+        let key = issue(&TEST_SEED, "team@example.com", 10, None).expect("issue ok");
         let lic = verify_with(&key, 1_800_000_000, &test_pub()).expect("valid");
         assert_eq!(lic.tier, Tier::Pro);
         assert_eq!(lic.seats, 10);
@@ -329,7 +351,7 @@ mod tests {
 
     #[test]
     fn rejects_tampered_payload() {
-        let key = issue(&TEST_SEED, "a@b.c", 1, None);
+        let key = issue(&TEST_SEED, "a@b.c", 1, None).expect("issue ok");
         // payload 末尾 1 byte 倒す → 署名不一致
         let tampered = key.replacen("65", "66", 1);
         assert!(matches!(
@@ -340,7 +362,7 @@ mod tests {
 
     #[test]
     fn rejects_wrong_pubkey() {
-        let key = issue(&TEST_SEED, "a@b.c", 1, None);
+        let key = issue(&TEST_SEED, "a@b.c", 1, None).expect("issue ok");
         let other = SigningKey::from_bytes(&[9u8; 32])
             .verifying_key()
             .to_bytes();
@@ -352,7 +374,7 @@ mod tests {
 
     #[test]
     fn expiry_enforced() {
-        let key = issue(&TEST_SEED, "a@b.c", 1, Some(1_700_000_000));
+        let key = issue(&TEST_SEED, "a@b.c", 1, Some(1_700_000_000)).expect("issue ok");
         assert!(matches!(
             verify_with(&key, 1_700_000_001, &test_pub()),
             Err(LicenseError::Expired)
@@ -369,7 +391,7 @@ mod tests {
         ));
         // activate() は埋め込み鍵を使うため、開発鍵の差し替え前は
         // verify_with で直接検証したライセンスを slot へ入れる形を取る。
-        let key = issue(&TEST_SEED, "a@b.c", 1, None);
+        let key = issue(&TEST_SEED, "a@b.c", 1, None).expect("issue ok");
         let lic = verify_with(&key, 0, &test_pub()).expect("valid");
         *slot().write().unwrap_or_else(|e| e.into_inner()) = Some(lic);
         assert!(require(Feature::FolderScan, 0).is_ok());
@@ -377,7 +399,7 @@ mod tests {
 
     #[test]
     fn expired_active_license_downgrades() {
-        let key = issue(&TEST_SEED, "a@b.c", 1, Some(100));
+        let key = issue(&TEST_SEED, "a@b.c", 1, Some(100)).expect("issue ok");
         let lic = verify_with(&key, 0, &test_pub()).expect("valid at issue time");
         *slot().write().unwrap_or_else(|e| e.into_inner()) = Some(lic);
         assert!(status(101).is_none());
@@ -390,7 +412,7 @@ mod tests {
 
     #[test]
     fn deactivate_returns_to_free() {
-        let key = issue(&TEST_SEED, "a@b.c", 1, None);
+        let key = issue(&TEST_SEED, "a@b.c", 1, None).expect("issue ok");
         let lic = verify_with(&key, 0, &test_pub()).expect("valid");
         *slot().write().unwrap_or_else(|e| e.into_inner()) = Some(lic);
         deactivate();
@@ -419,7 +441,7 @@ mod tests {
 
     #[test]
     fn issued_payload_does_not_embed_seed_bytes() {
-        let key = issue(&TEST_SEED, "a@b.c", 1, None);
+        let key = issue(&TEST_SEED, "a@b.c", 1, None).expect("issue ok");
         let body = key.strip_prefix("KANAME-").and_then(|b| b.split_once('.'));
         let payload_hex = body.map(|(p, _)| p).unwrap_or_default();
         let json = String::from_utf8(from_hex(payload_hex).unwrap_or_default()).unwrap_or_default();
