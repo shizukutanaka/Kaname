@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+### Security — 日本語 inline 添付メールで `parse()` が UTF-8 境界外スライスによりパニックする問題と、JMAP 検証エラー経路の同種パニックを修正。
+
 ### Security — D3128補強2: `X-MS-Exchange-Organization-OriginalArrivalTime:` の末尾 `(UTC)` 注記を受理 — 兄弟到着時刻検出器 (`X-Original-ArrivalTime`/`CrossTenant-OriginalArrivalTime`) と文法を一致させ、裸 `UTC`/`(GMT)`/任意後続語は引き続き発火。
 
 ### Security — D3124補強: `dc_each` が折り畳み継続行を元の大小写のまま連結していたのを修正 — 継続行も小文字化し、`from\t8bit`+`To 7bit` 継続等の正当値が誤発火しないように。

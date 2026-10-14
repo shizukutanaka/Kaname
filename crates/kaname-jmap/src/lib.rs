@@ -587,7 +587,7 @@ impl JmapClient {
             {
                 return Err(JmapError::InvalidInput(format!(
                     "添付名が不正です: {:?}",
-                    &a.filename[..a.filename.len().min(40)]
+                    head_at_char_boundary(&a.filename, 40)
                 )));
             }
             if a.mime_type.is_empty()
@@ -597,7 +597,7 @@ impl JmapClient {
             {
                 return Err(JmapError::InvalidInput(format!(
                     "添付の MIME 型が不正です: {:?}",
-                    &a.mime_type[..a.mime_type.len().min(40)]
+                    head_at_char_boundary(&a.mime_type, 40)
                 )));
             }
         }
@@ -609,7 +609,7 @@ impl JmapClient {
             if s.contains('\r') || s.contains('\n') {
                 return Err(JmapError::InvalidInput(format!(
                     "ヘッダーに改行文字は使用できません: {:?}",
-                    &s[..s.len().min(40)]
+                    head_at_char_boundary(s, 40)
                 )));
             }
             Ok(s.to_owned())
@@ -1386,13 +1386,22 @@ fn wrap76(s: &str) -> String {
     out
 }
 
+/// エラーメッセージ用に先頭 `max_bytes` バイト以内で UTF-8 境界に丸めた接頭辞を返す。
+fn head_at_char_boundary(s: &str, max_bytes: usize) -> &str {
+    let mut end = s.len().min(max_bytes);
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
 /// ヘッダー値のバリデーション (テストからも利用)。
 #[cfg(test)]
 fn sanitize_header_value(s: &str) -> Result<String, JmapError> {
     if s.contains('\r') || s.contains('\n') {
         return Err(JmapError::InvalidInput(format!(
             "ヘッダーに改行文字は使用できません: {:?}",
-            &s[..s.len().min(40)]
+            head_at_char_boundary(s, 40)
         )));
     }
     Ok(s.to_owned())
@@ -1409,7 +1418,7 @@ fn validate_addr(addr: &str) -> Result<(), JmapError> {
     let reject = |reason: &str| {
         Err(JmapError::InvalidInput(format!(
             "メールアドレスの形式が不正です ({reason}): {:?}",
-            &addr[..addr.len().min(40)]
+            head_at_char_boundary(addr, 40)
         )))
     };
     if addr.is_empty() {
@@ -1775,6 +1784,112 @@ mod tests {
         ] {
             assert!(validate_addr(bad).is_err(), "{bad} は拒否されるべき");
         }
+    }
+
+    fn test_client() -> JmapClient {
+        JmapClient {
+            session: Session {
+                capabilities: HashMap::new(),
+                accounts: HashMap::new(),
+                primary_accounts: HashMap::new(),
+                username: None,
+                api_url: String::new(),
+                download_url: String::new(),
+                upload_url: String::new(),
+                state: String::new(),
+            },
+            account_id: String::new(),
+            http: reqwest::Client::new(),
+            api_url: String::new(),
+            config: ClientConfig::default(),
+        }
+    }
+
+    fn assert_invalid_input(result: Result<String, JmapError>) {
+        assert!(matches!(result, Err(JmapError::InvalidInput(_))));
+    }
+
+    #[tokio::test]
+    async fn send_email_日本語添付名の不正入力で境界パニックしない() {
+        let client = test_client();
+        let attachment = OutgoingAttachment {
+            filename: format!("{}\"", "あ".repeat(14)),
+            mime_type: "application/octet-stream".into(),
+            data: Vec::new(),
+        };
+        let result = client
+            .send_email(
+                "sender@example.com",
+                &["recipient@example.com"],
+                "件名",
+                "本文",
+                &[attachment],
+            )
+            .await;
+        assert_invalid_input(result);
+    }
+
+    #[tokio::test]
+    async fn send_email_日本語_mime型の不正入力で境界パニックしない() {
+        let client = test_client();
+        let attachment = OutgoingAttachment {
+            filename: "report.txt".into(),
+            mime_type: format!("{};", "あ".repeat(14)),
+            data: Vec::new(),
+        };
+        let result = client
+            .send_email(
+                "sender@example.com",
+                &["recipient@example.com"],
+                "件名",
+                "本文",
+                &[attachment],
+            )
+            .await;
+        assert_invalid_input(result);
+    }
+
+    #[tokio::test]
+    async fn send_email_日本語件名の改行拒否で境界パニックしない() {
+        let client = test_client();
+        let subject = format!("{}\n", "あ".repeat(14));
+        let result = client
+            .send_email(
+                "sender@example.com",
+                &["recipient@example.com"],
+                &subject,
+                "本文",
+                &[],
+            )
+            .await;
+        assert_invalid_input(result);
+    }
+
+    #[tokio::test]
+    async fn send_email_日本語アドレスの空白拒否で境界パニックしない() {
+        let client = test_client();
+        let from = format!("{} @example.com", "あ".repeat(14));
+        let result = client
+            .send_email(&from, &["recipient@example.com"], "件名", "本文", &[])
+            .await;
+        assert_invalid_input(result);
+    }
+
+    #[test]
+    fn head_at_char_boundary_は_utf8境界で切り詰める() {
+        assert_eq!(head_at_char_boundary("abcdef", 3), "abc");
+        assert_eq!(head_at_char_boundary("あいう", 4), "あ");
+        assert_eq!(head_at_char_boundary("あいう", 20), "あいう");
+        assert_eq!(head_at_char_boundary("", 4), "");
+    }
+
+    #[test]
+    fn sanitize_header_value_は日本語の長い改行を安全に拒否する() {
+        let value = format!("{}\n", "あ".repeat(14));
+        assert!(matches!(
+            sanitize_header_value(&value),
+            Err(JmapError::InvalidInput(_))
+        ));
     }
 
     // ── query_emails limit キャップテスト ─────────────────────────────────────

@@ -93235,7 +93235,11 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
             .find("\n\n")
             .map(|e| hpos + e)
             .unwrap_or(lower.len());
-        let hdr = &lower[hpos..hdr_end.min(hpos + 500)];
+        let mut cut = hdr_end.min(hpos + 500);
+        while !lower.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        let hdr = &lower[hpos..cut];
         if hdr.contains("inline") {
             // 同じ宣言ブロック内の filename= を拾い危険拡張子判定
             if let Some(frel) = hdr.find("filename=") {
@@ -137399,4 +137403,44 @@ fn d3130_msav_bad() {
     assert!(!has_msav_bad(b"X-MS-Exchange-Organization-AVStamp-Service: 1.0.0.0\r\n\r\nbody"));
     assert!(!has_msav_bad(b"X-MS-Exchange-Organization-AVStamp-Service: 2.4.12345.9\r\n\r\nbody"));
     assert!(!has_msav_bad(b"From: a@b\r\n\r\nbody"));
+}
+
+#[cfg(test)]
+fn inline_japanese_mail(pad: usize, disposition: &str) -> String {
+    let body = "お世話になっております。請求書を添付いたします。ご確認のほどよろしくお願いいたします。".repeat(6);
+    format!(
+        "From: sender@example.com\r\n\
+         To: recipient@example.com\r\n\
+         Subject: ご確認ください\r\n\
+         MIME-Version: 1.0\r\n\
+         Content-Type: multipart/mixed; boundary=\"B\"\r\n\
+         \r\n\
+         --B\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\
+         {disposition}\r\n\
+         \r\n\
+         {}{body}\r\n\
+         --B--\r\n",
+        "x".repeat(pad)
+    )
+}
+
+#[test]
+fn parse_は日本語inline添付メールで_utf8境界パニックしない() {
+    for pad in 0..3 {
+        let raw = inline_japanese_mail(pad, "Content-Disposition: inline");
+        assert!(parse(raw.as_bytes()).is_ok(), "pad={pad}");
+    }
+}
+
+#[test]
+fn inline危険添付検出は日本語本文後も判定する() {
+    let body = "お世話になっております。請求書を添付いたします。ご確認のほどよろしくお願いいたします。".repeat(6);
+    let dangerous = format!(
+        "Content-Disposition: inline; filename=\"evil.exe\"\r\n\r\n{body}"
+    );
+    assert!(has_inline_dangerous_attachment(dangerous.as_bytes()));
+
+    let plain = inline_japanese_mail(0, "Content-Disposition: inline");
+    assert!(!has_inline_dangerous_attachment(plain.as_bytes()));
 }
