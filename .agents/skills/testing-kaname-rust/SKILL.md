@@ -138,3 +138,11 @@ Check which path the harness actually includes (`grep 'include!' harness_rNN.rs`
 - **Gate**: `cargo test --offline -p kaname-render --lib` is the full-suite gate (2410 tests as of r501); filter `--lib dNN` for scoped reruns.
 - **vite :1420 recurring down**: `npm run dev` dies between rounds (3 consecutive). Check `curl -s -o /dev/null -w '%{http_code}' localhost:1420` first; if 000, restart `npm run dev` before the UI pass.
 - **Folded-continuation fixtures**: write real CRLF + leading-WSP lines (`hdr: a\r\n\tB`) — continuation lowercase is applied in `dc_each`; hostname-grammar detectors should FIRE on folded mid-token values (space survives unfolding).
+
+## Round-502+ notes (license / Pro gate)
+
+- **Pro-gate mock recipe**: `mail_scan_folder` の Free 拒否は `invoke` mock が `PRO_REQUIRED:` プレフィックス付きで reject する形を再現 (実コマンドは `Err("PRO_REQUIRED: この機能は Pro ライセンスが必要です")`)。EmlImport はこの接頭辞でエラーボックスではなく紫色の Pro 案内カードを出す。
+- **license commands**: `license_status` → `{tier:"free"|"pro",seats,expires_at,licensed_to}`、`license_activate` → 成功で同形 / 失敗は `ライセンスキーの形式が不正です` 等の Err 文字列、`license_deactivate` → `()`。
+- **開発キー**: `ISSUER_PUBLIC_KEY_DEV` (シード `[7;32]`) に対応する実キーは `cargo test -p kaname-license issuer_vector -- --nocapture` で再生成できる (PUB/KEY を stderr 出力)。UI mock の `license_activate` にはその KEY を成功応答として返す。
+- **EmlImport 位置**: 下部ナビ「ファイル解析」(~608,699)。Pro パネルは `tier!=="pro"` で常時表示、`needPro` で紫色強調に切替。
+- **署名経路の境界**: UI mock は `window.__TAURI_INTERNALS__.invoke` 層のため実 ed25519 検証は lib テスト (13件) でしか担保されない — 両方を報告に明記すること。
