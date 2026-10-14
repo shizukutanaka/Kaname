@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+### Security — D3128補強2: `X-MS-Exchange-Organization-OriginalArrivalTime:` の末尾 `(UTC)` 注記を受理 — 兄弟到着時刻検出器 (`X-Original-ArrivalTime`/`CrossTenant-OriginalArrivalTime`) と文法を一致させ、裸 `UTC`/`(GMT)`/任意後続語は引き続き発火。
+
 ### Security — D3124補強: `dc_each` が折り畳み継続行を元の大小写のまま連結していたのを修正 — 継続行も小文字化し、`from\t8bit`+`To 7bit` 継続等の正当値が誤発火しないように。
 ### Security — D3127補強: `X-MS-Exchange-Transport-OriginalRecipient:` の宛名判定を引用ローカル部対応へ — `"sales@east"@example.com` を受理し、`user@x.com extra` (後続ゴミ) は発火。
 ### Security — D3128補強: `X-MS-Exchange-Organization-OriginalArrivalTime:` を `DD Mon YYYY HH:MM:SS` 厳密4語化 — 日 1–31・時 0–23・分秒 0–59 の範囲検査と後続語拒否を追加。
