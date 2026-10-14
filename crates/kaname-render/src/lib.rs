@@ -55486,7 +55486,7 @@ fn has_msoat_bad(bytes: &[u8]) -> bool {
                 "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep",
                 "oct", "nov", "dec",
             ];
-            !(w.len() == 4
+            !((w.len() == 4 || (w.len() == 5 && w[4] == "(utc)"))
                 && w[0].len() == 2
                 && w[0].parse::<u8>().is_ok_and(|d| (1..=31).contains(&d))
                 && months.contains(&w[1])
@@ -137371,7 +137371,10 @@ fn d3128_msoat_bad() {
     assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 99 Oct 2026 10:30:00\r\n\r\nbody"));
     assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:60\r\n\r\nbody"));
     assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00 forged\r\n\r\nbody"));
+    assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00 UTC\r\n\r\nbody"));
+    assert!(has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00 (GMT)\r\n\r\nbody"));
     assert!(!has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00\r\n\r\nbody"));
+    assert!(!has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00 (UTC)\r\n\r\nbody"));
     assert!(!has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01 Oct 2026 10:30:00.123\r\n\r\nbody"));
     assert!(!has_msoat_bad(b"X-MS-Exchange-Organization-OriginalArrivalTime: 01\r\n\tOct 2026 10:30:00\r\n\r\nbody"));
     assert!(!has_msoat_bad(b"From: a@b\r\n\r\nbody"));
