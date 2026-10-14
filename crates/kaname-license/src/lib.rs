@@ -128,6 +128,15 @@ fn from_hex(s: &str) -> Result<Vec<u8>, LicenseError> {
         .collect())
 }
 
+/// 発行ごとの一意化用 nonce。秘密鍵シード由来の値を payload (公開) に
+/// 載せないよう、プロセス乱数鍵の SipHash から生成する。
+fn issue_nonce(to: &str) -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write(to.as_bytes());
+    format!("{:016x}", h.finish())
+}
+
 /// 販売者側: payload に署名してライセンスキーを発行する。
 ///
 /// クライアントには同梱しない秘密鍵 (32 byte シード) が必要。
@@ -140,7 +149,7 @@ pub fn issue(seed: &[u8; 32], to: &str, seats: u32, expires_at: Option<u64>) -> 
         seats,
         exp: expires_at,
         to: to.to_string(),
-        nonce: to_hex(&seed[..4]),
+        nonce: issue_nonce(to),
     };
     let json = serde_json::to_string(&payload).unwrap_or_default();
     let key = SigningKey::from_bytes(seed);
@@ -406,6 +415,16 @@ mod tests {
         // 旧開発鍵ペアのキーは埋め込み鍵では拒否される
         let legacy = "KANAME-7b2276223a312c2274696572223a2270726f222c227365617473223a352c22657870223a6e756c6c2c22746f223a22646576406578616d706c652e636f6d222c226e6f6e6365223a223037303730373037227d.f53a7a4cff02147c94bed0c18e91352ec04d3008cca26e951ff2ce135d9a56b4805dc98f7ad2f37016a780da22a95c4cca2152491348b082535009d540aa2f08";
         assert!(matches!(verify(legacy, 0), Err(LicenseError::BadSignature)));
+    }
+
+    #[test]
+    fn issued_payload_does_not_embed_seed_bytes() {
+        let key = issue(&TEST_SEED, "a@b.c", 1, None);
+        let body = key.strip_prefix("KANAME-").and_then(|b| b.split_once('.'));
+        let payload_hex = body.map(|(p, _)| p).unwrap_or_default();
+        let json = String::from_utf8(from_hex(payload_hex).unwrap_or_default()).unwrap_or_default();
+        assert!(!json.contains(&to_hex(&TEST_SEED[..4])));
+        assert!(verify_with(&key, 0, &test_pub()).is_ok());
     }
 
     #[test]
