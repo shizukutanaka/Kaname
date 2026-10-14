@@ -30,24 +30,22 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::sync::{OnceLock, RwLock};
 
-/// 検証に使う発行者公開鍵 (開発既定値)。
+/// 検証に使う発行者公開鍵。
 ///
-/// 本番では販売者固有の鍵ペアに差し替え、秘密鍵はリポジトリ外で
-/// 管理する (販売者ツール `issue()` のみが必要とする)。
-pub const ISSUER_PUBLIC_KEY: [u8; 32] = kaname_dev_issuer_public_key();
-
-const fn kaname_dev_issuer_public_key() -> [u8; 32] {
-    // テストで生成した決定的な開発鍵ペアの公開鍵。
-    // 対応する秘密鍵は開発用プレースホルダであり本番出荷では差し替える。
-    ISSUER_PUBLIC_KEY_DEV
-}
-
-// cargo test --offline -p kaname-license -- --nocapture issuer_vector
-// で生成・差し替えする開発用公開鍵 (シード [7;32] の開発鍵ペア)。
-const ISSUER_PUBLIC_KEY_DEV: [u8; 32] = [
-    234, 74, 108, 99, 226, 156, 82, 10, 190, 245, 80, 123, 19, 46, 197, 249, 149, 71, 118, 174,
-    190, 190, 123, 146, 66, 30, 234, 105, 20, 70, 210, 44,
+/// 対応する秘密鍵はリポジトリに**含まれない** — 販売者の端末にのみ
+/// 保持し、`issue()` へ実行時に渡す。公開リポジトリのため、ここに
+/// テスト用シード由来の鍵を置くと誰でも有効キーを発行できる
+/// (Devin Review 指摘): シード非公開の鍵ペアを埋め込み、販売者は
+/// 自前の鍵ペア生成 (`cargo test -p kaname-license keygen -- --ignored`
+/// 参考) とこの値の差し替えで運用する。
+pub const ISSUER_PUBLIC_KEY: [u8; 32] = [
+    97, 243, 131, 217, 21, 247, 94, 180, 135, 216, 58, 78, 16, 53, 68, 166, 198, 142, 22, 206, 106,
+    217, 153, 212, 195, 89, 225, 66, 51, 48, 36, 139,
 ];
+
+/// ライセンスキー文字列の上限。これを超える入力は検証前に拒否し、
+/// 巨大キーによる割当て DoS を防ぐ (実キーは数百字)。
+const MAX_KEY_LEN: usize = 4096;
 
 /// ライセンス階層。`Free` は未登録 (全機能の内、Pro 枠だけが制限される)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -163,6 +161,9 @@ pub fn verify_with(
     now_unix: u64,
     pub_bytes: &[u8; 32],
 ) -> Result<License, LicenseError> {
+    if key.len() > MAX_KEY_LEN {
+        return Err(LicenseError::Malformed);
+    }
     let body = key.strip_prefix("KANAME-").ok_or(LicenseError::Malformed)?;
     let (payload_hex, sig_hex) = body.split_once('.').ok_or(LicenseError::Malformed)?;
     let payload_bytes = from_hex(payload_hex)?;
@@ -205,9 +206,24 @@ fn slot() -> &'static RwLock<Option<License>> {
 
 /// キーを検証してアクティブ化する。成功で Pro 機能が開放される。
 pub fn activate(key: &str, now_unix: u64) -> Result<License, LicenseError> {
-    let lic = verify(key, now_unix)?;
+    activate_with(key, now_unix, &ISSUER_PUBLIC_KEY)
+}
+
+/// 任意の公開鍵で検証・アクティブ化する (発行検証・試験用の注入経路)。
+pub fn activate_with(
+    key: &str,
+    now_unix: u64,
+    pub_bytes: &[u8; 32],
+) -> Result<License, LicenseError> {
+    let lic = verify_with(key, now_unix, pub_bytes)?;
     *slot().write().unwrap_or_else(|e| e.into_inner()) = Some(lic.clone());
     Ok(lic)
+}
+
+/// 検証済みライセンスを直接投入する (テスト・移行専用経路)。
+/// 署名検証を通さないため、テストコードからのみ使うこと。
+pub fn install_license(lic: License) {
+    *slot().write().unwrap_or_else(|e| e.into_inner()) = Some(lic);
 }
 
 /// 現在のライセンスを外す (Free に戻る)。
@@ -220,10 +236,14 @@ pub fn deactivate() {
 /// 保存された期限付きライセンスが失効していても残したままにせず
 /// Free 扱いに戻すため、呼び出し時に期限を再評価する。
 pub fn status(now_unix: u64) -> Option<License> {
-    let lic = slot().read().unwrap_or_else(|e| e.into_inner()).clone()?;
+    // 期限評価と削除を同一の書き込みロック内で行う — 読み取り後に
+    // 別スレッドの activate が成功した場合、古い期限切れ判定が
+    // 新しいライセンスを消してしまう競合を防ぐ (Devin Review 指摘)。
+    let mut guard = slot().write().unwrap_or_else(|e| e.into_inner());
+    let lic = guard.clone()?;
     match lic.expires_at {
         Some(exp) if now_unix > exp => {
-            deactivate();
+            *guard = None;
             None
         }
         _ => Some(lic),
@@ -374,13 +394,27 @@ mod tests {
 
     #[test]
     fn embedded_key_round_trip() {
-        // issuer_vector が出力した実キーで同梱公開鍵経路を検証する。
-        let key = "KANAME-7b2276223a312c2274696572223a2270726f222c227365617473223a352c22657870223a6e756c6c2c22746f223a22646576406578616d706c652e636f6d222c226e6f6e6365223a223037303730373037227d.f53a7a4cff02147c94bed0c18e91352ec04d3008cca26e951ff2ce135d9a56b4805dc98f7ad2f37016a780da22a95c4cca2152491348b082535009d540aa2f08";
+        // 埋め込み公開鍵 (シード非公開) で署名された実キーで同梱鍵経路を検証。
+        // 旧開発鍵ペア (公開シード [7;32]) のベクトルは BadSignature で
+        // 拒否されることも併せて確認する (Devin Review: 公開シード廃止)。
+        let key = "KANAME-7b2276223a312c2274696572223a2270726f222c227365617473223a352c22657870223a6e756c6c2c22746f223a22646576406578616d706c652e636f6d222c226e6f6e6365223a226b616e616d65227d.fbae5c1f8222fb32164178ab3c90366d1d2c1f3a6cf9bc16e76e9a394fd32ba384d2676adcf44bc4f230ca768434f1f48aa0455ec2ada93252b29dc469f7ce09";
         let lic = activate(key, 1_800_000_000).expect("embedded key verifies");
         assert_eq!(lic.tier, Tier::Pro);
         assert_eq!(lic.licensed_to, "dev@example.com");
         assert!(require(Feature::FolderScan, 1_800_000_000).is_ok());
         deactivate();
+        // 旧開発鍵ペアのキーは埋め込み鍵では拒否される
+        let legacy = "KANAME-7b2276223a312c2274696572223a2270726f222c227365617473223a352c22657870223a6e756c6c2c22746f223a22646576406578616d706c652e636f6d222c226e6f6e6365223a223037303730373037227d.f53a7a4cff02147c94bed0c18e91352ec04d3008cca26e951ff2ce135d9a56b4805dc98f7ad2f37016a780da22a95c4cca2152491348b082535009d540aa2f08";
+        assert!(matches!(verify(legacy, 0), Err(LicenseError::BadSignature)));
+    }
+
+    #[test]
+    fn rejects_oversized_key() {
+        let huge = format!("KANAME-{}", "aa".repeat(3000));
+        assert!(matches!(
+            verify_with(&huge, 0, &test_pub()),
+            Err(LicenseError::Malformed)
+        ));
     }
 
     #[test]

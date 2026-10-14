@@ -9959,7 +9959,10 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
     info!(path=%redact_path(&path), "mail_scan_folder");
     // Pro ゲート: フォルダ一括解析は業務量に比例する処理のため有償枠。
     // Free 層には購入導線つきの構造化エラーを返す (I5: キー本文はログしない)。
-    ensure_license_loaded().await;
+    {
+        let _guard = license_lock().lock().await;
+        ensure_license_loaded_locked().await;
+    }
     kaname_license::require(kaname_license::Feature::FolderScan, now_unix())
         .map_err(|e| format!("PRO_REQUIRED: {e}"))?;
 
@@ -11970,6 +11973,15 @@ mod tests {
     async fn mail_scan_folder_はネストしたフォルダ内のemlも解析する() -> Result<(), String> {
         let _serial = test_serial().await;
         reset_globals().await;
+        // フォルダ一括解析は Pro ゲート対象 — テストは検証済みライセンスを
+        // 直接投入して走査本体に到達する (署名経路は kaname-license 側で検証)。
+        kaname_license::install_license(kaname_license::License {
+            version: 1,
+            tier: kaname_license::Tier::Pro,
+            seats: 1,
+            expires_at: None,
+            licensed_to: "test".to_string(),
+        });
         let dir = std::env::temp_dir().join(format!("kaname-d149-{}", std::process::id()));
         let nested = dir.join("INBOX").join("重要");
         std::fs::create_dir_all(&nested).map_err(|e| e.to_string())?;
@@ -11987,6 +11999,22 @@ mod tests {
             r.emails.iter().any(|e| e.file == "nested.eml"),
             "ネストしたファイルが結果に含まれるべき"
         );
+        Ok(())
+    }
+
+    /// フォルダ一括解析は Pro ゲート対象 — ライセンス無しでは
+    /// `PRO_REQUIRED:` 接頭辞のエラーで走査本体に到達しない。
+    #[tokio::test]
+    async fn mail_scan_folder_はFreeではPro要求エラーを返す() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        kaname_license::deactivate();
+        let dir = std::env::temp_dir().join(format!("kaname-progate-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        match mail_scan_folder(dir.to_string_lossy().into_owned()).await {
+            Err(e) if e.starts_with("PRO_REQUIRED") => {}
+            other => return Err(format!("Free 層で PRO_REQUIRED 以外が返った: {other:?}")),
+        }
         Ok(())
     }
 
@@ -14925,7 +14953,10 @@ const LICENSE_SETTING_KEY: &str = "license_key";
 /// 起動後・再起動後にメモリのライセンスが空なら設定から復元する。
 /// 検証は kaname-license の署名検証を必ず通る (保存値の改竄は
 /// BadSignature で Free になる)。
-async fn ensure_license_loaded() {
+///
+/// 呼び出し側は `license_lock()` で直列化すること — 解除処理と並行すると
+/// 古い保存値が解除直後に復元される競合がある (Devin Review 指摘)。
+async fn ensure_license_loaded_locked() {
     if kaname_license::status(now_unix()).is_some() {
         return;
     }
@@ -14933,8 +14964,18 @@ async fn ensure_license_loaded() {
         return;
     };
     if let Ok(Some(key)) = store.get_setting("local", LICENSE_SETTING_KEY).await {
-        let _ = kaname_license::activate(&key, now_unix());
+        if !key.is_empty() {
+            let _ = kaname_license::activate(&key, now_unix());
+        }
     }
+}
+
+/// ライセンス読み書きを直列化するロック。
+/// store への保存とメモリ状態の更新を同一区間に入れることで、
+/// 解除直後に古いキーが復元される競合を防ぐ。
+fn license_lock() -> &'static tokio::sync::Mutex<()> {
+    static L: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+    L.get_or_init(|| tokio::sync::Mutex::new(()))
 }
 
 /// フロント向けのライセンス状態。
@@ -14948,50 +14989,87 @@ pub struct LicenseView {
     pub expires_at: Option<u64>,
     /// 購入者識別子 (設定画面の表示用)
     pub licensed_to: Option<String>,
+    /// 設定 DB へ保存済みか。false なら再起動で失効する旨 UI が示す
+    /// (Devin Review: 非永続化を成功と偽らない)。
+    pub persisted: bool,
 }
 
 /// 現在のライセンス状態。設定からの遅延復元込み。
 pub async fn license_status() -> LicenseView {
-    ensure_license_loaded().await;
+    let _guard = license_lock().lock().await;
+    ensure_license_loaded_locked().await;
+    // 復元された (永続化された) ライセンスなら persisted=true。
+    // メモリのみの状態は区別できないため、DB が生きているときは
+    // 保存値の有無で判定する。
+    let stored = match store_slot().lock().await.clone() {
+        Some(store) => store
+            .get_setting("local", LICENSE_SETTING_KEY)
+            .await
+            .ok()
+            .flatten()
+            .is_some_and(|v| !v.is_empty()),
+        None => false,
+    };
     match kaname_license::status(now_unix()) {
         Some(l) => LicenseView {
             tier: "pro".to_string(),
             seats: l.seats,
             expires_at: l.expires_at,
             licensed_to: Some(l.licensed_to),
+            persisted: stored,
         },
         None => LicenseView {
             tier: "free".to_string(),
             seats: 0,
             expires_at: None,
             licensed_to: None,
+            persisted: false,
         },
     }
 }
 
 /// ライセンスキーを検証・アクティブ化して設定に保存する。
 /// 失敗時は何も保存せずエラー理由を返す。
+///
+/// 保存順序: 設定 DB → メモリ。DB 書込みに失敗した場合はメモリも
+/// 更新せずエラーを返す — 「見えている状態」と「再起動後の状態」の
+/// 不整合を避けるため (Devin Review 指摘)。DB が無い環境では
+/// メモリのみ有効化し `persisted=false` で通知する。
 pub async fn license_activate(key: String) -> Result<LicenseView, String> {
-    let lic = kaname_license::activate(key.trim(), now_unix()).map_err(|e| e.to_string())?;
-    if let Some(store) = store_slot().lock().await.clone() {
-        let _ = store
-            .set_setting("local", LICENSE_SETTING_KEY, key.trim())
-            .await;
-    }
-    info!(tier = "pro", "license activated");
+    let _guard = license_lock().lock().await;
+    let lic = kaname_license::verify(key.trim(), now_unix()).map_err(|e| e.to_string())?;
+    let persisted = match store_slot().lock().await.clone() {
+        Some(store) => {
+            store
+                .set_setting("local", LICENSE_SETTING_KEY, key.trim())
+                .await
+                .map_err(|e| format!("ライセンスの保存に失敗しました: {e}"))?;
+            true
+        }
+        None => false,
+    };
+    let _ = kaname_license::activate(key.trim(), now_unix());
+    info!(tier = "pro", persisted, "license activated");
     Ok(LicenseView {
         tier: "pro".to_string(),
         seats: lic.seats,
         expires_at: lic.expires_at,
         licensed_to: Some(lic.licensed_to),
+        persisted,
     })
 }
 
 /// ライセンスを解除して Free に戻す。
+/// 設定 DB があるのに書込めない場合はエラーを返し、メモリ状態も
+/// そのままにする (解除成功の見せかけで再起動時に復活する事故を防ぐ)。
 pub async fn license_deactivate() -> Result<(), String> {
-    kaname_license::deactivate();
+    let _guard = license_lock().lock().await;
     if let Some(store) = store_slot().lock().await.clone() {
-        let _ = store.set_setting("local", LICENSE_SETTING_KEY, "").await;
+        store
+            .set_setting("local", LICENSE_SETTING_KEY, "")
+            .await
+            .map_err(|e| format!("ライセンス解除の保存に失敗しました: {e}"))?;
     }
+    kaname_license::deactivate();
     Ok(())
 }

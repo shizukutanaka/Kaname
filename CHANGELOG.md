@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-### Added — 収益化: オフライン署名ライセンス (Pro ゲート)。新クレート `kaname-license` は ed25519 署名付きライセンスキー (`KANAME-<hex>.<hex>`) を同梱公開鍵のみでローカル検証 — 課金サーバ・テレメトリ・外部通信なし。発行 API `issue()` は販売者側で秘密鍵をリポジトリ外管理。Pro ゲート第1号はフォルダ一括スキャン (`Feature::FolderScan`) で、未登録時は `PRO_REQUIRED:` 構造化エラーを返す。`license_status`/`license_activate`/`license_deactivate` コマンドと設定保存 (再起動後の遅延復元)、EmlImport の Pro パネル (キー入力・有効化・購入導線) を追加。
+### Added — 収益化: オフライン署名ライセンス (Pro ゲート)。新クレート `kaname-license` は ed25519 署名付きライセンスキー (`KANAME-<hex>.<hex>`) を同梱公開鍵のみでローカル検証 — 課金サーバ・テレメトリ・外部通信なし。発行 API `issue()` は販売者側で秘密鍵をリポジトリ外管理。Pro ゲート第1号はフォルダ一括スキャン (`Feature::FolderScan`) で、未登録時は `PRO_REQUIRED:` 構造化エラーを返す。`license_status`/`license_activate`/`license_deactivate` コマンドと設定保存 (再起動後の遅延復元)、EmlImport の Pro パネル (キー入力・有効化・購入導線) を追加。Review 対応で強化: 埋め込み公開鍵はシード非公開の鍵ペアに差替 (旧開発鍵ペア廃止)、キー長上限 4KiB、期限評価+メモリ更新を書き込みロック内で直列化、設定 DB 書込失敗をエラー化し `persisted` フラグで UI に通知、`license_lock` で復元/有効化/解除を直列化。
 
 ### Security — D3124補強: `dc_each` が折り畳み継続行を元の大小写のまま連結していたのを修正 — 継続行も小文字化し、`from\t8bit`+`To 7bit` 継続等の正当値が誤発火しないように。
 ### Security — D3127補強: `X-MS-Exchange-Transport-OriginalRecipient:` の宛名判定を引用ローカル部対応へ — `"sales@east"@example.com` を受理し、`user@x.com extra` (後続ゴミ) は発火。

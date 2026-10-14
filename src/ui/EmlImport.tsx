@@ -110,6 +110,7 @@ interface LicenseView {
   seats: number;
   expires_at: number | null;
   licensed_to: string | null;
+  persisted: boolean;
 }
 
 export function EmlImport() {
@@ -312,6 +313,7 @@ export function EmlImport() {
         }}>
           Pro ライセンス有効{license()?.licensed_to ? ` (${license()?.licensed_to})` : ""}
           {license()?.expires_at ? ` — 期限 ${new Date((license()?.expires_at ?? 0) * 1000).toLocaleDateString()}` : ""}
+          {license()?.persisted === false ? " — 設定DB未接続のため再起動で失効します" : ""}
         </div>
       </Show>
 
