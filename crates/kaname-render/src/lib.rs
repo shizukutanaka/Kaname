@@ -13914,10 +13914,11 @@ pub fn has_undeclared_base64_block(raw: &[u8]) -> bool {
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
+                    let b = b.to_ascii_lowercase();
                     !b.is_empty()
                         && declared
                             .iter()
-                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b.as_str()))
                 });
             if is_delim {
                 run = 0;
@@ -14110,6 +14111,7 @@ pub fn has_boundary_semicolon(raw: &[u8]) -> bool {
 /// 宣言された boundary 値を収集する (内部用 — D1367/D1368)。
 /// 列 0 の `content-type:` 行から `boundary=` 値を取る。クオート値は
 /// 内側を、非クオートは `;`/空白までを値とする。
+/// 値は ASCII 小文字化済みのため、呼び出し側も小文字化した delimiter token と比較する。
 fn declared_boundaries(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     for l in text.to_ascii_lowercase().lines() {
@@ -14146,6 +14148,10 @@ fn decode_transfer_body(cte: &str, body: &str) -> Vec<u8> {
     } else {
         body.as_bytes().to_vec()
     }
+}
+
+fn is_textual_content_type(content_type: &str) -> bool {
+    content_type.is_empty() || content_type.starts_with("text/")
 }
 
 /// quoted-printable 本文の最小デコーダ — `=XX` 16進と行末 `=` の
@@ -14196,6 +14202,7 @@ pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
     let text = text.replace("\r\n", "\n");
     let mut in_headers = true;
     let mut cte = String::new();
+    let mut content_type = String::new();
     let mut enc_body = String::new();
     let declared = declared_boundaries(&text);
     for l in text.lines() {
@@ -14203,6 +14210,15 @@ pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
             let low = l.to_ascii_lowercase();
             if let Some(tail) = low.strip_prefix("content-transfer-encoding:") {
                 cte = tail
+                    .trim()
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+            }
+            if let Some(tail) = low.strip_prefix("content-type:") {
+                content_type = tail
                     .trim()
                     .split(';')
                     .next()
@@ -14224,14 +14240,16 @@ pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
+                    let b = b.to_ascii_lowercase();
                     !b.is_empty()
                         && declared
                             .iter()
-                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b.as_str()))
                 });
             if is_delim {
                 // パート境界 — 溜めた符号化本文を復号して走査する
                 if !enc_body.is_empty()
+                    && is_textual_content_type(&content_type)
                     && decode_transfer_body(&cte, &enc_body)
                         .windows(2)
                         .any(|w| w[0] == 0x1B
@@ -14243,13 +14261,16 @@ pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
                 if !(l.len() > 4 && l.ends_with("--")) {
                     in_headers = true;
                     cte.clear();
+                    content_type.clear();
                 }
             }
             continue;
         }
         if matches!(cte.as_str(), "base64" | "quoted-printable") {
-            enc_body.push_str(l);
-            enc_body.push('\n');
+            if is_textual_content_type(&content_type) {
+                enc_body.push_str(l);
+                enc_body.push('\n');
+            }
             continue;
         }
         let b = l.as_bytes();
@@ -14260,6 +14281,7 @@ pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
         }
     }
     if !enc_body.is_empty()
+        && is_textual_content_type(&content_type)
         && decode_transfer_body(&cte, &enc_body)
             .windows(2)
             .any(|w| w[0] == 0x1B && matches!(w[1], b'[' | b']' | b'P' | b'X' | b'^' | b'_'))
@@ -14282,6 +14304,7 @@ pub fn has_bidi_override_body(raw: &[u8]) -> bool {
     let text = text.replace("\r\n", "\n");
     let mut in_headers = true;
     let mut cte = String::new();
+    let mut content_type = String::new();
     let mut enc_body = String::new();
     let declared = declared_boundaries(&text);
     // 復号後の UTF-8 中の U+202A–E は E2 80 AA–AE の3バイト列
@@ -14301,6 +14324,15 @@ pub fn has_bidi_override_body(raw: &[u8]) -> bool {
                     .trim()
                     .to_string();
             }
+            if let Some(tail) = low.strip_prefix("content-type:") {
+                content_type = tail
+                    .trim()
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+            }
             if l.is_empty() {
                 in_headers = false;
                 continue;
@@ -14312,26 +14344,33 @@ pub fn has_bidi_override_body(raw: &[u8]) -> bool {
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
+                    let b = b.to_ascii_lowercase();
                     !b.is_empty()
                         && declared
                             .iter()
-                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b.as_str()))
                 });
             if is_delim {
-                if !enc_body.is_empty() && has_bidi_seq(&decode_transfer_body(&cte, &enc_body)) {
+                if !enc_body.is_empty()
+                    && is_textual_content_type(&content_type)
+                    && has_bidi_seq(&decode_transfer_body(&cte, &enc_body))
+                {
                     return true;
                 }
                 enc_body.clear();
                 if !(l.len() > 4 && l.ends_with("--")) {
                     in_headers = true;
                     cte.clear();
+                    content_type.clear();
                 }
             }
             continue;
         }
         if matches!(cte.as_str(), "base64" | "quoted-printable") {
-            enc_body.push_str(l);
-            enc_body.push('\n');
+            if is_textual_content_type(&content_type) {
+                enc_body.push_str(l);
+                enc_body.push('\n');
+            }
             continue;
         }
         if l.contains('\u{202A}')
@@ -14343,7 +14382,10 @@ pub fn has_bidi_override_body(raw: &[u8]) -> bool {
             return true;
         }
     }
-    if !enc_body.is_empty() && has_bidi_seq(&decode_transfer_body(&cte, &enc_body)) {
+    if !enc_body.is_empty()
+        && is_textual_content_type(&content_type)
+        && has_bidi_seq(&decode_transfer_body(&cte, &enc_body))
+    {
         return true;
     }
     false
@@ -14534,10 +14576,11 @@ pub fn has_overlong_base64_line(raw: &[u8]) -> bool {
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
+                    let b = b.to_ascii_lowercase();
                     !b.is_empty()
                         && declared
                             .iter()
-                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b.as_str()))
                 });
             if is_delim {
                 if !(l.len() > 4 && l.ends_with("--")) {
@@ -108313,6 +108356,66 @@ mod tests {
         assert!(!has_undeclared_base64_block(
             b"Content-Type: text/plain\r\n\r\nHello, world. This is a normal message body.\r\n"
         ));
+    }
+
+    fn multipart_base64_message(
+        boundary: &str,
+        part_content_type: &str,
+        encoded_body: &str,
+    ) -> String {
+        format!(
+            "From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: MIME test\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n--{boundary}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello\r\n--{boundary}\r\nContent-Type: {part_content_type}\r\nContent-Transfer-Encoding: base64\r\n\r\n{encoded_body}\r\n--{boundary}--\r\n"
+        )
+    }
+
+    #[test]
+    fn undeclared_b64_は大文字boundaryの添付を誤検知しない() {
+        const BASE64_LINE: &str = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVog";
+        let encoded_body = [BASE64_LINE; 3].join("\r\n");
+        for boundary in [
+            "_000_TYXPR01MB123456789ABCDEF1234567890_",
+            "Apple-Mail=_3F2C1234-5678-ABCD-EF00-123456789ABC",
+            "------------0ZbS1D_a1b2c3d4",
+        ] {
+            let message = multipart_base64_message(boundary, "application/pdf", &encoded_body);
+            assert!(
+                !has_undeclared_base64_block(message.as_bytes()),
+                "boundary={boundary}"
+            );
+        }
+    }
+
+    #[test]
+    fn ansi_escape_body_はbinary符号化partを無視する() {
+        let binary = multipart_base64_message("_000_ABC_", "application/octet-stream", "G1s=");
+        assert!(!has_ansi_escape_body(binary.as_bytes()));
+
+        let text = multipart_base64_message("_000_ABC_", "text/plain", "G1s=");
+        assert!(has_ansi_escape_body(text.as_bytes()));
+    }
+
+    #[test]
+    fn bidi_override_body_はbinary符号化partを無視する() {
+        let binary = multipart_base64_message("_000_ABC_", "application/octet-stream", "4oCu");
+        assert!(!has_bidi_override_body(binary.as_bytes()));
+
+        let text = multipart_base64_message("_000_ABC_", "text/plain", "4oCu");
+        assert!(has_bidi_override_body(text.as_bytes()));
+    }
+
+    #[test]
+    fn parse_は_outlook境界の_pdf添付を符号化誤検知しない() {
+        const BASE64_LINE: &str = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVog";
+        let encoded_body = [BASE64_LINE; 3].join("\r\n");
+        let message = multipart_base64_message(
+            "_000_TYXPR01MB123456789ABCDEF1234567890_",
+            "application/pdf",
+            &encoded_body,
+        );
+        let env = parse(message.as_bytes()).expect("valid multipart message");
+        assert!(!env.undeclared_base64_block);
+        assert!(!env.ansi_escape_body);
+        assert!(!env.bidi_override_body);
     }
 
     #[test]

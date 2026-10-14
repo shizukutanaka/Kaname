@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+### Security — MIME boundary の大文字小文字による添付誤検知と、符号化 binary 添付の ANSI/bidi 誤検知を修正。
+
 ### Security — 日本語 inline 添付メールで `parse()` が UTF-8 境界外スライスによりパニックする問題と、JMAP 検証エラー経路の同種パニックを修正。
 
 ### Security — D3128補強2: `X-MS-Exchange-Organization-OriginalArrivalTime:` の末尾 `(UTC)` 注記を受理 — 兄弟到着時刻検出器 (`X-Original-ArrivalTime`/`CrossTenant-OriginalArrivalTime`) と文法を一致させ、裸 `UTC`/`(GMT)`/任意後続語は引き続き発火。
