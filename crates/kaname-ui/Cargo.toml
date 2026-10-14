@@ -37,6 +37,8 @@ kaname-jmap = { path = "../kaname-jmap" }
 kaname-store = { path = "../kaname-store" }
 # 本文リンクの SaaS 安全性判定 (偽 SaaS ドメイン・OAuth state 検証)。
 kaname-saas-guard = { path = "../kaname-saas-guard" }
+# オフライン署名ライセンス検証 (収益化)。Pro ゲートの判定に使う。
+kaname-license = { path = "../kaname-license" }
 # MLS E2E 暗号化 (D1 Phase 4): 受信メール内の MLS エンベロープ処理と
 # 会話状態の SQLCipher 永続化。rusqlite/sqlcipher は kaname-store 経由で
 # 既に依存に含まれる。

@@ -9957,6 +9957,11 @@ pub struct CampaignSummary {
 /// トリアージする、という実運用にも合致する。
 pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> {
     info!(path=%redact_path(&path), "mail_scan_folder");
+    // Pro ゲート: フォルダ一括解析は業務量に比例する処理のため有償枠。
+    // Free 層には購入導線つきの構造化エラーを返す (I5: キー本文はログしない)。
+    ensure_license_loaded().await;
+    kaname_license::require(kaname_license::Feature::FolderScan, now_unix())
+        .map_err(|e| format!("PRO_REQUIRED: {e}"))?;
 
     let mut entries: Vec<FolderScanEntry> = Vec::new();
     let mut failed: Vec<(String, String)> = Vec::new();
@@ -14901,4 +14906,92 @@ fn write_unique(
         }
     }
     Err(ErrorKind::AlreadyExists.into())
+}
+
+// ── ライセンス (収益化: オフライン署名キー) ─────────────────────────────
+
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// 設定テーブルの保存キー。ライセンスキー自体は秘密ではない (公開鍵
+/// 検証の署名付きトークン) が、購入者識別子を含むため PII として
+/// ログには出さない (I5)。
+const LICENSE_SETTING_KEY: &str = "license_key";
+
+/// 起動後・再起動後にメモリのライセンスが空なら設定から復元する。
+/// 検証は kaname-license の署名検証を必ず通る (保存値の改竄は
+/// BadSignature で Free になる)。
+async fn ensure_license_loaded() {
+    if kaname_license::status(now_unix()).is_some() {
+        return;
+    }
+    let Some(store) = store_slot().lock().await.clone() else {
+        return;
+    };
+    if let Ok(Some(key)) = store.get_setting("local", LICENSE_SETTING_KEY).await {
+        let _ = kaname_license::activate(&key, now_unix());
+    }
+}
+
+/// フロント向けのライセンス状態。
+#[derive(Debug, Serialize)]
+pub struct LicenseView {
+    /// "free" | "pro"
+    pub tier: String,
+    /// 契約席数 (free なら 0)
+    pub seats: u32,
+    /// 有効期限 Unix 秒 (無期限・free なら null)
+    pub expires_at: Option<u64>,
+    /// 購入者識別子 (設定画面の表示用)
+    pub licensed_to: Option<String>,
+}
+
+/// 現在のライセンス状態。設定からの遅延復元込み。
+pub async fn license_status() -> LicenseView {
+    ensure_license_loaded().await;
+    match kaname_license::status(now_unix()) {
+        Some(l) => LicenseView {
+            tier: "pro".to_string(),
+            seats: l.seats,
+            expires_at: l.expires_at,
+            licensed_to: Some(l.licensed_to),
+        },
+        None => LicenseView {
+            tier: "free".to_string(),
+            seats: 0,
+            expires_at: None,
+            licensed_to: None,
+        },
+    }
+}
+
+/// ライセンスキーを検証・アクティブ化して設定に保存する。
+/// 失敗時は何も保存せずエラー理由を返す。
+pub async fn license_activate(key: String) -> Result<LicenseView, String> {
+    let lic = kaname_license::activate(key.trim(), now_unix()).map_err(|e| e.to_string())?;
+    if let Some(store) = store_slot().lock().await.clone() {
+        let _ = store
+            .set_setting("local", LICENSE_SETTING_KEY, key.trim())
+            .await;
+    }
+    info!(tier = "pro", "license activated");
+    Ok(LicenseView {
+        tier: "pro".to_string(),
+        seats: lic.seats,
+        expires_at: lic.expires_at,
+        licensed_to: Some(lic.licensed_to),
+    })
+}
+
+/// ライセンスを解除して Free に戻す。
+pub async fn license_deactivate() -> Result<(), String> {
+    kaname_license::deactivate();
+    if let Some(store) = store_slot().lock().await.clone() {
+        let _ = store.set_setting("local", LICENSE_SETTING_KEY, "").await;
+    }
+    Ok(())
 }

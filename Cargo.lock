@@ -2657,6 +2657,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kaname-license"
+version = "0.7.1"
+dependencies = [
+ "ed25519-dalek",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "kaname-memory-guard"
 version = "0.7.1"
 dependencies = [
@@ -2835,6 +2845,7 @@ dependencies = [
  "kaname-bec",
  "kaname-dlp",
  "kaname-jmap",
+ "kaname-license",
  "kaname-memory-guard",
  "kaname-mls",
  "kaname-observability",

@@ -233,6 +233,21 @@ async fn settings_is_onboarded() -> bool {
 }
 
 #[tauri::command]
+async fn license_status() -> commands::LicenseView {
+    commands::license_status().await
+}
+
+#[tauri::command]
+async fn license_activate(key: String) -> Result<commands::LicenseView, String> {
+    commands::license_activate(key).await
+}
+
+#[tauri::command]
+async fn license_deactivate() -> Result<(), String> {
+    commands::license_deactivate().await
+}
+
+#[tauri::command]
 async fn history_open_default() -> Result<String, String> {
     commands::history_open_default().await
 }
@@ -440,6 +455,10 @@ fn main() {
             mail_get_mailboxes,
             settings_save_onboarding,
             settings_is_onboarded,
+            // オフライン署名ライセンス (収益化: Pro ゲート)
+            license_status,
+            license_activate,
+            license_deactivate,
             history_open_default,
             security_audit_log,
             mail_analyze_bytes,

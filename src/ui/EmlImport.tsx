@@ -11,7 +11,7 @@
 // ネイティブのファイル選択ダイアログ (tauri-plugin-dialog) は未導入のため、
 // パスを直接入力する方式にしている。
 
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, onMount, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { OobvCeremony } from "./OobvCeremony";
 
@@ -105,15 +105,53 @@ interface FolderScanResult {
   campaigns: CampaignSummary[];
 }
 
+interface LicenseView {
+  tier: "free" | "pro";
+  seats: number;
+  expires_at: number | null;
+  licensed_to: string | null;
+}
+
 export function EmlImport() {
   const [path, setPath] = createSignal("");
   const [result, setResult] = createSignal<ImportedEmail | null>(null);
   const [folder, setFolder] = createSignal<FolderScanResult | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
+  const [license, setLicense] = createSignal<LicenseView | null>(null);
+  const [licenseKey, setLicenseKey] = createSignal("");
+  const [licenseMsg, setLicenseMsg] = createSignal<string | null>(null);
+  const [needPro, setNeedPro] = createSignal(false);
+
+  const loadLicense = async () => {
+    try {
+      setLicense(await invoke<LicenseView>("license_status"));
+    } catch {
+      setLicense(null);
+    }
+  };
+
+  onMount(() => void loadLicense());
+
+  const activateLicense = async () => {
+    const k = licenseKey().trim();
+    if (!k) {
+      setLicenseMsg("ライセンスキーを入力してください。");
+      return;
+    }
+    try {
+      const v = await invoke<LicenseView>("license_activate", { key: k });
+      setLicense(v);
+      setNeedPro(false);
+      setLicenseMsg("Pro ライセンスを有効化しました。");
+    } catch (e) {
+      setLicenseMsg(String(e));
+    }
+  };
 
   // フォルダ一括解析。kaname-radar (PCR) は複数メールを見比べて初めて
   // 機能するため、この経路でのみキャンペーン検出が有効になる。
+  // Pro ゲート: 一括処理は有償枠 (バックエンドが PRO_REQUIRED を返す)。
   const scanFolder = async () => {
     const p = path().trim();
     if (!p) {
@@ -128,7 +166,12 @@ export function EmlImport() {
       const r = await invoke<FolderScanResult>("mail_scan_folder", { path: p });
       setFolder(r);
     } catch (e) {
-      setError(String(e));
+      const msg = String(e);
+      if (msg.startsWith("PRO_REQUIRED")) {
+        setNeedPro(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -211,9 +254,66 @@ export function EmlImport() {
             cursor: loading() ? "default" : "pointer",
           }}
         >
-          フォルダを一括解析
+          フォルダを一括解析{license()?.tier === "pro" ? "" : " (Pro)"}
         </button>
       </div>
+
+      {/* Pro ライセンス — オフライン署名キーで有効化 (通信・テレメトリなし) */}
+      <Show when={license()?.tier !== "pro" || needPro()}>
+        <div style={{
+          padding: "12px 14px", "border-radius": "8px",
+          border: needPro() ? "1px solid #B37FEB" : "1px solid #C3CBD4",
+          background: needPro() ? "#F6EFFD" : "#F7F9FB",
+          "margin-bottom": "16px",
+        }}>
+          <div style={{ "font-size": "13px", "font-weight": "600", "margin-bottom": "4px" }}>
+            {needPro()
+              ? "フォルダ一括解析は Pro 機能です"
+              : "Free プラン (Pro: フォルダ一括解析)"}
+          </div>
+          <p style={{ color: "#57606A", "font-size": "12px", "margin-bottom": "8px", "line-height": "1.6" }}>
+            Pro ライセンスキーで有効化できます。検証は端末内の署名検証のみで
+            完結し、外部への通信は発生しません。
+          </p>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input
+              type="text"
+              value={licenseKey()}
+              onInput={(e) => setLicenseKey(e.currentTarget.value)}
+              placeholder="KANAME-…"
+              style={{
+                flex: "1", padding: "8px 10px", "border-radius": "6px",
+                border: "1px solid #C3CBD4", "font-size": "12px",
+                "font-family": "monospace",
+              }}
+            />
+            <button
+              onClick={() => void activateLicense()}
+              style={{
+                padding: "8px 14px", "border-radius": "6px", border: "none",
+                background: "#8250DF", color: "#fff",
+                "font-size": "12px", "font-weight": "600", cursor: "pointer",
+              }}
+            >
+              有効化
+            </button>
+          </div>
+          <Show when={licenseMsg()}>
+            <div style={{ "font-size": "12px", "margin-top": "6px", color: "#57606A" }}>
+              {licenseMsg()}
+            </div>
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={license()?.tier === "pro" && !needPro()}>
+        <div style={{
+          "font-size": "12px", color: "#57606A", "margin-bottom": "16px",
+        }}>
+          Pro ライセンス有効{license()?.licensed_to ? ` (${license()?.licensed_to})` : ""}
+          {license()?.expires_at ? ` — 期限 ${new Date((license()?.expires_at ?? 0) * 1000).toLocaleDateString()}` : ""}
+        </div>
+      </Show>
 
       <Show when={error()}>
         <div style={{
