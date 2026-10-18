@@ -929,9 +929,7 @@ enum OneOrAll {
     All(Vec<String>),
 }
 
-fn topmost_header_instance<'de, D: Deserializer<'de>>(
-    d: D,
-) -> Result<Option<String>, D::Error> {
+fn topmost_header_instance<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
     let value = Option::<OneOrAll>::deserialize(d)?;
     Ok(match value {
         Some(OneOrAll::One(value)) => Some(value),
