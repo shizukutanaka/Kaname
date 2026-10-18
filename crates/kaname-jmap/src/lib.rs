@@ -20,6 +20,7 @@
 pub mod ssrf_guard;
 pub use ssrf_guard::SsrfError;
 
+use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -364,7 +365,7 @@ impl JmapClient {
                                 "from","to","replyTo","preview","threadId",
                                 "messageId","inReplyTo","references",
                                 "header:DKIM-Signature:asText",
-                                "header:Authentication-Results:asText",
+                                "header:Authentication-Results:asText:all",
                                 "header:Return-Path:asText",
                             ],
                         }),
@@ -899,11 +900,19 @@ pub struct EmailListItem {
     /// `l=` タグ乱用・リプレイ検出に使用。
     #[serde(rename = "header:DKIM-Signature:asText", default)]
     pub dkim_signature: Option<String>,
-    /// Authentication-Results ヘッダーの生値
-    /// (`header:Authentication-Results:asText`)。一覧時点の SPF/DKIM/DMARC
-    /// 評価に使用。ヘッダ値は受信 MTA の記述であり暗号学的検証ではない
-    /// (gap-analysis D18/D44)。
-    #[serde(rename = "header:Authentication-Results:asText", default)]
+    /// JMAP `:all` の先頭 (最上位) の Authentication-Results。
+    /// RFC 8621 §4.1.3 / RFC 8601 §5 に従い受信 MTA が追加した値で、
+    /// `.eml` の `parse_auth_results` と同じインスタンスを採る
+    /// (gap-analysis D18/D44。値自体は暗号学的検証ではない)。
+    #[serde(
+        rename(
+            serialize = "header:Authentication-Results:asText",
+            deserialize = "header:Authentication-Results:asText:all"
+        ),
+        alias = "header:Authentication-Results:asText",
+        default,
+        deserialize_with = "topmost_header_instance"
+    )]
     pub auth_results: Option<String>,
     /// Return-Path ヘッダーの生値 (`header:Return-Path:asText`)。
     /// From と Return-Path のドメイン不一致は BEC/スプーフィングの古典的
@@ -911,6 +920,22 @@ pub struct EmailListItem {
     /// 取得していない間は一覧評価でこの検査が構造的に不発だった (D106)。
     #[serde(rename = "header:Return-Path:asText", default)]
     pub return_path: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum OneOrAll {
+    One(String),
+    All(Vec<String>),
+}
+
+fn topmost_header_instance<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    let value = Option::<OneOrAll>::deserialize(d)?;
+    Ok(match value {
+        Some(OneOrAll::One(value)) => Some(value),
+        Some(OneOrAll::All(values)) => values.into_iter().next(),
+        None => None,
+    })
 }
 
 impl EmailListItem {
@@ -1681,15 +1706,93 @@ mod tests {
             "mailboxIds": {},
             "keywords": {},
             "header:Return-Path:asText": "<bounce@evil.example>",
-            "header:Authentication-Results:asText": "mx; spf=fail",
+            "header:Authentication-Results:asText:all": ["mx; spf=fail", "mx.bottom; spf=pass"],
             "header:DKIM-Signature:asText": "v=1; d=sig.example; s=sel",
         });
-        let e: EmailListItem = serde_json::from_value(json).unwrap();
+        let e: EmailListItem =
+            serde_json::from_value(json).unwrap_or_else(|error| panic!("invalid item: {error}"));
         assert_eq!(e.return_path.as_deref(), Some("<bounce@evil.example>"));
         assert_eq!(e.auth_results.as_deref(), Some("mx; spf=fail"));
         assert_eq!(
             e.dkim_signature.as_deref(),
             Some("v=1; d=sig.example; s=sel")
+        );
+    }
+
+    #[test]
+    fn auth_results_は_all配列の最上位インスタンスを採用する() {
+        let json = serde_json::json!({
+            "id": "e1",
+            "header:Authentication-Results:asText:all": [
+                "mx.receiver.example; spf=fail dkim=fail dmarc=fail",
+                "mx.google.com; spf=pass dkim=pass dmarc=pass"
+            ]
+        });
+        let item: EmailListItem =
+            serde_json::from_value(json).unwrap_or_else(|error| panic!("invalid item: {error}"));
+
+        assert_eq!(
+            item.auth_results.as_deref(),
+            Some("mx.receiver.example; spf=fail dkim=fail dmarc=fail")
+        );
+    }
+
+    #[test]
+    fn auth_results_は空配列_null_キー不在を_noneとして扱う() {
+        let empty: EmailListItem = serde_json::from_value(serde_json::json!({
+            "id": "empty",
+            "header:Authentication-Results:asText:all": []
+        }))
+        .unwrap_or_else(|error| panic!("invalid item: {error}"));
+        let null: EmailListItem = serde_json::from_value(serde_json::json!({
+            "id": "null",
+            "header:Authentication-Results:asText:all": null
+        }))
+        .unwrap_or_else(|error| panic!("invalid item: {error}"));
+        let absent: EmailListItem = serde_json::from_value(serde_json::json!({
+            "id": "absent"
+        }))
+        .unwrap_or_else(|error| panic!("invalid item: {error}"));
+
+        assert_eq!(empty.auth_results, None);
+        assert_eq!(null.auth_results, None);
+        assert_eq!(absent.auth_results, None);
+    }
+
+    #[test]
+    fn auth_results_は旧キーを受理する() {
+        let item: EmailListItem = serde_json::from_value(serde_json::json!({
+            "id": "e1",
+            "header:Authentication-Results:asText": "mx; spf=fail"
+        }))
+        .unwrap_or_else(|error| panic!("invalid item: {error}"));
+
+        assert_eq!(item.auth_results.as_deref(), Some("mx; spf=fail"));
+    }
+
+    #[test]
+    fn auth_results_は従来のキー名でシリアライズし往復できる() {
+        let item: EmailListItem = serde_json::from_value(serde_json::json!({
+            "id": "e1",
+            "header:Authentication-Results:asText:all": ["mx.receiver.example; spf=fail"]
+        }))
+        .unwrap_or_else(|error| panic!("invalid item: {error}"));
+        let serialized =
+            serde_json::to_value(&item).unwrap_or_else(|error| panic!("serialize failed: {error}"));
+
+        assert_eq!(
+            serialized.get("header:Authentication-Results:asText"),
+            Some(&serde_json::json!("mx.receiver.example; spf=fail"))
+        );
+        assert!(serialized
+            .get("header:Authentication-Results:asText:all")
+            .is_none());
+
+        let restored: EmailListItem = serde_json::from_value(serialized)
+            .unwrap_or_else(|error| panic!("round-trip failed: {error}"));
+        assert_eq!(
+            restored.auth_results.as_deref(),
+            Some("mx.receiver.example; spf=fail")
         );
     }
 

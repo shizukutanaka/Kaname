@@ -12887,7 +12887,7 @@ pub async fn mail_fetch(
             .map(|a| a.email.clone());
 
         // スレッド情報は JMAP の messageId/inReplyTo/references/threadId、
-        // 認証結果は header:Authentication-Results:asText から供給。
+        // 認証結果は header:Authentication-Results:asText:all の先頭 (最上位) から供給。
         let verdict = assess_listing(ListingInput {
             account_id: &account_id,
             from_name: &from_name,
