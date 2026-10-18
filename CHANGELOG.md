@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+### Security — JMAP 一覧の Authentication-Results を `:all` で取得し、受信 MTA が追加した最上位インスタンスを採用するよう修正。
+
 ### Added — scripts/mail-landscape: 最新メール事情 (arXiv/IETF/Zenn/Qiita/GitHub/HN) を収集し、検出カバレッジと照合して改善候補を docs/mail-landscape-report.md に出す開発者向けの層を追加 (アプリ本体は無通信のまま)。
 
 ### Security — MIME boundary の大文字小文字による添付誤検知と、符号化 binary 添付の ANSI/bidi 誤検知を修正。
