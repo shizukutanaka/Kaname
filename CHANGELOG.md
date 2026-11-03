@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+### Performance — D3571: `parse()` でヘッダ領域しか読まない 1354 個の検出器に、本文込みのメッセージ全体ではなくヘッダ部だけを渡すよう変更 — 各検出器が本文サイズ分の UTF-8 変換・CRLF 正規化・折り畳み展開・小文字化を繰り返していたのをやめ、大きなメールの解析を高速化 (72MB 実測で約 10.4 秒 → 約 2.7 秒)。検出結果は不変 (空行直後が WSP 継続行の場合のみ従来どおり全文を渡す)。
+
 ### Security — JMAP 一覧の Authentication-Results を `:all` で取得し、受信 MTA が追加した最上位インスタンスを採用するよう修正。
 
 ### Added — scripts/mail-landscape: 最新メール事情 (arXiv/IETF/Zenn/Qiita/GitHub/HN) を収集し、検出カバレッジと照合して改善候補を docs/mail-landscape-report.md に出す開発者向けの層を追加 (アプリ本体は無通信のまま)。
