@@ -5579,6 +5579,13 @@ fn detection_input(raw: &[u8]) -> &[u8] {
     raw
 }
 
+/// 検出器共通の正規化テキスト (D3572): `from_utf8_lossy` + `\r\n`→`\n`。
+/// 以前は全文走査する各検出器が呼び出しごとに全文ぶん変換していたのを、
+/// parse() で一度だけ作って `__t` 変種に `&str` で渡す。
+fn shared_text(raw: &[u8]) -> String {
+    String::from_utf8_lossy(raw).replace("\r\n", "\n")
+}
+
 struct MimeFields {
     message_id: Option<String>,
     from: Vec<Address>,
@@ -5768,6 +5775,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D3571: ヘッダのみを読む検出器群にはヘッダ部 (または従来等価の全体)
     // だけを渡し、本文サイズ分の正規化を検出器ごとに繰り返させない。
     let det = detection_input(raw);
+    // D3572: 本文込みで正規化テキストを必要とする検出器群には、
+    // 一度だけ作った正規化テキストを &str で渡す。
+    let det_text = shared_text(raw);
 
     let MimeFields {
         message_id,
@@ -5814,19 +5824,19 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let duplicate_identity_headers = has_duplicate_identity_headers(det);
 
     // D1293: multipart コンテナへの base64/QP CTE (RFC 2045 §6.4 違反)
-    let encoded_multipart_container = has_encoded_multipart_container(bytes);
+    let encoded_multipart_container = has_encoded_multipart_container_t(&det_text);
 
     // D1294: boundary= 値の空白混入 (trim 差異)
-    let whitespace_boundary = has_whitespace_boundary(bytes);
+    let whitespace_boundary = has_whitespace_boundary_t(&det_text);
 
     // D1295: filename*/name* の RFC 2231 分割・符号化パラメータ
-    let rfc2231_attachment_params = has_rfc2231_attachment_params(bytes);
+    let rfc2231_attachment_params = has_rfc2231_attachment_params_t(&det_text);
 
     // D1296: boundary= のエスケープ/閉じないクオート
-    let escaped_boundary_quote = has_escaped_boundary_quote(bytes);
+    let escaped_boundary_quote = has_escaped_boundary_quote_t(&det_text);
 
     // D1297: 同一 boundary 値の使い回し (入れ子衝突)
-    let reused_boundary = has_reused_boundary(bytes);
+    let reused_boundary = has_reused_boundary_t(&det_text);
 
     // D1298: ヘッダ部の CRLF/裸LF 混在
     let mixed_line_endings = has_mixed_line_endings(bytes);
@@ -5847,7 +5857,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let non_utf8_headers = has_non_utf8_headers(bytes);
 
     // D1305: ヘッダ名とコロン間の空白混入
-    let spaced_header_name = has_spaced_header_name(bytes);
+    let spaced_header_name = has_spaced_header_name_t(&det_text);
 
     // D1307: ヘッダ部の裸 CR (\r 単独)
     let bare_cr = has_bare_cr(bytes);
@@ -5856,128 +5866,128 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let mbox_from_line = has_mbox_from_line(bytes);
 
     // D1309: CT/CD パラメータキーの重複
-    let duplicate_mime_params = has_duplicate_mime_params(bytes);
+    let duplicate_mime_params = has_duplicate_mime_params_t(&det_text);
 
     // D1310: name= ありで Content-Disposition 無し
-    let ct_name_no_disposition = has_ct_name_no_disposition(bytes);
+    let ct_name_no_disposition = has_ct_name_no_disposition_t(&det_text);
 
     // D1311: boundary= の空値
-    let empty_boundary = has_empty_boundary(bytes);
+    let empty_boundary = has_empty_boundary_t(&det_text);
 
     // D1312: MIME-Version が 1.0 以外
     let odd_mime_version = has_odd_mime_version(det);
 
     // D1313: 添付名のパストラバーサル成分
-    let traversal_filename = has_traversal_filename(bytes);
+    let traversal_filename = has_traversal_filename_t(&det_text);
 
     // D1314: 998 バイト超のヘッダ行
-    let overlong_header = has_overlong_header(bytes);
+    let overlong_header = has_overlong_header_t(&det_text);
 
     // D1315: QP 本文の不正エスケープ
-    let invalid_qp_escapes = has_invalid_qp_escapes(bytes);
+    let invalid_qp_escapes = has_invalid_qp_escapes_t(&det_text);
 
     // D1316: base64 本文の不正文字
-    let invalid_base64_body = has_invalid_base64_body(bytes);
+    let invalid_base64_body = has_invalid_base64_body_t(&det_text);
 
     // D1317: boundary 値の bchars 外文字
-    let invalid_boundary_chars = has_invalid_boundary_chars(bytes);
+    let invalid_boundary_chars = has_invalid_boundary_chars_t(&det_text);
 
     // D1318: Windows 予約デバイス名の添付名
-    let device_filename = has_device_filename(bytes);
+    let device_filename = has_device_filename_t(&det_text);
 
     // D1319: 退化添付名 (空/空白のみ/ドットのみ)
-    let degenerate_filename = has_degenerate_filename(bytes);
-    let ambiguous_boundary_line = has_ambiguous_boundary_line(bytes);
+    let degenerate_filename = has_degenerate_filename_t(&det_text);
+    let ambiguous_boundary_line = has_ambiguous_boundary_line_t(&det_text);
 
     // D1320: Content-Type に subtype 無し
-    let typeless_content_type = has_typeless_content_type(bytes);
-    let tnef_attachment = has_tnef_attachment(bytes);
-    let control_encoded_word = has_control_encoded_word(bytes);
-    let multi_addr_from = has_multi_addr_from(bytes);
+    let typeless_content_type = has_typeless_content_type_t(&det_text);
+    let tnef_attachment = has_tnef_attachment_t(&det_text);
+    let control_encoded_word = has_control_encoded_word_t(&det_text);
+    let multi_addr_from = has_multi_addr_from_t(&det_text);
     let executable_content_type = has_executable_content_type(bytes);
-    let ctl_bytes_in_headers = has_ctl_bytes_in_headers(bytes);
-    let eightbit_body_7bit = has_8bit_body_with_7bit_cte(bytes);
+    let ctl_bytes_in_headers = has_ctl_bytes_in_headers_t(&det_text);
+    let eightbit_body_7bit = has_8bit_body_with_7bit_cte_t(&det_text);
     let charset_body_mismatch = has_charset_body_mismatch(bytes);
-    let malformed_header_line = has_malformed_header_line(bytes);
-    let bcc_header = has_bcc_header(bytes);
-    let remote_content_base = has_remote_content_base(bytes);
+    let malformed_header_line = has_malformed_header_line_t(&det_text);
+    let bcc_header = has_bcc_header_t(&det_text);
+    let remote_content_base = has_remote_content_base_t(&det_text);
     let receipt_request = has_receipt_request(bytes);
-    let degenerate_from = has_degenerate_from_addr(bytes);
-    let addr_in_display_name = has_address_display_name(bytes);
-    let odd_message_id = has_odd_message_id(bytes);
-    let odd_disposition_type = has_odd_disposition_type(bytes);
-    let malformed_thread_refs = has_malformed_thread_refs(bytes);
-    let no_recipient_headers = has_no_recipient_headers(bytes);
-    let urgency_claim = has_urgency_claim(bytes);
-    let structural_encoded_word = has_structural_encoded_word(bytes);
+    let degenerate_from = has_degenerate_from_addr_t(&det_text);
+    let addr_in_display_name = has_address_display_name_t(&det_text);
+    let odd_message_id = has_odd_message_id_t(&det_text);
+    let odd_disposition_type = has_odd_disposition_type_t(&det_text);
+    let malformed_thread_refs = has_malformed_thread_refs_t(&det_text);
+    let no_recipient_headers = has_no_recipient_headers_t(&det_text);
+    let urgency_claim = has_urgency_claim_t(&det_text);
+    let structural_encoded_word = has_structural_encoded_word_t(&det_text);
     let leading_bom = has_leading_bom(bytes);
-    let alternative_attachment = has_alternative_attachment(bytes);
+    let alternative_attachment = has_alternative_attachment_t(&det_text);
     let http_framing_headers = has_http_framing_headers(det);
-    let rfc822_headers_part = has_rfc822_headers_part(bytes);
-    let param_value_comment = has_param_value_comment(bytes);
-    let message_subtype_part = has_message_subtype_part(bytes);
-    let mixed_replace = has_mixed_replace(bytes);
-    let opaque_encrypted = has_opaque_encrypted_content(bytes);
-    let missing_part_content_type = has_missing_part_content_type(bytes);
-    let param_encoded_word = has_param_encoded_word(bytes);
-    let digest_container = has_digest_container(bytes);
+    let rfc822_headers_part = has_rfc822_headers_part_t(&det_text);
+    let param_value_comment = has_param_value_comment_t(&det_text);
+    let message_subtype_part = has_message_subtype_part_t(&det_text);
+    let mixed_replace = has_mixed_replace_t(&det_text);
+    let opaque_encrypted = has_opaque_encrypted_content_t(&det_text);
+    let missing_part_content_type = has_missing_part_content_type_t(&det_text);
+    let param_encoded_word = has_param_encoded_word_t(&det_text);
+    let digest_container = has_digest_container_t(&det_text);
     let malformed_addr_spec = has_malformed_addr_spec(det);
     let unbalanced_route = has_unbalanced_route(det);
     let exotic_multipart_subtype = has_exotic_multipart_subtype(bytes);
-    let malformed_media_type = has_malformed_media_type(bytes);
-    let percent_encoded_filename = has_percent_encoded_filename(bytes);
-    let unnamed_attachment = has_unnamed_attachment(bytes);
+    let malformed_media_type = has_malformed_media_type_t(&det_text);
+    let percent_encoded_filename = has_percent_encoded_filename_t(&det_text);
+    let unnamed_attachment = has_unnamed_attachment_t(&det_text);
     let non_ascii_addr_domain = has_non_ascii_addr_domain(det);
     let conflicting_filename = has_conflicting_filename(bytes);
     let fake_reply_claim = has_fake_reply_claim(det);
     let undeclared_base64_block = has_undeclared_base64_block(bytes);
     let empty_group_syntax = has_empty_group_syntax(det);
     let usenet_control_header = has_usenet_control_header(det);
-    let boundary_semicolon = has_boundary_semicolon(bytes);
-    let ansi_escape_body = has_ansi_escape_body(bytes);
-    let bidi_override_body = has_bidi_override_body(bytes);
-    let duplicate_content_id = has_duplicate_content_id(bytes);
+    let boundary_semicolon = has_boundary_semicolon_t(&det_text);
+    let ansi_escape_body = has_ansi_escape_body_t(&det_text);
+    let bidi_override_body = has_bidi_override_body_t(&det_text);
+    let duplicate_content_id = has_duplicate_content_id_t(&det_text);
     let literal_domain_sender = has_literal_domain_sender(det);
-    let overlong_base64_line = has_overlong_base64_line(bytes);
+    let overlong_base64_line = has_overlong_base64_line_t(&det_text);
     let mixed_encoded_charset = has_mixed_encoded_charset(det);
-    let deep_multipart_nesting = has_deep_multipart_nesting(bytes);
-    let part_mime_version = has_part_mime_version(bytes);
-    let enriched_text_type = has_enriched_text_type(bytes);
-    let encoded_message_part = has_encoded_message_part(bytes);
-    let unsigned_signed_container = has_unsigned_signed_container(bytes);
+    let deep_multipart_nesting = has_deep_multipart_nesting_t(&det_text);
+    let part_mime_version = has_part_mime_version_t(&det_text);
+    let enriched_text_type = has_enriched_text_type_t(&det_text);
+    let encoded_message_part = has_encoded_message_part_t(&det_text);
+    let unsigned_signed_container = has_unsigned_signed_container_t(&det_text);
     let self_reply_ref = has_self_reply_ref(det);
     let deadline_claim = has_deadline_claim(det);
     let spam_verdict_claim = has_spam_verdict_claim(bytes);
     let integrity_claim = has_integrity_claim(bytes);
     let suppression_claim = has_suppression_claim(bytes);
     let encoded_word_addr_spec = has_encoded_word_addr_spec(det);
-    let leading_continuation = has_leading_continuation(bytes);
-    let body_header_block = has_body_header_block(bytes);
+    let leading_continuation = has_leading_continuation_t(&det_text);
+    let body_header_block = has_body_header_block_t(&det_text);
     let pem_markers = has_pem_markers(det);
     let draft_residue = has_draft_residue(det);
     let exchange_org_claim = has_exchange_org_claim(det);
     let dup_delivery_headers = has_dup_delivery_headers(det);
-    let hidden_filename = has_hidden_filename(bytes);
-    let unbalanced_param_quote = has_unbalanced_param_quote(bytes);
-    let invalid_filename_chars = has_invalid_filename_chars(bytes);
-    let rfc2231_gap = has_rfc2231_gap(bytes);
-    let unbracketed_content_id = has_unbracketed_content_id(bytes);
-    let encoded_control_filename = has_encoded_control_filename(bytes);
+    let hidden_filename = has_hidden_filename_t(&det_text);
+    let unbalanced_param_quote = has_unbalanced_param_quote_t(&det_text);
+    let invalid_filename_chars = has_invalid_filename_chars_t(&det_text);
+    let rfc2231_gap = has_rfc2231_gap_t(&det_text);
+    let unbracketed_content_id = has_unbracketed_content_id_t(&det_text);
+    let encoded_control_filename = has_encoded_control_filename_t(&det_text);
     let bounce_directive = has_bounce_directive(det);
-    let part_header_dup = has_part_header_dup(bytes);
-    let missing_charset_hibit = has_missing_charset_hibit(bytes);
+    let part_header_dup = has_part_header_dup_t(&det_text);
+    let missing_charset_hibit = has_missing_charset_hibit_t(&det_text);
     let legacy_encrypted_header = has_legacy_encrypted_header(det);
     let dup_mime_headers = has_dup_mime_headers(det);
-    let long_boundary = has_long_boundary(bytes);
+    let long_boundary = has_long_boundary_t(&det_text);
     let url_display_name = has_url_display_name(det);
     let underscore_domain = has_underscore_domain(det);
-    let junk_cte_value = has_junk_cte_value(bytes);
+    let junk_cte_value = has_junk_cte_value_t(&det_text);
     let deliver_to_mark = has_deliver_to_mark(det);
     let literal_msgid_domain = has_literal_msgid_domain(det);
     let empty_addr_side = has_empty_addr_side(det);
-    let preamble_content = has_preamble_content(bytes);
-    let epilogue_content = has_epilogue_content(bytes);
-    let nontext_charset = has_nontext_charset(bytes);
+    let preamble_content = has_preamble_content_t(&det_text);
+    let epilogue_content = has_epilogue_content_t(&det_text);
+    let nontext_charset = has_nontext_charset_t(&det_text);
     let nntp_routing = has_nntp_routing(det);
     let sensitivity_claim = has_sensitivity_claim(det);
     let double_msgid = has_double_msgid(det);
@@ -5987,28 +5997,28 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let list_unsub_without_id = has_list_unsub_without_id(det);
     let long_filename = has_long_filename(det);
     let empty_param_name = has_empty_param_name(det);
-    let smtp_dot_line = has_smtp_dot_line(bytes);
-    let midbody_mbox_from = has_midbody_mbox_from(bytes);
+    let smtp_dot_line = has_smtp_dot_line_t(&det_text);
+    let midbody_mbox_from = has_midbody_mbox_from_t(&det_text);
     let multi_reply_to = has_multi_reply_to(det);
-    let outer_content_disposition = has_outer_content_disposition(bytes);
-    let no_received = has_no_received(bytes);
-    let dangling_start = has_dangling_start(bytes);
+    let outer_content_disposition = has_outer_content_disposition_t(&det_text);
+    let no_received = has_no_received_t(&det_text);
+    let dangling_start = has_dangling_start_t(&det_text);
     let malformed_listid = has_malformed_listid(det);
     let resent_bcc = has_resent_bcc(det);
     let star_boundary = has_star_boundary(det);
     let url_filename = has_url_filename(det);
     let conflicting_priority = has_conflicting_priority(det);
-    let no_from = has_no_from(bytes);
+    let no_from = has_no_from_t(&det_text);
     let inconsistent_auth_results = has_inconsistent_auth_results(det);
-    let missing_crypto_protocol = has_missing_crypto_protocol(bytes);
+    let missing_crypto_protocol = has_missing_crypto_protocol_t(&det_text);
     let orphan_thread = has_orphan_thread(det);
     let routing_addr = has_routing_addr(det);
     let encoded_re_subject = has_encoded_re_subject(det);
-    let missing_report_type = has_missing_report_type(bytes);
+    let missing_report_type = has_missing_report_type_t(&det_text);
     let obsolete_decl_headers = has_obsolete_decl_headers(det);
-    let part_field_headers = has_part_field_headers(bytes);
+    let part_field_headers = has_part_field_headers_t(&det_text);
     let http_response_headers = has_http_response_headers(det);
-    let related_no_type = has_related_no_type(bytes);
+    let related_no_type = has_related_no_type_t(&det_text);
     let multi_inreply = has_multi_inreply(det);
     let filename_trailing = has_filename_trailing(det);
     let bad_priority_value = has_bad_priority_value(det);
@@ -6017,59 +6027,59 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let bad_header_name = has_bad_header_name(det);
     let dup_thread_headers = has_dup_thread_headers(det);
     let empty_identity_value = has_empty_identity_value(det);
-    let empty_mime_value = has_empty_mime_value(bytes);
-    let empty_charset = has_empty_charset(bytes);
+    let empty_mime_value = has_empty_mime_value_t(&det_text);
+    let empty_charset = has_empty_charset_t(&det_text);
     let http_request_headers = has_http_request_headers(det);
-    let alt_wrong_order = has_alt_wrong_order(bytes);
-    let cd_boundary = has_cd_boundary(bytes);
+    let alt_wrong_order = has_alt_wrong_order_t(&det_text);
+    let cd_boundary = has_cd_boundary_t(&det_text);
     let addrless_from = has_addrless_from(det);
-    let dash_boundary = has_dash_boundary(bytes);
+    let dash_boundary = has_dash_boundary_t(&det_text);
     let bad_received = has_bad_received(det);
     let dup_mime_version = has_dup_mime_version(det);
-    let unused_boundary = has_unused_boundary(bytes);
+    let unused_boundary = has_unused_boundary_t(&det_text);
     let bare_msgid_ref = has_bare_msgid_ref(det);
-    let signed_no_micalg = has_signed_no_micalg(bytes);
-    let attachment_body_part = has_attachment_body_part(bytes);
-    let no_body_separator = has_no_body_separator(bytes);
-    let related_bad_type = has_related_bad_type(bytes);
-    let mismatched_attachment_type = has_mismatched_attachment_type(bytes);
-    let dangling_cid = has_dangling_cid(bytes);
+    let signed_no_micalg = has_signed_no_micalg_t(&det_text);
+    let attachment_body_part = has_attachment_body_part_t(&det_text);
+    let no_body_separator = has_no_body_separator_t(&det_text);
+    let related_bad_type = has_related_bad_type_t(&det_text);
+    let mismatched_attachment_type = has_mismatched_attachment_type_t(&det_text);
+    let dangling_cid = has_dangling_cid_t(&det_text);
     let orphan_list_headers = has_orphan_list_headers(det);
-    let dash_filename = has_dash_filename(bytes);
-    let shell_meta_filename = has_shell_meta_filename(bytes);
+    let dash_filename = has_dash_filename_t(&det_text);
+    let shell_meta_filename = has_shell_meta_filename_t(&det_text);
     let avatar_headers = has_avatar_headers(det);
-    let spaced_boundary = has_spaced_boundary(bytes);
+    let spaced_boundary = has_spaced_boundary_t(&det_text);
     let unhyphenated_header = has_unhyphenated_header(det);
-    let quoted_cte = has_quoted_cte(bytes);
-    let url_in_content_description = has_url_in_content_description(bytes);
+    let quoted_cte = has_quoted_cte_t(&det_text);
+    let url_in_content_description = has_url_in_content_description_t(&det_text);
     let incomplete_resent = has_incomplete_resent(det);
     let original_headers = has_original_headers(det);
     let obsolete_signature_headers = has_obsolete_signature_headers(det);
     let archive_claim = has_archive_claim(det);
     let nested_msgid = has_nested_msgid(det);
-    let html_in_plain_part = has_html_in_plain_part(bytes);
-    let misplaced_attachment_param = has_misplaced_attachment_param(bytes);
-    let closer_only_multipart = has_closer_only_multipart(bytes);
+    let html_in_plain_part = has_html_in_plain_part_t(&det_text);
+    let misplaced_attachment_param = has_misplaced_attachment_param_t(&det_text);
+    let closer_only_multipart = has_closer_only_multipart_t(&det_text);
     let stray_qp_header = has_stray_qp_header(det);
-    let case_variant_boundary = has_case_variant_boundary(bytes);
+    let case_variant_boundary = has_case_variant_boundary_t(&det_text);
     let dangling_param_semi = has_dangling_param_semi(det);
     let spaced_param_value = has_spaced_param_value(det);
     let orphan_unsubscribe_post = has_orphan_unsubscribe_post(det);
     let part_bom = has_part_bom(bytes);
     let bad_star_param = has_bad_star_param(det);
-    let double_closer = has_double_closer(bytes);
+    let double_closer = has_double_closer_t(&det_text);
     let nonascii_msgid = has_nonascii_msgid(det);
     let spaced_param_name = has_spaced_param_name(det);
-    let dup_alternative_part = has_dup_alternative_part(bytes);
+    let dup_alternative_part = has_dup_alternative_part_t(&det_text);
     let mixed_case_param = has_mixed_case_param(det);
-    let alternative_no_text = has_alternative_no_text(bytes);
+    let alternative_no_text = has_alternative_no_text_t(&det_text);
     let ext_and_plain_param = has_ext_and_plain_param(bytes);
     let broken_msgid_spec = has_broken_msgid_spec(det);
     let route_addr = has_route_addr(det);
     let nested_angle_addr = has_nested_angle_addr(det);
     let space_separated_param = has_space_separated_param(det);
     let unknown_cte = has_unknown_cte(bytes);
-    let nested_alternative = has_nested_alternative(bytes);
+    let nested_alternative = has_nested_alternative_t(&det_text);
     let bare_param = has_bare_param(det);
     let b64_html_part = has_b64_html_part(bytes);
     let ctl_filename = has_ctl_filename(bytes);
@@ -6078,51 +6088,51 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1509: text/plain+QP 部品の復号 HTML
     let qp_html_part = has_qp_html_part(bytes);
     // D1510: filename/name の生非 ASCII
-    let raw_nonascii_filename = has_raw_nonascii_filename(bytes);
+    let raw_nonascii_filename = has_raw_nonascii_filename_t(&det_text);
     // D1511: 空の型/サブタイプ
-    let edge_slash_ct = has_edge_slash_ct(bytes);
+    let edge_slash_ct = has_edge_slash_ct_t(&det_text);
     // D1512: 型トークン内空白
-    let spaced_media_type = has_spaced_media_type(bytes);
+    let spaced_media_type = has_spaced_media_type_t(&det_text);
     // D1513: 大文字形 CTE
     let mixed_case_cte = has_mixed_case_cte(bytes);
     // D1514: msgid 内の複数 @
     let multi_at_msgid = has_multi_at_msgid(det);
     // D1515: パラメータ値内の裸 =
-    let extra_eq_param = has_extra_eq_param(bytes);
+    let extra_eq_param = has_extra_eq_param_t(&det_text);
     // D1516: msgid 内の空白
     let spaced_msgid = has_spaced_msgid(det);
     // D1517: ローカル部の非 ASCII
-    let nonascii_addr_local = has_nonascii_addr_local(bytes);
+    let nonascii_addr_local = has_nonascii_addr_local_t(&det_text);
     // D1518: dot-stuffing 残渣
-    let dot_stuffed_line = has_dot_stuffed_line(bytes);
+    let dot_stuffed_line = has_dot_stuffed_line_t(&det_text);
     // D1519: 大文字形 Content-Disposition
-    let mixed_case_disposition = has_mixed_case_disposition(bytes);
+    let mixed_case_disposition = has_mixed_case_disposition_t(&det_text);
     // D1520: CTE 値内の空白
-    let spaced_cte = has_spaced_cte(bytes);
+    let spaced_cte = has_spaced_cte_t(&det_text);
     // D1521: アドレス欄の未終端コメント
-    let unclosed_addr_comment = has_unclosed_addr_comment(bytes);
+    let unclosed_addr_comment = has_unclosed_addr_comment_t(&det_text);
     // D1522: msgid の未終端 <
     let unclosed_msgid = has_unclosed_msgid(det);
     // D1523: グループ外 ;
-    let semicolon_addr = has_semicolon_addr(bytes);
+    let semicolon_addr = has_semicolon_addr_t(&det_text);
     // D1524: *= の危険 charset
     let bad_2231_charset = has_bad_2231_charset(bytes);
     // D1525: 未終端クオート
-    let unclosed_addr_quote = has_unclosed_addr_quote(bytes);
+    let unclosed_addr_quote = has_unclosed_addr_quote_t(&det_text);
     // D1526: 未終端/裸の括弧
-    let unclosed_angle_addr = has_unclosed_angle_addr(bytes);
+    let unclosed_angle_addr = has_unclosed_angle_addr_t(&det_text);
     // D1527: encoded-word の危険 charset
     let bad_ew_charset = has_bad_ew_charset(bytes);
     // D1528: @ 無し括弧宛名
-    let atless_angle_addr = has_atless_angle_addr(bytes);
+    let atless_angle_addr = has_atless_angle_addr_t(&det_text);
     // D1529: msgid 欄内の encoded-word
     let msgid_encoded_word = has_msgid_encoded_word(det);
     // D1530: 2231 連番の素/*混在
-    let mixed_2231_cont = has_mixed_2231_cont(bytes);
+    let mixed_2231_cont = has_mixed_2231_cont_t(&det_text);
     // D1531: 空白継ぎの裸アドレス
-    let spaced_bare_addrs = has_spaced_bare_addrs(bytes);
+    let spaced_bare_addrs = has_spaced_bare_addrs_t(&det_text);
     // D1532: @ 無し Content-ID
-    let atless_content_id = has_atless_content_id(bytes);
+    let atless_content_id = has_atless_content_id_t(&det_text);
     // D1533: `:` 終わり欄名
     let double_colon_header = has_double_colon_header(det);
     // D1534: 名前付きタイムゾーン
@@ -6130,63 +6140,63 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1535: 2桁年
     let two_digit_year = has_two_digit_year(det);
     // D1536: コメントのみ宛名
-    let comment_only_addr = has_comment_only_addr(bytes);
+    let comment_only_addr = has_comment_only_addr_t(&det_text);
     // D1537: 全角コンマ区切り
-    let fullwidth_comma_addr = has_fullwidth_comma_addr(bytes);
+    let fullwidth_comma_addr = has_fullwidth_comma_addr_t(&det_text);
     // D1538: `>` 後のゴミ
-    let addr_junk_after_angle = has_addr_junk_after_angle(bytes);
+    let addr_junk_after_angle = has_addr_junk_after_angle_t(&det_text);
     // D1539: `,` 無し連続括弧宛名
-    let two_angles_no_comma = has_two_angles_no_comma(bytes);
+    let two_angles_no_comma = has_two_angles_no_comma_t(&det_text);
     // D1540: ワイルドカード CT
-    let wildcard_ct = has_wildcard_ct(bytes);
+    let wildcard_ct = has_wildcard_ct_t(&det_text);
     // D1541: List-* の危険スキーム
     let dangerous_list_scheme = has_dangerous_list_scheme(bytes);
     // D1542: クオートのみ宛名
-    let quoted_only_addr = has_quoted_only_addr(bytes);
+    let quoted_only_addr = has_quoted_only_addr_t(&det_text);
     // D1543: `;` 無しグループ
-    let unclosed_addr_group = has_unclosed_addr_group(bytes);
+    let unclosed_addr_group = has_unclosed_addr_group_t(&det_text);
     // D1544: 複数値 CTE
-    let multi_value_cte = has_multi_value_cte(bytes);
+    let multi_value_cte = has_multi_value_cte_t(&det_text);
     // D1545: msgid 欄の `>` 後ゴミ
     let msgid_junk_after_angle = has_msgid_junk_after_angle(det);
     // D1546: 非 IP ドメインリテラル
-    let nonip_domain_literal = has_nonip_domain_literal(bytes);
+    let nonip_domain_literal = has_nonip_domain_literal_t(&det_text);
     // D1547: ゾーン無し Date
     let zoneless_date = has_zoneless_date(det);
     // D1548: `.` を含む欄名
     let dotted_header_name = has_dotted_header_name(det);
     // D1549: 全角括弧宛名
-    let fullwidth_angle_addr = has_fullwidth_angle_addr(bytes);
+    let fullwidth_angle_addr = has_fullwidth_angle_addr_t(&det_text);
     // D1550: 二重 @ 宛名
-    let multi_at_addr = has_multi_at_addr(bytes);
+    let multi_at_addr = has_multi_at_addr_t(&det_text);
     // D1551: msgid ドメインの連続ドット
     let dotdot_msgid_domain = has_dotdot_msgid_domain(det);
     // D1552: MIME 欄値中の encoded-word
-    let ew_in_mime_headers = has_ew_in_mime_headers(bytes);
+    let ew_in_mime_headers = has_ew_in_mime_headers_t(&det_text);
     // D1553: ローカル端ドット
-    let edge_dot_local = has_edge_dot_local(bytes);
+    let edge_dot_local = has_edge_dot_local_t(&det_text);
     // D1554: 宛名ドメイン連続ドット
-    let dotdot_addr_domain = has_dotdot_addr_domain(bytes);
+    let dotdot_addr_domain = has_dotdot_addr_domain_t(&det_text);
     // D1555: 未知月名
     let bad_month_name = has_bad_month_name(det);
     // D1556: ローカル連続ドット
-    let dotdot_addr_local = has_dotdot_addr_local(bytes);
+    let dotdot_addr_local = has_dotdot_addr_local_t(&det_text);
     // D1557: 裸ローカル部の特殊文字
     let special_local_char = has_special_local_char(bytes);
     // D1558: 数値 TLD
-    let digit_tld_addr = has_digit_tld_addr(bytes);
+    let digit_tld_addr = has_digit_tld_addr_t(&det_text);
     // D1559: 範囲外時刻
     let bad_clock = has_bad_clock(det);
     // D1560: 端ハイフンドメイン
-    let edge_hyphen_domain = has_edge_hyphen_domain(bytes);
+    let edge_hyphen_domain = has_edge_hyphen_domain_t(&det_text);
     // D1561: 範囲外の日
     let bad_day = has_bad_day(det);
     // D1562: 先頭ドットドメイン
-    let leading_dot_domain = has_leading_dot_domain(bytes);
+    let leading_dot_domain = has_leading_dot_domain_t(&det_text);
     // D1563: msgid 先頭ドットドメイン
     let msgid_leading_dot = has_msgid_leading_dot(det);
     // D1564: 範囲外 IP リテラル
-    let bad_ip_literal = has_bad_ip_literal(bytes);
+    let bad_ip_literal = has_bad_ip_literal_t(&det_text);
     // D1565: 範囲外タイムゾーン
     let bad_tz = has_bad_tz(det);
     // D1566: 数字月
@@ -6204,9 +6214,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1572: 裸 List-Id
     let bare_list_id = has_bare_list_id(det);
     // D1573: 複数スラッシュ CT
-    let multi_slash_ct = has_multi_slash_ct(bytes);
+    let multi_slash_ct = has_multi_slash_ct_t(&det_text);
     // D1574: 裸 IPv4 ドメイン
-    let bare_ipv4_domain = has_bare_ipv4_domain(bytes);
+    let bare_ipv4_domain = has_bare_ipv4_domain_t(&det_text);
     // D1575: 全角ピリオド宛名
     let fullwidth_dot_addr = has_fullwidth_dot_addr(bytes);
     // D1576: msgid ローカル端ドット
@@ -6216,39 +6226,39 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1578: クオート msgid
     let quoted_msgid = has_quoted_msgid(det);
     // D1579: 長いローカル部
-    let long_local = has_long_local(bytes);
+    let long_local = has_long_local_t(&det_text);
     // D1580: 長いドメインラベル
-    let long_domain_label = has_long_domain_label(bytes);
+    let long_domain_label = has_long_domain_label_t(&det_text);
     // D1581: 全角コロンの欄名区切り
-    let fullwidth_colon_header = has_fullwidth_colon_header(bytes);
+    let fullwidth_colon_header = has_fullwidth_colon_header_t(&det_text);
     // D1582: 非3文字曜日名
     let bad_weekday = has_bad_weekday(det);
     // D1583: 宛名欄の全角スペース
     let fullwidth_space_addr = has_fullwidth_space_addr(det);
     // D1584: 宛名リストの空要素
-    let empty_addr_segment = has_empty_addr_segment(bytes);
+    let empty_addr_segment = has_empty_addr_segment_t(&det_text);
     // D1585: コロンを欠くヘッダ行
-    let colonless_header_line = has_colonless_header_line(bytes);
+    let colonless_header_line = has_colonless_header_line_t(&det_text);
     // D1586: Received の `;` 日時印欠落
     let received_no_semi = has_received_no_semi(det);
     // D1587: `_` 綴りの標準欄名
     let underscore_header_name = has_underscore_header_name(bytes);
     // D1588: 未知メディア主型
-    let unknown_maintype = has_unknown_maintype(bytes);
+    let unknown_maintype = has_unknown_maintype_t(&det_text);
     // D1589: 同一性欄の重複
     let dup_identity_headers = has_dup_identity_headers(det);
     // D1590: 角括弧宛名の前の裸アドレス
-    let addr_before_angle = has_addr_before_angle(bytes);
+    let addr_before_angle = has_addr_before_angle_t(&det_text);
     // D1591: コンマ無し曜日名
     let nocomma_weekday = has_nocomma_weekday(det);
     // D1592: 欄名の非 ftext 文字
-    let bad_ftext = has_bad_ftext(bytes);
+    let bad_ftext = has_bad_ftext_t(&det_text);
     // D1593: CT/CD 型本体の `,`
-    let comma_media_value = has_comma_media_value(bytes);
+    let comma_media_value = has_comma_media_value_t(&det_text);
     // D1594: CT/CD 欄の全角 `；`/`＝`
-    let fullwidth_param_punct = has_fullwidth_param_punct(bytes);
+    let fullwidth_param_punct = has_fullwidth_param_punct_t(&det_text);
     // D1595: Content-ID の重複
-    let dup_content_id = has_dup_content_id(bytes);
+    let dup_content_id = has_dup_content_id_t(&det_text);
     // D1596: 識別子 `<…>` 内部の空白
     let inner_space_id = has_inner_space_id(det);
     // D1597: ヘッダが LF のみ改行
@@ -6256,9 +6266,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1598: To/Cc/Bcc/Reply-To の重複
     let dup_addr_headers = has_dup_addr_headers(det);
     // D1599: ヘッダ内の空白のみ行
-    let blank_ws_line = has_blank_ws_line(bytes);
+    let blank_ws_line = has_blank_ws_line_t(&det_text);
     // D1600: CT/CD param の未終端クオート
-    let unterm_param_quote = has_unterm_param_quote(bytes);
+    let unterm_param_quote = has_unterm_param_quote_t(&det_text);
     // D1601: List-* 欄の裸 URL
     let bare_list_url = has_bare_list_url(det);
     // D1602: 表示名クオート内の `@`
@@ -6276,7 +6286,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1608: List-* 欄の `<`/`>` 不一致
     let unclosed_list_angle = has_unclosed_list_angle(det);
     // D1609: CT/CD クオート値内の `;`
-    let quoted_semicolon = has_quoted_semicolon(bytes);
+    let quoted_semicolon = has_quoted_semicolon_t(&det_text);
     // D1610: 時刻を欠く日付欄
     let timeless_date = has_timeless_date(det);
     // D1611: アドレス欄のコメント入れ子
@@ -6284,7 +6294,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1612: encoded-word 連接
     let adjacent_encoded_words = has_adjacent_encoded_words(det);
     // D1613: 大文字混じりのメディア型
-    let uppercase_media = has_uppercase_media(bytes);
+    let uppercase_media = has_uppercase_media_t(&det_text);
     // D1614: `*=` 値の `'` 欠落
     let star_param_no_apostrophe = has_star_param_no_apostrophe(det);
     // D1615: 識別子内の非 IP リテラル
@@ -6300,7 +6310,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1620: 空ドメインリテラル
     let empty_domain_literal = has_empty_domain_literal(det);
     // D1621: 二重メディア型
-    let two_media_types = has_two_media_types(bytes);
+    let two_media_types = has_two_media_types_t(&det_text);
     // D1622: ドメインの DNS 外文字
     let bad_domain_char = has_bad_domain_char(det);
     // D1623: 識別子の全角額縁
@@ -6330,7 +6340,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1635: `<` 無しの `>`
     let msgid_gt_only = has_msgid_gt_only(det);
     // D1636: `;;` 空 param 節
-    let empty_param_segment = has_empty_param_segment(bytes);
+    let empty_param_segment = has_empty_param_segment_t(&det_text);
     // D1637: 識別子内の残存非合法字
     let msgid_bad_char = has_msgid_bad_char(det);
     // D1638: 額縁内の `;`
@@ -6342,25 +6352,25 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1641: Sender ありで From 無し
     let sender_no_from = has_sender_no_from(det);
     // D1642: パート内 MIME-Version
-    let mimever_in_part = has_mimever_in_part(bytes);
+    let mimever_in_part = has_mimever_in_part_t(&det_text);
     // D1643: ローカル部の裸 `\`
     let local_backslash = has_local_backslash(det);
     // D1644: param 値の生非 ASCII
-    let raw_param_nonascii = has_raw_param_nonascii(bytes);
+    let raw_param_nonascii = has_raw_param_nonascii_t(&det_text);
     // D1645: MIME 欄の空値
     let empty_mime_field = has_empty_mime_field(det);
     // D1646: クオート付きドメイン
     let quoted_domain = has_quoted_domain(det);
     // D1647: param 値の裸の第二 `=`
-    let param_eq_bare = has_param_eq_bare(bytes);
+    let param_eq_bare = has_param_eq_bare_t(&det_text);
     // D1648: 長い月名
     let long_month = has_long_month(det);
     // D1649: CT 型トークン欠落
-    let missing_media_type = has_missing_media_type(bytes);
+    let missing_media_type = has_missing_media_type_t(&det_text);
     // D1650: ドメイン部の空白
     let ws_domain = has_ws_domain(det);
     // D1651: param 値直後の空白
-    let param_leading_ws = has_param_leading_ws(bytes);
+    let param_leading_ws = has_param_leading_ws_t(&det_text);
     // D1652: 空白分断ゾーン
     let split_zone = has_split_zone(det);
     // D1653: Date 欄の年欠落
@@ -6368,15 +6378,15 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1654: `-` 区切り日付
     let dash_date = has_dash_date(det);
     // D1655: CTE 値の param
-    let cte_param = has_cte_param(bytes);
+    let cte_param = has_cte_param_t(&det_text);
     // D1656: param キーの非 token 文字
-    let bad_param_key = has_bad_param_key(bytes);
+    let bad_param_key = has_bad_param_key_t(&det_text);
     // D1657: Date 欄の二時刻
     let date_two_times = has_date_two_times(det);
     // D1658: クオート boundary の端空白
-    let boundary_edge_ws = has_boundary_edge_ws(bytes);
+    let boundary_edge_ws = has_boundary_edge_ws_t(&det_text);
     // D1659: param 裸値の `:`
-    let colon_param_val = has_colon_param_val(bytes);
+    let colon_param_val = has_colon_param_val_t(&det_text);
     // D1660: Date 欄の二曜日名
     let two_daynames = has_two_daynames(det);
     // D1661: Message-ID の <> 欠落
@@ -6384,7 +6394,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1662: Date 欄の符号なしゾーン
     let unsigned_zone = has_unsigned_zone(det);
     // D1663: param クオート閉じ後の続き文字
-    let quote_tail_param = has_quote_tail_param(bytes);
+    let quote_tail_param = has_quote_tail_param_t(&det_text);
     // D1664: Date 欄の年先頭並び
     let year_first_date = has_year_first_date(det);
     // D1665: Date 欄の AM/PM 記号
@@ -6396,7 +6406,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1668: Date 欄の / 区切り日付
     let slash_date = has_slash_date(det);
     // D1669: 親子 multipart の boundary 再利用
-    let nested_boundary_reuse = has_nested_boundary_reuse(bytes);
+    let nested_boundary_reuse = has_nested_boundary_reuse_t(&det_text);
     // D1670: Date 欄ゾーンの桁数異常
     let bad_zone_len = has_bad_zone_len(det);
     // D1671: Date 欄の . 区切り日付
@@ -6418,11 +6428,11 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1679: 宛名が @ で終わりドメイン欠落
     let addr_at_end = has_addr_at_end(det);
     // D1680: boundary 値が空白のみ
-    let ws_boundary = has_ws_boundary(bytes);
+    let ws_boundary = has_ws_boundary_t(&det_text);
     // D1681: 宛名欄の値が空
     let empty_addr_header = has_empty_addr_header(det);
     // D1682: 宣言なき区切り行
-    let orphan_boundary = has_orphan_boundary(bytes);
+    let orphan_boundary = has_orphan_boundary_t(&det_text);
     // D1683: Date 欄ゾーンが符号+英字
     let zone_alpha = has_zone_alpha(det);
     // D1684: Date 欄ゾーンが符号のみ
@@ -6450,31 +6460,31 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1695: Date 欄の数字曜日
     let numeric_dow = has_numeric_dow(det);
     // D1696: CT/CD param の空値
-    let param_empty_value = has_param_empty_value(bytes);
+    let param_empty_value = has_param_empty_value_t(&det_text);
     // D1697: 宛名の単ラベルドメイン
     let single_label_domain = has_single_label_domain(det);
     // D1698: param = 直前の空白
-    let pre_eq_space = has_pre_eq_space(bytes);
+    let pre_eq_space = has_pre_eq_space_t(&det_text);
     // D1699: Date 欄の5桁以上の年
     let year_5digit = has_year_5digit(det);
     // D1700: param 引用値内の =
-    let param_quoted_eq = has_param_quoted_eq(bytes);
+    let param_quoted_eq = has_param_quoted_eq_t(&det_text);
     // D1701: 大小写のみ異なる boundary
-    let boundary_case_collide = has_boundary_case_collide(bytes);
+    let boundary_case_collide = has_boundary_case_collide_t(&det_text);
     // D1702: List-Id の二識別子
     let two_list_ids = has_two_list_ids(det);
     // D1703: Received の from 節が空
     let received_from_empty = has_received_from_empty(det);
     // D1704: param 裸値の /
-    let slash_param_value = has_slash_param_value(bytes);
+    let slash_param_value = has_slash_param_value_t(&det_text);
     // D1705: Content-Type のサブ型欠落
-    let ct_no_subtype = has_ct_no_subtype(bytes);
+    let ct_no_subtype = has_ct_no_subtype_t(&det_text);
     // D1706: 識別子のドット無しドメイン
     let msgid_dotless_domain = has_msgid_dotless_domain(det);
     // D1707: Received の by 節重複
     let received_multi_by = has_received_multi_by(det);
     // D1708: Content-Disposition の型欠落
-    let cd_empty_type = has_cd_empty_type(bytes);
+    let cd_empty_type = has_cd_empty_type_t(&det_text);
     // D1709: Received の from 節クオート名
     let received_from_quoted = has_received_from_quoted(det);
     // D1710: Received の from 節の裸 @
@@ -6484,23 +6494,23 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1712: Received の for 節重複
     let received_multi_for = has_received_multi_for(det);
     // D1713: param 名の @
-    let at_param_name = has_at_param_name(bytes);
+    let at_param_name = has_at_param_name_t(&det_text);
     // D1714: CTE 値の余分な空白
     let padded_cte = has_padded_cte(det);
     // D1715: Received の id 節重複
     let received_multi_id = has_received_multi_id(det);
     // D1716: param 名の /
-    let slash_param_name = has_slash_param_name(bytes);
+    let slash_param_name = has_slash_param_name_t(&det_text);
     // D1717: CTE 値の二トークン
     let two_cte_values = has_two_cte_values(det);
     // D1718: boundary に英数字が無い
-    let alnumless_boundary = has_alnumless_boundary(bytes);
+    let alnumless_boundary = has_alnumless_boundary_t(&det_text);
     // D1719: Received の via 節重複
     let received_multi_via = has_received_multi_via(det);
     // D1720: Received の by 節空値
     let received_by_empty = has_received_by_empty(det);
     // D1721: Content-Disposition 型トークン2つ
-    let cd_two_types = has_cd_two_types(bytes);
+    let cd_two_types = has_cd_two_types_t(&det_text);
     // D1722: 識別子内の @ 2つ
     let msgid_two_at = has_msgid_two_at(det);
     // D1723: Received の with 節空値
@@ -6508,13 +6518,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1724: Received の id 節空値
     let received_id_empty = has_received_id_empty(det);
     // D1725: 同一欄内の boundary= 重複
-    let boundary_param_dup = has_boundary_param_dup(bytes);
+    let boundary_param_dup = has_boundary_param_dup_t(&det_text);
     // D1726: Received の for 節空値
     let received_for_empty = has_received_for_empty(det);
     // D1727: Received の via 節空値
     let received_via_empty = has_received_via_empty(det);
     // D1728: 同一欄内の同名 param 重複
-    let param_name_dup = has_param_name_dup(bytes);
+    let param_name_dup = has_param_name_dup_t(&det_text);
     // D1729: 識別子列の ,
     let msgid_ref_comma = has_msgid_ref_comma(det);
     // D1730: 宛名欄が ; のみ
@@ -7804,7 +7814,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let orig_msgid_bad = has_orig_msgid_bad(det);
     let mdn_disposition_bad = has_mdn_disposition_bad(det);
     let reporting_ua_bad = has_reporting_ua_bad(det);
-    let msg_context_bad = has_msg_context_bad(bytes);
+    let msg_context_bad = has_msg_context_bad_t(&det_text);
     let content_md5_bad = has_content_md5_bad(det);
     let content_lang_bad = has_content_lang_bad(det);
     let content_digest_bad = has_content_digest_bad(det);
@@ -7872,7 +7882,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
     // D1284: Content-Location がリモート URL を指すパート (MHTML smuggling)
-    let remote_content_location = has_remote_content_location(bytes);
+    let remote_content_location = has_remote_content_location_t(&det_text);
 
     // D1285: MIME 制御ヘッダの重複・不正 CTE (draft-chen MIME ambiguity)
     let conflicting_mime_headers = has_conflicting_mime_headers(bytes);
@@ -7881,16 +7891,16 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let uuencode_payload = has_uuencode_payload(bytes);
 
     // D1287: 非 multipart Content-Type 上の bogus boundary= (mailsplit 系)
-    let bogus_boundary_param = has_bogus_boundary_param(bytes);
+    let bogus_boundary_param = has_bogus_boundary_param_t(&det_text);
 
     // D1288: boundary プリアンブル/エピローグ内のパート様構造
-    let orphaned_part_content = has_orphaned_part_content(bytes);
+    let orphaned_part_content = has_orphaned_part_content_t(&det_text);
 
     // D1289: MIME-Version 欠落 (MIME 構造を使うのに宣言無し)
     let missing_mime_version = has_missing_mime_version(bytes);
 
     // D1290: 宣言 boundary の不使用/未終了 multipart
-    let unterminated_multipart = has_unterminated_multipart(bytes);
+    let unterminated_multipart = has_unterminated_multipart_t(&det_text);
 
     Ok(Envelope {
         message_id,
@@ -10080,8 +10090,10 @@ pub fn has_malformed_encoded_word(raw: &[u8]) -> bool {
 /// するため、行頭に `content-location:` が現れる論理行を全文で探す。
 #[must_use]
 pub fn has_remote_content_location(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_remote_content_location_t(&shared_text(raw))
+}
+
+fn has_remote_content_location_t(text: &str) -> bool {
     let mut logical: Vec<String> = Vec::new();
     for l in text.split('\n') {
         if l.starts_with([' ', '\t']) {
@@ -10259,8 +10271,10 @@ pub fn has_uuencode_payload(raw: &[u8]) -> bool {
 /// `content-type:` 論理行で型が `multipart/` でなければ兆候。
 #[must_use]
 pub fn has_bogus_boundary_param(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_bogus_boundary_param_t(&shared_text(raw))
+}
+
+fn has_bogus_boundary_param_t(text: &str) -> bool {
     let mut logical: Vec<String> = Vec::new();
     for l in text.split('\n') {
         if l.starts_with([' ', '\t']) {
@@ -10300,8 +10314,10 @@ pub fn has_bogus_boundary_param(raw: &[u8]) -> bool {
 /// boundary 値から判定。入れ子 multipart は外側だけ見る。
 #[must_use]
 pub fn has_orphaned_part_content(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_orphaned_part_content_t(&shared_text(raw))
+}
+
+fn has_orphaned_part_content_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(0);
     // トップヘッダから boundary 値を拾う (引用符許容)
     let lower_head = text[..header_end].to_ascii_lowercase();
@@ -10388,8 +10404,10 @@ pub fn has_missing_mime_version(raw: &[u8]) -> bool {
 /// 生きたまま残るバグと同型)。トップレベル boundary だけ見る。
 #[must_use]
 pub fn has_unterminated_multipart(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unterminated_multipart_t(&shared_text(raw))
+}
+
+fn has_unterminated_multipart_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(0);
     let lower_head = text[..header_end].to_ascii_lowercase();
     let mut boundary: Option<String> = None;
@@ -10511,8 +10529,10 @@ pub fn has_duplicate_identity_headers(raw: &[u8]) -> bool {
 /// 入れ子パートのヘッダ run も個別に評価される。
 #[must_use]
 pub fn has_encoded_multipart_container(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_encoded_multipart_container_t(&shared_text(raw))
+}
+
+fn has_encoded_multipart_container_t(text: &str) -> bool {
     // FWS 展開: 継続行を論理行に結合
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -10559,8 +10579,10 @@ pub fn has_encoded_multipart_container(raw: &[u8]) -> bool {
 /// 空白は bchars に含まれ RFC 上は合法のため対象外。
 #[must_use]
 pub fn has_whitespace_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_whitespace_boundary_t(&shared_text(raw))
+}
+
+fn has_whitespace_boundary_t(text: &str) -> bool {
     // FWS 展開
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -10606,8 +10628,10 @@ pub fn has_whitespace_boundary(raw: &[u8]) -> bool {
 /// name*= 符号化を、 filename* は CD を拾う)。
 #[must_use]
 pub fn has_rfc2231_attachment_params(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_rfc2231_attachment_params_t(&shared_text(raw))
+}
+
+fn has_rfc2231_attachment_params_t(text: &str) -> bool {
     // FWS 展開
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -10649,8 +10673,10 @@ pub fn has_rfc2231_attachment_params(raw: &[u8]) -> bool {
 /// (D1281/D1294 と同族)。
 #[must_use]
 pub fn has_escaped_boundary_quote(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_escaped_boundary_quote_t(&shared_text(raw))
+}
+
+fn has_escaped_boundary_quote_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -10708,8 +10734,10 @@ pub fn has_escaped_boundary_quote(raw: &[u8]) -> bool {
 /// 同一値の出現回数を数える。
 #[must_use]
 pub fn has_reused_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_reused_boundary_t(&shared_text(raw))
+}
+
+fn has_reused_boundary_t(text: &str) -> bool {
     // FWS 展開
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -11061,8 +11089,10 @@ pub fn has_non_utf8_headers(raw: &[u8]) -> bool {
 /// ハイフン) のみから成る行を検出する。
 #[must_use]
 pub fn has_spaced_header_name(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_spaced_header_name_t(&shared_text(raw))
+}
+
+fn has_spaced_header_name_t(text: &str) -> bool {
     let mut in_header_run = true; // 先頭は外側ヘッダ run
     for l in text.lines() {
         if l.is_empty() {
@@ -11155,8 +11185,10 @@ pub fn has_mbox_from_line(raw: &[u8]) -> bool {
 /// (連番分割自体は D1295 が別途検出する)。
 #[must_use]
 pub fn has_duplicate_mime_params(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_duplicate_mime_params_t(&shared_text(raw))
+}
+
+fn has_duplicate_mime_params_t(text: &str) -> bool {
     // FWS 展開
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -11200,8 +11232,10 @@ pub fn has_duplicate_mime_params(raw: &[u8]) -> bool {
 /// 差異として残る経路。パートのヘッダ run 単位で判定する。
 #[must_use]
 pub fn has_ct_name_no_disposition(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_ct_name_no_disposition_t(&shared_text(raw))
+}
+
+fn has_ct_name_no_disposition_t(text: &str) -> bool {
     // FWS 展開
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -11252,8 +11286,10 @@ pub fn has_ct_name_no_disposition(raw: &[u8]) -> bool {
 /// D1294/D1297 同族の極端なケース)。
 #[must_use]
 pub fn has_empty_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_empty_boundary_t(&shared_text(raw))
+}
+
+fn has_empty_boundary_t(text: &str) -> bool {
     // FWS 展開
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -11305,8 +11341,10 @@ pub fn has_empty_boundary(raw: &[u8]) -> bool {
 /// そのまま保存するメーラーで実際の保存先がずれる。
 #[must_use]
 pub fn has_traversal_filename(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_traversal_filename_t(&shared_text(raw))
+}
+
+fn has_traversal_filename_t(text: &str) -> bool {
     // FWS 展開
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -11358,8 +11396,10 @@ pub fn has_traversal_filename(raw: &[u8]) -> bool {
 /// ヘッダ部と各 MIME パートのヘッダ run を走査する。
 #[must_use]
 pub fn has_overlong_header(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_overlong_header_t(&shared_text(raw))
+}
+
+fn has_overlong_header_t(text: &str) -> bool {
     let mut in_header_run = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -11389,8 +11429,10 @@ pub fn has_overlong_header(raw: &[u8]) -> bool {
 /// 「除去する」デコーダで本文がずれ、検査器と表示側で別の内容になる。
 #[must_use]
 pub fn has_invalid_qp_escapes(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_invalid_qp_escapes_t(&shared_text(raw))
+}
+
+fn has_invalid_qp_escapes_t(text: &str) -> bool {
     let bnd = declared_boundary(&text);
     let mut in_headers = true;
     let mut qp = false;
@@ -11454,8 +11496,10 @@ pub fn has_invalid_qp_escapes(raw: &[u8]) -> bool {
 /// 検査器と表示側で別の添付内容になる差異工作。
 #[must_use]
 pub fn has_invalid_base64_body(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_invalid_base64_body_t(&shared_text(raw))
+}
+
+fn has_invalid_base64_body_t(text: &str) -> bool {
     let bnd = declared_boundary(&text);
     let mut in_headers = true;
     let mut b64 = false;
@@ -11521,8 +11565,10 @@ pub fn has_invalid_base64_body(raw: &[u8]) -> bool {
 /// (D1281/D1294/D1311 同族の字句側)。
 #[must_use]
 pub fn has_invalid_boundary_chars(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_invalid_boundary_chars_t(&shared_text(raw))
+}
+
+fn has_invalid_boundary_chars_t(text: &str) -> bool {
     // FWS 展開
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -11577,8 +11623,10 @@ pub fn has_invalid_boundary_chars(raw: &[u8]) -> bool {
 /// まで) が CON/PRN/AUX/NUL/COM1-9/LPT1-9 と一致するかを見る。
 #[must_use]
 pub fn has_device_filename(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_device_filename_t(&shared_text(raw))
+}
+
+fn has_device_filename_t(text: &str) -> bool {
     // FWS 展開
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -11629,8 +11677,10 @@ pub fn has_device_filename(raw: &[u8]) -> bool {
 /// 見え方がずれる (D1311 空 boundary・D1313 パス成分と同族の退化形)。
 #[must_use]
 pub fn has_degenerate_filename(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_degenerate_filename_t(&shared_text(raw))
+}
+
+fn has_degenerate_filename_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -11676,8 +11726,10 @@ pub fn has_degenerate_filename(raw: &[u8]) -> bool {
 /// メディア型の主値だけがある形は RFC 2045 の grammar に合わない。
 #[must_use]
 pub fn has_typeless_content_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_typeless_content_type_t(&shared_text(raw))
+}
+
+fn has_typeless_content_type_t(text: &str) -> bool {
     let bnd = declared_boundary(&text);
     let mut in_headers = true;
     for l in text.lines() {
@@ -11723,8 +11775,10 @@ pub fn has_typeless_content_type(raw: &[u8]) -> bool {
 /// 形は未カバーだった。
 #[must_use]
 pub fn has_ambiguous_boundary_line(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_ambiguous_boundary_line_t(&shared_text(raw))
+}
+
+fn has_ambiguous_boundary_line_t(text: &str) -> bool {
     // FWS 展開して boundary= 値を収集 (値は case-sensitive のため
     // 原文から取る — lower 化した行は位置合わせにのみ使う)
     let mut logical = String::with_capacity(text.len());
@@ -11791,8 +11845,10 @@ pub fn has_ambiguous_boundary_line(raw: &[u8]) -> bool {
 /// `filename=`/`name=` が `winmail.dat` のパートで検出する。
 #[must_use]
 pub fn has_tnef_attachment(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_tnef_attachment_t(&shared_text(raw))
+}
+
+fn has_tnef_attachment_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -11844,8 +11900,10 @@ pub fn has_tnef_attachment(raw: &[u8]) -> bool {
 /// パート) の `=?charset?{B,Q}?text?=` を実際にデコードして検査する。
 #[must_use]
 pub fn has_control_encoded_word(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_control_encoded_word_t(&shared_text(raw))
+}
+
+fn has_control_encoded_word_t(text: &str) -> bool {
     // FWS 展開 — 折り畳まれた encoded-word を1行に戻す
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
@@ -11986,8 +12044,10 @@ fn decode_b64_simple(s: &str) -> Vec<u8> {
 /// コメント内のカンマは氏名として合法なため剥がしてから評価する。
 #[must_use]
 pub fn has_multi_addr_from(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_multi_addr_from_t(&shared_text(raw))
+}
+
+fn has_multi_addr_from_t(text: &str) -> bool {
     // FWS 展開
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
@@ -12113,8 +12173,10 @@ pub fn has_executable_content_type(raw: &[u8]) -> bool {
 /// NUL は D1303、裸 CR は D1307 が別途報告するためここでは除外する。
 #[must_use]
 pub fn has_ctl_bytes_in_headers(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_ctl_bytes_in_headers_t(&shared_text(raw))
+}
+
+fn has_ctl_bytes_in_headers_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -12148,8 +12210,10 @@ pub fn has_ctl_bytes_in_headers(raw: &[u8]) -> bool {
 /// multipart コンテナの 7bit は正規なので除外する。
 #[must_use]
 pub fn has_8bit_body_with_7bit_cte(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_8bit_body_with_7bit_cte_t(&shared_text(raw))
+}
+
+fn has_8bit_body_with_7bit_cte_t(text: &str) -> bool {
     let mut in_headers = true;
     let mut run_7bit = false;
     let mut run_multipart = false;
@@ -12361,8 +12425,10 @@ fn trim_bytes(b: &[u8]) -> &[u8] {
 /// この一般形の一部。
 #[must_use]
 pub fn has_malformed_header_line(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_malformed_header_line_t(&shared_text(raw))
+}
+
+fn has_malformed_header_line_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -12398,8 +12464,10 @@ pub fn has_malformed_header_line(raw: &[u8]) -> bool {
 /// そのメッセージ自身の属性)。
 #[must_use]
 pub fn has_bcc_header(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_bcc_header_t(&shared_text(raw))
+}
+
+fn has_bcc_header_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -12433,8 +12501,10 @@ pub fn has_bcc_header(raw: &[u8]) -> bool {
 /// 外部を引きにいく。`cid:`/ローカル参照は対象外。
 #[must_use]
 pub fn has_remote_content_base(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_remote_content_base_t(&shared_text(raw))
+}
+
+fn has_remote_content_base_t(text: &str) -> bool {
     let mut logical: Vec<String> = Vec::new();
     for l in text.split('\n') {
         if l.starts_with([' ', '\t']) {
@@ -12498,8 +12568,10 @@ pub fn has_receipt_request(raw: &[u8]) -> bool {
 /// 対し、こちらは「アドレスを持たない From」を見る。
 #[must_use]
 pub fn has_degenerate_from_addr(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_degenerate_from_addr_t(&shared_text(raw))
+}
+
+fn has_degenerate_from_addr_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -12565,8 +12637,10 @@ pub fn has_degenerate_from_addr(raw: &[u8]) -> bool {
 /// 表示名に `@` が無い場合は D1334 (アドレス無し From) の領分。
 #[must_use]
 pub fn has_address_display_name(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_address_display_name_t(&shared_text(raw))
+}
+
+fn has_address_display_name_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -12638,8 +12712,10 @@ pub fn has_address_display_name(raw: &[u8]) -> bool {
 /// 兆候で、参照チェーン検査の材料も失わせる (D1278 Date 欠落の姉妹)。
 #[must_use]
 pub fn has_odd_message_id(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_odd_message_id_t(&shared_text(raw))
+}
+
+fn has_odd_message_id_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -12686,8 +12762,10 @@ pub fn has_odd_message_id(raw: &[u8]) -> bool {
 /// 添付一覧に現れない死角になる。
 #[must_use]
 pub fn has_odd_disposition_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_odd_disposition_type_t(&shared_text(raw))
+}
+
+fn has_odd_disposition_type_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -12721,8 +12799,10 @@ pub fn has_odd_disposition_type(raw: &[u8]) -> bool {
 /// 夾雑テキストがある場合に検出する。正規の `<a@b> <c@d>` 列は不発火。
 #[must_use]
 pub fn has_malformed_thread_refs(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_malformed_thread_refs_t(&shared_text(raw))
+}
+
+fn has_malformed_thread_refs_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -12791,8 +12871,10 @@ pub fn has_malformed_thread_refs(raw: &[u8]) -> bool {
 /// 欄はあるが値が空の場合も宛先は見えないため同様に検出する。
 #[must_use]
 pub fn has_no_recipient_headers(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_no_recipient_headers_t(&shared_text(raw))
+}
+
+fn has_no_recipient_headers_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -12832,8 +12914,10 @@ pub fn has_no_recipient_headers(raw: &[u8]) -> bool {
 /// DMARC 認証済みなら自称フィルタで沈む自称系の兆候として扱う。
 #[must_use]
 pub fn has_urgency_claim(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_urgency_claim_t(&shared_text(raw))
+}
+
+fn has_urgency_claim_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -12882,8 +12966,10 @@ pub fn has_urgency_claim(raw: &[u8]) -> bool {
 /// も構造を変えるため検出対象 — 件名での `@` は普通の本文なので対象外。
 #[must_use]
 pub fn has_structural_encoded_word(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_structural_encoded_word_t(&shared_text(raw))
+}
+
+fn has_structural_encoded_word_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -12982,8 +13068,10 @@ pub fn has_leading_bom(raw: &[u8]) -> bool {
 /// 描く — 読み手で見え方がずれる。
 #[must_use]
 pub fn has_alternative_attachment(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_alternative_attachment_t(&shared_text(raw))
+}
+
+fn has_alternative_attachment_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -13071,8 +13159,10 @@ pub fn has_http_framing_headers(raw: &[u8]) -> bool {
 /// 死角になる。`message/rfc822` (全体入れ子) は D1279/D1280 が担当。
 #[must_use]
 pub fn has_rfc822_headers_part(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_rfc822_headers_part_t(&shared_text(raw))
+}
+
+fn has_rfc822_headers_part_t(text: &str) -> bool {
     let mut in_headers = true; // 外側ヘッダ run から開始
     for l in text.to_ascii_lowercase().lines() {
         if l.is_empty() {
@@ -13103,8 +13193,10 @@ pub fn has_rfc822_headers_part(raw: &[u8]) -> bool {
 /// 一文字として正規のため対象外。quoted-pair `\\x` は次字をスキップ。
 #[must_use]
 pub fn has_param_value_comment(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_param_value_comment_t(&shared_text(raw))
+}
+
+fn has_param_value_comment_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.to_ascii_lowercase().lines() {
         if l.is_empty() {
@@ -13149,8 +13241,10 @@ pub fn has_param_value_comment(raw: &[u8]) -> bool {
 /// 死角を塞ぐ。
 #[must_use]
 pub fn has_message_subtype_part(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_message_subtype_part_t(&shared_text(raw))
+}
+
+fn has_message_subtype_part_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.to_ascii_lowercase().lines() {
         if l.is_empty() {
@@ -13181,8 +13275,10 @@ pub fn has_message_subtype_part(raw: &[u8]) -> bool {
 /// ずれる。メールでの正当な用途は無い。
 #[must_use]
 pub fn has_mixed_replace(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_mixed_replace_t(&shared_text(raw))
+}
+
+fn has_mixed_replace_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.to_ascii_lowercase().lines() {
         if l.is_empty() {
@@ -13210,8 +13306,10 @@ pub fn has_mixed_replace(raw: &[u8]) -> bool {
 /// 利用でも発火する注意喚起。
 #[must_use]
 pub fn has_opaque_encrypted_content(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_opaque_encrypted_content_t(&shared_text(raw))
+}
+
+fn has_opaque_encrypted_content_t(text: &str) -> bool {
     let mut in_headers = true;
     let mut past_headers = false;
     for l in text.to_ascii_lowercase().lines() {
@@ -13255,8 +13353,10 @@ pub fn has_opaque_encrypted_content(raw: &[u8]) -> bool {
 /// 既定値を使うかスニッフィングに頼るかで読み手がずれる。
 #[must_use]
 pub fn has_missing_part_content_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_missing_part_content_type_t(&shared_text(raw))
+}
+
+fn has_missing_part_content_type_t(text: &str) -> bool {
     let mut in_run = false;
     let mut saw_ct = false;
     // 宣言済み boundary に一致しない `--` 始まりの行は区切りにしない —
@@ -13319,8 +13419,10 @@ pub fn has_missing_part_content_type(raw: &[u8]) -> bool {
 /// しない側で添付名がずれる。
 #[must_use]
 pub fn has_param_encoded_word(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_param_encoded_word_t(&shared_text(raw))
+}
+
+fn has_param_encoded_word_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.to_ascii_lowercase().lines() {
         if l.is_empty() {
@@ -13354,8 +13456,10 @@ pub fn has_param_encoded_word(raw: &[u8]) -> bool {
 /// 既定値を知らない検査は入れ子メールを見逃す。
 #[must_use]
 pub fn has_digest_container(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_digest_container_t(&shared_text(raw))
+}
+
+fn has_digest_container_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.to_ascii_lowercase().lines() {
         if l.is_empty() {
@@ -13580,8 +13684,10 @@ pub fn has_exotic_multipart_subtype(raw: &[u8]) -> bool {
 /// ずれる (subtype 欠落は D1320 が担当)。
 #[must_use]
 pub fn has_malformed_media_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_malformed_media_type_t(&shared_text(raw))
+}
+
+fn has_malformed_media_type_t(text: &str) -> bool {
     // FWS 展開して論理行化 — `Content-Type:\n text/plain` の折りたたみを
     // 値ありとして読む (折りたたみ前の行だけ見ると空値に誤判定する)
     let mut logical = String::with_capacity(text.len());
@@ -13648,8 +13754,10 @@ pub fn has_malformed_media_type(raw: &[u8]) -> bool {
 /// しない実装で添付名がずれる (`filename*=` の RFC 2231 符号化は対象外)。
 #[must_use]
 pub fn has_percent_encoded_filename(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_percent_encoded_filename_t(&shared_text(raw))
+}
+
+fn has_percent_encoded_filename_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.to_ascii_lowercase().lines() {
         if l.is_empty() {
@@ -13699,8 +13807,10 @@ pub fn has_percent_encoded_filename(raw: &[u8]) -> bool {
 /// と空欄表示する実装で見える添付名がずれる。
 #[must_use]
 pub fn has_unnamed_attachment(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unnamed_attachment_t(&shared_text(raw))
+}
+
+fn has_unnamed_attachment_t(text: &str) -> bool {
     let mut in_headers = true;
     let mut saw_attachment = false;
     let mut saw_name = false;
@@ -14173,8 +14283,10 @@ pub fn has_usenet_control_header(raw: &[u8]) -> bool {
 /// boundary 系の姉妹検査)。クオート内の `;` は正規のため対象外。
 #[must_use]
 pub fn has_boundary_semicolon(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_boundary_semicolon_t(&shared_text(raw))
+}
+
+fn has_boundary_semicolon_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.to_ascii_lowercase().lines() {
         if l.is_empty() {
@@ -14307,8 +14419,10 @@ fn decode_qp_body(s: &str) -> Vec<u8> {
 /// 制御列潜伏を見逃さないため)。
 #[must_use]
 pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_ansi_escape_body_t(&shared_text(raw))
+}
+
+fn has_ansi_escape_body_t(text: &str) -> bool {
     let mut in_headers = true;
     let mut cte = String::new();
     let mut content_type = String::new();
@@ -14409,8 +14523,10 @@ pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
 /// 部分デコードしてから走査する。
 #[must_use]
 pub fn has_bidi_override_body(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_bidi_override_body_t(&shared_text(raw))
+}
+
+fn has_bidi_override_body_t(text: &str) -> bool {
     let mut in_headers = true;
     let mut cte = String::new();
     let mut content_type = String::new();
@@ -14547,8 +14663,10 @@ pub fn has_odd_mime_version(raw: &[u8]) -> bool {
 /// cid 衝突スプーフィング)。重複は一意性の前提違反として検出する。
 #[must_use]
 pub fn has_duplicate_content_id(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_duplicate_content_id_t(&shared_text(raw))
+}
+
+fn has_duplicate_content_id_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
     let declared = declared_boundaries(&text);
     let mut seen: Vec<String> = Vec::new();
@@ -14664,8 +14782,10 @@ pub fn has_literal_domain_sender(raw: &[u8]) -> bool {
 /// 姉妹として「形は正しいが長さが規格外」の行を検出する。
 #[must_use]
 pub fn has_overlong_base64_line(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_overlong_base64_line_t(&shared_text(raw))
+}
+
+fn has_overlong_base64_line_t(text: &str) -> bool {
     let mut in_headers = true;
     let mut cte_b64 = false;
     let declared = declared_boundaries(&text);
@@ -14778,8 +14898,10 @@ pub fn has_mixed_encoded_charset(raw: &[u8]) -> bool {
 /// 追跡し最大同時深度が4以上になれば発火する。
 #[must_use]
 pub fn has_deep_multipart_nesting(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_deep_multipart_nesting_t(&shared_text(raw))
+}
+
+fn has_deep_multipart_nesting_t(text: &str) -> bool {
     let declared = declared_boundaries(&text);
     let mut stack: Vec<&str> = Vec::new();
     let mut max_depth = 0usize;
@@ -14828,8 +14950,10 @@ pub fn has_deep_multipart_nesting(raw: &[u8]) -> bool {
 /// 生成・構造攪乱の兆候として検出する。
 #[must_use]
 pub fn has_part_mime_version(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_part_mime_version_t(&shared_text(raw))
+}
+
+fn has_part_mime_version_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
     let declared = declared_boundaries(&text);
     let mut in_part_headers = false;
@@ -14875,8 +14999,10 @@ pub fn has_part_mime_version(raw: &[u8]) -> bool {
 /// 属さない形式宣言は異常形状として検出する。
 #[must_use]
 pub fn has_enriched_text_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_enriched_text_type_t(&shared_text(raw))
+}
+
+fn has_enriched_text_type_t(text: &str) -> bool {
     let mut in_headers = true;
     let declared = declared_boundaries(&text);
     for l in text.to_ascii_lowercase().lines() {
@@ -14922,8 +15048,10 @@ pub fn has_enriched_text_type(raw: &[u8]) -> bool {
 /// (`multipart/*` への符号化) の姉妹形。
 #[must_use]
 pub fn has_encoded_message_part(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_encoded_message_part_t(&shared_text(raw))
+}
+
+fn has_encoded_message_part_t(text: &str) -> bool {
     // FWS 展開: 継続行を論理行に結合
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -14969,8 +15097,10 @@ pub fn has_encoded_message_part(raw: &[u8]) -> bool {
 /// 何も検証できない。
 #[must_use]
 pub fn has_unsigned_signed_container(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unsigned_signed_container_t(&shared_text(raw))
+}
+
+fn has_unsigned_signed_container_t(text: &str) -> bool {
     // FWS 展開: 継続行を論理行に結合
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
@@ -15241,8 +15371,10 @@ pub fn has_encoded_word_addr_spec(raw: &[u8]) -> bool {
 /// 外側ヘッダと各 MIME パートのヘッダ run を走査する。
 #[must_use]
 pub fn has_leading_continuation(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_leading_continuation_t(&shared_text(raw))
+}
+
+fn has_leading_continuation_t(text: &str) -> bool {
     let declared = declared_boundaries(&text);
     if text.starts_with(' ') || text.starts_with('\t') {
         return true;
@@ -15288,8 +15420,10 @@ fn is_header_shape_line(l: &str) -> bool {
 
 #[must_use]
 pub fn has_body_header_block(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_body_header_block_t(&shared_text(raw))
+}
+
+fn has_body_header_block_t(text: &str) -> bool {
     let Some(body_start) = text.find("\n\n") else {
         return false;
     };
@@ -15422,8 +15556,10 @@ pub fn has_dup_delivery_headers(raw: &[u8]) -> bool {
 /// 隠れ名。`filename*=` の符号化値先頭が `%2e` (.) の形も拾う。
 #[must_use]
 pub fn has_hidden_filename(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_hidden_filename_t(&shared_text(raw))
+}
+
+fn has_hidden_filename_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -15474,8 +15610,10 @@ pub fn has_hidden_filename(raw: &[u8]) -> bool {
 /// 数えない (コメント内の孤立クオートは誤爆を避けるため)。
 #[must_use]
 pub fn has_unbalanced_param_quote(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unbalanced_param_quote_t(&shared_text(raw))
+}
+
+fn has_unbalanced_param_quote_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -15524,8 +15662,10 @@ pub fn has_unbalanced_param_quote(raw: &[u8]) -> bool {
 /// ADS (`:`)・パス成分は D1265/D1313/D1365 が既に担当するため対象外。
 #[must_use]
 pub fn has_invalid_filename_chars(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_invalid_filename_chars_t(&shared_text(raw))
+}
+
+fn has_invalid_filename_chars_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -15577,8 +15717,10 @@ pub fn has_invalid_filename_chars(raw: &[u8]) -> bool {
 /// 欠番は形の崩れとして兆候。filename/name を別系統として評価。
 #[must_use]
 pub fn has_rfc2231_gap(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_rfc2231_gap_t(&shared_text(raw))
+}
+
+fn has_rfc2231_gap_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -15648,8 +15790,10 @@ pub fn has_rfc2231_gap(raw: &[u8]) -> bool {
 /// 角括弧を持たないのが正規のため対象外 (重複は D1369 が担当)。
 #[must_use]
 pub fn has_unbracketed_content_id(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unbracketed_content_id_t(&shared_text(raw))
+}
+
+fn has_unbracketed_content_id_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
     let declared = declared_boundaries(&text);
     let mut in_part_headers = false;
@@ -15700,8 +15844,10 @@ pub fn has_unbracketed_content_id(raw: &[u8]) -> bool {
 /// 場で復号した結果が制御文字になる値のみ。`%00`–`%1f` と `%7f`。
 #[must_use]
 pub fn has_encoded_control_filename(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_encoded_control_filename_t(&shared_text(raw))
+}
+
+fn has_encoded_control_filename_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -15790,8 +15936,10 @@ pub fn has_bounce_directive(raw: &[u8]) -> bool {
 /// するため正当な multipart で誤爆しない (run ごとに集合をリセット)。
 #[must_use]
 pub fn has_part_header_dup(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_part_header_dup_t(&shared_text(raw))
+}
+
+fn has_part_header_dup_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
     let declared = declared_boundaries(&text);
     let mut in_part_headers = false;
@@ -15854,8 +16002,10 @@ pub fn has_part_header_dup(raw: &[u8]) -> bool {
 /// 欠落 + 高位バイトの組み合わせのみ。
 #[must_use]
 pub fn has_missing_charset_hibit(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_missing_charset_hibit_t(&shared_text(raw))
+}
+
+fn has_missing_charset_hibit_t(text: &str) -> bool {
     let declared = declared_boundaries(&text);
     // 論理行化して各 run の content-type を評価 (to_ascii_lowercase は
     // 非 ASCII バイトをそのまま通すため高位バイト検査にも使える)
@@ -15994,8 +16144,10 @@ pub fn has_dup_mime_headers(raw: &[u8]) -> bool {
 /// 双方で取り出す。
 #[must_use]
 pub fn has_long_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_long_boundary_t(&shared_text(raw))
+}
+
+fn has_long_boundary_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -16184,8 +16336,10 @@ pub fn has_underscore_domain(raw: &[u8]) -> bool {
 /// base64|x-*` の単一トークンのみ。
 #[must_use]
 pub fn has_junk_cte_value(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_junk_cte_value_t(&shared_text(raw))
+}
+
+fn has_junk_cte_value_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -16367,8 +16521,10 @@ pub fn has_empty_addr_side(raw: &[u8]) -> bool {
 /// 場所に注記・ペイロードを潜ませる潜伏経路になる (epilogue と対)。
 #[must_use]
 pub fn has_preamble_content(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_preamble_content_t(&shared_text(raw))
+}
+
+fn has_preamble_content_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
     let lower = text[..header_end].to_ascii_lowercase();
     if !lower.contains("multipart/") {
@@ -16403,8 +16559,10 @@ pub fn has_preamble_content(raw: &[u8]) -> bool {
 /// 向こうに内容を隠せる (Outlook 系で実績のある evasion)。
 #[must_use]
 pub fn has_epilogue_content(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_epilogue_content_t(&shared_text(raw))
+}
+
+fn has_epilogue_content_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
     let lower = text[..header_end].to_ascii_lowercase();
     if !lower.contains("multipart/") {
@@ -16445,8 +16603,10 @@ pub fn has_epilogue_content(raw: &[u8]) -> bool {
 /// 解釈がずれる (型と引数の組み合わせ異常)。
 #[must_use]
 pub fn has_nontext_charset(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_nontext_charset_t(&shared_text(raw))
+}
+
+fn has_nontext_charset_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -16774,8 +16934,10 @@ pub fn has_empty_param_name(raw: &[u8]) -> bool {
 /// その後の内容の見え方がずれる (終端以降の潜伏)。
 #[must_use]
 pub fn has_smtp_dot_line(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_smtp_dot_line_t(&shared_text(raw))
+}
+
+fn has_smtp_dot_line_t(text: &str) -> bool {
     let Some(header_end) = text.find("\n\n") else {
         return false;
     };
@@ -16793,8 +16955,10 @@ pub fn has_smtp_dot_line(raw: &[u8]) -> bool {
 /// 「From here」等の通常文は対象外)。
 #[must_use]
 pub fn has_midbody_mbox_from(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_midbody_mbox_from_t(&shared_text(raw))
+}
+
+fn has_midbody_mbox_from_t(text: &str) -> bool {
     let Some(header_end) = text.find("\n\n") else {
         return false;
     };
@@ -16862,8 +17026,10 @@ pub fn has_multi_reply_to(raw: &[u8]) -> bool {
 /// HTTP 由来の欄がメール表紙に混ざった形。
 #[must_use]
 pub fn has_outer_content_disposition(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_outer_content_disposition_t(&shared_text(raw))
+}
+
+fn has_outer_content_disposition_t(text: &str) -> bool {
     let Some(header_end) = text.find("\n\n") else {
         return false;
     };
@@ -16880,8 +17046,10 @@ pub fn has_outer_content_disposition(raw: &[u8]) -> bool {
 /// (ローカル注入・スプーフィング材料) の兆候。
 #[must_use]
 pub fn has_no_received(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_no_received_t(&shared_text(raw))
+}
+
+fn has_no_received_t(text: &str) -> bool {
     let Some(header_end) = text.find("\n\n") else {
         return false;
     };
@@ -16899,8 +17067,10 @@ pub fn has_no_received(raw: &[u8]) -> bool {
 /// 表示不能に陥る実装で見え方がずれる。
 #[must_use]
 pub fn has_dangling_start(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_dangling_start_t(&shared_text(raw))
+}
+
+fn has_dangling_start_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
     let lower = text.to_ascii_lowercase();
     let mut starts: Vec<String> = Vec::new();
@@ -17164,8 +17334,10 @@ pub fn has_conflicting_priority(raw: &[u8]) -> bool {
 /// 差出人の読みがずれる (D1334 の欄欠落版)。
 #[must_use]
 pub fn has_no_from(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_no_from_t(&shared_text(raw))
+}
+
+fn has_no_from_t(text: &str) -> bool {
     let Some(header_end) = text.find("\n\n") else {
         return false;
     };
@@ -17236,8 +17408,10 @@ pub fn has_inconsistent_auth_results(raw: &[u8]) -> bool {
 /// (D1378 は署名パート欠落側を担当)。
 #[must_use]
 pub fn has_missing_crypto_protocol(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_missing_crypto_protocol_t(&shared_text(raw))
+}
+
+fn has_missing_crypto_protocol_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -17511,8 +17685,10 @@ pub fn has_encoded_re_subject(raw: &[u8]) -> bool {
 /// 通常 multipart として処理する実装で解釈がずれる。
 #[must_use]
 pub fn has_missing_report_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_missing_report_type_t(&shared_text(raw))
+}
+
+fn has_missing_report_type_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -17557,8 +17733,10 @@ pub fn has_obsolete_decl_headers(raw: &[u8]) -> bool {
 /// (中に仕込んだ「第2の表紙」の変種 — D1386 のパート版)。
 #[must_use]
 pub fn has_part_field_headers(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_part_field_headers_t(&shared_text(raw))
+}
+
+fn has_part_field_headers_t(text: &str) -> bool {
     let declared = declared_boundaries(&text);
     if declared.is_empty() {
         return false;
@@ -17655,8 +17833,10 @@ pub fn has_http_response_headers(raw: &[u8]) -> bool {
 /// (D1426 の指し手欠落とは別: こちらは型の欠落)。
 #[must_use]
 pub fn has_related_no_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_related_no_type_t(&shared_text(raw))
+}
+
+fn has_related_no_type_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -18039,8 +18219,10 @@ pub fn has_empty_identity_value(raw: &[u8]) -> bool {
 /// 添付判定そのものがずれる (欠落は missing_content_type が担当)。
 #[must_use]
 pub fn has_empty_mime_value(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_empty_mime_value_t(&shared_text(raw))
+}
+
+fn has_empty_mime_value_t(text: &str) -> bool {
     let lines: Vec<&str> = text.lines().collect();
     let mut in_header_run = true; // 先頭は外側ヘッダ run
     for (i, l) in lines.iter().enumerate() {
@@ -18089,8 +18271,10 @@ pub fn has_empty_mime_value(raw: &[u8]) -> bool {
 /// (危険 charset 値は D1301、宣言と本文の不一致は D1329)。
 #[must_use]
 pub fn has_empty_charset(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_empty_charset_t(&shared_text(raw))
+}
+
+fn has_empty_charset_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -18186,8 +18370,10 @@ pub fn has_http_request_headers(raw: &[u8]) -> bool {
 /// 簡易版だけが見え、ペイロード側が検査を外れる)。
 #[must_use]
 pub fn has_alt_wrong_order(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_alt_wrong_order_t(&shared_text(raw))
+}
+
+fn has_alt_wrong_order_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -18277,8 +18463,10 @@ pub fn has_alt_wrong_order(raw: &[u8]) -> bool {
 /// パート構造を書き換える差異工作になる。
 #[must_use]
 pub fn has_cd_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_cd_boundary_t(&shared_text(raw))
+}
+
+fn has_cd_boundary_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -18386,8 +18574,10 @@ pub fn has_addrless_from(raw: &[u8]) -> bool {
 /// 内部に `--` を含む境界 (`a--b`) も同族の誤区切りを誘発する。
 #[must_use]
 pub fn has_dash_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_dash_boundary_t(&shared_text(raw))
+}
+
+fn has_dash_boundary_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -18494,8 +18684,10 @@ pub fn has_dup_mime_version(raw: &[u8]) -> bool {
 /// 区切り自体の異常は D1287/D1366/D1457 が担当。
 #[must_use]
 pub fn has_unused_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unused_boundary_t(&shared_text(raw))
+}
+
+fn has_unused_boundary_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
     let lower_head = text[..header_end].to_ascii_lowercase();
     // 外側の multipart/* boundary を取得 (引用符許容・FWS 連結)
@@ -18580,8 +18772,10 @@ pub fn has_bare_msgid_ref(raw: &[u8]) -> bool {
 /// 残る (protocol 欠落は D1434、署名パート欠落は D1378)。
 #[must_use]
 pub fn has_signed_no_micalg(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_signed_no_micalg_t(&shared_text(raw))
+}
+
+fn has_signed_no_micalg_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -18615,8 +18809,10 @@ pub fn has_signed_no_micalg(raw: &[u8]) -> bool {
 /// 外側の CD は D1424、名前無き attachment は D1358。
 #[must_use]
 pub fn has_attachment_body_part(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_attachment_body_part_t(&shared_text(raw))
+}
+
+fn has_attachment_body_part_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -18699,8 +18895,10 @@ pub fn has_attachment_body_part(raw: &[u8]) -> bool {
 /// ずれる (本文冒頭の欄風行は D1386)。
 #[must_use]
 pub fn has_no_body_separator(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_no_body_separator_t(&shared_text(raw))
+}
+
+fn has_no_body_separator_t(text: &str) -> bool {
     // ヘッダ形の行が1行以上あり、区切り空行が無い
     text.lines().any(|l| {
         let mut it = l.splitn(2, ':');
@@ -18722,8 +18920,10 @@ pub fn has_no_body_separator(raw: &[u8]) -> bool {
 /// type= 欠落は D1442)。
 #[must_use]
 pub fn has_related_bad_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_related_bad_type_t(&shared_text(raw))
+}
+
+fn has_related_bad_type_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -18796,8 +18996,10 @@ pub fn has_related_bad_type(raw: &[u8]) -> bool {
 /// CT 基底型と name=/filename= の拡張子を対応づける。
 #[must_use]
 pub fn has_mismatched_attachment_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_mismatched_attachment_type_t(&shared_text(raw))
+}
+
+fn has_mismatched_attachment_type_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -18927,8 +19129,10 @@ pub fn has_mismatched_attachment_type(raw: &[u8]) -> bool {
 /// 指し先欠落は D1426、Content-ID 重複は D1369)。
 #[must_use]
 pub fn has_dangling_cid(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_dangling_cid_t(&shared_text(raw))
+}
+
+fn has_dangling_cid_t(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     // 宣言された Content-ID 値を集める (<…>・裸形の両方)
     let mut ids: Vec<String> = Vec::new();
@@ -19001,8 +19205,10 @@ pub fn has_orphan_list_headers(raw: &[u8]) -> bool {
 /// (D1444) とは別の、「先頭のハイフン」形。
 #[must_use]
 pub fn has_dash_filename(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_dash_filename_t(&shared_text(raw))
+}
+
+fn has_dash_filename_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -19062,8 +19268,10 @@ pub fn has_dash_filename(raw: &[u8]) -> bool {
 /// ダブルクリック保存後にターミナルで触れる運用への横打ち工作。
 #[must_use]
 pub fn has_shell_meta_filename(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_shell_meta_filename_t(&shared_text(raw))
+}
+
+fn has_shell_meta_filename_t(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     for l in lower.lines() {
         if !(l.starts_with("content-disposition:") || l.starts_with("content-type:")) {
@@ -19127,8 +19335,10 @@ pub fn has_avatar_headers(raw: &[u8]) -> bool {
 /// は D1402)。
 #[must_use]
 pub fn has_spaced_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_spaced_boundary_t(&shared_text(raw))
+}
+
+fn has_spaced_boundary_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -19238,8 +19448,10 @@ pub fn has_unhyphenated_header(raw: &[u8]) -> bool {
 /// 型の引用符は D1417 が担当)。
 #[must_use]
 pub fn has_quoted_cte(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_quoted_cte_t(&shared_text(raw))
+}
+
+fn has_quoted_cte_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -19272,8 +19484,10 @@ pub fn has_quoted_cte(raw: &[u8]) -> bool {
 /// スキャナが本文 URL 集めに含めない隙間への誘導リンク配置。
 #[must_use]
 pub fn has_url_in_content_description(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_url_in_content_description_t(&shared_text(raw))
+}
+
+fn has_url_in_content_description_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -19470,8 +19684,10 @@ pub fn has_nested_msgid(raw: &[u8]) -> bool {
 /// する — 安全と名乗る型の下に活動性コンテンツが潜む。
 #[must_use]
 pub fn has_html_in_plain_part(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_html_in_plain_part_t(&shared_text(raw))
+}
+
+fn has_html_in_plain_part_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -19540,8 +19756,10 @@ pub fn has_html_in_plain_part(raw: &[u8]) -> bool {
 /// 実装で添付名がずれる。
 #[must_use]
 pub fn has_misplaced_attachment_param(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_misplaced_attachment_param_t(&shared_text(raw))
+}
+
+fn has_misplaced_attachment_param_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -19592,8 +19810,10 @@ pub fn has_misplaced_attachment_param(raw: &[u8]) -> bool {
 /// (boundary 完全不使用は D1460)。
 #[must_use]
 pub fn has_closer_only_multipart(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_closer_only_multipart_t(&shared_text(raw))
+}
+
+fn has_closer_only_multipart_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -19733,8 +19953,10 @@ pub fn has_stray_qp_header(raw: &[u8]) -> bool {
 /// 正規化する実装は部品として切り出す (構造解釈がずれる)。
 #[must_use]
 pub fn has_case_variant_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_case_variant_boundary_t(&shared_text(raw))
+}
+
+fn has_case_variant_boundary_t(text: &str) -> bool {
     // boundary= 値を原文で収集 (case-sensitive)
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
@@ -20051,8 +20273,10 @@ pub fn has_bad_star_param(raw: &[u8]) -> bool {
 /// エピローグ後も区切りを拾い続ける実装で構造がずれる。
 #[must_use]
 pub fn has_double_closer(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_double_closer_t(&shared_text(raw))
+}
+
+fn has_double_closer_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -20222,8 +20446,10 @@ pub fn has_spaced_param_name(raw: &[u8]) -> bool {
 /// (順序の型差異は D1454)。
 #[must_use]
 pub fn has_dup_alternative_part(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_dup_alternative_part_t(&shared_text(raw))
+}
+
+fn has_dup_alternative_part_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -20372,8 +20598,10 @@ pub fn has_mixed_case_param(raw: &[u8]) -> bool {
 /// ずれる (順序差異は D1454、添付混入は D1343)。
 #[must_use]
 pub fn has_alternative_no_text(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_alternative_no_text_t(&shared_text(raw))
+}
+
+fn has_alternative_no_text_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -20797,8 +21025,10 @@ pub fn has_unknown_cte(raw: &[u8]) -> bool {
 /// 正当なので alternative のみを対象とする。
 #[must_use]
 pub fn has_nested_alternative(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_nested_alternative_t(&shared_text(raw))
+}
+
+fn has_nested_alternative_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -21228,8 +21458,10 @@ pub fn has_qp_html_part(raw: &[u8]) -> bool {
 /// 制御バイト (D1506) とは別の、符号化宣言の無い高位バイトを見る。
 #[must_use]
 pub fn has_raw_nonascii_filename(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_raw_nonascii_filename_t(&shared_text(raw))
+}
+
+fn has_raw_nonascii_filename_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -21269,8 +21501,10 @@ pub fn has_raw_nonascii_filename(raw: &[u8]) -> bool {
 /// ずれる。`/` 皆無 (typeless — D1320) とは別の、区切りだけある形。
 #[must_use]
 pub fn has_edge_slash_ct(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_edge_slash_ct_t(&shared_text(raw))
+}
+
+fn has_edge_slash_ct_t(text: &str) -> bool {
     for l in text.lines() {
         if l.starts_with(' ') || l.starts_with('\t') {
             continue;
@@ -21297,8 +21531,10 @@ pub fn has_edge_slash_ct(raw: &[u8]) -> bool {
 /// 型本体の内部空白を見る。
 #[must_use]
 pub fn has_spaced_media_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_spaced_media_type_t(&shared_text(raw))
+}
+
+fn has_spaced_media_type_t(text: &str) -> bool {
     for l in text.lines() {
         if l.starts_with(' ') || l.starts_with('\t') {
             continue;
@@ -21426,8 +21662,10 @@ pub fn has_multi_at_msgid(raw: &[u8]) -> bool {
 /// `=` は正当なので scrub してから見る。
 #[must_use]
 pub fn has_extra_eq_param(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_extra_eq_param_t(&shared_text(raw))
+}
+
+fn has_extra_eq_param_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -21529,8 +21767,10 @@ pub fn has_spaced_msgid(raw: &[u8]) -> bool {
 /// 手前側を見る。
 #[must_use]
 pub fn has_nonascii_addr_local(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_nonascii_addr_local_t(&shared_text(raw))
+}
+
+fn has_nonascii_addr_local_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -21580,8 +21820,10 @@ pub fn has_nonascii_addr_local(raw: &[u8]) -> bool {
 /// ありふれた `...` のみの行は対象外とする。
 #[must_use]
 pub fn has_dot_stuffed_line(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_dot_stuffed_line_t(&shared_text(raw))
+}
+
+fn has_dot_stuffed_line_t(text: &str) -> bool {
     let Some(body_start) = text.find("\n\n") else {
         return false;
     };
@@ -21604,8 +21846,10 @@ pub fn has_dot_stuffed_line(raw: &[u8]) -> bool {
 /// 型として認識せず添付判定がずれる。非標準の型自体は D1337 が担う。
 #[must_use]
 pub fn has_mixed_case_disposition(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_mixed_case_disposition_t(&shared_text(raw))
+}
+
+fn has_mixed_case_disposition_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -21640,8 +21884,10 @@ pub fn has_mixed_case_disposition(raw: &[u8]) -> bool {
 /// 未知トークンは D1502、ゴミ付きは D1405 の領分。
 #[must_use]
 pub fn has_spaced_cte(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_spaced_cte_t(&shared_text(raw))
+}
+
+fn has_spaced_cte_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -21673,8 +21919,10 @@ pub fn has_spaced_cte(raw: &[u8]) -> bool {
 /// アドレス (D1300) や `;` 経路とは別の、括弧自体の閉塞欠落。
 #[must_use]
 pub fn has_unclosed_addr_comment(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unclosed_addr_comment_t(&shared_text(raw))
+}
+
+fn has_unclosed_addr_comment_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -21772,8 +22020,10 @@ pub fn has_unclosed_msgid(raw: &[u8]) -> bool {
 /// (グループ構文自体は D1363/D1446 が担う)。
 #[must_use]
 pub fn has_semicolon_addr(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_semicolon_addr_t(&shared_text(raw))
+}
+
+fn has_semicolon_addr_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -21885,8 +22135,10 @@ pub fn has_bad_2231_charset(raw: &[u8]) -> bool {
 /// D1521、括弧の未終端は D1526)。
 #[must_use]
 pub fn has_unclosed_addr_quote(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unclosed_addr_quote_t(&shared_text(raw))
+}
+
+fn has_unclosed_addr_quote_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -21941,8 +22193,10 @@ pub fn has_unclosed_addr_quote(raw: &[u8]) -> bool {
 /// 入れ子は D1500、識別子欄の未終端は D1522)。
 #[must_use]
 pub fn has_unclosed_angle_addr(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unclosed_angle_addr_t(&shared_text(raw))
+}
+
+fn has_unclosed_angle_addr_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22048,8 +22302,10 @@ pub fn has_bad_ew_charset(raw: &[u8]) -> bool {
 /// msgid 側は D1498)。
 #[must_use]
 pub fn has_atless_angle_addr(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_atless_angle_addr_t(&shared_text(raw))
+}
+
+fn has_atless_angle_addr_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22159,8 +22415,10 @@ pub fn has_msgid_encoded_word(raw: &[u8]) -> bool {
 /// 添付名がずれる (欠番は D1394、非数値は D1490)。
 #[must_use]
 pub fn has_mixed_2231_cont(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_mixed_2231_cont_t(&shared_text(raw))
+}
+
+fn has_mixed_2231_cont_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22211,8 +22469,10 @@ pub fn has_mixed_2231_cont(raw: &[u8]) -> bool {
 /// 複数アドレスは厳密には `,` が必要)。
 #[must_use]
 pub fn has_spaced_bare_addrs(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_spaced_bare_addrs_t(&shared_text(raw))
+}
+
+fn has_spaced_bare_addrs_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22287,8 +22547,10 @@ pub fn has_spaced_bare_addrs(raw: &[u8]) -> bool {
 /// ずれる (括弧欠落は D1395、msgid 欄の `@` 無しは D1498)。
 #[must_use]
 pub fn has_atless_content_id(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_atless_content_id_t(&shared_text(raw))
+}
+
+fn has_atless_content_id_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22460,8 +22722,10 @@ pub fn has_two_digit_year(raw: &[u8]) -> bool {
 /// 差出人の読みがずれる (空値は D1450、欄欠落は D1432)。
 #[must_use]
 pub fn has_comment_only_addr(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_comment_only_addr_t(&shared_text(raw))
+}
+
+fn has_comment_only_addr_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22507,8 +22771,10 @@ pub fn has_comment_only_addr(raw: &[u8]) -> bool {
 /// 壊れた宛名、全角も区切る実装では二宛名になる — 宛先数がずれる。
 #[must_use]
 pub fn has_fullwidth_comma_addr(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_fullwidth_comma_addr_t(&shared_text(raw))
+}
+
+fn has_fullwidth_comma_addr_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22539,8 +22805,10 @@ pub fn has_fullwidth_comma_addr(raw: &[u8]) -> bool {
 /// D1526、空括弧は D1508)。
 #[must_use]
 pub fn has_addr_junk_after_angle(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_addr_junk_after_angle_t(&shared_text(raw))
+}
+
+fn has_addr_junk_after_angle_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22583,8 +22851,10 @@ pub fn has_addr_junk_after_angle(raw: &[u8]) -> bool {
 /// (空白継ぎの裸宛名は D1531)。
 #[must_use]
 pub fn has_two_angles_no_comma(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_two_angles_no_comma_t(&shared_text(raw))
+}
+
+fn has_two_angles_no_comma_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22619,8 +22889,10 @@ pub fn has_two_angles_no_comma(raw: &[u8]) -> bool {
 /// (空の型側は D1511)。
 #[must_use]
 pub fn has_wildcard_ct(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_wildcard_ct_t(&shared_text(raw))
+}
+
+fn has_wildcard_ct_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22689,8 +22961,10 @@ pub fn has_dangerous_list_scheme(raw: &[u8]) -> bool {
 /// (注釈のみは D1536、クオート未終端は D1525)。
 #[must_use]
 pub fn has_quoted_only_addr(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_quoted_only_addr_t(&shared_text(raw))
+}
+
+fn has_quoted_only_addr_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22724,8 +22998,10 @@ pub fn has_quoted_only_addr(raw: &[u8]) -> bool {
 /// (`;` の混入自体は D1523、空グループは D1334)。
 #[must_use]
 pub fn has_unclosed_addr_group(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unclosed_addr_group_t(&shared_text(raw))
+}
+
+fn has_unclosed_addr_group_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22793,8 +23069,10 @@ pub fn has_unclosed_addr_group(raw: &[u8]) -> bool {
 /// `;` 継ぎゴミは D1405)。
 #[must_use]
 pub fn has_multi_value_cte(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_multi_value_cte_t(&shared_text(raw))
+}
+
+fn has_multi_value_cte_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22872,8 +23150,10 @@ pub fn has_msgid_junk_after_angle(raw: &[u8]) -> bool {
 /// `_` ドメインは D1404)。
 #[must_use]
 pub fn has_nonip_domain_literal(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_nonip_domain_literal_t(&shared_text(raw))
+}
+
+fn has_nonip_domain_literal_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -22984,8 +23264,10 @@ pub fn has_dotted_header_name(raw: &[u8]) -> bool {
 /// そのまま読む実装で宛名の抽出がずれる。
 #[must_use]
 pub fn has_fullwidth_angle_addr(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_fullwidth_angle_addr_t(&shared_text(raw))
+}
+
+fn has_fullwidth_angle_addr_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -23016,8 +23298,10 @@ pub fn has_fullwidth_angle_addr(raw: &[u8]) -> bool {
 /// 連続形は D1408、msgid 欄は D1514)。
 #[must_use]
 pub fn has_multi_at_addr(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_multi_at_addr_t(&shared_text(raw))
+}
+
+fn has_multi_at_addr_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -23130,8 +23414,10 @@ pub fn has_dotdot_msgid_domain(raw: &[u8]) -> bool {
 /// こちらは形の正しい EW が値位置にあること自体が逸脱)。
 #[must_use]
 pub fn has_ew_in_mime_headers(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_ew_in_mime_headers_t(&shared_text(raw))
+}
+
+fn has_ew_in_mime_headers_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -23161,8 +23447,10 @@ pub fn has_ew_in_mime_headers(raw: &[u8]) -> bool {
 /// 宛名を拒否し、寛容実装はそのまま受理する — 宛名がずれる。
 #[must_use]
 pub fn has_edge_dot_local(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_edge_dot_local_t(&shared_text(raw))
+}
+
+fn has_edge_dot_local_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -23222,8 +23510,10 @@ pub fn has_edge_dot_local(raw: &[u8]) -> bool {
 /// ずれる (msgid 欄版は D1551、`.` 単独行は D1421)。
 #[must_use]
 pub fn has_dotdot_addr_domain(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_dotdot_addr_domain_t(&shared_text(raw))
+}
+
+fn has_dotdot_addr_domain_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -23323,8 +23613,10 @@ pub fn has_bad_month_name(raw: &[u8]) -> bool {
 /// する — 宛名の読みがずれる (ドメイン側は D1554、msgid は D1551)。
 #[must_use]
 pub fn has_dotdot_addr_local(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_dotdot_addr_local_t(&shared_text(raw))
+}
+
+fn has_dotdot_addr_local_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -23433,8 +23725,10 @@ pub fn has_special_local_char(raw: &[u8]) -> bool {
 /// 実装と受理する実装で宛名がずれる。
 #[must_use]
 pub fn has_digit_tld_addr(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_digit_tld_addr_t(&shared_text(raw))
+}
+
+fn has_digit_tld_addr_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -23530,8 +23824,10 @@ pub fn has_bad_clock(raw: &[u8]) -> bool {
 /// 厳格実装は宛名を拒否し寛容実装は受理する (`_` は D1404)。
 #[must_use]
 pub fn has_edge_hyphen_domain(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_edge_hyphen_domain_t(&shared_text(raw))
+}
+
+fn has_edge_hyphen_domain_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -23624,8 +23920,10 @@ pub fn has_bad_day(raw: &[u8]) -> bool {
 /// 拒否し寛容実装は受理する (連続 `..` は D1554、数値 TLD は D1558)。
 #[must_use]
 pub fn has_leading_dot_domain(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_leading_dot_domain_t(&shared_text(raw))
+}
+
+fn has_leading_dot_domain_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -23705,8 +24003,10 @@ pub fn has_msgid_leading_dot(raw: &[u8]) -> bool {
 /// 宛名を拒否し寛容実装は受理する (非 IP 形は D1546、正常 IP は対象外)。
 #[must_use]
 pub fn has_bad_ip_literal(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_bad_ip_literal_t(&shared_text(raw))
+}
+
+fn has_bad_ip_literal_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -24124,8 +24424,10 @@ pub fn has_bare_list_id(raw: &[u8]) -> bool {
 /// `text /plain` は D1512、ワイルドカードは D1540)。
 #[must_use]
 pub fn has_multi_slash_ct(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_multi_slash_ct_t(&shared_text(raw))
+}
+
+fn has_multi_slash_ct_t(text: &str) -> bool {
     for l in text.lines() {
         if l.starts_with(' ') || l.starts_with('\t') {
             continue;
@@ -24150,8 +24452,10 @@ pub fn has_multi_slash_ct(raw: &[u8]) -> bool {
 /// 実装で宛名がずれる (括弧付きは正規形、範囲外は D1564)。
 #[must_use]
 pub fn has_bare_ipv4_domain(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_bare_ipv4_domain_t(&shared_text(raw))
+}
+
+fn has_bare_ipv4_domain_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -24368,8 +24672,10 @@ pub fn has_quoted_msgid(raw: &[u8]) -> bool {
 /// 厳格実装が拒否し寛容実装が受理する — 宛名がずれる。
 #[must_use]
 pub fn has_long_local(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_long_local_t(&shared_text(raw))
+}
+
+fn has_long_local_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -24416,8 +24722,10 @@ pub fn has_long_local(raw: &[u8]) -> bool {
 /// 寛容実装が受理する — 宛名がずれる (ラベル端の記号は D1560)。
 #[must_use]
 pub fn has_long_domain_label(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_long_domain_label_t(&shared_text(raw))
+}
+
+fn has_long_domain_label_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -24456,8 +24764,10 @@ pub fn has_long_domain_label(raw: &[u8]) -> bool {
 /// 欠落は D1473、ドット混入は D1548)。
 #[must_use]
 pub fn has_fullwidth_colon_header(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_fullwidth_colon_header_t(&shared_text(raw))
+}
+
+fn has_fullwidth_colon_header_t(text: &str) -> bool {
     for l in text.lines() {
         if l.is_empty() {
             break; // ヘッダブロック終端
@@ -24578,8 +24888,10 @@ pub fn has_fullwidth_space_addr(raw: &[u8]) -> bool {
 /// 集合がずれる (コンマ無し連立は D1539)。
 #[must_use]
 pub fn has_empty_addr_segment(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_empty_addr_segment_t(&shared_text(raw))
+}
+
+fn has_empty_addr_segment_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -24641,8 +24953,10 @@ pub fn has_empty_addr_segment(raw: &[u8]) -> bool {
 /// ずれる (空白行前コロンは D1305、全角コロンは D1581)。
 #[must_use]
 pub fn has_colonless_header_line(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_colonless_header_line_t(&shared_text(raw))
+}
+
+fn has_colonless_header_line_t(text: &str) -> bool {
     for l in text.lines() {
         if l.is_empty() {
             break; // ヘッダブロック終端
@@ -24744,8 +25058,10 @@ pub fn has_underscore_header_name(raw: &[u8]) -> bool {
 /// message/model/multipart/text/video と `x-` 始まりの拡張のみ。
 #[must_use]
 pub fn has_unknown_maintype(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unknown_maintype_t(&shared_text(raw))
+}
+
+fn has_unknown_maintype_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -24838,8 +25154,10 @@ pub fn has_dup_identity_headers(raw: &[u8]) -> bool {
 /// は対象外。
 #[must_use]
 pub fn has_addr_before_angle(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_addr_before_angle_t(&shared_text(raw))
+}
+
+fn has_addr_before_angle_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -24945,8 +25263,10 @@ pub fn has_nocomma_weekday(raw: &[u8]) -> bool {
 /// `:` の間の空白は D1305 の領分 (それらはここでは対象外)。
 #[must_use]
 pub fn has_bad_ftext(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_bad_ftext_t(&shared_text(raw))
+}
+
+fn has_bad_ftext_t(text: &str) -> bool {
     for l in text.lines() {
         if l.is_empty() {
             break; // ヘッダブロック終端
@@ -24974,8 +25294,10 @@ pub fn has_bad_ftext(raw: &[u8]) -> bool {
 /// ずれる (`;` 区切りの裸トークンは D1504、CTE の複数値は D1544)。
 #[must_use]
 pub fn has_comma_media_value(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_comma_media_value_t(&shared_text(raw))
+}
+
+fn has_comma_media_value_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -25039,8 +25361,10 @@ pub fn has_comma_media_value(raw: &[u8]) -> bool {
 /// (全角コロンは D1581、全角空白は D1583)。
 #[must_use]
 pub fn has_fullwidth_param_punct(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_fullwidth_param_punct_t(&shared_text(raw))
+}
+
+fn has_fullwidth_param_punct_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -25084,8 +25408,10 @@ pub fn has_fullwidth_param_punct(raw: &[u8]) -> bool {
 /// 埋め込みのすり替え (欠落参照は D1467、`@` 無し形は D1532)。
 #[must_use]
 pub fn has_dup_content_id(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_dup_content_id_t(&shared_text(raw))
+}
+
+fn has_dup_content_id_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -25249,8 +25575,10 @@ pub fn has_dup_addr_headers(raw: &[u8]) -> bool {
 /// (コロン無し行は D1585、行端混在は D1290 系)。
 #[must_use]
 pub fn has_blank_ws_line(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_blank_ws_line_t(&shared_text(raw))
+}
+
+fn has_blank_ws_line_t(text: &str) -> bool {
     for l in text.lines() {
         if l.is_empty() {
             break; // 空行 = ヘッダ終端
@@ -25270,8 +25598,10 @@ pub fn has_blank_ws_line(raw: &[u8]) -> bool {
 /// (アドレス欄の未終端クオートは D1525)。
 #[must_use]
 pub fn has_unterm_param_quote(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_unterm_param_quote_t(&shared_text(raw))
+}
+
+fn has_unterm_param_quote_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -25732,8 +26062,10 @@ pub fn has_unclosed_list_angle(raw: &[u8]) -> bool {
 /// 裸形は D1486)。
 #[must_use]
 pub fn has_quoted_semicolon(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_quoted_semicolon_t(&shared_text(raw))
+}
+
+fn has_quoted_semicolon_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -25938,8 +26270,10 @@ pub fn has_adjacent_encoded_words(raw: &[u8]) -> bool {
 /// クオート括りの型値は D1417 の領分。
 #[must_use]
 pub fn has_uppercase_media(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_uppercase_media_t(&shared_text(raw))
+}
+
+fn has_uppercase_media_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -26362,8 +26696,10 @@ pub fn has_empty_domain_literal(raw: &[u8]) -> bool {
 /// D1501、型内空白は D1512)。
 #[must_use]
 pub fn has_two_media_types(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_two_media_types_t(&shared_text(raw))
+}
+
+fn has_two_media_types_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     let mut first = true;
     for l in text.lines() {
@@ -27232,8 +27568,10 @@ pub fn has_msgid_gt_only(raw: &[u8]) -> bool {
 /// 読みがずれる (キー無し `=x` は D1399、`;x` 裸トークンは D1504)。
 #[must_use]
 pub fn has_empty_param_segment(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_empty_param_segment_t(&shared_text(raw))
+}
+
+fn has_empty_param_segment_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -27503,8 +27841,10 @@ pub fn has_sender_no_from(raw: &[u8]) -> bool {
 /// 有無を問わない緩い形として併記する。
 #[must_use]
 pub fn has_mimever_in_part(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_mimever_in_part_t(&shared_text(raw))
+}
+
+fn has_mimever_in_part_t(text: &str) -> bool {
     let mut seen_boundary = false;
     for l in text.to_ascii_lowercase().lines() {
         if l.starts_with("--") {
@@ -27593,8 +27933,10 @@ pub fn has_local_backslash(raw: &[u8]) -> bool {
 /// 捨てる実装で読みがずれる (name/filename は D1510)。
 #[must_use]
 pub fn has_raw_param_nonascii(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_raw_param_nonascii_t(&shared_text(raw))
+}
+
+fn has_raw_param_nonascii_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -27765,8 +28107,10 @@ pub fn has_quoted_domain(raw: &[u8]) -> bool {
 /// D1515。
 #[must_use]
 pub fn has_param_eq_bare(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_param_eq_bare_t(&shared_text(raw))
+}
+
+fn has_param_eq_bare_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -27871,8 +28215,10 @@ pub fn has_long_month(raw: &[u8]) -> bool {
 /// D1645)。
 #[must_use]
 pub fn has_missing_media_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_missing_media_type_t(&shared_text(raw))
+}
+
+fn has_missing_media_type_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -27987,8 +28333,10 @@ pub fn has_ws_domain(raw: &[u8]) -> bool {
 /// ずれる (param 先頭空白は token として不正)。
 #[must_use]
 pub fn has_param_leading_ws(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_param_leading_ws_t(&shared_text(raw))
+}
+
+fn has_param_leading_ws_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -28167,8 +28515,10 @@ pub fn has_dash_date(raw: &[u8]) -> bool {
 /// 「`;` で切る」実装で符号化判定がずれる (CTE の空白は D1455)。
 #[must_use]
 pub fn has_cte_param(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_cte_param_t(&shared_text(raw))
+}
+
+fn has_cte_param_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.to_ascii_lowercase().lines() {
         if l.is_empty() {
@@ -28198,8 +28548,10 @@ pub fn has_cte_param(raw: &[u8]) -> bool {
 /// そのまま読む実装は値を拾う。param 値側の異常は D1647/D1515。
 #[must_use]
 pub fn has_bad_param_key(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_bad_param_key_t(&shared_text(raw))
+}
+
+fn has_bad_param_key_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -28322,8 +28674,10 @@ pub fn has_date_two_times(raw: &[u8]) -> bool {
 /// 正規)。
 #[must_use]
 pub fn has_boundary_edge_ws(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_boundary_edge_ws_t(&shared_text(raw))
+}
+
+fn has_boundary_edge_ws_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -28371,8 +28725,10 @@ pub fn has_boundary_edge_ws(raw: &[u8]) -> bool {
 /// 残す実装で param 値がずれる (クオート内は正規)。
 #[must_use]
 pub fn has_colon_param_val(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_colon_param_val_t(&shared_text(raw))
+}
+
+fn has_colon_param_val_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -28564,8 +28920,10 @@ pub fn has_unsigned_zone(raw: &[u8]) -> bool {
 /// ずれる (未終端クオートは D1600)。
 #[must_use]
 pub fn has_quote_tail_param(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_quote_tail_param_t(&shared_text(raw))
+}
+
+fn has_quote_tail_param_t(text: &str) -> bool {
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -28857,8 +29215,10 @@ pub fn has_slash_date(raw: &[u8]) -> bool {
 /// 起きる (長すぎる boundary は D1402)。
 #[must_use]
 pub fn has_nested_boundary_reuse(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_nested_boundary_reuse_t(&shared_text(raw))
+}
+
+fn has_nested_boundary_reuse_t(text: &str) -> bool {
     // 全 Content-Type 欄 (外側 + パート内) から boundary 値を採取し、
     // 同一値が別の宣言で再使用されていれば再利用
     let mut bounds: Vec<String> = Vec::new();
@@ -29398,8 +29758,10 @@ pub fn has_addr_at_end(raw: &[u8]) -> bool {
 /// (空の boundary は `has_empty_boundary`)。
 #[must_use]
 pub fn has_ws_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_ws_boundary_t(&shared_text(raw))
+}
+
+fn has_ws_boundary_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -29465,8 +29827,10 @@ pub fn has_empty_addr_header(raw: &[u8]) -> bool {
 /// `has_orphaned_part_content`)。
 #[must_use]
 pub fn has_orphan_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_orphan_boundary_t(&shared_text(raw))
+}
+
+fn has_orphan_boundary_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
     let lower_head = text[..header_end].to_ascii_lowercase();
     // multipart 宣言も boundary= も無ければ、本文の -- 行は孤児
@@ -30073,8 +30437,10 @@ pub fn has_numeric_dow(raw: &[u8]) -> bool {
 /// `has_empty_param_name`、空節 `;;` は D1636)。
 #[must_use]
 pub fn has_param_empty_value(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_param_empty_value_t(&shared_text(raw))
+}
+
+fn has_param_empty_value_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -30176,8 +30542,10 @@ pub fn has_single_label_domain(raw: &[u8]) -> bool {
 /// 正しく読む実装で値の採用がずれる (`=` 直後の空白は D1651)。
 #[must_use]
 pub fn has_pre_eq_space(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_pre_eq_space_t(&shared_text(raw))
+}
+
+fn has_pre_eq_space_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -30254,8 +30622,10 @@ pub fn has_year_5digit(raw: &[u8]) -> bool {
 /// param 値がずれる (クオート内 `;` は D1609)。
 #[must_use]
 pub fn has_param_quoted_eq(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_param_quoted_eq_t(&shared_text(raw))
+}
+
+fn has_param_quoted_eq_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -30323,8 +30693,10 @@ pub fn has_param_quoted_eq(raw: &[u8]) -> bool {
 /// パート区切りがずれる。
 #[must_use]
 pub fn has_boundary_case_collide(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_boundary_case_collide_t(&shared_text(raw))
+}
+
+fn has_boundary_case_collide_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -30462,8 +30834,10 @@ pub fn has_received_from_empty(raw: &[u8]) -> bool {
 /// (値内の `:` は D1659、第二 `=` は D1647)。
 #[must_use]
 pub fn has_slash_param_value(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_slash_param_value_t(&shared_text(raw))
+}
+
+fn has_slash_param_value_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -30499,8 +30873,10 @@ pub fn has_slash_param_value(raw: &[u8]) -> bool {
 /// D1649、空値は D1645、二重 `/` は D1356)。
 #[must_use]
 pub fn has_ct_no_subtype(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_ct_no_subtype_t(&shared_text(raw))
+}
+
+fn has_ct_no_subtype_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -30623,8 +30999,10 @@ pub fn has_received_multi_by(raw: &[u8]) -> bool {
 /// (型本体の空値は D1645、型トークン欠落は D1649 — こちらは CD 側)。
 #[must_use]
 pub fn has_cd_empty_type(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_cd_empty_type_t(&shared_text(raw))
+}
+
+fn has_cd_empty_type_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -30820,8 +31198,10 @@ pub fn has_received_multi_for(raw: &[u8]) -> bool {
 /// (名の空白は D1656、名なしは has_empty_param_name)。
 #[must_use]
 pub fn has_at_param_name(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_at_param_name_t(&shared_text(raw))
+}
+
+fn has_at_param_name_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -30934,8 +31314,10 @@ pub fn has_received_multi_id(raw: &[u8]) -> bool {
 /// (名の `@` は D1713、名の空白は D1656、値の `/` は D1704)。
 #[must_use]
 pub fn has_slash_param_name(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_slash_param_name_t(&shared_text(raw))
+}
+
+fn has_slash_param_name_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -31012,8 +31394,10 @@ pub fn has_two_cte_values(raw: &[u8]) -> bool {
 /// (bchars 外の文字は D1317、`-` 始まりは has_dash_boundary)。
 #[must_use]
 pub fn has_alnumless_boundary(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_alnumless_boundary_t(&shared_text(raw))
+}
+
+fn has_alnumless_boundary_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -31134,8 +31518,10 @@ pub fn has_received_by_empty(raw: &[u8]) -> bool {
 /// (型欠落は D1708、CT 二重型は D1621)。
 #[must_use]
 pub fn has_cd_two_types(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_cd_two_types_t(&shared_text(raw))
+}
+
+fn has_cd_two_types_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -31310,8 +31696,10 @@ pub fn has_received_id_empty(raw: &[u8]) -> bool {
 /// (大小写のみ異なる複数欄の boundary は D1701、欄そのものの重複は既存検出)。
 #[must_use]
 pub fn has_boundary_param_dup(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_boundary_param_dup_t(&shared_text(raw))
+}
+
+fn has_boundary_param_dup_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -31436,8 +31824,10 @@ pub fn has_received_via_empty(raw: &[u8]) -> bool {
 /// 欄ごとの重複は既存検出)。
 #[must_use]
 pub fn has_param_name_dup(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_param_name_dup_t(&shared_text(raw))
+}
+
+fn has_param_name_dup_t(text: &str) -> bool {
     let mut logical = String::with_capacity(text.len());
     for l in text.lines() {
         if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
@@ -50609,8 +50999,10 @@ pub fn has_reporting_ua_bad(raw: &[u8]) -> bool {
 /// `multimedia-message`/`text-message`/`none` の閉語彙 — 語彙外の値は
 /// 受理実装で文脈判定がずれる。
 pub fn has_msg_context_bad(raw: &[u8]) -> bool {
-    let text = String::from_utf8_lossy(raw);
-    let text = text.replace("\r\n", "\n");
+    has_msg_context_bad_t(&shared_text(raw))
+}
+
+fn has_msg_context_bad_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
     let mut logical = String::with_capacity(header_end + 1);
     let mut first = true;
