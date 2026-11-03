@@ -5537,6 +5537,48 @@ fn header_section(raw: &[u8]) -> &[u8] {
     &raw[..end]
 }
 
+/// 検出器への入力範囲 (D3571)。
+///
+/// 各 `has_*` 検出器は `from_utf8_lossy` + `"\r\n"->"\n"` 正規化後の
+/// `find("\n\n")` で得た `header_end` までしか読まないが、これまでは
+/// メッセージ全体 (本文込み) を渡していたため、大きなメールでは本文
+/// サイズ分の UTF-8 変換・正規化・小文字化が検出器ごとに繰り返されていた。
+/// 生バイトの `(\r?\n){2}` は正規化後の `\n\n` と同じ空行を指すので、
+/// ヘッダ部だけを渡せば結果は変わらない。
+/// ただし空行直後の行が WSP (space/tab) 始まりの場合、検出器側の
+/// 折り畳み展開で `\n\n` が潰れて `header_end` が末尾になる =
+/// 従来どおり全文走査なので、その場合のみ raw 全体を返す。
+fn detection_input(raw: &[u8]) -> &[u8] {
+    let mut i = 0;
+    while i < raw.len() {
+        let t1 = if raw[i] == b'\n' {
+            1
+        } else if raw[i] == b'\r' && raw.get(i + 1) == Some(&b'\n') {
+            2
+        } else {
+            i += 1;
+            continue;
+        };
+        let s = i + t1;
+        let second = if raw.get(s) == Some(&b'\n') {
+            Some(1)
+        } else if raw.get(s) == Some(&b'\r') && raw.get(s + 1) == Some(&b'\n') {
+            Some(2)
+        } else {
+            None
+        };
+        if let Some(t2) = second {
+            let body = s + t2;
+            if matches!(raw.get(body), Some(b' ') | Some(b'\t')) {
+                return raw;
+            }
+            return &raw[..i];
+        }
+        i += 1;
+    }
+    raw
+}
+
 struct MimeFields {
     message_id: Option<String>,
     from: Vec<Address>,
@@ -5723,6 +5765,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D系検出器は本文まで含むメッセージ全体を走査する (boundary 行等の
     // 本文側兆候を見るため、hdr ではなく raw を渡す)。
     let bytes = raw;
+    // D3571: ヘッダのみを読む検出器群にはヘッダ部 (または従来等価の全体)
+    // だけを渡し、本文サイズ分の正規化を検出器ごとに繰り返させない。
+    let det = detection_input(raw);
 
     let MimeFields {
         message_id,
@@ -5766,7 +5811,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let anomalous_date = date.map(|d| is_anomalous_date(d, unix_now())).unwrap_or(false);
 
     // D1292: Subject/From/Message-ID の重複 (パーサ差異)
-    let duplicate_identity_headers = has_duplicate_identity_headers(bytes);
+    let duplicate_identity_headers = has_duplicate_identity_headers(det);
 
     // D1293: multipart コンテナへの base64/QP CTE (RFC 2045 §6.4 違反)
     let encoded_multipart_container = has_encoded_multipart_container(bytes);
@@ -5787,10 +5832,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let mixed_line_endings = has_mixed_line_endings(bytes);
 
     // D1299: アドレスドメインの FQDN 末尾ドット
-    let fqdn_trailing_dot = has_fqdn_trailing_dot(bytes);
+    let fqdn_trailing_dot = has_fqdn_trailing_dot(det);
 
     // D1300: アドレスヘッダの CFWS コメント混入
-    let address_comment = has_address_comment(bytes);
+    let address_comment = has_address_comment(det);
 
     // D1301: MIME charset= の危険文字コード
     let dangerous_charset = has_dangerous_charset(bytes);
@@ -5820,7 +5865,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let empty_boundary = has_empty_boundary(bytes);
 
     // D1312: MIME-Version が 1.0 以外
-    let odd_mime_version = has_odd_mime_version(bytes);
+    let odd_mime_version = has_odd_mime_version(det);
 
     // D1313: 添付名のパストラバーサル成分
     let traversal_filename = has_traversal_filename(bytes);
@@ -5867,7 +5912,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let structural_encoded_word = has_structural_encoded_word(bytes);
     let leading_bom = has_leading_bom(bytes);
     let alternative_attachment = has_alternative_attachment(bytes);
-    let http_framing_headers = has_http_framing_headers(bytes);
+    let http_framing_headers = has_http_framing_headers(det);
     let rfc822_headers_part = has_rfc822_headers_part(bytes);
     let param_value_comment = has_param_value_comment(bytes);
     let message_subtype_part = has_message_subtype_part(bytes);
@@ -5876,160 +5921,160 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let missing_part_content_type = has_missing_part_content_type(bytes);
     let param_encoded_word = has_param_encoded_word(bytes);
     let digest_container = has_digest_container(bytes);
-    let malformed_addr_spec = has_malformed_addr_spec(bytes);
-    let unbalanced_route = has_unbalanced_route(bytes);
+    let malformed_addr_spec = has_malformed_addr_spec(det);
+    let unbalanced_route = has_unbalanced_route(det);
     let exotic_multipart_subtype = has_exotic_multipart_subtype(bytes);
     let malformed_media_type = has_malformed_media_type(bytes);
     let percent_encoded_filename = has_percent_encoded_filename(bytes);
     let unnamed_attachment = has_unnamed_attachment(bytes);
-    let non_ascii_addr_domain = has_non_ascii_addr_domain(bytes);
+    let non_ascii_addr_domain = has_non_ascii_addr_domain(det);
     let conflicting_filename = has_conflicting_filename(bytes);
-    let fake_reply_claim = has_fake_reply_claim(bytes);
+    let fake_reply_claim = has_fake_reply_claim(det);
     let undeclared_base64_block = has_undeclared_base64_block(bytes);
-    let empty_group_syntax = has_empty_group_syntax(bytes);
-    let usenet_control_header = has_usenet_control_header(bytes);
+    let empty_group_syntax = has_empty_group_syntax(det);
+    let usenet_control_header = has_usenet_control_header(det);
     let boundary_semicolon = has_boundary_semicolon(bytes);
     let ansi_escape_body = has_ansi_escape_body(bytes);
     let bidi_override_body = has_bidi_override_body(bytes);
     let duplicate_content_id = has_duplicate_content_id(bytes);
-    let literal_domain_sender = has_literal_domain_sender(bytes);
+    let literal_domain_sender = has_literal_domain_sender(det);
     let overlong_base64_line = has_overlong_base64_line(bytes);
-    let mixed_encoded_charset = has_mixed_encoded_charset(bytes);
+    let mixed_encoded_charset = has_mixed_encoded_charset(det);
     let deep_multipart_nesting = has_deep_multipart_nesting(bytes);
     let part_mime_version = has_part_mime_version(bytes);
     let enriched_text_type = has_enriched_text_type(bytes);
     let encoded_message_part = has_encoded_message_part(bytes);
     let unsigned_signed_container = has_unsigned_signed_container(bytes);
-    let self_reply_ref = has_self_reply_ref(bytes);
-    let deadline_claim = has_deadline_claim(bytes);
+    let self_reply_ref = has_self_reply_ref(det);
+    let deadline_claim = has_deadline_claim(det);
     let spam_verdict_claim = has_spam_verdict_claim(bytes);
     let integrity_claim = has_integrity_claim(bytes);
     let suppression_claim = has_suppression_claim(bytes);
-    let encoded_word_addr_spec = has_encoded_word_addr_spec(bytes);
+    let encoded_word_addr_spec = has_encoded_word_addr_spec(det);
     let leading_continuation = has_leading_continuation(bytes);
     let body_header_block = has_body_header_block(bytes);
-    let pem_markers = has_pem_markers(bytes);
-    let draft_residue = has_draft_residue(bytes);
-    let exchange_org_claim = has_exchange_org_claim(bytes);
-    let dup_delivery_headers = has_dup_delivery_headers(bytes);
+    let pem_markers = has_pem_markers(det);
+    let draft_residue = has_draft_residue(det);
+    let exchange_org_claim = has_exchange_org_claim(det);
+    let dup_delivery_headers = has_dup_delivery_headers(det);
     let hidden_filename = has_hidden_filename(bytes);
     let unbalanced_param_quote = has_unbalanced_param_quote(bytes);
     let invalid_filename_chars = has_invalid_filename_chars(bytes);
     let rfc2231_gap = has_rfc2231_gap(bytes);
     let unbracketed_content_id = has_unbracketed_content_id(bytes);
     let encoded_control_filename = has_encoded_control_filename(bytes);
-    let bounce_directive = has_bounce_directive(bytes);
+    let bounce_directive = has_bounce_directive(det);
     let part_header_dup = has_part_header_dup(bytes);
     let missing_charset_hibit = has_missing_charset_hibit(bytes);
-    let legacy_encrypted_header = has_legacy_encrypted_header(bytes);
-    let dup_mime_headers = has_dup_mime_headers(bytes);
+    let legacy_encrypted_header = has_legacy_encrypted_header(det);
+    let dup_mime_headers = has_dup_mime_headers(det);
     let long_boundary = has_long_boundary(bytes);
-    let url_display_name = has_url_display_name(bytes);
-    let underscore_domain = has_underscore_domain(bytes);
+    let url_display_name = has_url_display_name(det);
+    let underscore_domain = has_underscore_domain(det);
     let junk_cte_value = has_junk_cte_value(bytes);
-    let deliver_to_mark = has_deliver_to_mark(bytes);
-    let literal_msgid_domain = has_literal_msgid_domain(bytes);
-    let empty_addr_side = has_empty_addr_side(bytes);
+    let deliver_to_mark = has_deliver_to_mark(det);
+    let literal_msgid_domain = has_literal_msgid_domain(det);
+    let empty_addr_side = has_empty_addr_side(det);
     let preamble_content = has_preamble_content(bytes);
     let epilogue_content = has_epilogue_content(bytes);
     let nontext_charset = has_nontext_charset(bytes);
-    let nntp_routing = has_nntp_routing(bytes);
-    let sensitivity_claim = has_sensitivity_claim(bytes);
-    let double_msgid = has_double_msgid(bytes);
-    let system_addr_from = has_system_addr_from(bytes);
-    let apparently_from = has_apparently_from(bytes);
-    let quoted_media_type = has_quoted_media_type(bytes);
-    let list_unsub_without_id = has_list_unsub_without_id(bytes);
-    let long_filename = has_long_filename(bytes);
-    let empty_param_name = has_empty_param_name(bytes);
+    let nntp_routing = has_nntp_routing(det);
+    let sensitivity_claim = has_sensitivity_claim(det);
+    let double_msgid = has_double_msgid(det);
+    let system_addr_from = has_system_addr_from(det);
+    let apparently_from = has_apparently_from(det);
+    let quoted_media_type = has_quoted_media_type(det);
+    let list_unsub_without_id = has_list_unsub_without_id(det);
+    let long_filename = has_long_filename(det);
+    let empty_param_name = has_empty_param_name(det);
     let smtp_dot_line = has_smtp_dot_line(bytes);
     let midbody_mbox_from = has_midbody_mbox_from(bytes);
-    let multi_reply_to = has_multi_reply_to(bytes);
+    let multi_reply_to = has_multi_reply_to(det);
     let outer_content_disposition = has_outer_content_disposition(bytes);
     let no_received = has_no_received(bytes);
     let dangling_start = has_dangling_start(bytes);
-    let malformed_listid = has_malformed_listid(bytes);
-    let resent_bcc = has_resent_bcc(bytes);
-    let star_boundary = has_star_boundary(bytes);
-    let url_filename = has_url_filename(bytes);
-    let conflicting_priority = has_conflicting_priority(bytes);
+    let malformed_listid = has_malformed_listid(det);
+    let resent_bcc = has_resent_bcc(det);
+    let star_boundary = has_star_boundary(det);
+    let url_filename = has_url_filename(det);
+    let conflicting_priority = has_conflicting_priority(det);
     let no_from = has_no_from(bytes);
-    let inconsistent_auth_results = has_inconsistent_auth_results(bytes);
+    let inconsistent_auth_results = has_inconsistent_auth_results(det);
     let missing_crypto_protocol = has_missing_crypto_protocol(bytes);
-    let orphan_thread = has_orphan_thread(bytes);
-    let routing_addr = has_routing_addr(bytes);
-    let encoded_re_subject = has_encoded_re_subject(bytes);
+    let orphan_thread = has_orphan_thread(det);
+    let routing_addr = has_routing_addr(det);
+    let encoded_re_subject = has_encoded_re_subject(det);
     let missing_report_type = has_missing_report_type(bytes);
-    let obsolete_decl_headers = has_obsolete_decl_headers(bytes);
+    let obsolete_decl_headers = has_obsolete_decl_headers(det);
     let part_field_headers = has_part_field_headers(bytes);
-    let http_response_headers = has_http_response_headers(bytes);
+    let http_response_headers = has_http_response_headers(det);
     let related_no_type = has_related_no_type(bytes);
-    let multi_inreply = has_multi_inreply(bytes);
-    let filename_trailing = has_filename_trailing(bytes);
-    let bad_priority_value = has_bad_priority_value(bytes);
-    let mailbox_group = has_mailbox_group(bytes);
-    let headerless_line = has_headerless_line(bytes);
-    let bad_header_name = has_bad_header_name(bytes);
-    let dup_thread_headers = has_dup_thread_headers(bytes);
-    let empty_identity_value = has_empty_identity_value(bytes);
+    let multi_inreply = has_multi_inreply(det);
+    let filename_trailing = has_filename_trailing(det);
+    let bad_priority_value = has_bad_priority_value(det);
+    let mailbox_group = has_mailbox_group(det);
+    let headerless_line = has_headerless_line(det);
+    let bad_header_name = has_bad_header_name(det);
+    let dup_thread_headers = has_dup_thread_headers(det);
+    let empty_identity_value = has_empty_identity_value(det);
     let empty_mime_value = has_empty_mime_value(bytes);
     let empty_charset = has_empty_charset(bytes);
-    let http_request_headers = has_http_request_headers(bytes);
+    let http_request_headers = has_http_request_headers(det);
     let alt_wrong_order = has_alt_wrong_order(bytes);
     let cd_boundary = has_cd_boundary(bytes);
-    let addrless_from = has_addrless_from(bytes);
+    let addrless_from = has_addrless_from(det);
     let dash_boundary = has_dash_boundary(bytes);
-    let bad_received = has_bad_received(bytes);
-    let dup_mime_version = has_dup_mime_version(bytes);
+    let bad_received = has_bad_received(det);
+    let dup_mime_version = has_dup_mime_version(det);
     let unused_boundary = has_unused_boundary(bytes);
-    let bare_msgid_ref = has_bare_msgid_ref(bytes);
+    let bare_msgid_ref = has_bare_msgid_ref(det);
     let signed_no_micalg = has_signed_no_micalg(bytes);
     let attachment_body_part = has_attachment_body_part(bytes);
     let no_body_separator = has_no_body_separator(bytes);
     let related_bad_type = has_related_bad_type(bytes);
     let mismatched_attachment_type = has_mismatched_attachment_type(bytes);
     let dangling_cid = has_dangling_cid(bytes);
-    let orphan_list_headers = has_orphan_list_headers(bytes);
+    let orphan_list_headers = has_orphan_list_headers(det);
     let dash_filename = has_dash_filename(bytes);
     let shell_meta_filename = has_shell_meta_filename(bytes);
-    let avatar_headers = has_avatar_headers(bytes);
+    let avatar_headers = has_avatar_headers(det);
     let spaced_boundary = has_spaced_boundary(bytes);
-    let unhyphenated_header = has_unhyphenated_header(bytes);
+    let unhyphenated_header = has_unhyphenated_header(det);
     let quoted_cte = has_quoted_cte(bytes);
     let url_in_content_description = has_url_in_content_description(bytes);
-    let incomplete_resent = has_incomplete_resent(bytes);
-    let original_headers = has_original_headers(bytes);
-    let obsolete_signature_headers = has_obsolete_signature_headers(bytes);
-    let archive_claim = has_archive_claim(bytes);
-    let nested_msgid = has_nested_msgid(bytes);
+    let incomplete_resent = has_incomplete_resent(det);
+    let original_headers = has_original_headers(det);
+    let obsolete_signature_headers = has_obsolete_signature_headers(det);
+    let archive_claim = has_archive_claim(det);
+    let nested_msgid = has_nested_msgid(det);
     let html_in_plain_part = has_html_in_plain_part(bytes);
     let misplaced_attachment_param = has_misplaced_attachment_param(bytes);
     let closer_only_multipart = has_closer_only_multipart(bytes);
-    let stray_qp_header = has_stray_qp_header(bytes);
+    let stray_qp_header = has_stray_qp_header(det);
     let case_variant_boundary = has_case_variant_boundary(bytes);
-    let dangling_param_semi = has_dangling_param_semi(bytes);
-    let spaced_param_value = has_spaced_param_value(bytes);
-    let orphan_unsubscribe_post = has_orphan_unsubscribe_post(bytes);
+    let dangling_param_semi = has_dangling_param_semi(det);
+    let spaced_param_value = has_spaced_param_value(det);
+    let orphan_unsubscribe_post = has_orphan_unsubscribe_post(det);
     let part_bom = has_part_bom(bytes);
-    let bad_star_param = has_bad_star_param(bytes);
+    let bad_star_param = has_bad_star_param(det);
     let double_closer = has_double_closer(bytes);
-    let nonascii_msgid = has_nonascii_msgid(bytes);
-    let spaced_param_name = has_spaced_param_name(bytes);
+    let nonascii_msgid = has_nonascii_msgid(det);
+    let spaced_param_name = has_spaced_param_name(det);
     let dup_alternative_part = has_dup_alternative_part(bytes);
-    let mixed_case_param = has_mixed_case_param(bytes);
+    let mixed_case_param = has_mixed_case_param(det);
     let alternative_no_text = has_alternative_no_text(bytes);
     let ext_and_plain_param = has_ext_and_plain_param(bytes);
-    let broken_msgid_spec = has_broken_msgid_spec(bytes);
-    let route_addr = has_route_addr(bytes);
-    let nested_angle_addr = has_nested_angle_addr(bytes);
-    let space_separated_param = has_space_separated_param(bytes);
+    let broken_msgid_spec = has_broken_msgid_spec(det);
+    let route_addr = has_route_addr(det);
+    let nested_angle_addr = has_nested_angle_addr(det);
+    let space_separated_param = has_space_separated_param(det);
     let unknown_cte = has_unknown_cte(bytes);
     let nested_alternative = has_nested_alternative(bytes);
-    let bare_param = has_bare_param(bytes);
+    let bare_param = has_bare_param(det);
     let b64_html_part = has_b64_html_part(bytes);
     let ctl_filename = has_ctl_filename(bytes);
-    let dotless_sender_domain = has_dotless_sender_domain(bytes);
-    let empty_angle_addr = has_empty_angle_addr(bytes);
+    let dotless_sender_domain = has_dotless_sender_domain(det);
+    let empty_angle_addr = has_empty_angle_addr(det);
     // D1509: text/plain+QP 部品の復号 HTML
     let qp_html_part = has_qp_html_part(bytes);
     // D1510: filename/name の生非 ASCII
@@ -6041,11 +6086,11 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1513: 大文字形 CTE
     let mixed_case_cte = has_mixed_case_cte(bytes);
     // D1514: msgid 内の複数 @
-    let multi_at_msgid = has_multi_at_msgid(bytes);
+    let multi_at_msgid = has_multi_at_msgid(det);
     // D1515: パラメータ値内の裸 =
     let extra_eq_param = has_extra_eq_param(bytes);
     // D1516: msgid 内の空白
-    let spaced_msgid = has_spaced_msgid(bytes);
+    let spaced_msgid = has_spaced_msgid(det);
     // D1517: ローカル部の非 ASCII
     let nonascii_addr_local = has_nonascii_addr_local(bytes);
     // D1518: dot-stuffing 残渣
@@ -6057,7 +6102,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1521: アドレス欄の未終端コメント
     let unclosed_addr_comment = has_unclosed_addr_comment(bytes);
     // D1522: msgid の未終端 <
-    let unclosed_msgid = has_unclosed_msgid(bytes);
+    let unclosed_msgid = has_unclosed_msgid(det);
     // D1523: グループ外 ;
     let semicolon_addr = has_semicolon_addr(bytes);
     // D1524: *= の危険 charset
@@ -6071,7 +6116,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1528: @ 無し括弧宛名
     let atless_angle_addr = has_atless_angle_addr(bytes);
     // D1529: msgid 欄内の encoded-word
-    let msgid_encoded_word = has_msgid_encoded_word(bytes);
+    let msgid_encoded_word = has_msgid_encoded_word(det);
     // D1530: 2231 連番の素/*混在
     let mixed_2231_cont = has_mixed_2231_cont(bytes);
     // D1531: 空白継ぎの裸アドレス
@@ -6079,11 +6124,11 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1532: @ 無し Content-ID
     let atless_content_id = has_atless_content_id(bytes);
     // D1533: `:` 終わり欄名
-    let double_colon_header = has_double_colon_header(bytes);
+    let double_colon_header = has_double_colon_header(det);
     // D1534: 名前付きタイムゾーン
-    let named_zone = has_named_zone(bytes);
+    let named_zone = has_named_zone(det);
     // D1535: 2桁年
-    let two_digit_year = has_two_digit_year(bytes);
+    let two_digit_year = has_two_digit_year(det);
     // D1536: コメントのみ宛名
     let comment_only_addr = has_comment_only_addr(bytes);
     // D1537: 全角コンマ区切り
@@ -6103,19 +6148,19 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1544: 複数値 CTE
     let multi_value_cte = has_multi_value_cte(bytes);
     // D1545: msgid 欄の `>` 後ゴミ
-    let msgid_junk_after_angle = has_msgid_junk_after_angle(bytes);
+    let msgid_junk_after_angle = has_msgid_junk_after_angle(det);
     // D1546: 非 IP ドメインリテラル
     let nonip_domain_literal = has_nonip_domain_literal(bytes);
     // D1547: ゾーン無し Date
-    let zoneless_date = has_zoneless_date(bytes);
+    let zoneless_date = has_zoneless_date(det);
     // D1548: `.` を含む欄名
-    let dotted_header_name = has_dotted_header_name(bytes);
+    let dotted_header_name = has_dotted_header_name(det);
     // D1549: 全角括弧宛名
     let fullwidth_angle_addr = has_fullwidth_angle_addr(bytes);
     // D1550: 二重 @ 宛名
     let multi_at_addr = has_multi_at_addr(bytes);
     // D1551: msgid ドメインの連続ドット
-    let dotdot_msgid_domain = has_dotdot_msgid_domain(bytes);
+    let dotdot_msgid_domain = has_dotdot_msgid_domain(det);
     // D1552: MIME 欄値中の encoded-word
     let ew_in_mime_headers = has_ew_in_mime_headers(bytes);
     // D1553: ローカル端ドット
@@ -6123,7 +6168,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1554: 宛名ドメイン連続ドット
     let dotdot_addr_domain = has_dotdot_addr_domain(bytes);
     // D1555: 未知月名
-    let bad_month_name = has_bad_month_name(bytes);
+    let bad_month_name = has_bad_month_name(det);
     // D1556: ローカル連続ドット
     let dotdot_addr_local = has_dotdot_addr_local(bytes);
     // D1557: 裸ローカル部の特殊文字
@@ -6131,33 +6176,33 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1558: 数値 TLD
     let digit_tld_addr = has_digit_tld_addr(bytes);
     // D1559: 範囲外時刻
-    let bad_clock = has_bad_clock(bytes);
+    let bad_clock = has_bad_clock(det);
     // D1560: 端ハイフンドメイン
     let edge_hyphen_domain = has_edge_hyphen_domain(bytes);
     // D1561: 範囲外の日
-    let bad_day = has_bad_day(bytes);
+    let bad_day = has_bad_day(det);
     // D1562: 先頭ドットドメイン
     let leading_dot_domain = has_leading_dot_domain(bytes);
     // D1563: msgid 先頭ドットドメイン
-    let msgid_leading_dot = has_msgid_leading_dot(bytes);
+    let msgid_leading_dot = has_msgid_leading_dot(det);
     // D1564: 範囲外 IP リテラル
     let bad_ip_literal = has_bad_ip_literal(bytes);
     // D1565: 範囲外タイムゾーン
-    let bad_tz = has_bad_tz(bytes);
+    let bad_tz = has_bad_tz(det);
     // D1566: 数字月
-    let numeric_month = has_numeric_month(bytes);
+    let numeric_month = has_numeric_month(det);
     // D1567: msgid ローカル連続ドット
-    let msgid_dotdot_local = has_msgid_dotdot_local(bytes);
+    let msgid_dotdot_local = has_msgid_dotdot_local(det);
     // D1568: 全角＠宛名
     let fullwidth_at_addr = has_fullwidth_at_addr(bytes);
     // D1569: 曜日と日付の不一致
-    let weekday_mismatch = has_weekday_mismatch(bytes);
+    let weekday_mismatch = has_weekday_mismatch(det);
     // D1570: 非数字年
-    let non_digit_year = has_non_digit_year(bytes);
+    let non_digit_year = has_non_digit_year(det);
     // D1571: ゾーン後ゴミ
-    let junk_after_zone = has_junk_after_zone(bytes);
+    let junk_after_zone = has_junk_after_zone(det);
     // D1572: 裸 List-Id
-    let bare_list_id = has_bare_list_id(bytes);
+    let bare_list_id = has_bare_list_id(det);
     // D1573: 複数スラッシュ CT
     let multi_slash_ct = has_multi_slash_ct(bytes);
     // D1574: 裸 IPv4 ドメイン
@@ -6165,11 +6210,11 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1575: 全角ピリオド宛名
     let fullwidth_dot_addr = has_fullwidth_dot_addr(bytes);
     // D1576: msgid ローカル端ドット
-    let msgid_edge_dot_local = has_msgid_edge_dot_local(bytes);
+    let msgid_edge_dot_local = has_msgid_edge_dot_local(det);
     // D1577: 月先頭日付
-    let month_first_date = has_month_first_date(bytes);
+    let month_first_date = has_month_first_date(det);
     // D1578: クオート msgid
-    let quoted_msgid = has_quoted_msgid(bytes);
+    let quoted_msgid = has_quoted_msgid(det);
     // D1579: 長いローカル部
     let long_local = has_long_local(bytes);
     // D1580: 長いドメインラベル
@@ -6177,25 +6222,25 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1581: 全角コロンの欄名区切り
     let fullwidth_colon_header = has_fullwidth_colon_header(bytes);
     // D1582: 非3文字曜日名
-    let bad_weekday = has_bad_weekday(bytes);
+    let bad_weekday = has_bad_weekday(det);
     // D1583: 宛名欄の全角スペース
-    let fullwidth_space_addr = has_fullwidth_space_addr(bytes);
+    let fullwidth_space_addr = has_fullwidth_space_addr(det);
     // D1584: 宛名リストの空要素
     let empty_addr_segment = has_empty_addr_segment(bytes);
     // D1585: コロンを欠くヘッダ行
     let colonless_header_line = has_colonless_header_line(bytes);
     // D1586: Received の `;` 日時印欠落
-    let received_no_semi = has_received_no_semi(bytes);
+    let received_no_semi = has_received_no_semi(det);
     // D1587: `_` 綴りの標準欄名
     let underscore_header_name = has_underscore_header_name(bytes);
     // D1588: 未知メディア主型
     let unknown_maintype = has_unknown_maintype(bytes);
     // D1589: 同一性欄の重複
-    let dup_identity_headers = has_dup_identity_headers(bytes);
+    let dup_identity_headers = has_dup_identity_headers(det);
     // D1590: 角括弧宛名の前の裸アドレス
     let addr_before_angle = has_addr_before_angle(bytes);
     // D1591: コンマ無し曜日名
-    let nocomma_weekday = has_nocomma_weekday(bytes);
+    let nocomma_weekday = has_nocomma_weekday(det);
     // D1592: 欄名の非 ftext 文字
     let bad_ftext = has_bad_ftext(bytes);
     // D1593: CT/CD 型本体の `,`
@@ -6205,1389 +6250,1389 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1595: Content-ID の重複
     let dup_content_id = has_dup_content_id(bytes);
     // D1596: 識別子 `<…>` 内部の空白
-    let inner_space_id = has_inner_space_id(bytes);
+    let inner_space_id = has_inner_space_id(det);
     // D1597: ヘッダが LF のみ改行
     let lf_only_headers = has_lf_only_headers(bytes);
     // D1598: To/Cc/Bcc/Reply-To の重複
-    let dup_addr_headers = has_dup_addr_headers(bytes);
+    let dup_addr_headers = has_dup_addr_headers(det);
     // D1599: ヘッダ内の空白のみ行
     let blank_ws_line = has_blank_ws_line(bytes);
     // D1600: CT/CD param の未終端クオート
     let unterm_param_quote = has_unterm_param_quote(bytes);
     // D1601: List-* 欄の裸 URL
-    let bare_list_url = has_bare_list_url(bytes);
+    let bare_list_url = has_bare_list_url(det);
     // D1602: 表示名クオート内の `@`
-    let quoted_at_display = has_quoted_at_display(bytes);
+    let quoted_at_display = has_quoted_at_display(det);
     // D1603: 識別子 `<…>` 内の `(`
-    let comment_inside_id = has_comment_inside_id(bytes);
+    let comment_inside_id = has_comment_inside_id(det);
     // D1604: 表示名のみの宛名欄
-    let display_only_addr = has_display_only_addr(bytes);
+    let display_only_addr = has_display_only_addr(det);
     // D1605: 継続行のみで始まるヘッダブロック
     let orphan_continuation = has_orphan_continuation(bytes);
     // D1606: 非クオート表示名内の `,`
-    let unquoted_comma_display = has_unquoted_comma_display(bytes);
+    let unquoted_comma_display = has_unquoted_comma_display(det);
     // D1607: List-* 欄の重複
-    let dup_list_headers = has_dup_list_headers(bytes);
+    let dup_list_headers = has_dup_list_headers(det);
     // D1608: List-* 欄の `<`/`>` 不一致
-    let unclosed_list_angle = has_unclosed_list_angle(bytes);
+    let unclosed_list_angle = has_unclosed_list_angle(det);
     // D1609: CT/CD クオート値内の `;`
     let quoted_semicolon = has_quoted_semicolon(bytes);
     // D1610: 時刻を欠く日付欄
-    let timeless_date = has_timeless_date(bytes);
+    let timeless_date = has_timeless_date(det);
     // D1611: アドレス欄のコメント入れ子
-    let nested_comment = has_nested_comment(bytes);
+    let nested_comment = has_nested_comment(det);
     // D1612: encoded-word 連接
-    let adjacent_encoded_words = has_adjacent_encoded_words(bytes);
+    let adjacent_encoded_words = has_adjacent_encoded_words(det);
     // D1613: 大文字混じりのメディア型
     let uppercase_media = has_uppercase_media(bytes);
     // D1614: `*=` 値の `'` 欠落
-    let star_param_no_apostrophe = has_star_param_no_apostrophe(bytes);
+    let star_param_no_apostrophe = has_star_param_no_apostrophe(det);
     // D1615: 識別子内の非 IP リテラル
-    let msgid_bad_literal = has_msgid_bad_literal(bytes);
+    let msgid_bad_literal = has_msgid_bad_literal(det);
     // D1616: 空クオート表示名
-    let empty_quoted_string = has_empty_quoted_string(bytes);
+    let empty_quoted_string = has_empty_quoted_string(det);
     // D1617: コメント内のアドレス構造
-    let comment_has_addr = has_comment_has_addr(bytes);
+    let comment_has_addr = has_comment_has_addr(det);
     // D1618: クオート内の `;`
-    let quoted_semicolon_display = has_quoted_semicolon_display(bytes);
+    let quoted_semicolon_display = has_quoted_semicolon_display(det);
     // D1619: 額縁内のコメント
-    let comment_in_angle = has_comment_in_angle(bytes);
+    let comment_in_angle = has_comment_in_angle(det);
     // D1620: 空ドメインリテラル
-    let empty_domain_literal = has_empty_domain_literal(bytes);
+    let empty_domain_literal = has_empty_domain_literal(det);
     // D1621: 二重メディア型
     let two_media_types = has_two_media_types(bytes);
     // D1622: ドメインの DNS 外文字
-    let bad_domain_char = has_bad_domain_char(bytes);
+    let bad_domain_char = has_bad_domain_char(det);
     // D1623: 識別子の全角額縁
-    let msgid_fullwidth_angle = has_msgid_fullwidth_angle(bytes);
+    let msgid_fullwidth_angle = has_msgid_fullwidth_angle(det);
     // D1624: param 値の `\`
-    let param_backslash = has_param_backslash(bytes);
+    let param_backslash = has_param_backslash(det);
     // D1625: 空額縁の識別子
-    let msgid_empty_angle = has_msgid_empty_angle(bytes);
+    let msgid_empty_angle = has_msgid_empty_angle(det);
     // D1626: 識別子内の経路記号
-    let msgid_routing_char = has_msgid_routing_char(bytes);
+    let msgid_routing_char = has_msgid_routing_char(det);
     // D1627: 額縁の外の裸 @
-    let bare_at_display = has_bare_at_display(bytes);
+    let bare_at_display = has_bare_at_display(det);
     // D1628: 識別子の `;`
-    let semi_in_id = has_semi_in_id(bytes);
+    let semi_in_id = has_semi_in_id(det);
     // D1629: 宛名の全角 `；`
-    let addr_fullwidth_semi = has_addr_fullwidth_semi(bytes);
+    let addr_fullwidth_semi = has_addr_fullwidth_semi(det);
     // D1630: 識別子内の生非 ASCII
-    let msgid_nonascii = has_msgid_nonascii(bytes);
+    let msgid_nonascii = has_msgid_nonascii(det);
     // D1631: 識別子のクオートローカル
-    let msgid_quoted_local = has_msgid_quoted_local(bytes);
+    let msgid_quoted_local = has_msgid_quoted_local(det);
     // D1632: 1桁時刻
-    let date_short_time = has_date_short_time(bytes);
+    let date_short_time = has_date_short_time(det);
     // D1633: 額縁内の `,`
-    let addr_angle_comma = has_addr_angle_comma(bytes);
+    let addr_angle_comma = has_addr_angle_comma(det);
     // D1634: 裸トークン途中の `"`
-    let mid_token_quote = has_mid_token_quote(bytes);
+    let mid_token_quote = has_mid_token_quote(det);
     // D1635: `<` 無しの `>`
-    let msgid_gt_only = has_msgid_gt_only(bytes);
+    let msgid_gt_only = has_msgid_gt_only(det);
     // D1636: `;;` 空 param 節
     let empty_param_segment = has_empty_param_segment(bytes);
     // D1637: 識別子内の残存非合法字
-    let msgid_bad_char = has_msgid_bad_char(bytes);
+    let msgid_bad_char = has_msgid_bad_char(det);
     // D1638: 額縁内の `;`
-    let addr_angle_semi = has_addr_angle_semi(bytes);
+    let addr_angle_semi = has_addr_angle_semi(det);
     // D1639: 4節時刻
-    let four_part_time = has_four_part_time(bytes);
+    let four_part_time = has_four_part_time(det);
     // D1640: 額縁内途中の `"`
-    let mid_angle_quote = has_mid_angle_quote(bytes);
+    let mid_angle_quote = has_mid_angle_quote(det);
     // D1641: Sender ありで From 無し
-    let sender_no_from = has_sender_no_from(bytes);
+    let sender_no_from = has_sender_no_from(det);
     // D1642: パート内 MIME-Version
     let mimever_in_part = has_mimever_in_part(bytes);
     // D1643: ローカル部の裸 `\`
-    let local_backslash = has_local_backslash(bytes);
+    let local_backslash = has_local_backslash(det);
     // D1644: param 値の生非 ASCII
     let raw_param_nonascii = has_raw_param_nonascii(bytes);
     // D1645: MIME 欄の空値
-    let empty_mime_field = has_empty_mime_field(bytes);
+    let empty_mime_field = has_empty_mime_field(det);
     // D1646: クオート付きドメイン
-    let quoted_domain = has_quoted_domain(bytes);
+    let quoted_domain = has_quoted_domain(det);
     // D1647: param 値の裸の第二 `=`
     let param_eq_bare = has_param_eq_bare(bytes);
     // D1648: 長い月名
-    let long_month = has_long_month(bytes);
+    let long_month = has_long_month(det);
     // D1649: CT 型トークン欠落
     let missing_media_type = has_missing_media_type(bytes);
     // D1650: ドメイン部の空白
-    let ws_domain = has_ws_domain(bytes);
+    let ws_domain = has_ws_domain(det);
     // D1651: param 値直後の空白
     let param_leading_ws = has_param_leading_ws(bytes);
     // D1652: 空白分断ゾーン
-    let split_zone = has_split_zone(bytes);
+    let split_zone = has_split_zone(det);
     // D1653: Date 欄の年欠落
-    let date_no_year = has_date_no_year(bytes);
+    let date_no_year = has_date_no_year(det);
     // D1654: `-` 区切り日付
-    let dash_date = has_dash_date(bytes);
+    let dash_date = has_dash_date(det);
     // D1655: CTE 値の param
     let cte_param = has_cte_param(bytes);
     // D1656: param キーの非 token 文字
     let bad_param_key = has_bad_param_key(bytes);
     // D1657: Date 欄の二時刻
-    let date_two_times = has_date_two_times(bytes);
+    let date_two_times = has_date_two_times(det);
     // D1658: クオート boundary の端空白
     let boundary_edge_ws = has_boundary_edge_ws(bytes);
     // D1659: param 裸値の `:`
     let colon_param_val = has_colon_param_val(bytes);
     // D1660: Date 欄の二曜日名
-    let two_daynames = has_two_daynames(bytes);
+    let two_daynames = has_two_daynames(det);
     // D1661: Message-ID の <> 欠落
-    let unbracketed_msgid = has_unbracketed_msgid(bytes);
+    let unbracketed_msgid = has_unbracketed_msgid(det);
     // D1662: Date 欄の符号なしゾーン
-    let unsigned_zone = has_unsigned_zone(bytes);
+    let unsigned_zone = has_unsigned_zone(det);
     // D1663: param クオート閉じ後の続き文字
     let quote_tail_param = has_quote_tail_param(bytes);
     // D1664: Date 欄の年先頭並び
-    let year_first_date = has_year_first_date(bytes);
+    let year_first_date = has_year_first_date(det);
     // D1665: Date 欄の AM/PM 記号
-    let ampm_time = has_ampm_time(bytes);
+    let ampm_time = has_ampm_time(det);
     // D1666: Message-ID 欄の二識別子
-    let two_msgids = has_two_msgids(bytes);
+    let two_msgids = has_two_msgids(det);
     // D1667: アドレス欄の重複グループ名
-    let addr_group_dup = has_addr_group_dup(bytes);
+    let addr_group_dup = has_addr_group_dup(det);
     // D1668: Date 欄の / 区切り日付
-    let slash_date = has_slash_date(bytes);
+    let slash_date = has_slash_date(det);
     // D1669: 親子 multipart の boundary 再利用
     let nested_boundary_reuse = has_nested_boundary_reuse(bytes);
     // D1670: Date 欄ゾーンの桁数異常
-    let bad_zone_len = has_bad_zone_len(bytes);
+    let bad_zone_len = has_bad_zone_len(det);
     // D1671: Date 欄の . 区切り日付
-    let dot_date = has_dot_date(bytes);
+    let dot_date = has_dot_date(det);
     // D1672: Date 欄の二数値ゾーン
-    let two_num_zones = has_two_num_zones(bytes);
+    let two_num_zones = has_two_num_zones(det);
     // D1673: Received の from 節欠落
-    let received_no_from = has_received_no_from(bytes);
+    let received_no_from = has_received_no_from(det);
     // D1674: Date 欄ゾーンのコロン形
-    let zone_colon = has_zone_colon(bytes);
+    let zone_colon = has_zone_colon(det);
     // D1675: Date 欄の二4桁年
-    let two_years = has_two_years(bytes);
+    let two_years = has_two_years(det);
     // D1676: Resent-* 欄の重複
-    let dup_resent_headers = has_dup_resent_headers(bytes);
+    let dup_resent_headers = has_dup_resent_headers(det);
     // D1677: Date 欄ゾーンの二重符号
-    let zone_two_signs = has_zone_two_signs(bytes);
+    let zone_two_signs = has_zone_two_signs(det);
     // D1678: Date 欄が時刻のみ
-    let date_time_only = has_date_time_only(bytes);
+    let date_time_only = has_date_time_only(det);
     // D1679: 宛名が @ で終わりドメイン欠落
-    let addr_at_end = has_addr_at_end(bytes);
+    let addr_at_end = has_addr_at_end(det);
     // D1680: boundary 値が空白のみ
     let ws_boundary = has_ws_boundary(bytes);
     // D1681: 宛名欄の値が空
-    let empty_addr_header = has_empty_addr_header(bytes);
+    let empty_addr_header = has_empty_addr_header(det);
     // D1682: 宣言なき区切り行
     let orphan_boundary = has_orphan_boundary(bytes);
     // D1683: Date 欄ゾーンが符号+英字
-    let zone_alpha = has_zone_alpha(bytes);
+    let zone_alpha = has_zone_alpha(det);
     // D1684: Date 欄ゾーンが符号のみ
-    let zone_sign_only = has_zone_sign_only(bytes);
+    let zone_sign_only = has_zone_sign_only(det);
     // D1685: 宛名欄の < 無し >
-    let addr_gt_only = has_addr_gt_only(bytes);
+    let addr_gt_only = has_addr_gt_only(det);
     // D1686: Date 欄の数字+英字融合語
-    let fused_date = has_fused_date(bytes);
+    let fused_date = has_fused_date(det);
     // D1687: Received の空値
-    let empty_received = has_empty_received(bytes);
+    let empty_received = has_empty_received(det);
     // D1688: Received の from 節重複
-    let received_multi_from = has_received_multi_from(bytes);
+    let received_multi_from = has_received_multi_from(det);
     // D1689: Date 欄の二つの日
-    let date_two_days = has_date_two_days(bytes);
+    let date_two_days = has_date_two_days(det);
     // D1690: Received が ; のみ
-    let received_semi_only = has_received_semi_only(bytes);
+    let received_semi_only = has_received_semi_only(det);
     // D1691: Received の by 節欠落
-    let received_no_by = has_received_no_by(bytes);
+    let received_no_by = has_received_no_by(det);
     // D1692: Date 欄の二つの月名
-    let date_two_months = has_date_two_months(bytes);
+    let date_two_months = has_date_two_months(det);
     // D1693: CT/CD 欄の末尾 ;
-    let trailing_semi_param = has_trailing_semi_param(bytes);
+    let trailing_semi_param = has_trailing_semi_param(det);
     // D1694: Received の ; 複数
-    let multi_semi_received = has_multi_semi_received(bytes);
+    let multi_semi_received = has_multi_semi_received(det);
     // D1695: Date 欄の数字曜日
-    let numeric_dow = has_numeric_dow(bytes);
+    let numeric_dow = has_numeric_dow(det);
     // D1696: CT/CD param の空値
     let param_empty_value = has_param_empty_value(bytes);
     // D1697: 宛名の単ラベルドメイン
-    let single_label_domain = has_single_label_domain(bytes);
+    let single_label_domain = has_single_label_domain(det);
     // D1698: param = 直前の空白
     let pre_eq_space = has_pre_eq_space(bytes);
     // D1699: Date 欄の5桁以上の年
-    let year_5digit = has_year_5digit(bytes);
+    let year_5digit = has_year_5digit(det);
     // D1700: param 引用値内の =
     let param_quoted_eq = has_param_quoted_eq(bytes);
     // D1701: 大小写のみ異なる boundary
     let boundary_case_collide = has_boundary_case_collide(bytes);
     // D1702: List-Id の二識別子
-    let two_list_ids = has_two_list_ids(bytes);
+    let two_list_ids = has_two_list_ids(det);
     // D1703: Received の from 節が空
-    let received_from_empty = has_received_from_empty(bytes);
+    let received_from_empty = has_received_from_empty(det);
     // D1704: param 裸値の /
     let slash_param_value = has_slash_param_value(bytes);
     // D1705: Content-Type のサブ型欠落
     let ct_no_subtype = has_ct_no_subtype(bytes);
     // D1706: 識別子のドット無しドメイン
-    let msgid_dotless_domain = has_msgid_dotless_domain(bytes);
+    let msgid_dotless_domain = has_msgid_dotless_domain(det);
     // D1707: Received の by 節重複
-    let received_multi_by = has_received_multi_by(bytes);
+    let received_multi_by = has_received_multi_by(det);
     // D1708: Content-Disposition の型欠落
     let cd_empty_type = has_cd_empty_type(bytes);
     // D1709: Received の from 節クオート名
-    let received_from_quoted = has_received_from_quoted(bytes);
+    let received_from_quoted = has_received_from_quoted(det);
     // D1710: Received の from 節の裸 @
-    let received_from_at = has_received_from_at(bytes);
+    let received_from_at = has_received_from_at(det);
     // D1711: Received の with 節重複
-    let received_multi_with = has_received_multi_with(bytes);
+    let received_multi_with = has_received_multi_with(det);
     // D1712: Received の for 節重複
-    let received_multi_for = has_received_multi_for(bytes);
+    let received_multi_for = has_received_multi_for(det);
     // D1713: param 名の @
     let at_param_name = has_at_param_name(bytes);
     // D1714: CTE 値の余分な空白
-    let padded_cte = has_padded_cte(bytes);
+    let padded_cte = has_padded_cte(det);
     // D1715: Received の id 節重複
-    let received_multi_id = has_received_multi_id(bytes);
+    let received_multi_id = has_received_multi_id(det);
     // D1716: param 名の /
     let slash_param_name = has_slash_param_name(bytes);
     // D1717: CTE 値の二トークン
-    let two_cte_values = has_two_cte_values(bytes);
+    let two_cte_values = has_two_cte_values(det);
     // D1718: boundary に英数字が無い
     let alnumless_boundary = has_alnumless_boundary(bytes);
     // D1719: Received の via 節重複
-    let received_multi_via = has_received_multi_via(bytes);
+    let received_multi_via = has_received_multi_via(det);
     // D1720: Received の by 節空値
-    let received_by_empty = has_received_by_empty(bytes);
+    let received_by_empty = has_received_by_empty(det);
     // D1721: Content-Disposition 型トークン2つ
     let cd_two_types = has_cd_two_types(bytes);
     // D1722: 識別子内の @ 2つ
-    let msgid_two_at = has_msgid_two_at(bytes);
+    let msgid_two_at = has_msgid_two_at(det);
     // D1723: Received の with 節空値
-    let received_with_empty = has_received_with_empty(bytes);
+    let received_with_empty = has_received_with_empty(det);
     // D1724: Received の id 節空値
-    let received_id_empty = has_received_id_empty(bytes);
+    let received_id_empty = has_received_id_empty(det);
     // D1725: 同一欄内の boundary= 重複
     let boundary_param_dup = has_boundary_param_dup(bytes);
     // D1726: Received の for 節空値
-    let received_for_empty = has_received_for_empty(bytes);
+    let received_for_empty = has_received_for_empty(det);
     // D1727: Received の via 節空値
-    let received_via_empty = has_received_via_empty(bytes);
+    let received_via_empty = has_received_via_empty(det);
     // D1728: 同一欄内の同名 param 重複
     let param_name_dup = has_param_name_dup(bytes);
     // D1729: 識別子列の ,
-    let msgid_ref_comma = has_msgid_ref_comma(bytes);
+    let msgid_ref_comma = has_msgid_ref_comma(det);
     // D1730: 宛名欄が ; のみ
-    let addr_semicolon_only = has_addr_semicolon_only(bytes);
+    let addr_semicolon_only = has_addr_semicolon_only(det);
     // D1731: 識別子列の ;
-    let msgid_ref_semicolon = has_msgid_ref_semicolon(bytes);
+    let msgid_ref_semicolon = has_msgid_ref_semicolon(det);
     // D1732: 宛名欄が , のみ
-    let addr_comma_only = has_addr_comma_only(bytes);
+    let addr_comma_only = has_addr_comma_only(det);
     // D1733: CT の型のみで / 後が空
-    let ct_empty_subtype = has_ct_empty_subtype(bytes);
+    let ct_empty_subtype = has_ct_empty_subtype(det);
     // D1734: CTE 値の , 区切り二値
-    let cte_comma = has_cte_comma(bytes);
+    let cte_comma = has_cte_comma(det);
     // D1735: param 名が * 始まり
-    let param_star_name = has_param_star_name(bytes);
+    let param_star_name = has_param_star_name(det);
     // D1736: Resent-* 欄の順序が規格と逆
-    let resent_out_of_order = has_resent_out_of_order(bytes);
+    let resent_out_of_order = has_resent_out_of_order(det);
     // D1737: Received の ; 後日付節が空
-    let received_date_empty = has_received_date_empty(bytes);
+    let received_date_empty = has_received_date_empty(det);
     // D1738: 宛名欄の二つの異名グループ
-    let addr_two_groups = has_addr_two_groups(bytes);
+    let addr_two_groups = has_addr_two_groups(det);
     // D1739: msgid 系のドメイン端点ドット
-    let msgid_edge_dot_domain = has_msgid_edge_dot_domain(bytes);
+    let msgid_edge_dot_domain = has_msgid_edge_dot_domain(det);
     // D1740: boundary 値の端点ドット
-    let boundary_dot_edge = has_boundary_dot_edge(bytes);
+    let boundary_dot_edge = has_boundary_dot_edge(det);
     // D1741: Received 節の : 付き値
-    let received_port = has_received_port(bytes);
+    let received_port = has_received_port(det);
     // D1742: References 等の同一識別子重複
-    let msgid_ref_dup = has_msgid_ref_dup(bytes);
+    let msgid_ref_dup = has_msgid_ref_dup(det);
     // D1743: Received が ; で始まる
-    let received_semi_lead = has_received_semi_lead(bytes);
+    let received_semi_lead = has_received_semi_lead(det);
     // D1744: CTE 値の大文字
-    let cte_upper = has_cte_upper(bytes);
+    let cte_upper = has_cte_upper(det);
     // D1745: 宛名欄の <…> が二組
-    let addr_two_angle = has_addr_two_angle(bytes);
+    let addr_two_angle = has_addr_two_angle(det);
     // D1746: msgid 系の @ 無し識別子
-    let msgid_no_at = has_msgid_no_at(bytes);
+    let msgid_no_at = has_msgid_no_at(det);
     // D1747: 宛名欄の @ が二つ
-    let two_at_addr = has_two_at_addr(bytes);
+    let two_at_addr = has_two_at_addr(det);
     // D1748: CT の // 空セグメント
-    let ct_double_slash = has_ct_double_slash(bytes);
+    let ct_double_slash = has_ct_double_slash(det);
     // D1749: boundary 裸値の内部空白
-    let boundary_inner_ws = has_boundary_inner_ws(bytes);
+    let boundary_inner_ws = has_boundary_inner_ws(det);
     // D1750: 宛名欄が : のみ
-    let addr_colon_only = has_addr_colon_only(bytes);
+    let addr_colon_only = has_addr_colon_only(det);
     // D1751: References 系の先頭区切り
-    let ref_lead_sep = has_ref_lead_sep(bytes);
+    let ref_lead_sep = has_ref_lead_sep(det);
     // D1752: msgid 系の <> 隣接コメント
-    let msgid_paren = has_msgid_paren(bytes);
+    let msgid_paren = has_msgid_paren(det);
     // D1753: 宛名欄の先頭 >
-    let addr_gt_lead = has_addr_gt_lead(bytes);
+    let addr_gt_lead = has_addr_gt_lead(det);
     // D1754: msgid 系の側欠落
-    let msgid_empty_side = has_msgid_empty_side(bytes);
+    let msgid_empty_side = has_msgid_empty_side(det);
     // D1755: msgid 系の ; 先立ち
-    let msgid_semi_lead = has_msgid_semi_lead(bytes);
+    let msgid_semi_lead = has_msgid_semi_lead(det);
     // D1756: CTE の ; 先立ち
-    let cte_semi_lead = has_cte_semi_lead(bytes);
+    let cte_semi_lead = has_cte_semi_lead(det);
     // D1757: References 系の > 先立ち
-    let ref_gt_lead = has_ref_gt_lead(bytes);
+    let ref_gt_lead = has_ref_gt_lead(det);
     // D1758: CT 型本体内の =
-    let ct_eq_type = has_ct_eq_type(bytes);
+    let ct_eq_type = has_ct_eq_type(det);
     // D1759: CD 型本体内の =
-    let cd_eq_type = has_cd_eq_type(bytes);
+    let cd_eq_type = has_cd_eq_type(det);
     // D1760: 宛名ローカル部の &
-    let addr_amp_local = has_addr_amp_local(bytes);
+    let addr_amp_local = has_addr_amp_local(det);
     // D1761: CT 型本体内の :
-    let ct_colon_type = has_ct_colon_type(bytes);
+    let ct_colon_type = has_ct_colon_type(det);
     // D1762: 宛名欄の同一アドレス重複
-    let same_addr_dup = has_same_addr_dup(bytes);
+    let same_addr_dup = has_same_addr_dup(det);
     // D1763: 宛名ローカル部の ~
-    let addr_tilde_local = has_addr_tilde_local(bytes);
+    let addr_tilde_local = has_addr_tilde_local(det);
     // D1764: CT 型本体内の (
-    let ct_paren = has_ct_paren(bytes);
+    let ct_paren = has_ct_paren(det);
     // D1765: CD 型本体内の :
-    let cd_colon_type = has_cd_colon_type(bytes);
+    let cd_colon_type = has_cd_colon_type(det);
     // D1766: CD 型本体内の孤立括弧
-    let cd_paren = has_cd_paren(bytes);
+    let cd_paren = has_cd_paren(det);
     // D1767: 宛名ローカル部の {}
-    let addr_brace_local = has_addr_brace_local(bytes);
+    let addr_brace_local = has_addr_brace_local(det);
     // D1768: CTE 値本体内の孤立括弧
-    let cte_paren = has_cte_paren(bytes);
+    let cte_paren = has_cte_paren(det);
     // D1769: msgid 系の , 先立ち
-    let msgid_comma_lead = has_msgid_comma_lead(bytes);
+    let msgid_comma_lead = has_msgid_comma_lead(det);
     // D1770: 宛名ローカル部の ^
-    let addr_caret_local = has_addr_caret_local(bytes);
+    let addr_caret_local = has_addr_caret_local(det);
     // D1771: 宛名ローカル部の `
-    let addr_backtick_local = has_addr_backtick_local(bytes);
+    let addr_backtick_local = has_addr_backtick_local(det);
     // D1772: msgid 系の額縁内空白
-    let msgid_ws_inner = has_msgid_ws_inner(bytes);
+    let msgid_ws_inner = has_msgid_ws_inner(det);
     // D1773: Received の by 節の @
-    let received_by_at = has_received_by_at(bytes);
+    let received_by_at = has_received_by_at(det);
     // D1774: msgid 系の = 先立ち
-    let msgid_eq_lead = has_msgid_eq_lead(bytes);
-    let boundary_quoted_semi = has_boundary_quoted_semi(bytes);
-    let cd_star_type = has_cd_star_type(bytes);
-    let received_for_two_at = has_received_for_two_at(bytes);
-    let addr_noname_group = has_addr_noname_group(bytes);
-    let msgid_pct_lead = has_msgid_pct_lead(bytes);
-    let cte_eq = has_cte_eq(bytes);
-    let received_from_bang = has_received_from_bang(bytes);
-    let param_backtick_name = has_param_backtick_name(bytes);
-    let msgid_colon_lead = has_msgid_colon_lead(bytes);
-    let ct_bslash_type = has_ct_bslash_type(bytes);
-    let received_id_bang = has_received_id_bang(bytes);
-    let cd_bslash_type = has_cd_bslash_type(bytes);
-    let msgid_lt_lead = has_msgid_lt_lead(bytes);
-    let cte_bslash = has_cte_bslash(bytes);
-    let received_via_at = has_received_via_at(bytes);
-    let msgid_inner_bslash = has_msgid_inner_bslash(bytes);
-    let msgid_gt_lead = has_msgid_gt_lead(bytes);
-    let ct_gt_type = has_ct_gt_type(bytes);
-    let received_by_pct = has_received_by_pct(bytes);
-    let cd_gt_type = has_cd_gt_type(bytes);
-    let msgid_qmark_lead = has_msgid_qmark_lead(bytes);
-    let ct_lt_type = has_ct_lt_type(bytes);
-    let received_from_pct = has_received_from_pct(bytes);
-    let cte_gt = has_cte_gt(bytes);
-    let msgid_at_lead = has_msgid_at_lead(bytes);
-    let received_id_pct = has_received_id_pct(bytes);
-    let cd_lt_type = has_cd_lt_type(bytes);
-    let addr_pipe_local = has_addr_pipe_local(bytes);
-    let msgid_bang_lead = has_msgid_bang_lead(bytes);
-    let received_for_pct = has_received_for_pct(bytes);
-    let cte_lt = has_cte_lt(bytes);
-    let addr_dollar_local = has_addr_dollar_local(bytes);
-    let addr_quoted_local = has_addr_quoted_local(bytes);
-    let msgid_slash_lead = has_msgid_slash_lead(bytes);
-    let ct_at_type = has_ct_at_type(bytes);
-    let received_via_pct = has_received_via_pct(bytes);
-    let param_qmark_name = has_param_qmark_name(bytes);
-    let addr_pct_local = has_addr_pct_local(bytes);
-    let ct_qmark_type = has_ct_qmark_type(bytes);
-    let received_by_bang = has_received_by_bang(bytes);
-    let msgid_hash_lead = has_msgid_hash_lead(bytes);
-    let addr_hash_local = has_addr_hash_local(bytes);
-    let ct_comma_type = has_ct_comma_type(bytes);
-    let received_via_bang = has_received_via_bang(bytes);
-    let msgid_amp_lead = has_msgid_amp_lead(bytes);
-    let addr_star_local = has_addr_star_local(bytes);
-    let ct_lbracket_type = has_ct_lbracket_type(bytes);
-    let received_for_bang = has_received_for_bang(bytes);
-    let msgid_tilde_lead = has_msgid_tilde_lead(bytes);
-    let addr_apos_local = has_addr_apos_local(bytes);
-    let ct_rbracket_type = has_ct_rbracket_type(bytes);
-    let received_with_pct = has_received_with_pct(bytes);
-    let msgid_pipe_lead = has_msgid_pipe_lead(bytes);
-    let received_id_at = has_received_id_at(bytes);
-    let param_bang_name = has_param_bang_name(bytes);
-    let cd_at_type = has_cd_at_type(bytes);
-    let msgid_backtick_lead = has_msgid_backtick_lead(bytes);
-    let param_amp_name = has_param_amp_name(bytes);
-    let cte_at = has_cte_at(bytes);
-    let received_with_bang = has_received_with_bang(bytes);
-    let msgid_caret_lead = has_msgid_caret_lead(bytes);
-    let param_colon_name = has_param_colon_name(bytes);
-    let cte_pct = has_cte_pct(bytes);
-    let received_with_at = has_received_with_at(bytes);
-    let msgid_dollar_lead = has_msgid_dollar_lead(bytes);
-    let param_pct_name = has_param_pct_name(bytes);
-    let cte_bang = has_cte_bang(bytes);
-    let received_via_eq = has_received_via_eq(bytes);
-    let msgid_rparen_lead = has_msgid_rparen_lead(bytes);
-    let param_comma_name = has_param_comma_name(bytes);
-    let cte_qmark = has_cte_qmark(bytes);
-    let received_by_eq = has_received_by_eq(bytes);
-    let msgid_lparen_lead = has_msgid_lparen_lead(bytes);
-    let param_lbrack_name = has_param_lbrack_name(bytes);
-    let cte_slash = has_cte_slash(bytes);
-    let received_id_eq = has_received_id_eq(bytes);
-    let msgid_squote_lead = has_msgid_squote_lead(bytes);
-    let param_rbrack_name = has_param_rbrack_name(bytes);
-    let cte_lbrack = has_cte_lbrack(bytes);
-    let received_for_eq = has_received_for_eq(bytes);
-    let msgid_plus_lead = has_msgid_plus_lead(bytes);
-    let param_lbrace_name = has_param_lbrace_name(bytes);
-    let cte_rbrack = has_cte_rbrack(bytes);
-    let received_with_eq = has_received_with_eq(bytes);
-    let msgid_dquote_lead = has_msgid_dquote_lead(bytes);
-    let param_rbrace_name = has_param_rbrace_name(bytes);
-    let cte_lbrace = has_cte_lbrace(bytes);
-    let received_from_eq = has_received_from_eq(bytes);
-    let msgid_minus_lead = has_msgid_minus_lead(bytes);
-    let param_pipe_name = has_param_pipe_name(bytes);
-    let cte_rbrace = has_cte_rbrace(bytes);
-    let received_by_lt = has_received_by_lt(bytes);
-    let msgid_lbrack_lead = has_msgid_lbrack_lead(bytes);
-    let param_caret_name = has_param_caret_name(bytes);
-    let cte_pipe = has_cte_pipe(bytes);
-    let received_via_lt = has_received_via_lt(bytes);
-    let msgid_rbrack_lead = has_msgid_rbrack_lead(bytes);
-    let param_tilde_name = has_param_tilde_name(bytes);
-    let cte_caret = has_cte_caret(bytes);
-    let received_id_lt = has_received_id_lt(bytes);
-    let msgid_lbrace_lead = has_msgid_lbrace_lead(bytes);
-    let param_dollar_name = has_param_dollar_name(bytes);
-    let cte_tilde = has_cte_tilde(bytes);
-    let received_from_lt = has_received_from_lt(bytes);
-    let msgid_rbrace_lead = has_msgid_rbrace_lead(bytes);
-    let param_hash_name = has_param_hash_name(bytes);
-    let cte_star = has_cte_star(bytes);
-    let received_with_lt = has_received_with_lt(bytes);
-    let msgid_uscore_lead = has_msgid_uscore_lead(bytes);
-    let param_apos_name = has_param_apos_name(bytes);
-    let cte_hash = has_cte_hash(bytes);
-    let received_for_lt = has_received_for_lt(bytes);
-    let param_plus_name = has_param_plus_name(bytes);
-    let param_lparen_name = has_param_lparen_name(bytes);
-    let cte_dollar = has_cte_dollar(bytes);
-    let received_from_gt = has_received_from_gt(bytes);
-    let received_by_gt = has_received_by_gt(bytes);
-    let param_rparen_name = has_param_rparen_name(bytes);
-    let cte_apos = has_cte_apos(bytes);
-    let received_via_gt = has_received_via_gt(bytes);
-    let received_for_gt = has_received_for_gt(bytes);
-    let param_gt_name = has_param_gt_name(bytes);
-    let cte_quote = has_cte_quote(bytes);
-    let received_id_gt = has_received_id_gt(bytes);
-    let received_with_gt = has_received_with_gt(bytes);
-    let param_lt_name = has_param_lt_name(bytes);
-    let received_from_qmark = has_received_from_qmark(bytes);
-    let received_by_hash = has_received_by_hash(bytes);
-    let received_id_quote = has_received_id_quote(bytes);
-    let received_for_qmark = has_received_for_qmark(bytes);
-    let received_via_hash = has_received_via_hash(bytes);
-    let received_with_colon = has_received_with_colon(bytes);
-    let received_from_comma = has_received_from_comma(bytes);
-    let received_for_slash = has_received_for_slash(bytes);
-    let received_by_bslash = has_received_by_bslash(bytes);
-    let received_via_apos = has_received_via_apos(bytes);
-    let received_id_hash = has_received_id_hash(bytes);
-    let received_for_tilde = has_received_for_tilde(bytes);
-    let received_by_pipe = has_received_by_pipe(bytes);
-    let received_via_tilde = has_received_via_tilde(bytes);
-    let received_id_pipe = has_received_id_pipe(bytes);
-    let received_from_dollar = has_received_from_dollar(bytes);
-    let received_by_amp = has_received_by_amp(bytes);
-    let received_via_dollar = has_received_via_dollar(bytes);
-    let received_for_caret = has_received_for_caret(bytes);
-    let received_from_tilde = has_received_from_tilde(bytes);
-    let received_by_dollar = has_received_by_dollar(bytes);
-    let received_with_amp = has_received_with_amp(bytes);
-    let received_id_caret = has_received_id_caret(bytes);
-    let received_from_pipe = has_received_from_pipe(bytes);
-    let received_by_qmark = has_received_by_qmark(bytes);
-    let received_via_amp = has_received_via_amp(bytes);
-    let received_for_dollar = has_received_for_dollar(bytes);
-    let received_with_qmark = has_received_with_qmark(bytes);
-    let received_id_tilde = has_received_id_tilde(bytes);
-    let received_for_amp = has_received_for_amp(bytes);
-    let received_from_apos = has_received_from_apos(bytes);
-    let received_for_hash = has_received_for_hash(bytes);
-    let received_with_comma = has_received_with_comma(bytes);
-    let received_id_dollar = has_received_id_dollar(bytes);
-    let received_by_comma = has_received_by_comma(bytes);
-    let received_by_colon = has_received_by_colon(bytes);
-    let received_for_quote = has_received_for_quote(bytes);
-    let received_via_qmark = has_received_via_qmark(bytes);
-    let received_with_quote = has_received_with_quote(bytes);
-    let received_id_apos = has_received_id_apos(bytes);
-    let received_via_colon = has_received_via_colon(bytes);
-    let received_with_tilde = has_received_with_tilde(bytes);
-    let received_for_apos = has_received_for_apos(bytes);
-    let received_id_qmark = has_received_id_qmark(bytes);
-    let received_via_comma = has_received_via_comma(bytes);
-    let received_with_pipe = has_received_with_pipe(bytes);
-    let received_for_colon = has_received_for_colon(bytes);
-    let received_id_comma = has_received_id_comma(bytes);
-    let received_via_quote = has_received_via_quote(bytes);
-    let received_with_dollar = has_received_with_dollar(bytes);
-    let received_for_comma = has_received_for_comma(bytes);
-    let received_id_colon = has_received_id_colon(bytes);
-    let received_via_caret = has_received_via_caret(bytes);
-    let received_with_caret = has_received_with_caret(bytes);
-    let received_for_pipe = has_received_for_pipe(bytes);
-    let received_id_amp = has_received_id_amp(bytes);
-    let received_via_pipe = has_received_via_pipe(bytes);
-    let received_with_hash = has_received_with_hash(bytes);
-    let received_by_tilde = has_received_by_tilde(bytes);
-    let received_from_hash = has_received_from_hash(bytes);
-    let received_via_slash = has_received_via_slash(bytes);
-    let received_with_apos = has_received_with_apos(bytes);
-    let received_by_apos = has_received_by_apos(bytes);
-    let received_from_quote = has_received_from_quote(bytes);
-    let received_via_bslash = has_received_via_bslash(bytes);
-    let received_from_amp = has_received_from_amp(bytes);
-    let received_by_quote = has_received_by_quote(bytes);
-    let received_from_caret = has_received_from_caret(bytes);
-    let received_with_star = has_received_with_star(bytes);
-    let received_by_star = has_received_by_star(bytes);
-    let received_via_lbracket = has_received_via_lbracket(bytes);
-    let received_from_colon = has_received_from_colon(bytes);
-    let received_with_plus = has_received_with_plus(bytes);
-    let received_by_plus = has_received_by_plus(bytes);
-    let received_via_rbracket = has_received_via_rbracket(bytes);
-    let received_from_slash = has_received_from_slash(bytes);
-    let received_with_lbrace = has_received_with_lbrace(bytes);
-    let received_by_lbracket = has_received_by_lbracket(bytes);
-    let received_via_star = has_received_via_star(bytes);
-    let received_from_bslash = has_received_from_bslash(bytes);
-    let received_with_rbrace = has_received_with_rbrace(bytes);
-    let received_by_rbracket = has_received_by_rbracket(bytes);
-    let received_via_plus = has_received_via_plus(bytes);
-    let received_via_lbrace = has_received_via_lbrace(bytes);
-    let received_via_rbrace = has_received_via_rbrace(bytes);
-    let received_with_lbracket = has_received_with_lbracket(bytes);
-    let received_with_rbracket = has_received_with_rbracket(bytes);
-    let received_with_bslash = has_received_with_bslash(bytes);
-    let received_by_lbrace = has_received_by_lbrace(bytes);
-    let received_by_rbrace = has_received_by_rbrace(bytes);
-    let refs_comment_lead = has_refs_comment_lead(bytes);
-    let refs_bang_lead = has_refs_bang_lead(bytes);
-    let refs_eq_lead = has_refs_eq_lead(bytes);
-    let refs_colon_lead = has_refs_colon_lead(bytes);
-    let refs_star_lead = has_refs_star_lead(bytes);
-    let refs_hash_lead = has_refs_hash_lead(bytes);
-    let refs_dollar_lead = has_refs_dollar_lead(bytes);
-    let refs_at_lead = has_refs_at_lead(bytes);
-    let refs_qmark_lead = has_refs_qmark_lead(bytes);
-    let refs_amp_lead = has_refs_amp_lead(bytes);
-    let refs_apos_lead = has_refs_apos_lead(bytes);
-    let refs_plus_lead = has_refs_plus_lead(bytes);
-    let refs_slash_lead = has_refs_slash_lead(bytes);
-    let refs_pct_lead = has_refs_pct_lead(bytes);
-    let refs_minus_lead = has_refs_minus_lead(bytes);
-    let refs_lbrack_lead = has_refs_lbrack_lead(bytes);
-    let refs_rbrack_lead = has_refs_rbrack_lead(bytes);
-    let refs_caret_lead = has_refs_caret_lead(bytes);
-    let refs_uscore_lead = has_refs_uscore_lead(bytes);
-    let refs_backtick_lead = has_refs_backtick_lead(bytes);
-    let refs_tilde_lead = has_refs_tilde_lead(bytes);
-    let refs_lbrace_lead = has_refs_lbrace_lead(bytes);
-    let refs_pipe_lead = has_refs_pipe_lead(bytes);
-    let refs_rbrace_lead = has_refs_rbrace_lead(bytes);
-    let refs_dot_lead = has_refs_dot_lead(bytes);
-    let refs_bslash_lead = has_refs_bslash_lead(bytes);
-    let refs_junk_before_angle = has_refs_junk_before_angle(bytes);
-    let refs_comment_before_msgid = has_refs_comment_before_msgid(bytes);
-    let refs_adjacent_angles = has_refs_adjacent_angles(bytes);
-    let msgid_star_lead = has_msgid_star_lead(bytes);
-    let msgid_bslash_lead = has_msgid_bslash_lead(bytes);
-    let msgid_junk_before_angle = has_msgid_junk_before_angle(bytes);
-    let msgid_no_angle = has_msgid_no_angle(bytes);
-    let msgid_inner_bang = has_msgid_inner_bang(bytes);
-    let msgid_inner_hash = has_msgid_inner_hash(bytes);
-    let msgid_inner_dollar = has_msgid_inner_dollar(bytes);
-    let msgid_inner_star = has_msgid_inner_star(bytes);
-    let msgid_inner_pct = has_msgid_inner_pct(bytes);
-    let msgid_inner_caret = has_msgid_inner_caret(bytes);
-    let msgid_inner_backtick = has_msgid_inner_backtick(bytes);
-    let msgid_inner_tilde = has_msgid_inner_tilde(bytes);
-    let msgid_inner_lbrace = has_msgid_inner_lbrace(bytes);
-    let msgid_inner_rbrace = has_msgid_inner_rbrace(bytes);
-    let msgid_inner_semi = has_msgid_inner_semi(bytes);
-    let msgid_inner_lt = has_msgid_inner_lt(bytes);
-    let msgid_adjacent_angles = has_msgid_adjacent_angles(bytes);
-    let msgid_word_between_angles = has_msgid_word_between_angles(bytes);
-    let msgid_empty_value = has_msgid_empty_value(bytes);
-    let msgid_dup_pair = has_msgid_dup_pair(bytes);
-    let refs_irt_conflict = has_refs_irt_conflict(bytes);
-    let resent_msgid_same = has_resent_msgid_same(bytes);
-    let resent_reply_to = has_resent_reply_to(bytes);
-    let msgid_comment_lead = has_msgid_comment_lead(bytes);
-    let subject_locale_prefix = has_subject_locale_prefix(bytes);
-    let resent_no_recipient = has_resent_no_recipient(bytes);
-    let resent_unknown_field = has_resent_unknown_field(bytes);
-    let resent_no_msgid = has_resent_no_msgid(bytes);
-    let msgid_case_variant_pair = has_msgid_case_variant_pair(bytes);
-    let content_id_top = has_content_id_top(bytes);
-    let to_many_addrs = has_to_many_addrs(bytes);
-    let from_sender_dup = has_from_sender_dup(bytes);
-    let reply_to_same_as_from = has_reply_to_same_as_from(bytes);
-    let irt_no_refs = has_irt_no_refs(bytes);
-    let resent_from_same_as_from = has_resent_from_same_as_from(bytes);
-    let resent_to_same_as_to = has_resent_to_same_as_to(bytes);
-    let resent_to_same_as_from = has_resent_to_same_as_from(bytes);
-    let resent_sender_same_as_sender = has_resent_sender_same_as_sender(bytes);
-    let resent_date_same_as_date = has_resent_date_same_as_date(bytes);
-    let resent_cc_same_as_cc = has_resent_cc_same_as_cc(bytes);
-    let resent_to_same_as_cc = has_resent_to_same_as_cc(bytes);
-    let resent_from_same_as_sender = has_resent_from_same_as_sender(bytes);
-    let resent_sender_same_as_from = has_resent_sender_same_as_from(bytes);
-    let resent_to_same_as_resent_from = has_resent_to_same_as_resent_from(bytes);
-    let resent_cc_same_as_resent_from = has_resent_cc_same_as_resent_from(bytes);
-    let resent_sender_same_as_resent_from = has_resent_sender_same_as_resent_from(bytes);
-    let resent_cc_same_as_resent_to = has_resent_cc_same_as_resent_to(bytes);
-    let resent_cc_same_as_to = has_resent_cc_same_as_to(bytes);
-    let resent_cc_same_as_from = has_resent_cc_same_as_from(bytes);
-    let resent_to_same_as_resent_sender = has_resent_to_same_as_resent_sender(bytes);
-    let resent_cc_same_as_resent_sender = has_resent_cc_same_as_resent_sender(bytes);
-    let to_same_as_cc = has_to_same_as_cc(bytes);
-    let reply_to_same_as_to = has_reply_to_same_as_to(bytes);
-    let from_same_as_to = has_from_same_as_to(bytes);
-    let reply_to_same_as_sender = has_reply_to_same_as_sender(bytes);
-    let reply_to_same_as_cc = has_reply_to_same_as_cc(bytes);
-    let sender_same_as_to = has_sender_same_as_to(bytes);
-    let sender_same_as_cc = has_sender_same_as_cc(bytes);
-    let from_same_as_cc = has_from_same_as_cc(bytes);
-    let delivered_to_differs_to = has_delivered_to_differs_to(bytes);
-    let envelope_to_differs_to = has_envelope_to_differs_to(bytes);
-    let delivered_to_same_as_cc = has_delivered_to_same_as_cc(bytes);
-    let return_path_differs_from = has_return_path_differs_from(bytes);
-    let delivered_to_same_as_from = has_delivered_to_same_as_from(bytes);
-    let delivered_to_same_as_reply_to = has_delivered_to_same_as_reply_to(bytes);
-    let envelope_to_same_as_cc = has_envelope_to_same_as_cc(bytes);
-    let delivered_to_same_as_sender = has_delivered_to_same_as_sender(bytes);
-    let x_orig_from_differs = has_x_orig_from_differs(bytes);
-    let x_orig_subject_differs = has_x_orig_subject_differs(bytes);
-    let x_orig_msgid_differs = has_x_orig_msgid_differs(bytes);
-    let x_orig_date_differs = has_x_orig_date_differs(bytes);
-    let x_orig_to_differs = has_x_orig_to_differs(bytes);
-    let x_orig_cc_differs = has_x_orig_cc_differs(bytes);
-    let x_orig_sender_differs = has_x_orig_sender_differs(bytes);
-    let x_orig_refs_differs = has_x_orig_refs_differs(bytes);
-    let dnt_differs_from = has_dnt_differs_from(bytes);
-    let rrt_differs_from = has_rrt_differs_from(bytes);
-    let xrt_differs_from = has_xrt_differs_from(bytes);
-    let dnt_differs_reply_to = has_dnt_differs_reply_to(bytes);
-    let apparently_to_differs_to = has_apparently_to_differs_to(bytes);
-    let apparently_to_differs_delivered_to = has_apparently_to_differs_delivered_to(bytes);
-    let x_orig_to_differs_delivered_to = has_x_orig_to_differs_delivered_to(bytes);
-    let resent_reply_to_differs_reply_to = has_resent_reply_to_differs_reply_to(bytes);
-    let env_from_differs_from = has_env_from_differs_from(bytes);
-    let apparently_from_differs_from = has_apparently_from_differs_from(bytes);
-    let rrt_differs_reply_to = has_rrt_differs_reply_to(bytes);
-    let xrt_differs_reply_to = has_xrt_differs_reply_to(bytes);
-    let apparently_resent_marks = has_apparently_resent_marks(bytes);
-    let x_orig_bcc_mark = has_x_orig_bcc_mark(bytes);
-    let x_orig_cc_mark = has_x_orig_cc_mark(bytes);
-    let x_orig_reply_to_mark = has_x_orig_reply_to_mark(bytes);
-    let fcc_mark = has_fcc_mark(bytes);
-    let forwarded_marks = has_forwarded_marks(bytes);
-    let apparently_to_same_as_to = has_apparently_to_same_as_to(bytes);
-    let x_orig_to_same_as_to = has_x_orig_to_same_as_to(bytes);
-    let x_orig_from_same_as_from = has_x_orig_from_same_as_from(bytes);
-    let x_orig_subject_same_as_subject = has_x_orig_subject_same_as_subject(bytes);
-    let x_orig_msgid_same_as_msgid = has_x_orig_msgid_same_as_msgid(bytes);
-    let x_orig_date_same_as_date = has_x_orig_date_same_as_date(bytes);
-    let x_orig_sender_same_as_sender = has_x_orig_sender_same_as_sender(bytes);
-    let x_orig_cc_same_as_cc = has_x_orig_cc_same_as_cc(bytes);
-    let x_orig_reply_to_same_as_reply_to = has_x_orig_reply_to_same_as_reply_to(bytes);
-    let x_orig_refs_same_as_refs = has_x_orig_refs_same_as_refs(bytes);
-    let x_orig_to_differs_apparently_to = has_x_orig_to_differs_apparently_to(bytes);
-    let x_orig_to_differs_envelope_to = has_x_orig_to_differs_envelope_to(bytes);
-    let envelope_to_differs_delivered_to = has_envelope_to_differs_delivered_to(bytes);
-    let envelope_to_differs_apparently_to = has_envelope_to_differs_apparently_to(bytes);
-    let return_path_differs_env_from = has_return_path_differs_env_from(bytes);
-    let return_path_differs_apparently_from = has_return_path_differs_apparently_from(bytes);
-    let env_from_differs_apparently_from = has_env_from_differs_apparently_from(bytes);
-    let x_orig_from_differs_env_from = has_x_orig_from_differs_env_from(bytes);
-    let multi_env_to = has_multi_env_to(bytes);
-    let multi_apparently_to = has_multi_apparently_to(bytes);
-    let multi_env_from = has_multi_env_from(bytes);
-    let multi_apparently_from = has_multi_apparently_from(bytes);
-    let multi_x_orig_to = has_multi_x_orig_to(bytes);
-    let multi_x_orig_from = has_multi_x_orig_from(bytes);
-    let multi_x_orig_msgid = has_multi_x_orig_msgid(bytes);
-    let multi_x_orig_subject = has_multi_x_orig_subject(bytes);
-    let multi_x_orig_cc = has_multi_x_orig_cc(bytes);
-    let multi_x_orig_reply_to = has_multi_x_orig_reply_to(bytes);
-    let multi_x_orig_date = has_multi_x_orig_date(bytes);
-    let multi_x_orig_refs = has_multi_x_orig_refs(bytes);
-    let multi_disposition_to = has_multi_disposition_to(bytes);
-    let multi_return_receipt_to = has_multi_return_receipt_to(bytes);
-    let multi_confirm_reading = has_multi_confirm_reading(bytes);
-    let multi_resent_reply_to = has_multi_resent_reply_to(bytes);
-    let env_to_empty = has_env_to_empty(bytes);
-    let apparently_to_empty = has_apparently_to_empty(bytes);
-    let env_from_empty = has_env_from_empty(bytes);
-    let apparently_from_empty = has_apparently_from_empty(bytes);
-    let disposition_to_empty = has_disposition_to_empty(bytes);
-    let return_receipt_to_empty = has_return_receipt_to_empty(bytes);
-    let confirm_reading_empty = has_confirm_reading_empty(bytes);
-    let resent_reply_to_empty = has_resent_reply_to_empty(bytes);
-    let x_orig_to_empty = has_x_orig_to_empty(bytes);
-    let x_orig_from_empty = has_x_orig_from_empty(bytes);
-    let x_orig_msgid_empty = has_x_orig_msgid_empty(bytes);
-    let x_orig_subject_empty = has_x_orig_subject_empty(bytes);
-    let x_orig_cc_empty = has_x_orig_cc_empty(bytes);
-    let x_orig_reply_to_empty = has_x_orig_reply_to_empty(bytes);
-    let x_orig_date_empty = has_x_orig_date_empty(bytes);
-    let x_orig_refs_empty = has_x_orig_refs_empty(bytes);
-    let x_orig_bcc_empty = has_x_orig_bcc_empty(bytes);
-    let fcc_empty = has_fcc_empty(bytes);
-    let x_forwarded_empty = has_x_forwarded_empty(bytes);
-    let apparently_resent_empty = has_apparently_resent_empty(bytes);
-    let x_orig_to_headers_empty = has_x_orig_to_headers_empty(bytes);
-    let x_orig_rcpt_to_empty = has_x_orig_rcpt_to_empty(bytes);
-    let x_orig_ar_empty = has_x_orig_ar_empty(bytes);
-    let x_orig_arrival_empty = has_x_orig_arrival_empty(bytes);
-    let auth_results_empty = has_auth_results_empty(bytes);
-    let dkim_sig_empty = has_dkim_sig_empty(bytes);
-    let received_spf_empty = has_received_spf_empty(bytes);
-    let priority_headers_empty = has_priority_headers_empty(bytes);
-    let env_to_non_addr = has_env_to_non_addr(bytes);
-    let apparently_to_non_addr = has_apparently_to_non_addr(bytes);
-    let env_from_non_addr = has_env_from_non_addr(bytes);
-    let apparently_from_non_addr = has_apparently_from_non_addr(bytes);
-    let x_orig_to_non_addr = has_x_orig_to_non_addr(bytes);
-    let x_orig_from_non_addr = has_x_orig_from_non_addr(bytes);
-    let x_orig_cc_non_addr = has_x_orig_cc_non_addr(bytes);
-    let x_orig_reply_to_non_addr = has_x_orig_reply_to_non_addr(bytes);
-    let disposition_to_non_addr = has_disposition_to_non_addr(bytes);
-    let return_receipt_to_non_addr = has_return_receipt_to_non_addr(bytes);
-    let confirm_reading_non_addr = has_confirm_reading_non_addr(bytes);
-    let resent_reply_to_non_addr = has_resent_reply_to_non_addr(bytes);
-    let delivered_to_non_addr = has_delivered_to_non_addr(bytes);
-    let errors_to_non_addr = has_errors_to_non_addr(bytes);
-    let x_orig_rcpt_to_non_addr = has_x_orig_rcpt_to_non_addr(bytes);
-    let apparently_resent_non_addr = has_apparently_resent_non_addr(bytes);
-    let env_to_addr_list = has_env_to_addr_list(bytes);
-    let delivered_to_addr_list = has_delivered_to_addr_list(bytes);
-    let env_from_addr_list = has_env_from_addr_list(bytes);
-    let errors_to_addr_list = has_errors_to_addr_list(bytes);
-    let apparently_to_addr_list = has_apparently_to_addr_list(bytes);
-    let apparently_from_addr_list = has_apparently_from_addr_list(bytes);
-    let x_orig_to_addr_list = has_x_orig_to_addr_list(bytes);
-    let x_orig_from_addr_list = has_x_orig_from_addr_list(bytes);
-    let x_orig_cc_addr_list = has_x_orig_cc_addr_list(bytes);
-    let x_orig_reply_to_addr_list = has_x_orig_reply_to_addr_list(bytes);
-    let disposition_to_addr_list = has_disposition_to_addr_list(bytes);
-    let return_receipt_addr_list = has_return_receipt_addr_list(bytes);
-    let confirm_reading_addr_list = has_confirm_reading_addr_list(bytes);
-    let resent_reply_to_addr_list = has_resent_reply_to_addr_list(bytes);
-    let apparently_resent_addr_list = has_apparently_resent_addr_list(bytes);
-    let x_orig_rcpt_to_addr_list = has_x_orig_rcpt_to_addr_list(bytes);
-    let env_to_bracketed = has_env_to_bracketed(bytes);
-    let delivered_to_bracketed = has_delivered_to_bracketed(bytes);
-    let env_from_bracketed = has_env_from_bracketed(bytes);
-    let errors_to_bracketed = has_errors_to_bracketed(bytes);
-    let apparently_to_bracketed = has_apparently_to_bracketed(bytes);
-    let apparently_from_bracketed = has_apparently_from_bracketed(bytes);
-    let x_orig_to_bracketed = has_x_orig_to_bracketed(bytes);
-    let x_orig_from_bracketed = has_x_orig_from_bracketed(bytes);
-    let x_orig_cc_bracketed = has_x_orig_cc_bracketed(bytes);
-    let x_orig_reply_to_bracketed = has_x_orig_reply_to_bracketed(bytes);
-    let disposition_to_bracketed = has_disposition_to_bracketed(bytes);
-    let return_receipt_bracketed = has_return_receipt_bracketed(bytes);
-    let confirm_reading_bracketed = has_confirm_reading_bracketed(bytes);
-    let resent_reply_to_bracketed = has_resent_reply_to_bracketed(bytes);
-    let apparently_resent_bracketed = has_apparently_resent_bracketed(bytes);
-    let x_orig_rcpt_to_bracketed = has_x_orig_rcpt_to_bracketed(bytes);
-    let env_to_spaced = has_env_to_spaced(bytes);
-    let delivered_to_spaced = has_delivered_to_spaced(bytes);
-    let env_from_spaced = has_env_from_spaced(bytes);
-    let errors_to_spaced = has_errors_to_spaced(bytes);
-    let apparently_to_spaced = has_apparently_to_spaced(bytes);
-    let apparently_from_spaced = has_apparently_from_spaced(bytes);
-    let x_orig_to_spaced = has_x_orig_to_spaced(bytes);
-    let x_orig_from_spaced = has_x_orig_from_spaced(bytes);
-    let x_orig_cc_spaced = has_x_orig_cc_spaced(bytes);
-    let x_orig_reply_to_spaced = has_x_orig_reply_to_spaced(bytes);
-    let disposition_to_spaced = has_disposition_to_spaced(bytes);
-    let return_receipt_spaced = has_return_receipt_spaced(bytes);
-    let confirm_reading_spaced = has_confirm_reading_spaced(bytes);
-    let resent_reply_to_spaced = has_resent_reply_to_spaced(bytes);
-    let apparently_resent_spaced = has_apparently_resent_spaced(bytes);
-    let x_orig_rcpt_to_spaced = has_x_orig_rcpt_to_spaced(bytes);
-    let env_to_dotmal = has_env_to_dotmal(bytes);
-    let delivered_to_dotmal = has_delivered_to_dotmal(bytes);
-    let env_from_dotmal = has_env_from_dotmal(bytes);
-    let errors_to_dotmal = has_errors_to_dotmal(bytes);
-    let apparently_to_dotmal = has_apparently_to_dotmal(bytes);
-    let apparently_from_dotmal = has_apparently_from_dotmal(bytes);
-    let x_orig_to_dotmal = has_x_orig_to_dotmal(bytes);
-    let x_orig_from_dotmal = has_x_orig_from_dotmal(bytes);
-    let x_orig_cc_dotmal = has_x_orig_cc_dotmal(bytes);
-    let x_orig_reply_to_dotmal = has_x_orig_reply_to_dotmal(bytes);
-    let disposition_to_dotmal = has_disposition_to_dotmal(bytes);
-    let return_receipt_dotmal = has_return_receipt_dotmal(bytes);
-    let confirm_reading_dotmal = has_confirm_reading_dotmal(bytes);
-    let resent_reply_to_dotmal = has_resent_reply_to_dotmal(bytes);
-    let apparently_resent_dotmal = has_apparently_resent_dotmal(bytes);
-    let x_orig_rcpt_to_dotmal = has_x_orig_rcpt_to_dotmal(bytes);
-    let env_to_atdup = has_env_to_atdup(bytes);
-    let delivered_to_atdup = has_delivered_to_atdup(bytes);
-    let env_from_atdup = has_env_from_atdup(bytes);
-    let errors_to_atdup = has_errors_to_atdup(bytes);
-    let apparently_to_atdup = has_apparently_to_atdup(bytes);
-    let apparently_from_atdup = has_apparently_from_atdup(bytes);
-    let x_orig_to_atdup = has_x_orig_to_atdup(bytes);
-    let x_orig_from_atdup = has_x_orig_from_atdup(bytes);
-    let x_orig_cc_atdup = has_x_orig_cc_atdup(bytes);
-    let x_orig_reply_to_atdup = has_x_orig_reply_to_atdup(bytes);
-    let disposition_to_atdup = has_disposition_to_atdup(bytes);
-    let return_receipt_atdup = has_return_receipt_atdup(bytes);
-    let confirm_reading_atdup = has_confirm_reading_atdup(bytes);
-    let resent_reply_to_atdup = has_resent_reply_to_atdup(bytes);
-    let apparently_resent_atdup = has_apparently_resent_atdup(bytes);
-    let x_orig_rcpt_to_atdup = has_x_orig_rcpt_to_atdup(bytes);
-    let env_to_atside = has_env_to_atside(bytes);
-    let delivered_to_atside = has_delivered_to_atside(bytes);
-    let env_from_atside = has_env_from_atside(bytes);
-    let errors_to_atside = has_errors_to_atside(bytes);
-    let apparently_to_atside = has_apparently_to_atside(bytes);
-    let apparently_from_atside = has_apparently_from_atside(bytes);
-    let x_orig_to_atside = has_x_orig_to_atside(bytes);
-    let x_orig_from_atside = has_x_orig_from_atside(bytes);
-    let x_orig_cc_atside = has_x_orig_cc_atside(bytes);
-    let x_orig_reply_to_atside = has_x_orig_reply_to_atside(bytes);
-    let disposition_to_atside = has_disposition_to_atside(bytes);
-    let return_receipt_atside = has_return_receipt_atside(bytes);
-    let confirm_reading_atside = has_confirm_reading_atside(bytes);
-    let resent_reply_to_atside = has_resent_reply_to_atside(bytes);
-    let apparently_resent_atside = has_apparently_resent_atside(bytes);
-    let x_orig_rcpt_to_atside = has_x_orig_rcpt_to_atside(bytes);
-    let env_to_semiv = has_env_to_semiv(bytes);
-    let delivered_to_semiv = has_delivered_to_semiv(bytes);
-    let env_from_semiv = has_env_from_semiv(bytes);
-    let errors_to_semiv = has_errors_to_semiv(bytes);
-    let apparently_to_semiv = has_apparently_to_semiv(bytes);
-    let apparently_from_semiv = has_apparently_from_semiv(bytes);
-    let x_orig_to_semiv = has_x_orig_to_semiv(bytes);
-    let x_orig_from_semiv = has_x_orig_from_semiv(bytes);
-    let x_orig_cc_semiv = has_x_orig_cc_semiv(bytes);
-    let x_orig_reply_to_semiv = has_x_orig_reply_to_semiv(bytes);
-    let disposition_to_semiv = has_disposition_to_semiv(bytes);
-    let return_receipt_semiv = has_return_receipt_semiv(bytes);
-    let confirm_reading_semiv = has_confirm_reading_semiv(bytes);
-    let resent_reply_to_semiv = has_resent_reply_to_semiv(bytes);
-    let apparently_resent_semiv = has_apparently_resent_semiv(bytes);
-    let x_orig_rcpt_to_semiv = has_x_orig_rcpt_to_semiv(bytes);
-    let env_to_pct = has_env_to_pct(bytes);
-    let delivered_to_pct = has_delivered_to_pct(bytes);
-    let env_from_pct = has_env_from_pct(bytes);
-    let errors_to_pct = has_errors_to_pct(bytes);
-    let apparently_to_pct = has_apparently_to_pct(bytes);
-    let apparently_from_pct = has_apparently_from_pct(bytes);
-    let x_orig_to_pct = has_x_orig_to_pct(bytes);
-    let x_orig_from_pct = has_x_orig_from_pct(bytes);
-    let x_orig_cc_pct = has_x_orig_cc_pct(bytes);
-    let x_orig_reply_to_pct = has_x_orig_reply_to_pct(bytes);
-    let disposition_to_pct = has_disposition_to_pct(bytes);
-    let return_receipt_pct = has_return_receipt_pct(bytes);
-    let confirm_reading_pct = has_confirm_reading_pct(bytes);
-    let resent_reply_to_pct = has_resent_reply_to_pct(bytes);
-    let apparently_resent_pct = has_apparently_resent_pct(bytes);
-    let x_orig_rcpt_to_pct = has_x_orig_rcpt_to_pct(bytes);
-    let env_to_bang = has_env_to_bang(bytes);
-    let delivered_to_bang = has_delivered_to_bang(bytes);
-    let env_from_bang = has_env_from_bang(bytes);
-    let errors_to_bang = has_errors_to_bang(bytes);
-    let apparently_to_bang = has_apparently_to_bang(bytes);
-    let apparently_from_bang = has_apparently_from_bang(bytes);
-    let x_orig_to_bang = has_x_orig_to_bang(bytes);
-    let x_orig_from_bang = has_x_orig_from_bang(bytes);
-    let x_orig_cc_bang = has_x_orig_cc_bang(bytes);
-    let x_orig_reply_to_bang = has_x_orig_reply_to_bang(bytes);
-    let disposition_to_bang = has_disposition_to_bang(bytes);
-    let return_receipt_bang = has_return_receipt_bang(bytes);
-    let confirm_reading_bang = has_confirm_reading_bang(bytes);
-    let resent_reply_to_bang = has_resent_reply_to_bang(bytes);
-    let apparently_resent_bang = has_apparently_resent_bang(bytes);
-    let x_orig_rcpt_to_bang = has_x_orig_rcpt_to_bang(bytes);
-    let env_to_domlit = has_env_to_domlit(bytes);
-    let delivered_to_domlit = has_delivered_to_domlit(bytes);
-    let env_from_domlit = has_env_from_domlit(bytes);
-    let errors_to_domlit = has_errors_to_domlit(bytes);
-    let apparently_to_domlit = has_apparently_to_domlit(bytes);
-    let apparently_from_domlit = has_apparently_from_domlit(bytes);
-    let x_orig_to_domlit = has_x_orig_to_domlit(bytes);
-    let x_orig_from_domlit = has_x_orig_from_domlit(bytes);
-    let x_orig_cc_domlit = has_x_orig_cc_domlit(bytes);
-    let x_orig_reply_to_domlit = has_x_orig_reply_to_domlit(bytes);
-    let disposition_to_domlit = has_disposition_to_domlit(bytes);
-    let return_receipt_domlit = has_return_receipt_domlit(bytes);
-    let confirm_reading_domlit = has_confirm_reading_domlit(bytes);
-    let resent_reply_to_domlit = has_resent_reply_to_domlit(bytes);
-    let apparently_resent_domlit = has_apparently_resent_domlit(bytes);
-    let x_orig_rcpt_to_domlit = has_x_orig_rcpt_to_domlit(bytes);
-    let env_to_eai = has_env_to_eai(bytes);
-    let delivered_to_eai = has_delivered_to_eai(bytes);
-    let env_from_eai = has_env_from_eai(bytes);
-    let errors_to_eai = has_errors_to_eai(bytes);
-    let apparently_to_eai = has_apparently_to_eai(bytes);
-    let apparently_from_eai = has_apparently_from_eai(bytes);
-    let x_orig_to_eai = has_x_orig_to_eai(bytes);
-    let x_orig_from_eai = has_x_orig_from_eai(bytes);
-    let x_orig_cc_eai = has_x_orig_cc_eai(bytes);
-    let x_orig_reply_to_eai = has_x_orig_reply_to_eai(bytes);
-    let disposition_to_eai = has_disposition_to_eai(bytes);
-    let return_receipt_eai = has_return_receipt_eai(bytes);
-    let confirm_reading_eai = has_confirm_reading_eai(bytes);
-    let resent_reply_to_eai = has_resent_reply_to_eai(bytes);
-    let apparently_resent_eai = has_apparently_resent_eai(bytes);
-    let x_orig_rcpt_to_eai = has_x_orig_rcpt_to_eai(bytes);
-    let env_to_hyph = has_env_to_hyph(bytes);
-    let delivered_to_hyph = has_delivered_to_hyph(bytes);
-    let env_from_hyph = has_env_from_hyph(bytes);
-    let errors_to_hyph = has_errors_to_hyph(bytes);
-    let apparently_to_hyph = has_apparently_to_hyph(bytes);
-    let apparently_from_hyph = has_apparently_from_hyph(bytes);
-    let x_orig_to_hyph = has_x_orig_to_hyph(bytes);
-    let x_orig_from_hyph = has_x_orig_from_hyph(bytes);
-    let x_orig_cc_hyph = has_x_orig_cc_hyph(bytes);
-    let x_orig_reply_to_hyph = has_x_orig_reply_to_hyph(bytes);
-    let disposition_to_hyph = has_disposition_to_hyph(bytes);
-    let return_receipt_hyph = has_return_receipt_hyph(bytes);
-    let confirm_reading_hyph = has_confirm_reading_hyph(bytes);
-    let resent_reply_to_hyph = has_resent_reply_to_hyph(bytes);
-    let apparently_resent_hyph = has_apparently_resent_hyph(bytes);
-    let x_orig_rcpt_to_hyph = has_x_orig_rcpt_to_hyph(bytes);
-    let confirm_reading_bslash = has_confirm_reading_bslash(bytes);
-    let resent_reply_to_bslash = has_resent_reply_to_bslash(bytes);
-    let apparently_resent_bslash = has_apparently_resent_bslash(bytes);
-    let x_orig_rcpt_to_bslash = has_x_orig_rcpt_to_bslash(bytes);
-    let confirm_reading_colon = has_confirm_reading_colon(bytes);
-    let resent_reply_to_colon = has_resent_reply_to_colon(bytes);
-    let apparently_resent_colon = has_apparently_resent_colon(bytes);
-    let x_orig_rcpt_to_colon = has_x_orig_rcpt_to_colon(bytes);
-    let confirm_reading_rparen = has_confirm_reading_rparen(bytes);
-    let resent_reply_to_rparen = has_resent_reply_to_rparen(bytes);
-    let apparently_resent_rparen = has_apparently_resent_rparen(bytes);
-    let x_orig_rcpt_to_rparen = has_x_orig_rcpt_to_rparen(bytes);
-    let confirm_reading_rbracket = has_confirm_reading_rbracket(bytes);
-    let resent_reply_to_rbracket = has_resent_reply_to_rbracket(bytes);
-    let apparently_resent_rbracket = has_apparently_resent_rbracket(bytes);
-    let x_orig_rcpt_to_rbracket = has_x_orig_rcpt_to_rbracket(bytes);
-    let confirm_reading_rbrace = has_confirm_reading_rbrace(bytes);
-    let resent_reply_to_rbrace = has_resent_reply_to_rbrace(bytes);
-    let apparently_resent_rbrace = has_apparently_resent_rbrace(bytes);
-    let x_orig_rcpt_to_rbrace = has_x_orig_rcpt_to_rbrace(bytes);
-    let confirm_reading_apos = has_confirm_reading_apos(bytes);
-    let resent_reply_to_apos = has_resent_reply_to_apos(bytes);
-    let apparently_resent_apos = has_apparently_resent_apos(bytes);
-    let x_orig_rcpt_to_apos = has_x_orig_rcpt_to_apos(bytes);
-    let confirm_reading_qmark = has_confirm_reading_qmark(bytes);
-    let resent_reply_to_qmark = has_resent_reply_to_qmark(bytes);
-    let apparently_resent_qmark = has_apparently_resent_qmark(bytes);
-    let x_orig_rcpt_to_qmark = has_x_orig_rcpt_to_qmark(bytes);
-    let confirm_reading_plus = has_confirm_reading_plus(bytes);
-    let resent_reply_to_plus = has_resent_reply_to_plus(bytes);
-    let apparently_resent_plus = has_apparently_resent_plus(bytes);
-    let x_orig_rcpt_to_plus = has_x_orig_rcpt_to_plus(bytes);
-    let confirm_reading_pipe = has_confirm_reading_pipe(bytes);
-    let resent_reply_to_pipe = has_resent_reply_to_pipe(bytes);
-    let apparently_resent_pipe = has_apparently_resent_pipe(bytes);
-    let x_orig_rcpt_to_pipe = has_x_orig_rcpt_to_pipe(bytes);
-    let confirm_reading_caret = has_confirm_reading_caret(bytes);
-    let resent_reply_to_caret = has_resent_reply_to_caret(bytes);
-    let apparently_resent_caret = has_apparently_resent_caret(bytes);
-    let x_orig_rcpt_to_caret = has_x_orig_rcpt_to_caret(bytes);
-    let confirm_reading_star_local = has_confirm_reading_star_local(bytes);
-    let resent_reply_to_star_local = has_resent_reply_to_star_local(bytes);
-    let apparently_resent_star_local = has_apparently_resent_star_local(bytes);
-    let x_orig_rcpt_to_star_local = has_x_orig_rcpt_to_star_local(bytes);
-    let confirm_reading_unclosed = has_confirm_reading_unclosed(bytes);
-    let resent_reply_to_unclosed = has_resent_reply_to_unclosed(bytes);
-    let apparently_resent_unclosed = has_apparently_resent_unclosed(bytes);
-    let x_orig_rcpt_to_unclosed = has_x_orig_rcpt_to_unclosed(bytes);
-    let confirm_reading_hash_local = has_confirm_reading_hash_local(bytes);
-    let resent_reply_to_hash_local = has_resent_reply_to_hash_local(bytes);
-    let apparently_resent_hash_local = has_apparently_resent_hash_local(bytes);
-    let x_orig_rcpt_to_hash_local = has_x_orig_rcpt_to_hash_local(bytes);
-    let confirm_reading_backtick_local = has_confirm_reading_backtick_local(bytes);
-    let resent_reply_to_backtick_local = has_resent_reply_to_backtick_local(bytes);
-    let apparently_resent_backtick_local = has_apparently_resent_backtick_local(bytes);
-    let x_orig_rcpt_to_backtick_local = has_x_orig_rcpt_to_backtick_local(bytes);
-    let confirm_reading_dollar_local = has_confirm_reading_dollar_local(bytes);
-    let resent_reply_to_dollar_local = has_resent_reply_to_dollar_local(bytes);
-    let apparently_resent_dollar_local = has_apparently_resent_dollar_local(bytes);
-    let x_orig_rcpt_to_dollar_local = has_x_orig_rcpt_to_dollar_local(bytes);
-    let confirm_reading_caret_local = has_confirm_reading_caret_local(bytes);
-    let resent_reply_to_caret_local = has_resent_reply_to_caret_local(bytes);
-    let apparently_resent_caret_local = has_apparently_resent_caret_local(bytes);
-    let x_orig_rcpt_to_caret_local = has_x_orig_rcpt_to_caret_local(bytes);
-    let confirm_reading_lbrace = has_confirm_reading_lbrace(bytes);
-    let resent_reply_to_lbrace = has_resent_reply_to_lbrace(bytes);
-    let apparently_resent_lbrace = has_apparently_resent_lbrace(bytes);
-    let x_orig_rcpt_to_lbrace = has_x_orig_rcpt_to_lbrace(bytes);
-    let confirm_reading_eq = has_confirm_reading_eq(bytes);
-    let resent_reply_to_eq = has_resent_reply_to_eq(bytes);
-    let apparently_resent_eq = has_apparently_resent_eq(bytes);
-    let x_orig_rcpt_to_eq = has_x_orig_rcpt_to_eq(bytes);
-    let confirm_reading_tilde = has_confirm_reading_tilde(bytes);
-    let resent_reply_to_tilde = has_resent_reply_to_tilde(bytes);
-    let apparently_resent_tilde = has_apparently_resent_tilde(bytes);
-    let x_orig_rcpt_to_tilde = has_x_orig_rcpt_to_tilde(bytes);
-    let confirm_reading_amp = has_confirm_reading_amp(bytes);
-    let resent_reply_to_amp = has_resent_reply_to_amp(bytes);
-    let apparently_resent_amp = has_apparently_resent_amp(bytes);
-    let x_orig_rcpt_to_amp = has_x_orig_rcpt_to_amp(bytes);
-    let confirm_reading_hash = has_confirm_reading_hash(bytes);
-    let resent_reply_to_hash = has_resent_reply_to_hash(bytes);
-    let apparently_resent_hash = has_apparently_resent_hash(bytes);
-    let x_orig_rcpt_to_hash = has_x_orig_rcpt_to_hash(bytes);
-    let confirm_reading_dollar = has_confirm_reading_dollar(bytes);
-    let resent_reply_to_dollar = has_resent_reply_to_dollar(bytes);
-    let apparently_resent_dollar = has_apparently_resent_dollar(bytes);
-    let x_orig_rcpt_to_dollar = has_x_orig_rcpt_to_dollar(bytes);
-    let confirm_reading_star = has_confirm_reading_star(bytes);
-    let resent_reply_to_star = has_resent_reply_to_star(bytes);
-    let apparently_resent_star = has_apparently_resent_star(bytes);
-    let x_orig_rcpt_to_star = has_x_orig_rcpt_to_star(bytes);
-    let confirm_reading_slash = has_confirm_reading_slash(bytes);
-    let resent_reply_to_slash = has_resent_reply_to_slash(bytes);
-    let apparently_resent_slash = has_apparently_resent_slash(bytes);
-    let x_orig_rcpt_to_slash = has_x_orig_rcpt_to_slash(bytes);
-    let confirm_reading_backtick = has_confirm_reading_backtick(bytes);
-    let resent_reply_to_backtick = has_resent_reply_to_backtick(bytes);
-    let apparently_resent_backtick = has_apparently_resent_backtick(bytes);
-    let x_orig_rcpt_to_backtick = has_x_orig_rcpt_to_backtick(bytes);
-    let confirm_reading_underscore = has_confirm_reading_underscore(bytes);
-    let resent_reply_to_underscore = has_resent_reply_to_underscore(bytes);
-    let apparently_resent_underscore = has_apparently_resent_underscore(bytes);
-    let x_orig_rcpt_to_underscore = has_x_orig_rcpt_to_underscore(bytes);
-    let confirm_reading_slash_local = has_confirm_reading_slash_local(bytes);
-    let resent_reply_to_slash_local = has_resent_reply_to_slash_local(bytes);
-    let apparently_resent_slash_local = has_apparently_resent_slash_local(bytes);
-    let x_orig_rcpt_to_slash_local = has_x_orig_rcpt_to_slash_local(bytes);
-    let apparently_to_bslash = has_apparently_to_bslash(bytes);
-    let apparently_from_bslash = has_apparently_from_bslash(bytes);
-    let x_orig_to_bslash = has_x_orig_to_bslash(bytes);
-    let x_orig_from_bslash = has_x_orig_from_bslash(bytes);
-    let apparently_to_colon = has_apparently_to_colon(bytes);
-    let apparently_from_colon = has_apparently_from_colon(bytes);
-    let x_orig_to_colon = has_x_orig_to_colon(bytes);
-    let x_orig_from_colon = has_x_orig_from_colon(bytes);
-    let apparently_to_rparen = has_apparently_to_rparen(bytes);
-    let apparently_from_rparen = has_apparently_from_rparen(bytes);
-    let x_orig_to_rparen = has_x_orig_to_rparen(bytes);
-    let x_orig_from_rparen = has_x_orig_from_rparen(bytes);
-    let apparently_to_rbracket = has_apparently_to_rbracket(bytes);
-    let apparently_from_rbracket = has_apparently_from_rbracket(bytes);
-    let x_orig_to_rbracket = has_x_orig_to_rbracket(bytes);
-    let x_orig_from_rbracket = has_x_orig_from_rbracket(bytes);
-    let apparently_to_rbrace = has_apparently_to_rbrace(bytes);
-    let apparently_from_rbrace = has_apparently_from_rbrace(bytes);
-    let x_orig_to_rbrace = has_x_orig_to_rbrace(bytes);
-    let x_orig_from_rbrace = has_x_orig_from_rbrace(bytes);
-    let apparently_to_apos = has_apparently_to_apos(bytes);
-    let apparently_from_apos = has_apparently_from_apos(bytes);
-    let x_orig_to_apos = has_x_orig_to_apos(bytes);
-    let x_orig_from_apos = has_x_orig_from_apos(bytes);
-    let apparently_to_qmark = has_apparently_to_qmark(bytes);
-    let apparently_from_qmark = has_apparently_from_qmark(bytes);
-    let x_orig_to_qmark = has_x_orig_to_qmark(bytes);
-    let x_orig_from_qmark = has_x_orig_from_qmark(bytes);
-    let apparently_to_plus = has_apparently_to_plus(bytes);
-    let apparently_from_plus = has_apparently_from_plus(bytes);
-    let x_orig_to_plus = has_x_orig_to_plus(bytes);
-    let x_orig_from_plus = has_x_orig_from_plus(bytes);
-    let apparently_to_lbrace = has_apparently_to_lbrace(bytes);
-    let apparently_from_lbrace = has_apparently_from_lbrace(bytes);
-    let x_orig_to_lbrace = has_x_orig_to_lbrace(bytes);
-    let x_orig_from_lbrace = has_x_orig_from_lbrace(bytes);
-    let apparently_to_eq = has_apparently_to_eq(bytes);
-    let apparently_from_eq = has_apparently_from_eq(bytes);
-    let x_orig_to_eq = has_x_orig_to_eq(bytes);
-    let x_orig_from_eq = has_x_orig_from_eq(bytes);
-    let apparently_to_amp = has_apparently_to_amp(bytes);
-    let apparently_from_amp = has_apparently_from_amp(bytes);
-    let x_orig_to_amp = has_x_orig_to_amp(bytes);
-    let x_orig_from_amp = has_x_orig_from_amp(bytes);
-    let apparently_to_slash = has_apparently_to_slash(bytes);
-    let apparently_from_slash = has_apparently_from_slash(bytes);
-    let x_orig_to_slash = has_x_orig_to_slash(bytes);
-    let x_orig_from_slash = has_x_orig_from_slash(bytes);
-    let apparently_to_backtick = has_apparently_to_backtick(bytes);
-    let apparently_from_backtick = has_apparently_from_backtick(bytes);
-    let x_orig_to_backtick = has_x_orig_to_backtick(bytes);
-    let x_orig_from_backtick = has_x_orig_from_backtick(bytes);
-    let apparently_to_pipe = has_apparently_to_pipe(bytes);
-    let apparently_from_pipe = has_apparently_from_pipe(bytes);
-    let x_orig_to_pipe = has_x_orig_to_pipe(bytes);
-    let x_orig_from_pipe = has_x_orig_from_pipe(bytes);
-    let apparently_to_tilde = has_apparently_to_tilde(bytes);
-    let apparently_from_tilde = has_apparently_from_tilde(bytes);
-    let x_orig_to_tilde = has_x_orig_to_tilde(bytes);
-    let x_orig_from_tilde = has_x_orig_from_tilde(bytes);
-    let apparently_to_caret = has_apparently_to_caret(bytes);
-    let apparently_from_caret = has_apparently_from_caret(bytes);
-    let x_orig_to_caret = has_x_orig_to_caret(bytes);
-    let x_orig_from_caret = has_x_orig_from_caret(bytes);
-    let apparently_to_hash = has_apparently_to_hash(bytes);
-    let apparently_from_hash = has_apparently_from_hash(bytes);
-    let x_orig_to_hash = has_x_orig_to_hash(bytes);
-    let x_orig_from_hash = has_x_orig_from_hash(bytes);
-    let apparently_to_dollar = has_apparently_to_dollar(bytes);
-    let apparently_from_dollar = has_apparently_from_dollar(bytes);
-    let x_orig_to_dollar = has_x_orig_to_dollar(bytes);
-    let x_orig_from_dollar = has_x_orig_from_dollar(bytes);
-    let apparently_to_star = has_apparently_to_star(bytes);
-    let apparently_from_star = has_apparently_from_star(bytes);
-    let x_orig_to_star = has_x_orig_to_star(bytes);
-    let x_orig_from_star = has_x_orig_from_star(bytes);
-    let apparently_to_underscore = has_apparently_to_underscore(bytes);
-    let apparently_from_underscore = has_apparently_from_underscore(bytes);
-    let x_orig_to_underscore = has_x_orig_to_underscore(bytes);
-    let x_orig_from_underscore = has_x_orig_from_underscore(bytes);
-    let apparently_to_slash_local = has_apparently_to_slash_local(bytes);
-    let apparently_from_slash_local = has_apparently_from_slash_local(bytes);
-    let x_orig_to_slash_local = has_x_orig_to_slash_local(bytes);
-    let x_orig_from_slash_local = has_x_orig_from_slash_local(bytes);
-    let apparently_to_star_local = has_apparently_to_star_local(bytes);
-    let apparently_from_star_local = has_apparently_from_star_local(bytes);
-    let x_orig_to_star_local = has_x_orig_to_star_local(bytes);
-    let x_orig_from_star_local = has_x_orig_from_star_local(bytes);
-    let apparently_to_dollar_local = has_apparently_to_dollar_local(bytes);
-    let apparently_from_dollar_local = has_apparently_from_dollar_local(bytes);
-    let x_orig_to_dollar_local = has_x_orig_to_dollar_local(bytes);
-    let x_orig_from_dollar_local = has_x_orig_from_dollar_local(bytes);
-    let apparently_to_hash_local = has_apparently_to_hash_local(bytes);
-    let apparently_from_hash_local = has_apparently_from_hash_local(bytes);
-    let x_orig_to_hash_local = has_x_orig_to_hash_local(bytes);
-    let x_orig_from_hash_local = has_x_orig_from_hash_local(bytes);
-    let apparently_to_backtick_local = has_apparently_to_backtick_local(bytes);
-    let apparently_from_backtick_local = has_apparently_from_backtick_local(bytes);
-    let x_orig_to_backtick_local = has_x_orig_to_backtick_local(bytes);
-    let x_orig_from_backtick_local = has_x_orig_from_backtick_local(bytes);
-    let apparently_to_caret_local = has_apparently_to_caret_local(bytes);
-    let apparently_from_caret_local = has_apparently_from_caret_local(bytes);
-    let x_orig_to_caret_local = has_x_orig_to_caret_local(bytes);
-    let x_orig_from_caret_local = has_x_orig_from_caret_local(bytes);
-    let apparently_to_quoted_local = has_apparently_to_quoted_local(bytes);
-    let apparently_from_quoted_local = has_apparently_from_quoted_local(bytes);
-    let x_orig_to_quoted_local = has_x_orig_to_quoted_local(bytes);
-    let x_orig_from_quoted_local = has_x_orig_from_quoted_local(bytes);
-    let x_orig_cc_bslash = has_x_orig_cc_bslash(bytes);
-    let x_orig_reply_to_bslash = has_x_orig_reply_to_bslash(bytes);
-    let disposition_to_bslash = has_disposition_to_bslash(bytes);
-    let return_receipt_bslash = has_return_receipt_bslash(bytes);
-    let x_orig_cc_colon = has_x_orig_cc_colon(bytes);
-    let x_orig_reply_to_colon = has_x_orig_reply_to_colon(bytes);
-    let disposition_to_colon = has_disposition_to_colon(bytes);
-    let return_receipt_colon = has_return_receipt_colon(bytes);
-    let x_orig_cc_rparen = has_x_orig_cc_rparen(bytes);
-    let x_orig_reply_to_rparen = has_x_orig_reply_to_rparen(bytes);
-    let disposition_to_rparen = has_disposition_to_rparen(bytes);
-    let return_receipt_rparen = has_return_receipt_rparen(bytes);
-    let x_orig_cc_rbracket = has_x_orig_cc_rbracket(bytes);
-    let x_orig_reply_to_rbracket = has_x_orig_reply_to_rbracket(bytes);
-    let disposition_to_rbracket = has_disposition_to_rbracket(bytes);
-    let return_receipt_rbracket = has_return_receipt_rbracket(bytes);
-    let x_orig_cc_rbrace = has_x_orig_cc_rbrace(bytes);
-    let x_orig_reply_to_rbrace = has_x_orig_reply_to_rbrace(bytes);
-    let disposition_to_rbrace = has_disposition_to_rbrace(bytes);
-    let return_receipt_rbrace = has_return_receipt_rbrace(bytes);
-    let x_orig_cc_apos = has_x_orig_cc_apos(bytes);
-    let x_orig_reply_to_apos = has_x_orig_reply_to_apos(bytes);
-    let disposition_to_apos = has_disposition_to_apos(bytes);
-    let return_receipt_apos = has_return_receipt_apos(bytes);
-    let x_orig_cc_qmark = has_x_orig_cc_qmark(bytes);
-    let x_orig_reply_to_qmark = has_x_orig_reply_to_qmark(bytes);
-    let disposition_to_qmark = has_disposition_to_qmark(bytes);
-    let return_receipt_qmark = has_return_receipt_qmark(bytes);
-    let x_orig_cc_plus = has_x_orig_cc_plus(bytes);
-    let x_orig_reply_to_plus = has_x_orig_reply_to_plus(bytes);
-    let disposition_to_plus = has_disposition_to_plus(bytes);
-    let return_receipt_plus = has_return_receipt_plus(bytes);
-    let x_orig_cc_pipe = has_x_orig_cc_pipe(bytes);
-    let x_orig_reply_to_pipe = has_x_orig_reply_to_pipe(bytes);
-    let disposition_to_pipe = has_disposition_to_pipe(bytes);
-    let return_receipt_pipe = has_return_receipt_pipe(bytes);
-    let x_orig_cc_caret = has_x_orig_cc_caret(bytes);
-    let x_orig_reply_to_caret = has_x_orig_reply_to_caret(bytes);
-    let disposition_to_caret = has_disposition_to_caret(bytes);
-    let return_receipt_caret = has_return_receipt_caret(bytes);
-    let x_orig_cc_amp = has_x_orig_cc_amp(bytes);
-    let x_orig_reply_to_amp = has_x_orig_reply_to_amp(bytes);
-    let disposition_to_amp = has_disposition_to_amp(bytes);
-    let return_receipt_amp = has_return_receipt_amp(bytes);
-    let x_orig_cc_lbrace = has_x_orig_cc_lbrace(bytes);
-    let x_orig_reply_to_lbrace = has_x_orig_reply_to_lbrace(bytes);
-    let disposition_to_lbrace = has_disposition_to_lbrace(bytes);
-    let return_receipt_lbrace = has_return_receipt_lbrace(bytes);
-    let x_orig_cc_eq = has_x_orig_cc_eq(bytes);
-    let x_orig_reply_to_eq = has_x_orig_reply_to_eq(bytes);
-    let disposition_to_eq = has_disposition_to_eq(bytes);
-    let return_receipt_eq = has_return_receipt_eq(bytes);
-    let x_orig_cc_tilde = has_x_orig_cc_tilde(bytes);
-    let x_orig_reply_to_tilde = has_x_orig_reply_to_tilde(bytes);
-    let disposition_to_tilde = has_disposition_to_tilde(bytes);
-    let return_receipt_tilde = has_return_receipt_tilde(bytes);
-    let x_orig_cc_hash = has_x_orig_cc_hash(bytes);
-    let x_orig_reply_to_hash = has_x_orig_reply_to_hash(bytes);
-    let disposition_to_hash = has_disposition_to_hash(bytes);
-    let return_receipt_hash = has_return_receipt_hash(bytes);
-    let x_orig_cc_dollar = has_x_orig_cc_dollar(bytes);
-    let x_orig_reply_to_dollar = has_x_orig_reply_to_dollar(bytes);
-    let disposition_to_dollar = has_disposition_to_dollar(bytes);
-    let return_receipt_dollar = has_return_receipt_dollar(bytes);
-    let x_orig_cc_star = has_x_orig_cc_star(bytes);
-    let x_orig_reply_to_star = has_x_orig_reply_to_star(bytes);
-    let disposition_to_star = has_disposition_to_star(bytes);
-    let return_receipt_star = has_return_receipt_star(bytes);
-    let x_orig_cc_slash = has_x_orig_cc_slash(bytes);
-    let x_orig_reply_to_slash = has_x_orig_reply_to_slash(bytes);
-    let disposition_to_slash = has_disposition_to_slash(bytes);
-    let return_receipt_slash = has_return_receipt_slash(bytes);
-    let x_orig_cc_backtick = has_x_orig_cc_backtick(bytes);
-    let x_orig_reply_to_backtick = has_x_orig_reply_to_backtick(bytes);
-    let disposition_to_backtick = has_disposition_to_backtick(bytes);
-    let return_receipt_backtick = has_return_receipt_backtick(bytes);
-    let x_orig_cc_underscore = has_x_orig_cc_underscore(bytes);
-    let x_orig_reply_to_underscore = has_x_orig_reply_to_underscore(bytes);
-    let disposition_to_underscore = has_disposition_to_underscore(bytes);
-    let return_receipt_underscore = has_return_receipt_underscore(bytes);
-    let x_orig_cc_slash_local = has_x_orig_cc_slash_local(bytes);
-    let x_orig_reply_to_slash_local = has_x_orig_reply_to_slash_local(bytes);
-    let disposition_to_slash_local = has_disposition_to_slash_local(bytes);
-    let return_receipt_slash_local = has_return_receipt_slash_local(bytes);
-    let x_orig_cc_star_local = has_x_orig_cc_star_local(bytes);
-    let x_orig_reply_to_star_local = has_x_orig_reply_to_star_local(bytes);
-    let disposition_to_star_local = has_disposition_to_star_local(bytes);
-    let return_receipt_star_local = has_return_receipt_star_local(bytes);
-    let x_orig_cc_dollar_local = has_x_orig_cc_dollar_local(bytes);
-    let x_orig_reply_to_dollar_local = has_x_orig_reply_to_dollar_local(bytes);
-    let disposition_to_dollar_local = has_disposition_to_dollar_local(bytes);
-    let return_receipt_dollar_local = has_return_receipt_dollar_local(bytes);
-    let x_orig_cc_caret_local = has_x_orig_cc_caret_local(bytes);
-    let x_orig_reply_to_caret_local = has_x_orig_reply_to_caret_local(bytes);
-    let disposition_to_caret_local = has_disposition_to_caret_local(bytes);
-    let return_receipt_caret_local = has_return_receipt_caret_local(bytes);
-    let x_orig_cc_hash_local = has_x_orig_cc_hash_local(bytes);
-    let x_orig_reply_to_hash_local = has_x_orig_reply_to_hash_local(bytes);
-    let disposition_to_hash_local = has_disposition_to_hash_local(bytes);
-    let return_receipt_hash_local = has_return_receipt_hash_local(bytes);
-    let x_orig_cc_backtick_local = has_x_orig_cc_backtick_local(bytes);
-    let x_orig_reply_to_backtick_local = has_x_orig_reply_to_backtick_local(bytes);
-    let disposition_to_backtick_local = has_disposition_to_backtick_local(bytes);
-    let return_receipt_backtick_local = has_return_receipt_backtick_local(bytes);
-    let env_to_bslash = has_env_to_bslash(bytes);
-    let delivered_to_bslash = has_delivered_to_bslash(bytes);
-    let env_from_bslash = has_env_from_bslash(bytes);
-    let errors_to_bslash = has_errors_to_bslash(bytes);
-    let env_to_colon = has_env_to_colon(bytes);
-    let delivered_to_colon = has_delivered_to_colon(bytes);
-    let env_from_colon = has_env_from_colon(bytes);
-    let errors_to_colon = has_errors_to_colon(bytes);
-    let env_to_rparen = has_env_to_rparen(bytes);
-    let delivered_to_rparen = has_delivered_to_rparen(bytes);
-    let env_from_rparen = has_env_from_rparen(bytes);
-    let errors_to_rparen = has_errors_to_rparen(bytes);
-    let env_to_rbracket = has_env_to_rbracket(bytes);
-    let delivered_to_rbracket = has_delivered_to_rbracket(bytes);
-    let env_from_rbracket = has_env_from_rbracket(bytes);
-    let errors_to_rbracket = has_errors_to_rbracket(bytes);
-    let env_to_rbrace = has_env_to_rbrace(bytes);
-    let delivered_to_rbrace = has_delivered_to_rbrace(bytes);
-    let env_from_rbrace = has_env_from_rbrace(bytes);
-    let errors_to_rbrace = has_errors_to_rbrace(bytes);
-    let env_to_apos = has_env_to_apos(bytes);
-    let delivered_to_apos = has_delivered_to_apos(bytes);
-    let env_from_apos = has_env_from_apos(bytes);
-    let errors_to_apos = has_errors_to_apos(bytes);
-    let env_to_qmark = has_env_to_qmark(bytes);
-    let delivered_to_qmark = has_delivered_to_qmark(bytes);
-    let env_from_qmark = has_env_from_qmark(bytes);
-    let errors_to_qmark = has_errors_to_qmark(bytes);
-    let env_to_plus = has_env_to_plus(bytes);
-    let delivered_to_plus = has_delivered_to_plus(bytes);
-    let env_from_plus = has_env_from_plus(bytes);
-    let errors_to_plus = has_errors_to_plus(bytes);
-    let env_to_amp = has_env_to_amp(bytes);
-    let delivered_to_amp = has_delivered_to_amp(bytes);
-    let env_from_amp = has_env_from_amp(bytes);
-    let errors_to_amp = has_errors_to_amp(bytes);
-    let env_to_lbrace = has_env_to_lbrace(bytes);
-    let delivered_to_lbrace = has_delivered_to_lbrace(bytes);
-    let env_from_lbrace = has_env_from_lbrace(bytes);
-    let errors_to_lbrace = has_errors_to_lbrace(bytes);
-    let env_to_eq = has_env_to_eq(bytes);
-    let delivered_to_eq = has_delivered_to_eq(bytes);
-    let env_from_eq = has_env_from_eq(bytes);
-    let errors_to_eq = has_errors_to_eq(bytes);
-    let env_to_pipe = has_env_to_pipe(bytes);
-    let delivered_to_pipe = has_delivered_to_pipe(bytes);
-    let env_from_pipe = has_env_from_pipe(bytes);
-    let errors_to_pipe = has_errors_to_pipe(bytes);
-    let env_to_slash = has_env_to_slash(bytes);
-    let delivered_to_slash = has_delivered_to_slash(bytes);
-    let env_from_slash = has_env_from_slash(bytes);
-    let errors_to_slash = has_errors_to_slash(bytes);
-    let env_to_backtick = has_env_to_backtick(bytes);
-    let delivered_to_backtick = has_delivered_to_backtick(bytes);
-    let env_from_backtick = has_env_from_backtick(bytes);
-    let errors_to_backtick = has_errors_to_backtick(bytes);
-    let env_to_tilde = has_env_to_tilde(bytes);
-    let delivered_to_tilde = has_delivered_to_tilde(bytes);
-    let env_from_tilde = has_env_from_tilde(bytes);
-    let errors_to_tilde = has_errors_to_tilde(bytes);
-    let env_to_underscore = has_env_to_underscore(bytes);
-    let delivered_to_underscore = has_delivered_to_underscore(bytes);
-    let env_from_underscore = has_env_from_underscore(bytes);
-    let errors_to_underscore = has_errors_to_underscore(bytes);
-    let env_to_caret = has_env_to_caret(bytes);
-    let delivered_to_caret = has_delivered_to_caret(bytes);
-    let env_from_caret = has_env_from_caret(bytes);
-    let errors_to_caret = has_errors_to_caret(bytes);
-    let env_to_hash = has_env_to_hash(bytes);
-    let delivered_to_hash = has_delivered_to_hash(bytes);
-    let env_from_hash = has_env_from_hash(bytes);
-    let errors_to_hash = has_errors_to_hash(bytes);
-    let env_to_dollar = has_env_to_dollar(bytes);
-    let delivered_to_dollar = has_delivered_to_dollar(bytes);
-    let env_from_dollar = has_env_from_dollar(bytes);
-    let errors_to_dollar = has_errors_to_dollar(bytes);
-    let env_to_star = has_env_to_star(bytes);
-    let delivered_to_star = has_delivered_to_star(bytes);
-    let env_from_star = has_env_from_star(bytes);
-    let errors_to_star = has_errors_to_star(bytes);
-    let env_to_slash_local = has_env_to_slash_local(bytes);
-    let delivered_to_slash_local = has_delivered_to_slash_local(bytes);
-    let env_from_slash_local = has_env_from_slash_local(bytes);
-    let errors_to_slash_local = has_errors_to_slash_local(bytes);
-    let env_to_star_local = has_env_to_star_local(bytes);
-    let env_from_star_local = has_env_from_star_local(bytes);
-    let errors_to_star_local = has_errors_to_star_local(bytes);
+    let msgid_eq_lead = has_msgid_eq_lead(det);
+    let boundary_quoted_semi = has_boundary_quoted_semi(det);
+    let cd_star_type = has_cd_star_type(det);
+    let received_for_two_at = has_received_for_two_at(det);
+    let addr_noname_group = has_addr_noname_group(det);
+    let msgid_pct_lead = has_msgid_pct_lead(det);
+    let cte_eq = has_cte_eq(det);
+    let received_from_bang = has_received_from_bang(det);
+    let param_backtick_name = has_param_backtick_name(det);
+    let msgid_colon_lead = has_msgid_colon_lead(det);
+    let ct_bslash_type = has_ct_bslash_type(det);
+    let received_id_bang = has_received_id_bang(det);
+    let cd_bslash_type = has_cd_bslash_type(det);
+    let msgid_lt_lead = has_msgid_lt_lead(det);
+    let cte_bslash = has_cte_bslash(det);
+    let received_via_at = has_received_via_at(det);
+    let msgid_inner_bslash = has_msgid_inner_bslash(det);
+    let msgid_gt_lead = has_msgid_gt_lead(det);
+    let ct_gt_type = has_ct_gt_type(det);
+    let received_by_pct = has_received_by_pct(det);
+    let cd_gt_type = has_cd_gt_type(det);
+    let msgid_qmark_lead = has_msgid_qmark_lead(det);
+    let ct_lt_type = has_ct_lt_type(det);
+    let received_from_pct = has_received_from_pct(det);
+    let cte_gt = has_cte_gt(det);
+    let msgid_at_lead = has_msgid_at_lead(det);
+    let received_id_pct = has_received_id_pct(det);
+    let cd_lt_type = has_cd_lt_type(det);
+    let addr_pipe_local = has_addr_pipe_local(det);
+    let msgid_bang_lead = has_msgid_bang_lead(det);
+    let received_for_pct = has_received_for_pct(det);
+    let cte_lt = has_cte_lt(det);
+    let addr_dollar_local = has_addr_dollar_local(det);
+    let addr_quoted_local = has_addr_quoted_local(det);
+    let msgid_slash_lead = has_msgid_slash_lead(det);
+    let ct_at_type = has_ct_at_type(det);
+    let received_via_pct = has_received_via_pct(det);
+    let param_qmark_name = has_param_qmark_name(det);
+    let addr_pct_local = has_addr_pct_local(det);
+    let ct_qmark_type = has_ct_qmark_type(det);
+    let received_by_bang = has_received_by_bang(det);
+    let msgid_hash_lead = has_msgid_hash_lead(det);
+    let addr_hash_local = has_addr_hash_local(det);
+    let ct_comma_type = has_ct_comma_type(det);
+    let received_via_bang = has_received_via_bang(det);
+    let msgid_amp_lead = has_msgid_amp_lead(det);
+    let addr_star_local = has_addr_star_local(det);
+    let ct_lbracket_type = has_ct_lbracket_type(det);
+    let received_for_bang = has_received_for_bang(det);
+    let msgid_tilde_lead = has_msgid_tilde_lead(det);
+    let addr_apos_local = has_addr_apos_local(det);
+    let ct_rbracket_type = has_ct_rbracket_type(det);
+    let received_with_pct = has_received_with_pct(det);
+    let msgid_pipe_lead = has_msgid_pipe_lead(det);
+    let received_id_at = has_received_id_at(det);
+    let param_bang_name = has_param_bang_name(det);
+    let cd_at_type = has_cd_at_type(det);
+    let msgid_backtick_lead = has_msgid_backtick_lead(det);
+    let param_amp_name = has_param_amp_name(det);
+    let cte_at = has_cte_at(det);
+    let received_with_bang = has_received_with_bang(det);
+    let msgid_caret_lead = has_msgid_caret_lead(det);
+    let param_colon_name = has_param_colon_name(det);
+    let cte_pct = has_cte_pct(det);
+    let received_with_at = has_received_with_at(det);
+    let msgid_dollar_lead = has_msgid_dollar_lead(det);
+    let param_pct_name = has_param_pct_name(det);
+    let cte_bang = has_cte_bang(det);
+    let received_via_eq = has_received_via_eq(det);
+    let msgid_rparen_lead = has_msgid_rparen_lead(det);
+    let param_comma_name = has_param_comma_name(det);
+    let cte_qmark = has_cte_qmark(det);
+    let received_by_eq = has_received_by_eq(det);
+    let msgid_lparen_lead = has_msgid_lparen_lead(det);
+    let param_lbrack_name = has_param_lbrack_name(det);
+    let cte_slash = has_cte_slash(det);
+    let received_id_eq = has_received_id_eq(det);
+    let msgid_squote_lead = has_msgid_squote_lead(det);
+    let param_rbrack_name = has_param_rbrack_name(det);
+    let cte_lbrack = has_cte_lbrack(det);
+    let received_for_eq = has_received_for_eq(det);
+    let msgid_plus_lead = has_msgid_plus_lead(det);
+    let param_lbrace_name = has_param_lbrace_name(det);
+    let cte_rbrack = has_cte_rbrack(det);
+    let received_with_eq = has_received_with_eq(det);
+    let msgid_dquote_lead = has_msgid_dquote_lead(det);
+    let param_rbrace_name = has_param_rbrace_name(det);
+    let cte_lbrace = has_cte_lbrace(det);
+    let received_from_eq = has_received_from_eq(det);
+    let msgid_minus_lead = has_msgid_minus_lead(det);
+    let param_pipe_name = has_param_pipe_name(det);
+    let cte_rbrace = has_cte_rbrace(det);
+    let received_by_lt = has_received_by_lt(det);
+    let msgid_lbrack_lead = has_msgid_lbrack_lead(det);
+    let param_caret_name = has_param_caret_name(det);
+    let cte_pipe = has_cte_pipe(det);
+    let received_via_lt = has_received_via_lt(det);
+    let msgid_rbrack_lead = has_msgid_rbrack_lead(det);
+    let param_tilde_name = has_param_tilde_name(det);
+    let cte_caret = has_cte_caret(det);
+    let received_id_lt = has_received_id_lt(det);
+    let msgid_lbrace_lead = has_msgid_lbrace_lead(det);
+    let param_dollar_name = has_param_dollar_name(det);
+    let cte_tilde = has_cte_tilde(det);
+    let received_from_lt = has_received_from_lt(det);
+    let msgid_rbrace_lead = has_msgid_rbrace_lead(det);
+    let param_hash_name = has_param_hash_name(det);
+    let cte_star = has_cte_star(det);
+    let received_with_lt = has_received_with_lt(det);
+    let msgid_uscore_lead = has_msgid_uscore_lead(det);
+    let param_apos_name = has_param_apos_name(det);
+    let cte_hash = has_cte_hash(det);
+    let received_for_lt = has_received_for_lt(det);
+    let param_plus_name = has_param_plus_name(det);
+    let param_lparen_name = has_param_lparen_name(det);
+    let cte_dollar = has_cte_dollar(det);
+    let received_from_gt = has_received_from_gt(det);
+    let received_by_gt = has_received_by_gt(det);
+    let param_rparen_name = has_param_rparen_name(det);
+    let cte_apos = has_cte_apos(det);
+    let received_via_gt = has_received_via_gt(det);
+    let received_for_gt = has_received_for_gt(det);
+    let param_gt_name = has_param_gt_name(det);
+    let cte_quote = has_cte_quote(det);
+    let received_id_gt = has_received_id_gt(det);
+    let received_with_gt = has_received_with_gt(det);
+    let param_lt_name = has_param_lt_name(det);
+    let received_from_qmark = has_received_from_qmark(det);
+    let received_by_hash = has_received_by_hash(det);
+    let received_id_quote = has_received_id_quote(det);
+    let received_for_qmark = has_received_for_qmark(det);
+    let received_via_hash = has_received_via_hash(det);
+    let received_with_colon = has_received_with_colon(det);
+    let received_from_comma = has_received_from_comma(det);
+    let received_for_slash = has_received_for_slash(det);
+    let received_by_bslash = has_received_by_bslash(det);
+    let received_via_apos = has_received_via_apos(det);
+    let received_id_hash = has_received_id_hash(det);
+    let received_for_tilde = has_received_for_tilde(det);
+    let received_by_pipe = has_received_by_pipe(det);
+    let received_via_tilde = has_received_via_tilde(det);
+    let received_id_pipe = has_received_id_pipe(det);
+    let received_from_dollar = has_received_from_dollar(det);
+    let received_by_amp = has_received_by_amp(det);
+    let received_via_dollar = has_received_via_dollar(det);
+    let received_for_caret = has_received_for_caret(det);
+    let received_from_tilde = has_received_from_tilde(det);
+    let received_by_dollar = has_received_by_dollar(det);
+    let received_with_amp = has_received_with_amp(det);
+    let received_id_caret = has_received_id_caret(det);
+    let received_from_pipe = has_received_from_pipe(det);
+    let received_by_qmark = has_received_by_qmark(det);
+    let received_via_amp = has_received_via_amp(det);
+    let received_for_dollar = has_received_for_dollar(det);
+    let received_with_qmark = has_received_with_qmark(det);
+    let received_id_tilde = has_received_id_tilde(det);
+    let received_for_amp = has_received_for_amp(det);
+    let received_from_apos = has_received_from_apos(det);
+    let received_for_hash = has_received_for_hash(det);
+    let received_with_comma = has_received_with_comma(det);
+    let received_id_dollar = has_received_id_dollar(det);
+    let received_by_comma = has_received_by_comma(det);
+    let received_by_colon = has_received_by_colon(det);
+    let received_for_quote = has_received_for_quote(det);
+    let received_via_qmark = has_received_via_qmark(det);
+    let received_with_quote = has_received_with_quote(det);
+    let received_id_apos = has_received_id_apos(det);
+    let received_via_colon = has_received_via_colon(det);
+    let received_with_tilde = has_received_with_tilde(det);
+    let received_for_apos = has_received_for_apos(det);
+    let received_id_qmark = has_received_id_qmark(det);
+    let received_via_comma = has_received_via_comma(det);
+    let received_with_pipe = has_received_with_pipe(det);
+    let received_for_colon = has_received_for_colon(det);
+    let received_id_comma = has_received_id_comma(det);
+    let received_via_quote = has_received_via_quote(det);
+    let received_with_dollar = has_received_with_dollar(det);
+    let received_for_comma = has_received_for_comma(det);
+    let received_id_colon = has_received_id_colon(det);
+    let received_via_caret = has_received_via_caret(det);
+    let received_with_caret = has_received_with_caret(det);
+    let received_for_pipe = has_received_for_pipe(det);
+    let received_id_amp = has_received_id_amp(det);
+    let received_via_pipe = has_received_via_pipe(det);
+    let received_with_hash = has_received_with_hash(det);
+    let received_by_tilde = has_received_by_tilde(det);
+    let received_from_hash = has_received_from_hash(det);
+    let received_via_slash = has_received_via_slash(det);
+    let received_with_apos = has_received_with_apos(det);
+    let received_by_apos = has_received_by_apos(det);
+    let received_from_quote = has_received_from_quote(det);
+    let received_via_bslash = has_received_via_bslash(det);
+    let received_from_amp = has_received_from_amp(det);
+    let received_by_quote = has_received_by_quote(det);
+    let received_from_caret = has_received_from_caret(det);
+    let received_with_star = has_received_with_star(det);
+    let received_by_star = has_received_by_star(det);
+    let received_via_lbracket = has_received_via_lbracket(det);
+    let received_from_colon = has_received_from_colon(det);
+    let received_with_plus = has_received_with_plus(det);
+    let received_by_plus = has_received_by_plus(det);
+    let received_via_rbracket = has_received_via_rbracket(det);
+    let received_from_slash = has_received_from_slash(det);
+    let received_with_lbrace = has_received_with_lbrace(det);
+    let received_by_lbracket = has_received_by_lbracket(det);
+    let received_via_star = has_received_via_star(det);
+    let received_from_bslash = has_received_from_bslash(det);
+    let received_with_rbrace = has_received_with_rbrace(det);
+    let received_by_rbracket = has_received_by_rbracket(det);
+    let received_via_plus = has_received_via_plus(det);
+    let received_via_lbrace = has_received_via_lbrace(det);
+    let received_via_rbrace = has_received_via_rbrace(det);
+    let received_with_lbracket = has_received_with_lbracket(det);
+    let received_with_rbracket = has_received_with_rbracket(det);
+    let received_with_bslash = has_received_with_bslash(det);
+    let received_by_lbrace = has_received_by_lbrace(det);
+    let received_by_rbrace = has_received_by_rbrace(det);
+    let refs_comment_lead = has_refs_comment_lead(det);
+    let refs_bang_lead = has_refs_bang_lead(det);
+    let refs_eq_lead = has_refs_eq_lead(det);
+    let refs_colon_lead = has_refs_colon_lead(det);
+    let refs_star_lead = has_refs_star_lead(det);
+    let refs_hash_lead = has_refs_hash_lead(det);
+    let refs_dollar_lead = has_refs_dollar_lead(det);
+    let refs_at_lead = has_refs_at_lead(det);
+    let refs_qmark_lead = has_refs_qmark_lead(det);
+    let refs_amp_lead = has_refs_amp_lead(det);
+    let refs_apos_lead = has_refs_apos_lead(det);
+    let refs_plus_lead = has_refs_plus_lead(det);
+    let refs_slash_lead = has_refs_slash_lead(det);
+    let refs_pct_lead = has_refs_pct_lead(det);
+    let refs_minus_lead = has_refs_minus_lead(det);
+    let refs_lbrack_lead = has_refs_lbrack_lead(det);
+    let refs_rbrack_lead = has_refs_rbrack_lead(det);
+    let refs_caret_lead = has_refs_caret_lead(det);
+    let refs_uscore_lead = has_refs_uscore_lead(det);
+    let refs_backtick_lead = has_refs_backtick_lead(det);
+    let refs_tilde_lead = has_refs_tilde_lead(det);
+    let refs_lbrace_lead = has_refs_lbrace_lead(det);
+    let refs_pipe_lead = has_refs_pipe_lead(det);
+    let refs_rbrace_lead = has_refs_rbrace_lead(det);
+    let refs_dot_lead = has_refs_dot_lead(det);
+    let refs_bslash_lead = has_refs_bslash_lead(det);
+    let refs_junk_before_angle = has_refs_junk_before_angle(det);
+    let refs_comment_before_msgid = has_refs_comment_before_msgid(det);
+    let refs_adjacent_angles = has_refs_adjacent_angles(det);
+    let msgid_star_lead = has_msgid_star_lead(det);
+    let msgid_bslash_lead = has_msgid_bslash_lead(det);
+    let msgid_junk_before_angle = has_msgid_junk_before_angle(det);
+    let msgid_no_angle = has_msgid_no_angle(det);
+    let msgid_inner_bang = has_msgid_inner_bang(det);
+    let msgid_inner_hash = has_msgid_inner_hash(det);
+    let msgid_inner_dollar = has_msgid_inner_dollar(det);
+    let msgid_inner_star = has_msgid_inner_star(det);
+    let msgid_inner_pct = has_msgid_inner_pct(det);
+    let msgid_inner_caret = has_msgid_inner_caret(det);
+    let msgid_inner_backtick = has_msgid_inner_backtick(det);
+    let msgid_inner_tilde = has_msgid_inner_tilde(det);
+    let msgid_inner_lbrace = has_msgid_inner_lbrace(det);
+    let msgid_inner_rbrace = has_msgid_inner_rbrace(det);
+    let msgid_inner_semi = has_msgid_inner_semi(det);
+    let msgid_inner_lt = has_msgid_inner_lt(det);
+    let msgid_adjacent_angles = has_msgid_adjacent_angles(det);
+    let msgid_word_between_angles = has_msgid_word_between_angles(det);
+    let msgid_empty_value = has_msgid_empty_value(det);
+    let msgid_dup_pair = has_msgid_dup_pair(det);
+    let refs_irt_conflict = has_refs_irt_conflict(det);
+    let resent_msgid_same = has_resent_msgid_same(det);
+    let resent_reply_to = has_resent_reply_to(det);
+    let msgid_comment_lead = has_msgid_comment_lead(det);
+    let subject_locale_prefix = has_subject_locale_prefix(det);
+    let resent_no_recipient = has_resent_no_recipient(det);
+    let resent_unknown_field = has_resent_unknown_field(det);
+    let resent_no_msgid = has_resent_no_msgid(det);
+    let msgid_case_variant_pair = has_msgid_case_variant_pair(det);
+    let content_id_top = has_content_id_top(det);
+    let to_many_addrs = has_to_many_addrs(det);
+    let from_sender_dup = has_from_sender_dup(det);
+    let reply_to_same_as_from = has_reply_to_same_as_from(det);
+    let irt_no_refs = has_irt_no_refs(det);
+    let resent_from_same_as_from = has_resent_from_same_as_from(det);
+    let resent_to_same_as_to = has_resent_to_same_as_to(det);
+    let resent_to_same_as_from = has_resent_to_same_as_from(det);
+    let resent_sender_same_as_sender = has_resent_sender_same_as_sender(det);
+    let resent_date_same_as_date = has_resent_date_same_as_date(det);
+    let resent_cc_same_as_cc = has_resent_cc_same_as_cc(det);
+    let resent_to_same_as_cc = has_resent_to_same_as_cc(det);
+    let resent_from_same_as_sender = has_resent_from_same_as_sender(det);
+    let resent_sender_same_as_from = has_resent_sender_same_as_from(det);
+    let resent_to_same_as_resent_from = has_resent_to_same_as_resent_from(det);
+    let resent_cc_same_as_resent_from = has_resent_cc_same_as_resent_from(det);
+    let resent_sender_same_as_resent_from = has_resent_sender_same_as_resent_from(det);
+    let resent_cc_same_as_resent_to = has_resent_cc_same_as_resent_to(det);
+    let resent_cc_same_as_to = has_resent_cc_same_as_to(det);
+    let resent_cc_same_as_from = has_resent_cc_same_as_from(det);
+    let resent_to_same_as_resent_sender = has_resent_to_same_as_resent_sender(det);
+    let resent_cc_same_as_resent_sender = has_resent_cc_same_as_resent_sender(det);
+    let to_same_as_cc = has_to_same_as_cc(det);
+    let reply_to_same_as_to = has_reply_to_same_as_to(det);
+    let from_same_as_to = has_from_same_as_to(det);
+    let reply_to_same_as_sender = has_reply_to_same_as_sender(det);
+    let reply_to_same_as_cc = has_reply_to_same_as_cc(det);
+    let sender_same_as_to = has_sender_same_as_to(det);
+    let sender_same_as_cc = has_sender_same_as_cc(det);
+    let from_same_as_cc = has_from_same_as_cc(det);
+    let delivered_to_differs_to = has_delivered_to_differs_to(det);
+    let envelope_to_differs_to = has_envelope_to_differs_to(det);
+    let delivered_to_same_as_cc = has_delivered_to_same_as_cc(det);
+    let return_path_differs_from = has_return_path_differs_from(det);
+    let delivered_to_same_as_from = has_delivered_to_same_as_from(det);
+    let delivered_to_same_as_reply_to = has_delivered_to_same_as_reply_to(det);
+    let envelope_to_same_as_cc = has_envelope_to_same_as_cc(det);
+    let delivered_to_same_as_sender = has_delivered_to_same_as_sender(det);
+    let x_orig_from_differs = has_x_orig_from_differs(det);
+    let x_orig_subject_differs = has_x_orig_subject_differs(det);
+    let x_orig_msgid_differs = has_x_orig_msgid_differs(det);
+    let x_orig_date_differs = has_x_orig_date_differs(det);
+    let x_orig_to_differs = has_x_orig_to_differs(det);
+    let x_orig_cc_differs = has_x_orig_cc_differs(det);
+    let x_orig_sender_differs = has_x_orig_sender_differs(det);
+    let x_orig_refs_differs = has_x_orig_refs_differs(det);
+    let dnt_differs_from = has_dnt_differs_from(det);
+    let rrt_differs_from = has_rrt_differs_from(det);
+    let xrt_differs_from = has_xrt_differs_from(det);
+    let dnt_differs_reply_to = has_dnt_differs_reply_to(det);
+    let apparently_to_differs_to = has_apparently_to_differs_to(det);
+    let apparently_to_differs_delivered_to = has_apparently_to_differs_delivered_to(det);
+    let x_orig_to_differs_delivered_to = has_x_orig_to_differs_delivered_to(det);
+    let resent_reply_to_differs_reply_to = has_resent_reply_to_differs_reply_to(det);
+    let env_from_differs_from = has_env_from_differs_from(det);
+    let apparently_from_differs_from = has_apparently_from_differs_from(det);
+    let rrt_differs_reply_to = has_rrt_differs_reply_to(det);
+    let xrt_differs_reply_to = has_xrt_differs_reply_to(det);
+    let apparently_resent_marks = has_apparently_resent_marks(det);
+    let x_orig_bcc_mark = has_x_orig_bcc_mark(det);
+    let x_orig_cc_mark = has_x_orig_cc_mark(det);
+    let x_orig_reply_to_mark = has_x_orig_reply_to_mark(det);
+    let fcc_mark = has_fcc_mark(det);
+    let forwarded_marks = has_forwarded_marks(det);
+    let apparently_to_same_as_to = has_apparently_to_same_as_to(det);
+    let x_orig_to_same_as_to = has_x_orig_to_same_as_to(det);
+    let x_orig_from_same_as_from = has_x_orig_from_same_as_from(det);
+    let x_orig_subject_same_as_subject = has_x_orig_subject_same_as_subject(det);
+    let x_orig_msgid_same_as_msgid = has_x_orig_msgid_same_as_msgid(det);
+    let x_orig_date_same_as_date = has_x_orig_date_same_as_date(det);
+    let x_orig_sender_same_as_sender = has_x_orig_sender_same_as_sender(det);
+    let x_orig_cc_same_as_cc = has_x_orig_cc_same_as_cc(det);
+    let x_orig_reply_to_same_as_reply_to = has_x_orig_reply_to_same_as_reply_to(det);
+    let x_orig_refs_same_as_refs = has_x_orig_refs_same_as_refs(det);
+    let x_orig_to_differs_apparently_to = has_x_orig_to_differs_apparently_to(det);
+    let x_orig_to_differs_envelope_to = has_x_orig_to_differs_envelope_to(det);
+    let envelope_to_differs_delivered_to = has_envelope_to_differs_delivered_to(det);
+    let envelope_to_differs_apparently_to = has_envelope_to_differs_apparently_to(det);
+    let return_path_differs_env_from = has_return_path_differs_env_from(det);
+    let return_path_differs_apparently_from = has_return_path_differs_apparently_from(det);
+    let env_from_differs_apparently_from = has_env_from_differs_apparently_from(det);
+    let x_orig_from_differs_env_from = has_x_orig_from_differs_env_from(det);
+    let multi_env_to = has_multi_env_to(det);
+    let multi_apparently_to = has_multi_apparently_to(det);
+    let multi_env_from = has_multi_env_from(det);
+    let multi_apparently_from = has_multi_apparently_from(det);
+    let multi_x_orig_to = has_multi_x_orig_to(det);
+    let multi_x_orig_from = has_multi_x_orig_from(det);
+    let multi_x_orig_msgid = has_multi_x_orig_msgid(det);
+    let multi_x_orig_subject = has_multi_x_orig_subject(det);
+    let multi_x_orig_cc = has_multi_x_orig_cc(det);
+    let multi_x_orig_reply_to = has_multi_x_orig_reply_to(det);
+    let multi_x_orig_date = has_multi_x_orig_date(det);
+    let multi_x_orig_refs = has_multi_x_orig_refs(det);
+    let multi_disposition_to = has_multi_disposition_to(det);
+    let multi_return_receipt_to = has_multi_return_receipt_to(det);
+    let multi_confirm_reading = has_multi_confirm_reading(det);
+    let multi_resent_reply_to = has_multi_resent_reply_to(det);
+    let env_to_empty = has_env_to_empty(det);
+    let apparently_to_empty = has_apparently_to_empty(det);
+    let env_from_empty = has_env_from_empty(det);
+    let apparently_from_empty = has_apparently_from_empty(det);
+    let disposition_to_empty = has_disposition_to_empty(det);
+    let return_receipt_to_empty = has_return_receipt_to_empty(det);
+    let confirm_reading_empty = has_confirm_reading_empty(det);
+    let resent_reply_to_empty = has_resent_reply_to_empty(det);
+    let x_orig_to_empty = has_x_orig_to_empty(det);
+    let x_orig_from_empty = has_x_orig_from_empty(det);
+    let x_orig_msgid_empty = has_x_orig_msgid_empty(det);
+    let x_orig_subject_empty = has_x_orig_subject_empty(det);
+    let x_orig_cc_empty = has_x_orig_cc_empty(det);
+    let x_orig_reply_to_empty = has_x_orig_reply_to_empty(det);
+    let x_orig_date_empty = has_x_orig_date_empty(det);
+    let x_orig_refs_empty = has_x_orig_refs_empty(det);
+    let x_orig_bcc_empty = has_x_orig_bcc_empty(det);
+    let fcc_empty = has_fcc_empty(det);
+    let x_forwarded_empty = has_x_forwarded_empty(det);
+    let apparently_resent_empty = has_apparently_resent_empty(det);
+    let x_orig_to_headers_empty = has_x_orig_to_headers_empty(det);
+    let x_orig_rcpt_to_empty = has_x_orig_rcpt_to_empty(det);
+    let x_orig_ar_empty = has_x_orig_ar_empty(det);
+    let x_orig_arrival_empty = has_x_orig_arrival_empty(det);
+    let auth_results_empty = has_auth_results_empty(det);
+    let dkim_sig_empty = has_dkim_sig_empty(det);
+    let received_spf_empty = has_received_spf_empty(det);
+    let priority_headers_empty = has_priority_headers_empty(det);
+    let env_to_non_addr = has_env_to_non_addr(det);
+    let apparently_to_non_addr = has_apparently_to_non_addr(det);
+    let env_from_non_addr = has_env_from_non_addr(det);
+    let apparently_from_non_addr = has_apparently_from_non_addr(det);
+    let x_orig_to_non_addr = has_x_orig_to_non_addr(det);
+    let x_orig_from_non_addr = has_x_orig_from_non_addr(det);
+    let x_orig_cc_non_addr = has_x_orig_cc_non_addr(det);
+    let x_orig_reply_to_non_addr = has_x_orig_reply_to_non_addr(det);
+    let disposition_to_non_addr = has_disposition_to_non_addr(det);
+    let return_receipt_to_non_addr = has_return_receipt_to_non_addr(det);
+    let confirm_reading_non_addr = has_confirm_reading_non_addr(det);
+    let resent_reply_to_non_addr = has_resent_reply_to_non_addr(det);
+    let delivered_to_non_addr = has_delivered_to_non_addr(det);
+    let errors_to_non_addr = has_errors_to_non_addr(det);
+    let x_orig_rcpt_to_non_addr = has_x_orig_rcpt_to_non_addr(det);
+    let apparently_resent_non_addr = has_apparently_resent_non_addr(det);
+    let env_to_addr_list = has_env_to_addr_list(det);
+    let delivered_to_addr_list = has_delivered_to_addr_list(det);
+    let env_from_addr_list = has_env_from_addr_list(det);
+    let errors_to_addr_list = has_errors_to_addr_list(det);
+    let apparently_to_addr_list = has_apparently_to_addr_list(det);
+    let apparently_from_addr_list = has_apparently_from_addr_list(det);
+    let x_orig_to_addr_list = has_x_orig_to_addr_list(det);
+    let x_orig_from_addr_list = has_x_orig_from_addr_list(det);
+    let x_orig_cc_addr_list = has_x_orig_cc_addr_list(det);
+    let x_orig_reply_to_addr_list = has_x_orig_reply_to_addr_list(det);
+    let disposition_to_addr_list = has_disposition_to_addr_list(det);
+    let return_receipt_addr_list = has_return_receipt_addr_list(det);
+    let confirm_reading_addr_list = has_confirm_reading_addr_list(det);
+    let resent_reply_to_addr_list = has_resent_reply_to_addr_list(det);
+    let apparently_resent_addr_list = has_apparently_resent_addr_list(det);
+    let x_orig_rcpt_to_addr_list = has_x_orig_rcpt_to_addr_list(det);
+    let env_to_bracketed = has_env_to_bracketed(det);
+    let delivered_to_bracketed = has_delivered_to_bracketed(det);
+    let env_from_bracketed = has_env_from_bracketed(det);
+    let errors_to_bracketed = has_errors_to_bracketed(det);
+    let apparently_to_bracketed = has_apparently_to_bracketed(det);
+    let apparently_from_bracketed = has_apparently_from_bracketed(det);
+    let x_orig_to_bracketed = has_x_orig_to_bracketed(det);
+    let x_orig_from_bracketed = has_x_orig_from_bracketed(det);
+    let x_orig_cc_bracketed = has_x_orig_cc_bracketed(det);
+    let x_orig_reply_to_bracketed = has_x_orig_reply_to_bracketed(det);
+    let disposition_to_bracketed = has_disposition_to_bracketed(det);
+    let return_receipt_bracketed = has_return_receipt_bracketed(det);
+    let confirm_reading_bracketed = has_confirm_reading_bracketed(det);
+    let resent_reply_to_bracketed = has_resent_reply_to_bracketed(det);
+    let apparently_resent_bracketed = has_apparently_resent_bracketed(det);
+    let x_orig_rcpt_to_bracketed = has_x_orig_rcpt_to_bracketed(det);
+    let env_to_spaced = has_env_to_spaced(det);
+    let delivered_to_spaced = has_delivered_to_spaced(det);
+    let env_from_spaced = has_env_from_spaced(det);
+    let errors_to_spaced = has_errors_to_spaced(det);
+    let apparently_to_spaced = has_apparently_to_spaced(det);
+    let apparently_from_spaced = has_apparently_from_spaced(det);
+    let x_orig_to_spaced = has_x_orig_to_spaced(det);
+    let x_orig_from_spaced = has_x_orig_from_spaced(det);
+    let x_orig_cc_spaced = has_x_orig_cc_spaced(det);
+    let x_orig_reply_to_spaced = has_x_orig_reply_to_spaced(det);
+    let disposition_to_spaced = has_disposition_to_spaced(det);
+    let return_receipt_spaced = has_return_receipt_spaced(det);
+    let confirm_reading_spaced = has_confirm_reading_spaced(det);
+    let resent_reply_to_spaced = has_resent_reply_to_spaced(det);
+    let apparently_resent_spaced = has_apparently_resent_spaced(det);
+    let x_orig_rcpt_to_spaced = has_x_orig_rcpt_to_spaced(det);
+    let env_to_dotmal = has_env_to_dotmal(det);
+    let delivered_to_dotmal = has_delivered_to_dotmal(det);
+    let env_from_dotmal = has_env_from_dotmal(det);
+    let errors_to_dotmal = has_errors_to_dotmal(det);
+    let apparently_to_dotmal = has_apparently_to_dotmal(det);
+    let apparently_from_dotmal = has_apparently_from_dotmal(det);
+    let x_orig_to_dotmal = has_x_orig_to_dotmal(det);
+    let x_orig_from_dotmal = has_x_orig_from_dotmal(det);
+    let x_orig_cc_dotmal = has_x_orig_cc_dotmal(det);
+    let x_orig_reply_to_dotmal = has_x_orig_reply_to_dotmal(det);
+    let disposition_to_dotmal = has_disposition_to_dotmal(det);
+    let return_receipt_dotmal = has_return_receipt_dotmal(det);
+    let confirm_reading_dotmal = has_confirm_reading_dotmal(det);
+    let resent_reply_to_dotmal = has_resent_reply_to_dotmal(det);
+    let apparently_resent_dotmal = has_apparently_resent_dotmal(det);
+    let x_orig_rcpt_to_dotmal = has_x_orig_rcpt_to_dotmal(det);
+    let env_to_atdup = has_env_to_atdup(det);
+    let delivered_to_atdup = has_delivered_to_atdup(det);
+    let env_from_atdup = has_env_from_atdup(det);
+    let errors_to_atdup = has_errors_to_atdup(det);
+    let apparently_to_atdup = has_apparently_to_atdup(det);
+    let apparently_from_atdup = has_apparently_from_atdup(det);
+    let x_orig_to_atdup = has_x_orig_to_atdup(det);
+    let x_orig_from_atdup = has_x_orig_from_atdup(det);
+    let x_orig_cc_atdup = has_x_orig_cc_atdup(det);
+    let x_orig_reply_to_atdup = has_x_orig_reply_to_atdup(det);
+    let disposition_to_atdup = has_disposition_to_atdup(det);
+    let return_receipt_atdup = has_return_receipt_atdup(det);
+    let confirm_reading_atdup = has_confirm_reading_atdup(det);
+    let resent_reply_to_atdup = has_resent_reply_to_atdup(det);
+    let apparently_resent_atdup = has_apparently_resent_atdup(det);
+    let x_orig_rcpt_to_atdup = has_x_orig_rcpt_to_atdup(det);
+    let env_to_atside = has_env_to_atside(det);
+    let delivered_to_atside = has_delivered_to_atside(det);
+    let env_from_atside = has_env_from_atside(det);
+    let errors_to_atside = has_errors_to_atside(det);
+    let apparently_to_atside = has_apparently_to_atside(det);
+    let apparently_from_atside = has_apparently_from_atside(det);
+    let x_orig_to_atside = has_x_orig_to_atside(det);
+    let x_orig_from_atside = has_x_orig_from_atside(det);
+    let x_orig_cc_atside = has_x_orig_cc_atside(det);
+    let x_orig_reply_to_atside = has_x_orig_reply_to_atside(det);
+    let disposition_to_atside = has_disposition_to_atside(det);
+    let return_receipt_atside = has_return_receipt_atside(det);
+    let confirm_reading_atside = has_confirm_reading_atside(det);
+    let resent_reply_to_atside = has_resent_reply_to_atside(det);
+    let apparently_resent_atside = has_apparently_resent_atside(det);
+    let x_orig_rcpt_to_atside = has_x_orig_rcpt_to_atside(det);
+    let env_to_semiv = has_env_to_semiv(det);
+    let delivered_to_semiv = has_delivered_to_semiv(det);
+    let env_from_semiv = has_env_from_semiv(det);
+    let errors_to_semiv = has_errors_to_semiv(det);
+    let apparently_to_semiv = has_apparently_to_semiv(det);
+    let apparently_from_semiv = has_apparently_from_semiv(det);
+    let x_orig_to_semiv = has_x_orig_to_semiv(det);
+    let x_orig_from_semiv = has_x_orig_from_semiv(det);
+    let x_orig_cc_semiv = has_x_orig_cc_semiv(det);
+    let x_orig_reply_to_semiv = has_x_orig_reply_to_semiv(det);
+    let disposition_to_semiv = has_disposition_to_semiv(det);
+    let return_receipt_semiv = has_return_receipt_semiv(det);
+    let confirm_reading_semiv = has_confirm_reading_semiv(det);
+    let resent_reply_to_semiv = has_resent_reply_to_semiv(det);
+    let apparently_resent_semiv = has_apparently_resent_semiv(det);
+    let x_orig_rcpt_to_semiv = has_x_orig_rcpt_to_semiv(det);
+    let env_to_pct = has_env_to_pct(det);
+    let delivered_to_pct = has_delivered_to_pct(det);
+    let env_from_pct = has_env_from_pct(det);
+    let errors_to_pct = has_errors_to_pct(det);
+    let apparently_to_pct = has_apparently_to_pct(det);
+    let apparently_from_pct = has_apparently_from_pct(det);
+    let x_orig_to_pct = has_x_orig_to_pct(det);
+    let x_orig_from_pct = has_x_orig_from_pct(det);
+    let x_orig_cc_pct = has_x_orig_cc_pct(det);
+    let x_orig_reply_to_pct = has_x_orig_reply_to_pct(det);
+    let disposition_to_pct = has_disposition_to_pct(det);
+    let return_receipt_pct = has_return_receipt_pct(det);
+    let confirm_reading_pct = has_confirm_reading_pct(det);
+    let resent_reply_to_pct = has_resent_reply_to_pct(det);
+    let apparently_resent_pct = has_apparently_resent_pct(det);
+    let x_orig_rcpt_to_pct = has_x_orig_rcpt_to_pct(det);
+    let env_to_bang = has_env_to_bang(det);
+    let delivered_to_bang = has_delivered_to_bang(det);
+    let env_from_bang = has_env_from_bang(det);
+    let errors_to_bang = has_errors_to_bang(det);
+    let apparently_to_bang = has_apparently_to_bang(det);
+    let apparently_from_bang = has_apparently_from_bang(det);
+    let x_orig_to_bang = has_x_orig_to_bang(det);
+    let x_orig_from_bang = has_x_orig_from_bang(det);
+    let x_orig_cc_bang = has_x_orig_cc_bang(det);
+    let x_orig_reply_to_bang = has_x_orig_reply_to_bang(det);
+    let disposition_to_bang = has_disposition_to_bang(det);
+    let return_receipt_bang = has_return_receipt_bang(det);
+    let confirm_reading_bang = has_confirm_reading_bang(det);
+    let resent_reply_to_bang = has_resent_reply_to_bang(det);
+    let apparently_resent_bang = has_apparently_resent_bang(det);
+    let x_orig_rcpt_to_bang = has_x_orig_rcpt_to_bang(det);
+    let env_to_domlit = has_env_to_domlit(det);
+    let delivered_to_domlit = has_delivered_to_domlit(det);
+    let env_from_domlit = has_env_from_domlit(det);
+    let errors_to_domlit = has_errors_to_domlit(det);
+    let apparently_to_domlit = has_apparently_to_domlit(det);
+    let apparently_from_domlit = has_apparently_from_domlit(det);
+    let x_orig_to_domlit = has_x_orig_to_domlit(det);
+    let x_orig_from_domlit = has_x_orig_from_domlit(det);
+    let x_orig_cc_domlit = has_x_orig_cc_domlit(det);
+    let x_orig_reply_to_domlit = has_x_orig_reply_to_domlit(det);
+    let disposition_to_domlit = has_disposition_to_domlit(det);
+    let return_receipt_domlit = has_return_receipt_domlit(det);
+    let confirm_reading_domlit = has_confirm_reading_domlit(det);
+    let resent_reply_to_domlit = has_resent_reply_to_domlit(det);
+    let apparently_resent_domlit = has_apparently_resent_domlit(det);
+    let x_orig_rcpt_to_domlit = has_x_orig_rcpt_to_domlit(det);
+    let env_to_eai = has_env_to_eai(det);
+    let delivered_to_eai = has_delivered_to_eai(det);
+    let env_from_eai = has_env_from_eai(det);
+    let errors_to_eai = has_errors_to_eai(det);
+    let apparently_to_eai = has_apparently_to_eai(det);
+    let apparently_from_eai = has_apparently_from_eai(det);
+    let x_orig_to_eai = has_x_orig_to_eai(det);
+    let x_orig_from_eai = has_x_orig_from_eai(det);
+    let x_orig_cc_eai = has_x_orig_cc_eai(det);
+    let x_orig_reply_to_eai = has_x_orig_reply_to_eai(det);
+    let disposition_to_eai = has_disposition_to_eai(det);
+    let return_receipt_eai = has_return_receipt_eai(det);
+    let confirm_reading_eai = has_confirm_reading_eai(det);
+    let resent_reply_to_eai = has_resent_reply_to_eai(det);
+    let apparently_resent_eai = has_apparently_resent_eai(det);
+    let x_orig_rcpt_to_eai = has_x_orig_rcpt_to_eai(det);
+    let env_to_hyph = has_env_to_hyph(det);
+    let delivered_to_hyph = has_delivered_to_hyph(det);
+    let env_from_hyph = has_env_from_hyph(det);
+    let errors_to_hyph = has_errors_to_hyph(det);
+    let apparently_to_hyph = has_apparently_to_hyph(det);
+    let apparently_from_hyph = has_apparently_from_hyph(det);
+    let x_orig_to_hyph = has_x_orig_to_hyph(det);
+    let x_orig_from_hyph = has_x_orig_from_hyph(det);
+    let x_orig_cc_hyph = has_x_orig_cc_hyph(det);
+    let x_orig_reply_to_hyph = has_x_orig_reply_to_hyph(det);
+    let disposition_to_hyph = has_disposition_to_hyph(det);
+    let return_receipt_hyph = has_return_receipt_hyph(det);
+    let confirm_reading_hyph = has_confirm_reading_hyph(det);
+    let resent_reply_to_hyph = has_resent_reply_to_hyph(det);
+    let apparently_resent_hyph = has_apparently_resent_hyph(det);
+    let x_orig_rcpt_to_hyph = has_x_orig_rcpt_to_hyph(det);
+    let confirm_reading_bslash = has_confirm_reading_bslash(det);
+    let resent_reply_to_bslash = has_resent_reply_to_bslash(det);
+    let apparently_resent_bslash = has_apparently_resent_bslash(det);
+    let x_orig_rcpt_to_bslash = has_x_orig_rcpt_to_bslash(det);
+    let confirm_reading_colon = has_confirm_reading_colon(det);
+    let resent_reply_to_colon = has_resent_reply_to_colon(det);
+    let apparently_resent_colon = has_apparently_resent_colon(det);
+    let x_orig_rcpt_to_colon = has_x_orig_rcpt_to_colon(det);
+    let confirm_reading_rparen = has_confirm_reading_rparen(det);
+    let resent_reply_to_rparen = has_resent_reply_to_rparen(det);
+    let apparently_resent_rparen = has_apparently_resent_rparen(det);
+    let x_orig_rcpt_to_rparen = has_x_orig_rcpt_to_rparen(det);
+    let confirm_reading_rbracket = has_confirm_reading_rbracket(det);
+    let resent_reply_to_rbracket = has_resent_reply_to_rbracket(det);
+    let apparently_resent_rbracket = has_apparently_resent_rbracket(det);
+    let x_orig_rcpt_to_rbracket = has_x_orig_rcpt_to_rbracket(det);
+    let confirm_reading_rbrace = has_confirm_reading_rbrace(det);
+    let resent_reply_to_rbrace = has_resent_reply_to_rbrace(det);
+    let apparently_resent_rbrace = has_apparently_resent_rbrace(det);
+    let x_orig_rcpt_to_rbrace = has_x_orig_rcpt_to_rbrace(det);
+    let confirm_reading_apos = has_confirm_reading_apos(det);
+    let resent_reply_to_apos = has_resent_reply_to_apos(det);
+    let apparently_resent_apos = has_apparently_resent_apos(det);
+    let x_orig_rcpt_to_apos = has_x_orig_rcpt_to_apos(det);
+    let confirm_reading_qmark = has_confirm_reading_qmark(det);
+    let resent_reply_to_qmark = has_resent_reply_to_qmark(det);
+    let apparently_resent_qmark = has_apparently_resent_qmark(det);
+    let x_orig_rcpt_to_qmark = has_x_orig_rcpt_to_qmark(det);
+    let confirm_reading_plus = has_confirm_reading_plus(det);
+    let resent_reply_to_plus = has_resent_reply_to_plus(det);
+    let apparently_resent_plus = has_apparently_resent_plus(det);
+    let x_orig_rcpt_to_plus = has_x_orig_rcpt_to_plus(det);
+    let confirm_reading_pipe = has_confirm_reading_pipe(det);
+    let resent_reply_to_pipe = has_resent_reply_to_pipe(det);
+    let apparently_resent_pipe = has_apparently_resent_pipe(det);
+    let x_orig_rcpt_to_pipe = has_x_orig_rcpt_to_pipe(det);
+    let confirm_reading_caret = has_confirm_reading_caret(det);
+    let resent_reply_to_caret = has_resent_reply_to_caret(det);
+    let apparently_resent_caret = has_apparently_resent_caret(det);
+    let x_orig_rcpt_to_caret = has_x_orig_rcpt_to_caret(det);
+    let confirm_reading_star_local = has_confirm_reading_star_local(det);
+    let resent_reply_to_star_local = has_resent_reply_to_star_local(det);
+    let apparently_resent_star_local = has_apparently_resent_star_local(det);
+    let x_orig_rcpt_to_star_local = has_x_orig_rcpt_to_star_local(det);
+    let confirm_reading_unclosed = has_confirm_reading_unclosed(det);
+    let resent_reply_to_unclosed = has_resent_reply_to_unclosed(det);
+    let apparently_resent_unclosed = has_apparently_resent_unclosed(det);
+    let x_orig_rcpt_to_unclosed = has_x_orig_rcpt_to_unclosed(det);
+    let confirm_reading_hash_local = has_confirm_reading_hash_local(det);
+    let resent_reply_to_hash_local = has_resent_reply_to_hash_local(det);
+    let apparently_resent_hash_local = has_apparently_resent_hash_local(det);
+    let x_orig_rcpt_to_hash_local = has_x_orig_rcpt_to_hash_local(det);
+    let confirm_reading_backtick_local = has_confirm_reading_backtick_local(det);
+    let resent_reply_to_backtick_local = has_resent_reply_to_backtick_local(det);
+    let apparently_resent_backtick_local = has_apparently_resent_backtick_local(det);
+    let x_orig_rcpt_to_backtick_local = has_x_orig_rcpt_to_backtick_local(det);
+    let confirm_reading_dollar_local = has_confirm_reading_dollar_local(det);
+    let resent_reply_to_dollar_local = has_resent_reply_to_dollar_local(det);
+    let apparently_resent_dollar_local = has_apparently_resent_dollar_local(det);
+    let x_orig_rcpt_to_dollar_local = has_x_orig_rcpt_to_dollar_local(det);
+    let confirm_reading_caret_local = has_confirm_reading_caret_local(det);
+    let resent_reply_to_caret_local = has_resent_reply_to_caret_local(det);
+    let apparently_resent_caret_local = has_apparently_resent_caret_local(det);
+    let x_orig_rcpt_to_caret_local = has_x_orig_rcpt_to_caret_local(det);
+    let confirm_reading_lbrace = has_confirm_reading_lbrace(det);
+    let resent_reply_to_lbrace = has_resent_reply_to_lbrace(det);
+    let apparently_resent_lbrace = has_apparently_resent_lbrace(det);
+    let x_orig_rcpt_to_lbrace = has_x_orig_rcpt_to_lbrace(det);
+    let confirm_reading_eq = has_confirm_reading_eq(det);
+    let resent_reply_to_eq = has_resent_reply_to_eq(det);
+    let apparently_resent_eq = has_apparently_resent_eq(det);
+    let x_orig_rcpt_to_eq = has_x_orig_rcpt_to_eq(det);
+    let confirm_reading_tilde = has_confirm_reading_tilde(det);
+    let resent_reply_to_tilde = has_resent_reply_to_tilde(det);
+    let apparently_resent_tilde = has_apparently_resent_tilde(det);
+    let x_orig_rcpt_to_tilde = has_x_orig_rcpt_to_tilde(det);
+    let confirm_reading_amp = has_confirm_reading_amp(det);
+    let resent_reply_to_amp = has_resent_reply_to_amp(det);
+    let apparently_resent_amp = has_apparently_resent_amp(det);
+    let x_orig_rcpt_to_amp = has_x_orig_rcpt_to_amp(det);
+    let confirm_reading_hash = has_confirm_reading_hash(det);
+    let resent_reply_to_hash = has_resent_reply_to_hash(det);
+    let apparently_resent_hash = has_apparently_resent_hash(det);
+    let x_orig_rcpt_to_hash = has_x_orig_rcpt_to_hash(det);
+    let confirm_reading_dollar = has_confirm_reading_dollar(det);
+    let resent_reply_to_dollar = has_resent_reply_to_dollar(det);
+    let apparently_resent_dollar = has_apparently_resent_dollar(det);
+    let x_orig_rcpt_to_dollar = has_x_orig_rcpt_to_dollar(det);
+    let confirm_reading_star = has_confirm_reading_star(det);
+    let resent_reply_to_star = has_resent_reply_to_star(det);
+    let apparently_resent_star = has_apparently_resent_star(det);
+    let x_orig_rcpt_to_star = has_x_orig_rcpt_to_star(det);
+    let confirm_reading_slash = has_confirm_reading_slash(det);
+    let resent_reply_to_slash = has_resent_reply_to_slash(det);
+    let apparently_resent_slash = has_apparently_resent_slash(det);
+    let x_orig_rcpt_to_slash = has_x_orig_rcpt_to_slash(det);
+    let confirm_reading_backtick = has_confirm_reading_backtick(det);
+    let resent_reply_to_backtick = has_resent_reply_to_backtick(det);
+    let apparently_resent_backtick = has_apparently_resent_backtick(det);
+    let x_orig_rcpt_to_backtick = has_x_orig_rcpt_to_backtick(det);
+    let confirm_reading_underscore = has_confirm_reading_underscore(det);
+    let resent_reply_to_underscore = has_resent_reply_to_underscore(det);
+    let apparently_resent_underscore = has_apparently_resent_underscore(det);
+    let x_orig_rcpt_to_underscore = has_x_orig_rcpt_to_underscore(det);
+    let confirm_reading_slash_local = has_confirm_reading_slash_local(det);
+    let resent_reply_to_slash_local = has_resent_reply_to_slash_local(det);
+    let apparently_resent_slash_local = has_apparently_resent_slash_local(det);
+    let x_orig_rcpt_to_slash_local = has_x_orig_rcpt_to_slash_local(det);
+    let apparently_to_bslash = has_apparently_to_bslash(det);
+    let apparently_from_bslash = has_apparently_from_bslash(det);
+    let x_orig_to_bslash = has_x_orig_to_bslash(det);
+    let x_orig_from_bslash = has_x_orig_from_bslash(det);
+    let apparently_to_colon = has_apparently_to_colon(det);
+    let apparently_from_colon = has_apparently_from_colon(det);
+    let x_orig_to_colon = has_x_orig_to_colon(det);
+    let x_orig_from_colon = has_x_orig_from_colon(det);
+    let apparently_to_rparen = has_apparently_to_rparen(det);
+    let apparently_from_rparen = has_apparently_from_rparen(det);
+    let x_orig_to_rparen = has_x_orig_to_rparen(det);
+    let x_orig_from_rparen = has_x_orig_from_rparen(det);
+    let apparently_to_rbracket = has_apparently_to_rbracket(det);
+    let apparently_from_rbracket = has_apparently_from_rbracket(det);
+    let x_orig_to_rbracket = has_x_orig_to_rbracket(det);
+    let x_orig_from_rbracket = has_x_orig_from_rbracket(det);
+    let apparently_to_rbrace = has_apparently_to_rbrace(det);
+    let apparently_from_rbrace = has_apparently_from_rbrace(det);
+    let x_orig_to_rbrace = has_x_orig_to_rbrace(det);
+    let x_orig_from_rbrace = has_x_orig_from_rbrace(det);
+    let apparently_to_apos = has_apparently_to_apos(det);
+    let apparently_from_apos = has_apparently_from_apos(det);
+    let x_orig_to_apos = has_x_orig_to_apos(det);
+    let x_orig_from_apos = has_x_orig_from_apos(det);
+    let apparently_to_qmark = has_apparently_to_qmark(det);
+    let apparently_from_qmark = has_apparently_from_qmark(det);
+    let x_orig_to_qmark = has_x_orig_to_qmark(det);
+    let x_orig_from_qmark = has_x_orig_from_qmark(det);
+    let apparently_to_plus = has_apparently_to_plus(det);
+    let apparently_from_plus = has_apparently_from_plus(det);
+    let x_orig_to_plus = has_x_orig_to_plus(det);
+    let x_orig_from_plus = has_x_orig_from_plus(det);
+    let apparently_to_lbrace = has_apparently_to_lbrace(det);
+    let apparently_from_lbrace = has_apparently_from_lbrace(det);
+    let x_orig_to_lbrace = has_x_orig_to_lbrace(det);
+    let x_orig_from_lbrace = has_x_orig_from_lbrace(det);
+    let apparently_to_eq = has_apparently_to_eq(det);
+    let apparently_from_eq = has_apparently_from_eq(det);
+    let x_orig_to_eq = has_x_orig_to_eq(det);
+    let x_orig_from_eq = has_x_orig_from_eq(det);
+    let apparently_to_amp = has_apparently_to_amp(det);
+    let apparently_from_amp = has_apparently_from_amp(det);
+    let x_orig_to_amp = has_x_orig_to_amp(det);
+    let x_orig_from_amp = has_x_orig_from_amp(det);
+    let apparently_to_slash = has_apparently_to_slash(det);
+    let apparently_from_slash = has_apparently_from_slash(det);
+    let x_orig_to_slash = has_x_orig_to_slash(det);
+    let x_orig_from_slash = has_x_orig_from_slash(det);
+    let apparently_to_backtick = has_apparently_to_backtick(det);
+    let apparently_from_backtick = has_apparently_from_backtick(det);
+    let x_orig_to_backtick = has_x_orig_to_backtick(det);
+    let x_orig_from_backtick = has_x_orig_from_backtick(det);
+    let apparently_to_pipe = has_apparently_to_pipe(det);
+    let apparently_from_pipe = has_apparently_from_pipe(det);
+    let x_orig_to_pipe = has_x_orig_to_pipe(det);
+    let x_orig_from_pipe = has_x_orig_from_pipe(det);
+    let apparently_to_tilde = has_apparently_to_tilde(det);
+    let apparently_from_tilde = has_apparently_from_tilde(det);
+    let x_orig_to_tilde = has_x_orig_to_tilde(det);
+    let x_orig_from_tilde = has_x_orig_from_tilde(det);
+    let apparently_to_caret = has_apparently_to_caret(det);
+    let apparently_from_caret = has_apparently_from_caret(det);
+    let x_orig_to_caret = has_x_orig_to_caret(det);
+    let x_orig_from_caret = has_x_orig_from_caret(det);
+    let apparently_to_hash = has_apparently_to_hash(det);
+    let apparently_from_hash = has_apparently_from_hash(det);
+    let x_orig_to_hash = has_x_orig_to_hash(det);
+    let x_orig_from_hash = has_x_orig_from_hash(det);
+    let apparently_to_dollar = has_apparently_to_dollar(det);
+    let apparently_from_dollar = has_apparently_from_dollar(det);
+    let x_orig_to_dollar = has_x_orig_to_dollar(det);
+    let x_orig_from_dollar = has_x_orig_from_dollar(det);
+    let apparently_to_star = has_apparently_to_star(det);
+    let apparently_from_star = has_apparently_from_star(det);
+    let x_orig_to_star = has_x_orig_to_star(det);
+    let x_orig_from_star = has_x_orig_from_star(det);
+    let apparently_to_underscore = has_apparently_to_underscore(det);
+    let apparently_from_underscore = has_apparently_from_underscore(det);
+    let x_orig_to_underscore = has_x_orig_to_underscore(det);
+    let x_orig_from_underscore = has_x_orig_from_underscore(det);
+    let apparently_to_slash_local = has_apparently_to_slash_local(det);
+    let apparently_from_slash_local = has_apparently_from_slash_local(det);
+    let x_orig_to_slash_local = has_x_orig_to_slash_local(det);
+    let x_orig_from_slash_local = has_x_orig_from_slash_local(det);
+    let apparently_to_star_local = has_apparently_to_star_local(det);
+    let apparently_from_star_local = has_apparently_from_star_local(det);
+    let x_orig_to_star_local = has_x_orig_to_star_local(det);
+    let x_orig_from_star_local = has_x_orig_from_star_local(det);
+    let apparently_to_dollar_local = has_apparently_to_dollar_local(det);
+    let apparently_from_dollar_local = has_apparently_from_dollar_local(det);
+    let x_orig_to_dollar_local = has_x_orig_to_dollar_local(det);
+    let x_orig_from_dollar_local = has_x_orig_from_dollar_local(det);
+    let apparently_to_hash_local = has_apparently_to_hash_local(det);
+    let apparently_from_hash_local = has_apparently_from_hash_local(det);
+    let x_orig_to_hash_local = has_x_orig_to_hash_local(det);
+    let x_orig_from_hash_local = has_x_orig_from_hash_local(det);
+    let apparently_to_backtick_local = has_apparently_to_backtick_local(det);
+    let apparently_from_backtick_local = has_apparently_from_backtick_local(det);
+    let x_orig_to_backtick_local = has_x_orig_to_backtick_local(det);
+    let x_orig_from_backtick_local = has_x_orig_from_backtick_local(det);
+    let apparently_to_caret_local = has_apparently_to_caret_local(det);
+    let apparently_from_caret_local = has_apparently_from_caret_local(det);
+    let x_orig_to_caret_local = has_x_orig_to_caret_local(det);
+    let x_orig_from_caret_local = has_x_orig_from_caret_local(det);
+    let apparently_to_quoted_local = has_apparently_to_quoted_local(det);
+    let apparently_from_quoted_local = has_apparently_from_quoted_local(det);
+    let x_orig_to_quoted_local = has_x_orig_to_quoted_local(det);
+    let x_orig_from_quoted_local = has_x_orig_from_quoted_local(det);
+    let x_orig_cc_bslash = has_x_orig_cc_bslash(det);
+    let x_orig_reply_to_bslash = has_x_orig_reply_to_bslash(det);
+    let disposition_to_bslash = has_disposition_to_bslash(det);
+    let return_receipt_bslash = has_return_receipt_bslash(det);
+    let x_orig_cc_colon = has_x_orig_cc_colon(det);
+    let x_orig_reply_to_colon = has_x_orig_reply_to_colon(det);
+    let disposition_to_colon = has_disposition_to_colon(det);
+    let return_receipt_colon = has_return_receipt_colon(det);
+    let x_orig_cc_rparen = has_x_orig_cc_rparen(det);
+    let x_orig_reply_to_rparen = has_x_orig_reply_to_rparen(det);
+    let disposition_to_rparen = has_disposition_to_rparen(det);
+    let return_receipt_rparen = has_return_receipt_rparen(det);
+    let x_orig_cc_rbracket = has_x_orig_cc_rbracket(det);
+    let x_orig_reply_to_rbracket = has_x_orig_reply_to_rbracket(det);
+    let disposition_to_rbracket = has_disposition_to_rbracket(det);
+    let return_receipt_rbracket = has_return_receipt_rbracket(det);
+    let x_orig_cc_rbrace = has_x_orig_cc_rbrace(det);
+    let x_orig_reply_to_rbrace = has_x_orig_reply_to_rbrace(det);
+    let disposition_to_rbrace = has_disposition_to_rbrace(det);
+    let return_receipt_rbrace = has_return_receipt_rbrace(det);
+    let x_orig_cc_apos = has_x_orig_cc_apos(det);
+    let x_orig_reply_to_apos = has_x_orig_reply_to_apos(det);
+    let disposition_to_apos = has_disposition_to_apos(det);
+    let return_receipt_apos = has_return_receipt_apos(det);
+    let x_orig_cc_qmark = has_x_orig_cc_qmark(det);
+    let x_orig_reply_to_qmark = has_x_orig_reply_to_qmark(det);
+    let disposition_to_qmark = has_disposition_to_qmark(det);
+    let return_receipt_qmark = has_return_receipt_qmark(det);
+    let x_orig_cc_plus = has_x_orig_cc_plus(det);
+    let x_orig_reply_to_plus = has_x_orig_reply_to_plus(det);
+    let disposition_to_plus = has_disposition_to_plus(det);
+    let return_receipt_plus = has_return_receipt_plus(det);
+    let x_orig_cc_pipe = has_x_orig_cc_pipe(det);
+    let x_orig_reply_to_pipe = has_x_orig_reply_to_pipe(det);
+    let disposition_to_pipe = has_disposition_to_pipe(det);
+    let return_receipt_pipe = has_return_receipt_pipe(det);
+    let x_orig_cc_caret = has_x_orig_cc_caret(det);
+    let x_orig_reply_to_caret = has_x_orig_reply_to_caret(det);
+    let disposition_to_caret = has_disposition_to_caret(det);
+    let return_receipt_caret = has_return_receipt_caret(det);
+    let x_orig_cc_amp = has_x_orig_cc_amp(det);
+    let x_orig_reply_to_amp = has_x_orig_reply_to_amp(det);
+    let disposition_to_amp = has_disposition_to_amp(det);
+    let return_receipt_amp = has_return_receipt_amp(det);
+    let x_orig_cc_lbrace = has_x_orig_cc_lbrace(det);
+    let x_orig_reply_to_lbrace = has_x_orig_reply_to_lbrace(det);
+    let disposition_to_lbrace = has_disposition_to_lbrace(det);
+    let return_receipt_lbrace = has_return_receipt_lbrace(det);
+    let x_orig_cc_eq = has_x_orig_cc_eq(det);
+    let x_orig_reply_to_eq = has_x_orig_reply_to_eq(det);
+    let disposition_to_eq = has_disposition_to_eq(det);
+    let return_receipt_eq = has_return_receipt_eq(det);
+    let x_orig_cc_tilde = has_x_orig_cc_tilde(det);
+    let x_orig_reply_to_tilde = has_x_orig_reply_to_tilde(det);
+    let disposition_to_tilde = has_disposition_to_tilde(det);
+    let return_receipt_tilde = has_return_receipt_tilde(det);
+    let x_orig_cc_hash = has_x_orig_cc_hash(det);
+    let x_orig_reply_to_hash = has_x_orig_reply_to_hash(det);
+    let disposition_to_hash = has_disposition_to_hash(det);
+    let return_receipt_hash = has_return_receipt_hash(det);
+    let x_orig_cc_dollar = has_x_orig_cc_dollar(det);
+    let x_orig_reply_to_dollar = has_x_orig_reply_to_dollar(det);
+    let disposition_to_dollar = has_disposition_to_dollar(det);
+    let return_receipt_dollar = has_return_receipt_dollar(det);
+    let x_orig_cc_star = has_x_orig_cc_star(det);
+    let x_orig_reply_to_star = has_x_orig_reply_to_star(det);
+    let disposition_to_star = has_disposition_to_star(det);
+    let return_receipt_star = has_return_receipt_star(det);
+    let x_orig_cc_slash = has_x_orig_cc_slash(det);
+    let x_orig_reply_to_slash = has_x_orig_reply_to_slash(det);
+    let disposition_to_slash = has_disposition_to_slash(det);
+    let return_receipt_slash = has_return_receipt_slash(det);
+    let x_orig_cc_backtick = has_x_orig_cc_backtick(det);
+    let x_orig_reply_to_backtick = has_x_orig_reply_to_backtick(det);
+    let disposition_to_backtick = has_disposition_to_backtick(det);
+    let return_receipt_backtick = has_return_receipt_backtick(det);
+    let x_orig_cc_underscore = has_x_orig_cc_underscore(det);
+    let x_orig_reply_to_underscore = has_x_orig_reply_to_underscore(det);
+    let disposition_to_underscore = has_disposition_to_underscore(det);
+    let return_receipt_underscore = has_return_receipt_underscore(det);
+    let x_orig_cc_slash_local = has_x_orig_cc_slash_local(det);
+    let x_orig_reply_to_slash_local = has_x_orig_reply_to_slash_local(det);
+    let disposition_to_slash_local = has_disposition_to_slash_local(det);
+    let return_receipt_slash_local = has_return_receipt_slash_local(det);
+    let x_orig_cc_star_local = has_x_orig_cc_star_local(det);
+    let x_orig_reply_to_star_local = has_x_orig_reply_to_star_local(det);
+    let disposition_to_star_local = has_disposition_to_star_local(det);
+    let return_receipt_star_local = has_return_receipt_star_local(det);
+    let x_orig_cc_dollar_local = has_x_orig_cc_dollar_local(det);
+    let x_orig_reply_to_dollar_local = has_x_orig_reply_to_dollar_local(det);
+    let disposition_to_dollar_local = has_disposition_to_dollar_local(det);
+    let return_receipt_dollar_local = has_return_receipt_dollar_local(det);
+    let x_orig_cc_caret_local = has_x_orig_cc_caret_local(det);
+    let x_orig_reply_to_caret_local = has_x_orig_reply_to_caret_local(det);
+    let disposition_to_caret_local = has_disposition_to_caret_local(det);
+    let return_receipt_caret_local = has_return_receipt_caret_local(det);
+    let x_orig_cc_hash_local = has_x_orig_cc_hash_local(det);
+    let x_orig_reply_to_hash_local = has_x_orig_reply_to_hash_local(det);
+    let disposition_to_hash_local = has_disposition_to_hash_local(det);
+    let return_receipt_hash_local = has_return_receipt_hash_local(det);
+    let x_orig_cc_backtick_local = has_x_orig_cc_backtick_local(det);
+    let x_orig_reply_to_backtick_local = has_x_orig_reply_to_backtick_local(det);
+    let disposition_to_backtick_local = has_disposition_to_backtick_local(det);
+    let return_receipt_backtick_local = has_return_receipt_backtick_local(det);
+    let env_to_bslash = has_env_to_bslash(det);
+    let delivered_to_bslash = has_delivered_to_bslash(det);
+    let env_from_bslash = has_env_from_bslash(det);
+    let errors_to_bslash = has_errors_to_bslash(det);
+    let env_to_colon = has_env_to_colon(det);
+    let delivered_to_colon = has_delivered_to_colon(det);
+    let env_from_colon = has_env_from_colon(det);
+    let errors_to_colon = has_errors_to_colon(det);
+    let env_to_rparen = has_env_to_rparen(det);
+    let delivered_to_rparen = has_delivered_to_rparen(det);
+    let env_from_rparen = has_env_from_rparen(det);
+    let errors_to_rparen = has_errors_to_rparen(det);
+    let env_to_rbracket = has_env_to_rbracket(det);
+    let delivered_to_rbracket = has_delivered_to_rbracket(det);
+    let env_from_rbracket = has_env_from_rbracket(det);
+    let errors_to_rbracket = has_errors_to_rbracket(det);
+    let env_to_rbrace = has_env_to_rbrace(det);
+    let delivered_to_rbrace = has_delivered_to_rbrace(det);
+    let env_from_rbrace = has_env_from_rbrace(det);
+    let errors_to_rbrace = has_errors_to_rbrace(det);
+    let env_to_apos = has_env_to_apos(det);
+    let delivered_to_apos = has_delivered_to_apos(det);
+    let env_from_apos = has_env_from_apos(det);
+    let errors_to_apos = has_errors_to_apos(det);
+    let env_to_qmark = has_env_to_qmark(det);
+    let delivered_to_qmark = has_delivered_to_qmark(det);
+    let env_from_qmark = has_env_from_qmark(det);
+    let errors_to_qmark = has_errors_to_qmark(det);
+    let env_to_plus = has_env_to_plus(det);
+    let delivered_to_plus = has_delivered_to_plus(det);
+    let env_from_plus = has_env_from_plus(det);
+    let errors_to_plus = has_errors_to_plus(det);
+    let env_to_amp = has_env_to_amp(det);
+    let delivered_to_amp = has_delivered_to_amp(det);
+    let env_from_amp = has_env_from_amp(det);
+    let errors_to_amp = has_errors_to_amp(det);
+    let env_to_lbrace = has_env_to_lbrace(det);
+    let delivered_to_lbrace = has_delivered_to_lbrace(det);
+    let env_from_lbrace = has_env_from_lbrace(det);
+    let errors_to_lbrace = has_errors_to_lbrace(det);
+    let env_to_eq = has_env_to_eq(det);
+    let delivered_to_eq = has_delivered_to_eq(det);
+    let env_from_eq = has_env_from_eq(det);
+    let errors_to_eq = has_errors_to_eq(det);
+    let env_to_pipe = has_env_to_pipe(det);
+    let delivered_to_pipe = has_delivered_to_pipe(det);
+    let env_from_pipe = has_env_from_pipe(det);
+    let errors_to_pipe = has_errors_to_pipe(det);
+    let env_to_slash = has_env_to_slash(det);
+    let delivered_to_slash = has_delivered_to_slash(det);
+    let env_from_slash = has_env_from_slash(det);
+    let errors_to_slash = has_errors_to_slash(det);
+    let env_to_backtick = has_env_to_backtick(det);
+    let delivered_to_backtick = has_delivered_to_backtick(det);
+    let env_from_backtick = has_env_from_backtick(det);
+    let errors_to_backtick = has_errors_to_backtick(det);
+    let env_to_tilde = has_env_to_tilde(det);
+    let delivered_to_tilde = has_delivered_to_tilde(det);
+    let env_from_tilde = has_env_from_tilde(det);
+    let errors_to_tilde = has_errors_to_tilde(det);
+    let env_to_underscore = has_env_to_underscore(det);
+    let delivered_to_underscore = has_delivered_to_underscore(det);
+    let env_from_underscore = has_env_from_underscore(det);
+    let errors_to_underscore = has_errors_to_underscore(det);
+    let env_to_caret = has_env_to_caret(det);
+    let delivered_to_caret = has_delivered_to_caret(det);
+    let env_from_caret = has_env_from_caret(det);
+    let errors_to_caret = has_errors_to_caret(det);
+    let env_to_hash = has_env_to_hash(det);
+    let delivered_to_hash = has_delivered_to_hash(det);
+    let env_from_hash = has_env_from_hash(det);
+    let errors_to_hash = has_errors_to_hash(det);
+    let env_to_dollar = has_env_to_dollar(det);
+    let delivered_to_dollar = has_delivered_to_dollar(det);
+    let env_from_dollar = has_env_from_dollar(det);
+    let errors_to_dollar = has_errors_to_dollar(det);
+    let env_to_star = has_env_to_star(det);
+    let delivered_to_star = has_delivered_to_star(det);
+    let env_from_star = has_env_from_star(det);
+    let errors_to_star = has_errors_to_star(det);
+    let env_to_slash_local = has_env_to_slash_local(det);
+    let delivered_to_slash_local = has_delivered_to_slash_local(det);
+    let env_from_slash_local = has_env_from_slash_local(det);
+    let errors_to_slash_local = has_errors_to_slash_local(det);
+    let env_to_star_local = has_env_to_star_local(det);
+    let env_from_star_local = has_env_from_star_local(det);
+    let errors_to_star_local = has_errors_to_star_local(det);
 
-    let env_to_hash_local = has_env_to_hash_local(bytes);
-    let env_from_hash_local = has_env_from_hash_local(bytes);
-    let errors_to_hash_local = has_errors_to_hash_local(bytes);
-    let env_to_quoted_local = has_env_to_quoted_local(bytes);
-    let env_from_quoted_local = has_env_from_quoted_local(bytes);
-    let errors_to_quoted_local = has_errors_to_quoted_local(bytes);
-    let ms_has_attach_bad = has_ms_has_attach_bad(bytes);
-    let tnef_correlator_bad = has_tnef_correlator_bad(bytes);
-    let ms_latency_bad = has_ms_latency_bad(bytes);
-    let mailer_bad = has_mailer_bad(bytes);
+    let env_to_hash_local = has_env_to_hash_local(det);
+    let env_from_hash_local = has_env_from_hash_local(det);
+    let errors_to_hash_local = has_errors_to_hash_local(det);
+    let env_to_quoted_local = has_env_to_quoted_local(det);
+    let env_from_quoted_local = has_env_from_quoted_local(det);
+    let errors_to_quoted_local = has_errors_to_quoted_local(det);
+    let ms_has_attach_bad = has_ms_has_attach_bad(det);
+    let tnef_correlator_bad = has_tnef_correlator_bad(det);
+    let ms_latency_bad = has_ms_latency_bad(det);
+    let mailer_bad = has_mailer_bad(det);
     let autocrypt_bad = has_autocrypt_bad(bytes);
     let openpgp_bad = has_openpgp_bad(bytes);
     let content_return_bad = has_content_return_bad(bytes);
@@ -7744,30 +7789,30 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let spam_status_bad = has_spam_status_bad(bytes);
     let spam_level_bad = has_spam_level_bad(bytes);
     let spam_score_bad = has_spam_score_bad(bytes);
-    let newsgroups_bad = has_newsgroups_bad(bytes);
-    let path_bang_bad = has_path_bang_bad(bytes);
-    let xref_bad = has_xref_bad(bytes);
-    let followup_bad = has_followup_bad(bytes);
-    let orig_recipient_bad = has_orig_recipient_bad(bytes);
-    let final_recipient_bad = has_final_recipient_bad(bytes);
-    let reporting_mta_bad = has_reporting_mta_bad(bytes);
-    let mdn_gateway_bad = has_mdn_gateway_bad(bytes);
-    let remote_mta_bad = has_remote_mta_bad(bytes);
-    let dsn_status_bad = has_dsn_status_bad(bytes);
-    let orig_envid_bad = has_orig_envid_bad(bytes);
-    let diag_code_bad = has_diag_code_bad(bytes);
-    let orig_msgid_bad = has_orig_msgid_bad(bytes);
-    let mdn_disposition_bad = has_mdn_disposition_bad(bytes);
-    let reporting_ua_bad = has_reporting_ua_bad(bytes);
+    let newsgroups_bad = has_newsgroups_bad(det);
+    let path_bang_bad = has_path_bang_bad(det);
+    let xref_bad = has_xref_bad(det);
+    let followup_bad = has_followup_bad(det);
+    let orig_recipient_bad = has_orig_recipient_bad(det);
+    let final_recipient_bad = has_final_recipient_bad(det);
+    let reporting_mta_bad = has_reporting_mta_bad(det);
+    let mdn_gateway_bad = has_mdn_gateway_bad(det);
+    let remote_mta_bad = has_remote_mta_bad(det);
+    let dsn_status_bad = has_dsn_status_bad(det);
+    let orig_envid_bad = has_orig_envid_bad(det);
+    let diag_code_bad = has_diag_code_bad(det);
+    let orig_msgid_bad = has_orig_msgid_bad(det);
+    let mdn_disposition_bad = has_mdn_disposition_bad(det);
+    let reporting_ua_bad = has_reporting_ua_bad(det);
     let msg_context_bad = has_msg_context_bad(bytes);
-    let content_md5_bad = has_content_md5_bad(bytes);
-    let content_lang_bad = has_content_lang_bad(bytes);
-    let content_digest_bad = has_content_digest_bad(bytes);
-    let content_features_bad = has_content_features_bad(bytes);
-    let display_ctrl_bad = has_display_ctrl_bad(bytes);
-    let display_domain_bad = has_display_domain_bad(bytes);
-    let display_punct_bad = has_display_punct_bad(bytes);
-    let display_long_bad = has_display_long_bad(bytes);
+    let content_md5_bad = has_content_md5_bad(det);
+    let content_lang_bad = has_content_lang_bad(det);
+    let content_digest_bad = has_content_digest_bad(det);
+    let content_features_bad = has_content_features_bad(det);
+    let display_ctrl_bad = has_display_ctrl_bad(det);
+    let display_domain_bad = has_display_domain_bad(det);
+    let display_punct_bad = has_display_punct_bad(det);
+    let display_long_bad = has_display_long_bad(det);
     let recv_spf_bad = has_recv_spf_bad(bytes);
     let tls_required_bad = has_tls_required_bad(bytes);
     let req_rcpt_bad = has_req_rcpt_bad(bytes);
@@ -7776,52 +7821,52 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let supersedes_bad = has_supersedes_bad(bytes);
     let cancel_lock_bad = has_cancel_lock_bad(bytes);
     let posting_host_bad = has_posting_host_bad(bytes);
-    let display_raw_nonascii = has_display_raw_nonascii(bytes);
-    let display_ew_danger = has_display_ew_danger(bytes);
-    let display_inner_quote = has_display_inner_quote(bytes);
-    let display_ws_only = has_display_ws_only(bytes);
-    let subject_zero_width = has_subject_zero_width(bytes);
-    let subject_bidi = has_subject_bidi(bytes);
-    let subject_tag_chars = has_subject_tag_chars(bytes);
-    let subject_ctrl = has_subject_ctrl(bytes);
-    let subject_empty = has_subject_empty(bytes);
-    let subject_multi = has_subject_multi(bytes);
-    let subject_reply_chain = has_subject_reply_chain(bytes);
-    let subject_html = has_subject_html(bytes);
-    let subject_raw_nonascii = has_subject_raw_nonascii(bytes);
-    let subject_url = has_subject_url(bytes);
-    let subject_unclosed_comment = has_subject_unclosed_comment(bytes);
-    let subject_long_ew = has_subject_long_ew(bytes);
-    let authres_fail = has_authres_fail(bytes);
-    let authres_bad_verdict = has_authres_bad_verdict(bytes);
-    let arc_cv_bad = has_arc_cv_bad(bytes);
-    let dkim_sig_no_d = has_dkim_sig_no_d(bytes);
-    let dkim_sig_no_s = has_dkim_sig_no_s(bytes);
-    let dkim_sig_no_b = has_dkim_sig_no_b(bytes);
-    let arc_seal_bad_i = has_arc_seal_bad_i(bytes);
-    let arc_chain_incomplete = has_arc_chain_incomplete(bytes);
-    let auto_submitted_bad = has_auto_submitted_bad(bytes);
-    let x_orig_ip_bad = has_x_orig_ip_bad(bytes);
-    let x_auto_suppress_bad = has_x_auto_suppress_bad(bytes);
-    let arrival_time_bad = has_arrival_time_bad(bytes);
-    let thread_index_bad = has_thread_index_bad(bytes);
-    let content_class_bad = has_content_class_bad(bytes);
-    let originator_org_bad = has_originator_org_bad(bytes);
-    let ms_scl_bad = has_ms_scl_bad(bytes);
-    let ms_nmi_bad = has_ms_nmi_bad(bytes);
-    let ms_as_report_bad = has_ms_as_report_bad(bytes);
-    let env_to_backtick_local = has_env_to_backtick_local(bytes);
-    let env_from_backtick_local = has_env_from_backtick_local(bytes);
-    let errors_to_backtick_local = has_errors_to_backtick_local(bytes);
-    let env_to_caret_local = has_env_to_caret_local(bytes);
-    let env_from_caret_local = has_env_from_caret_local(bytes);
-    let errors_to_caret_local = has_errors_to_caret_local(bytes);
-    let env_to_dollar_local = has_env_to_dollar_local(bytes);
-    let env_from_dollar_local = has_env_from_dollar_local(bytes);
-    let errors_to_dollar_local = has_errors_to_dollar_local(bytes);
-    let env_to_unclosed = has_env_to_unclosed(bytes);
-    let env_from_unclosed = has_env_from_unclosed(bytes);
-    let errors_to_unclosed = has_errors_to_unclosed(bytes);
+    let display_raw_nonascii = has_display_raw_nonascii(det);
+    let display_ew_danger = has_display_ew_danger(det);
+    let display_inner_quote = has_display_inner_quote(det);
+    let display_ws_only = has_display_ws_only(det);
+    let subject_zero_width = has_subject_zero_width(det);
+    let subject_bidi = has_subject_bidi(det);
+    let subject_tag_chars = has_subject_tag_chars(det);
+    let subject_ctrl = has_subject_ctrl(det);
+    let subject_empty = has_subject_empty(det);
+    let subject_multi = has_subject_multi(det);
+    let subject_reply_chain = has_subject_reply_chain(det);
+    let subject_html = has_subject_html(det);
+    let subject_raw_nonascii = has_subject_raw_nonascii(det);
+    let subject_url = has_subject_url(det);
+    let subject_unclosed_comment = has_subject_unclosed_comment(det);
+    let subject_long_ew = has_subject_long_ew(det);
+    let authres_fail = has_authres_fail(det);
+    let authres_bad_verdict = has_authres_bad_verdict(det);
+    let arc_cv_bad = has_arc_cv_bad(det);
+    let dkim_sig_no_d = has_dkim_sig_no_d(det);
+    let dkim_sig_no_s = has_dkim_sig_no_s(det);
+    let dkim_sig_no_b = has_dkim_sig_no_b(det);
+    let arc_seal_bad_i = has_arc_seal_bad_i(det);
+    let arc_chain_incomplete = has_arc_chain_incomplete(det);
+    let auto_submitted_bad = has_auto_submitted_bad(det);
+    let x_orig_ip_bad = has_x_orig_ip_bad(det);
+    let x_auto_suppress_bad = has_x_auto_suppress_bad(det);
+    let arrival_time_bad = has_arrival_time_bad(det);
+    let thread_index_bad = has_thread_index_bad(det);
+    let content_class_bad = has_content_class_bad(det);
+    let originator_org_bad = has_originator_org_bad(det);
+    let ms_scl_bad = has_ms_scl_bad(det);
+    let ms_nmi_bad = has_ms_nmi_bad(det);
+    let ms_as_report_bad = has_ms_as_report_bad(det);
+    let env_to_backtick_local = has_env_to_backtick_local(det);
+    let env_from_backtick_local = has_env_from_backtick_local(det);
+    let errors_to_backtick_local = has_errors_to_backtick_local(det);
+    let env_to_caret_local = has_env_to_caret_local(det);
+    let env_from_caret_local = has_env_from_caret_local(det);
+    let errors_to_caret_local = has_errors_to_caret_local(det);
+    let env_to_dollar_local = has_env_to_dollar_local(det);
+    let env_from_dollar_local = has_env_from_dollar_local(det);
+    let errors_to_dollar_local = has_errors_to_dollar_local(det);
+    let env_to_unclosed = has_env_to_unclosed(det);
+    let env_from_unclosed = has_env_from_unclosed(det);
+    let errors_to_unclosed = has_errors_to_unclosed(det);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -105952,6 +105997,28 @@ mod tests {
         assert_eq!(header_section(b"A: 1\r\nB: 2\r\n\r\nbody"), b"A: 1\r\nB: 2");
         assert_eq!(header_section(b"A: 1\nB: 2\n\nbody"), b"A: 1\nB: 2");
         assert_eq!(header_section(b"A: 1\r\nB: 2"), b"A: 1\r\nB: 2");
+    }
+
+    /// D3571: 検出器入力は正規化後 `find("\n\n")` と同じ空行で切る。
+    /// LF/CRLF/混在 (LF+CRLF) の空行を同じ位置で認める。
+    #[test]
+    fn detection_input_は空行までを返す() {
+        assert_eq!(detection_input(b"A: 1\n\nbody"), b"A: 1");
+        assert_eq!(detection_input(b"A: 1\r\n\r\nbody"), b"A: 1");
+        // "\n\r\n" は正規化後 "\n\n" になるため空行として扱う
+        assert_eq!(detection_input(b"A: 1\n\r\nbody"), b"A: 1");
+        // 空行なし = 従来どおり全文
+        assert_eq!(detection_input(b"A: 1\nB: 2"), b"A: 1\nB: 2");
+    }
+
+    /// D3571: 空行直後の行が WSP 始まりなら、検出器側の折り畳み展開で
+    /// `header_end` が末尾になる (= 従来どおり全文走査) ので raw を返す。
+    #[test]
+    fn detection_input_は折り畳み継続で全体を返す() {
+        let raw = b"A: 1\r\n\r\n folded-body-line\r\n";
+        assert_eq!(detection_input(raw), &raw[..]);
+        let raw = b"A: 1\n\n\tbody\r\n";
+        assert_eq!(detection_input(raw), &raw[..]);
     }
 
     /// D570: LF のみのメッセージで本文行が `X-VISA-` で始まっても
