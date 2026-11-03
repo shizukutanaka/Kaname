@@ -49917,6 +49917,9 @@ pub fn has_mailer_bad(raw: &[u8]) -> bool {
 }
 
 fn list_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let text = String::from_utf8_lossy(bytes);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -50027,6 +50030,9 @@ fn has_injection_info_bad(bytes: &[u8]) -> bool {
 }
 
 fn report_opt_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let text = String::from_utf8_lossy(bytes);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -50131,6 +50137,9 @@ fn has_feedback_id_bad(bytes: &[u8]) -> bool {
 }
 
 fn route_opt_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let text = String::from_utf8_lossy(bytes);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -50223,6 +50232,9 @@ fn has_x_received_bad(bytes: &[u8]) -> bool {
 }
 
 fn trace_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let text = String::from_utf8_lossy(bytes);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -50316,6 +50328,9 @@ fn has_auth_sender_bad(bytes: &[u8]) -> bool {
 }
 
 fn filt_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let text = String::from_utf8_lossy(bytes);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -50409,6 +50424,9 @@ fn has_no_archive_bad(bytes: &[u8]) -> bool {
 }
 
 fn spam_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let text = String::from_utf8_lossy(bytes);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -51327,6 +51345,9 @@ pub fn has_display_long_bad(raw: &[u8]) -> bool {
 }
 
 fn auth_resid_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let text = String::from_utf8_lossy(bytes);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -51423,6 +51444,9 @@ fn has_bimi_mark_bad(bytes: &[u8]) -> bool {
 }
 
 fn nntp_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let text = String::from_utf8_lossy(bytes);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -52732,6 +52756,9 @@ pub fn has_ms_as_report_bad(raw: &[u8]) -> bool {
 /// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
 /// 本文全体の文字列化・書換を避けるため。
 fn claims_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
     let lf = bytes.windows(2).position(|w| w == b"\n\n");
     let end = match (crlf, lf) {
@@ -52996,6 +53023,9 @@ fn has_ms_prvs_bad(bytes: &[u8]) -> bool {
 /// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
 /// 本文全体の文字列化・書換を避けるため。
 fn vnd_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
     let lf = bytes.windows(2).position(|w| w == b"\n\n");
     let end = match (crlf, lf) {
@@ -53054,6 +53084,9 @@ fn has_xip_asf_bad(bytes: &[u8]) -> bool {
 /// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
 /// 本文全体の文字列化・書換を避けるため。
 fn dq_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
     let lf = bytes.windows(2).position(|w| w == b"\n\n");
     let end = match (crlf, lf) {
@@ -53205,6 +53238,9 @@ fn has_x_mgun_bad(bytes: &[u8]) -> bool {
 /// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
 /// 本文全体の文字列化・書換を避けるため。
 fn sv_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
     let lf = bytes.windows(2).position(|w| w == b"\n\n");
     let end = match (crlf, lf) {
@@ -53323,6 +53359,9 @@ fn has_x_envsnd_bad(bytes: &[u8]) -> bool {
 /// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
 /// 本文全体の文字列化・書換を避けるため。
 fn mime_meta_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
     let lf = bytes.windows(2).position(|w| w == b"\n\n");
     let end = match (crlf, lf) {
@@ -53467,6 +53506,9 @@ fn has_x_ses_bad(bytes: &[u8]) -> bool {
 /// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
 /// 本文全体の文字列化・書換を避けるため。
 fn x400_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
     let lf = bytes.windows(2).position(|w| w == b"\n\n");
     let end = match (crlf, lf) {
@@ -53607,6 +53649,9 @@ fn has_read_rec_bad(bytes: &[u8]) -> bool {
 /// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
 /// 本文全体の文字列化・書換を避けるため。
 fn ms3_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
     let lf = bytes.windows(2).position(|w| w == b"\n\n");
     let end = match (crlf, lf) {
@@ -53810,6 +53855,9 @@ fn has_xpp_sdet_bad(bytes: &[u8]) -> bool {
 /// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
 /// 本文全体の文字列化・書換を避けるため。
 fn ms2_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
     let lf = bytes.windows(2).position(|w| w == b"\n\n");
     let end = match (crlf, lf) {
@@ -53946,6 +53994,9 @@ fn has_xep_bcf_bad(bytes: &[u8]) -> bool {
 /// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
 /// 本文全体の文字列化・書換を避けるため。
 fn ms_ct_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
     let lf = bytes.windows(2).position(|w| w == b"\n\n");
     let end = match (crlf, lf) {
@@ -54249,6 +54300,9 @@ fn has_x_hamr_bad(bytes: &[u8]) -> bool {
 /// ヘッダ部だけを UTF-8 損失復号する — 大きな本文を持つ入力で
 /// 本文全体の文字列化・書換を避けるため。
 fn ms_org_hdr_text(bytes: &[u8]) -> String {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let crlf = bytes.windows(4).position(|w| w == b"\r\n\r\n");
     let lf = bytes.windows(2).position(|w| w == b"\n\n");
     let end = match (crlf, lf) {
@@ -54397,6 +54451,9 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
 }
 
 fn hdr_end(bytes: &[u8]) -> usize {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let mut end = bytes.len();
     for w in bytes.windows(4) {
         if w == b"\r\n\r\n" {
@@ -54425,6 +54482,9 @@ fn tok_bad(t: &str) -> bool {
 }
 
 fn any_hdr_bad(bytes: &[u8], names: &[&str]) -> bool {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let end = hdr_end(bytes);
     let text = String::from_utf8_lossy(&bytes[..end]);
     for ln in text.lines() {
@@ -55391,6 +55451,9 @@ fn has_xmid_bad(bytes: &[u8]) -> bool {
 }
 
 fn dc_hdr_end(bytes: &[u8]) -> usize {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let mut end = bytes.len();
     for w in bytes.windows(4) {
         if w == b"\r\n\r\n" {
@@ -55411,6 +55474,9 @@ fn dc_hdr_end(bytes: &[u8]) -> usize {
 }
 
 fn dc_each(bytes: &[u8], names: &[&str], mut f: impl FnMut(&str) -> bool) -> bool {
+    // D3573: これらのヘルパーはヘッダ部しか読まないので、先にヘッダ範囲へ切り詰める。
+    // (detection_input は WSP 折り畳み継続時に従来どおり全体を返すため結果は不変)
+    let bytes = detection_input(bytes);
     let end = dc_hdr_end(bytes);
     let text = String::from_utf8_lossy(&bytes[..end]);
     let mut it = text.lines().peekable();
