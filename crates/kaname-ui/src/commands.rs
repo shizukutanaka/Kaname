@@ -12001,7 +12001,7 @@ mod tests {
             \r\n\
             ご請求金額に関する確認はサポート窓口 0120-123-4567 までお電話ください。\r\n\
             解約のお手続きもお電話のみで承っております。\r\n"
-            .into_bytes();
+            .as_bytes();
         let r = analyze_raw_email(&eml).await?;
         assert!(
             r.body.render_risks.iter().any(|s| s.contains("TOAD")),
@@ -12024,7 +12024,7 @@ mod tests {
             \r\n\
             Agenda is here: https://example.org/agenda\r\n\
             連絡先: 03-1234-5678\r\n"
-            .into_bytes();
+            .as_bytes();
         let r = analyze_raw_email(&eml).await?;
         assert!(
             !r.body.render_risks.iter().any(|s| s.contains("TOAD")),
@@ -12157,7 +12157,7 @@ mod tests {
             Content-Type: text/plain; charset=utf-8\r\n\
             \r\n\
             See the attached document.\r\n"
-            .into_bytes();
+            .as_bytes();
         let r = analyze_raw_email(&eml).await?;
         assert!(
             r.body
