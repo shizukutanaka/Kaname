@@ -415,7 +415,7 @@ impl QuishingDefense {
         //    正規 IDN (日本語ドメイン等) も存在するが、未検査では絞り込め
         //    ないため Suspicious (審査してから開け、という水準) に倒す。
         if domain.split('.').any(|l| l.starts_with("xn--"))
-            || domain.chars().any(|c| !c.is_ascii())
+            || !domain.is_ascii()
         {
             return UrlReputation::Suspicious;
         }

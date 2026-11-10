@@ -10657,7 +10657,7 @@ fn has_rfc2231_attachment_params_t(text: &str) -> bool {
                 if after.starts_with('*') {
                     return true;
                 }
-                rest = &after[..];
+                rest = after;
             }
         }
     }
@@ -11041,7 +11041,7 @@ pub fn has_dangerous_charset(raw: &[u8]) -> bool {
             .find(|c: char| c == '"' || c == '\'' || c == ';' || c.is_whitespace())
             .unwrap_or(after.len());
         let val = after[..end].trim_end_matches('*');
-        if DANGEROUS.iter().any(|d| val == *d) {
+        if DANGEROUS.contains(&val) {
             return true;
         }
         rest = &rest[pos + 7..];
@@ -11433,7 +11433,7 @@ pub fn has_invalid_qp_escapes(raw: &[u8]) -> bool {
 }
 
 fn has_invalid_qp_escapes_t(text: &str) -> bool {
-    let bnd = declared_boundary(&text);
+    let bnd = declared_boundary(text);
     let mut in_headers = true;
     let mut qp = false;
     for l in text.lines() {
@@ -11500,7 +11500,7 @@ pub fn has_invalid_base64_body(raw: &[u8]) -> bool {
 }
 
 fn has_invalid_base64_body_t(text: &str) -> bool {
-    let bnd = declared_boundary(&text);
+    let bnd = declared_boundary(text);
     let mut in_headers = true;
     let mut b64 = false;
     for l in text.lines() {
@@ -11730,7 +11730,7 @@ pub fn has_typeless_content_type(raw: &[u8]) -> bool {
 }
 
 fn has_typeless_content_type_t(text: &str) -> bool {
-    let bnd = declared_boundary(&text);
+    let bnd = declared_boundary(text);
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -13362,7 +13362,7 @@ fn has_missing_part_content_type_t(text: &str) -> bool {
     // 宣言済み boundary に一致しない `--` 始まりの行は区切りにしない —
     // 平文メール本文中の `-- ` 署名区切り等が擬似パート run を開始し
     // 「CT 無しパート」と誤検出されるのを防ぐ (宣言が無ければパートは無い)
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     for l in text.to_ascii_lowercase().lines() {
         if l.starts_with("--") {
             let is_delim = l[2..]
@@ -13777,7 +13777,7 @@ fn has_percent_encoded_filename_t(text: &str) -> bool {
         // `filename=`/`name=` (末尾 * を含まない正規キー) の値だけを評価
         for m in l.match_indices('=').map(|(i, _)| i) {
             let key_end = m;
-            let key_start = l[..key_end].rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+            let key_start = l[..key_end].rfind([';', ' ', '\t'])
                 .map(|p| p + 1)
                 .unwrap_or(0);
             let key = l[key_start..key_end].trim();
@@ -13848,7 +13848,7 @@ fn has_unnamed_attachment_t(text: &str) -> bool {
         if l.starts_with("content-disposition:") || l.starts_with("content-type:") {
             for (i, _) in l.match_indices('=') {
                 let ks = l[..i]
-                    .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                    .rfind([';', ' ', '\t'])
                     .map(|p| p + 1)
                     .unwrap_or(0);
                 let key = l[ks..i].trim().trim_end_matches('*').trim_end_matches(
@@ -13913,7 +13913,7 @@ pub fn has_non_ascii_addr_domain(raw: &[u8]) -> bool {
             }
             prev = c;
         }
-        for tok in cleaned.split(|c: char| c == ',' || c == ' ' || c == '\t' || c == '<' || c == '>') {
+        for tok in cleaned.split([',', ' ', '\t', '<', '>']) {
             let Some(at) = tok.rfind('@') else { continue };
             let domain = &tok[at + 1..];
             if domain.bytes().any(|b| b >= 0x80) {
@@ -13965,7 +13965,7 @@ pub fn has_conflicting_filename(raw: &[u8]) -> bool {
         let mut star_segs: Vec<(usize, Vec<u8>)> = Vec::new();
         for (i, _) in lower.match_indices('=') {
             let ks = lower[..i]
-                .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                .rfind([';', ' ', '\t'])
                 .map(|p| p + 1)
                 .unwrap_or(0);
             let key = lower[ks..i].trim();
@@ -14427,7 +14427,7 @@ fn has_ansi_escape_body_t(text: &str) -> bool {
     let mut cte = String::new();
     let mut content_type = String::new();
     let mut enc_body = String::new();
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     for l in text.lines() {
         if in_headers {
             let low = l.to_ascii_lowercase();
@@ -14531,7 +14531,7 @@ fn has_bidi_override_body_t(text: &str) -> bool {
     let mut cte = String::new();
     let mut content_type = String::new();
     let mut enc_body = String::new();
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     // 復号後の UTF-8 中の U+202A–E は E2 80 AA–AE の3バイト列
     fn has_bidi_seq(d: &[u8]) -> bool {
         d.windows(3)
@@ -14668,7 +14668,7 @@ pub fn has_duplicate_content_id(raw: &[u8]) -> bool {
 
 fn has_duplicate_content_id_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     let mut seen: Vec<String> = Vec::new();
     // 外側ヘッダはスキップ — パートヘッダ run 内の content-id/location のみ
     let mut in_part_headers = false;
@@ -14788,7 +14788,7 @@ pub fn has_overlong_base64_line(raw: &[u8]) -> bool {
 fn has_overlong_base64_line_t(text: &str) -> bool {
     let mut in_headers = true;
     let mut cte_b64 = false;
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     for l in text.lines() {
         if in_headers {
             let low = l.to_ascii_lowercase();
@@ -14811,12 +14811,11 @@ fn has_overlong_base64_line_t(text: &str) -> bool {
                             .iter()
                             .any(|d| b.starts_with(d.as_str()) || d.starts_with(b.as_str()))
                 });
-            if is_delim {
-                if !(l.len() > 4 && l.ends_with("--")) {
+            if is_delim
+                && !(l.len() > 4 && l.ends_with("--")) {
                     in_headers = true;
                     cte_b64 = false;
                 }
-            }
             continue;
         }
         if !cte_b64 {
@@ -14876,14 +14875,12 @@ pub fn has_mixed_encoded_charset(raw: &[u8]) -> bool {
                 if !cs.is_empty()
                     && cs.bytes()
                         .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-                {
-                    if !charsets.contains(&cs) {
+                    && !charsets.contains(&cs) {
                         charsets.push(cs);
                         if charsets.len() > 1 {
                             return true;
                         }
                     }
-                }
             }
         }
     }
@@ -14902,7 +14899,7 @@ pub fn has_deep_multipart_nesting(raw: &[u8]) -> bool {
 }
 
 fn has_deep_multipart_nesting_t(text: &str) -> bool {
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     let mut stack: Vec<&str> = Vec::new();
     let mut max_depth = 0usize;
     for l in text.to_ascii_lowercase().lines() {
@@ -14955,7 +14952,7 @@ pub fn has_part_mime_version(raw: &[u8]) -> bool {
 
 fn has_part_mime_version_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     let mut in_part_headers = false;
     for l in text[header_end..].to_ascii_lowercase().lines() {
         if l.starts_with("--") {
@@ -15004,7 +15001,7 @@ pub fn has_enriched_text_type(raw: &[u8]) -> bool {
 
 fn has_enriched_text_type_t(text: &str) -> bool {
     let mut in_headers = true;
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     for l in text.to_ascii_lowercase().lines() {
         if in_headers && l.is_empty() {
             in_headers = false;
@@ -15375,7 +15372,7 @@ pub fn has_leading_continuation(raw: &[u8]) -> bool {
 }
 
 fn has_leading_continuation_t(text: &str) -> bool {
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     if text.starts_with(' ') || text.starts_with('\t') {
         return true;
     }
@@ -15795,7 +15792,7 @@ pub fn has_unbracketed_content_id(raw: &[u8]) -> bool {
 
 fn has_unbracketed_content_id_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     let mut in_part_headers = false;
     for l in text[header_end..].to_ascii_lowercase().lines() {
         if l.starts_with("--") {
@@ -15941,7 +15938,7 @@ pub fn has_part_header_dup(raw: &[u8]) -> bool {
 
 fn has_part_header_dup_t(text: &str) -> bool {
     let header_end = text.find("\n\n").unwrap_or(text.len());
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     let mut in_part_headers = false;
     let mut seen: Vec<&str> = Vec::new();
     for l in text[header_end..].to_ascii_lowercase().lines() {
@@ -16006,7 +16003,7 @@ pub fn has_missing_charset_hibit(raw: &[u8]) -> bool {
 }
 
 fn has_missing_charset_hibit_t(text: &str) -> bool {
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     // 論理行化して各 run の content-type を評価 (to_ascii_lowercase は
     // 非 ASCII バイトをそのまま通すため高位バイト検査にも使える)
     let mut logical = String::with_capacity(text.len());
@@ -16031,11 +16028,10 @@ fn has_missing_charset_hibit_t(text: &str) -> bool {
     let outer_is_text = outer_ct.starts_with("text/");
     let outer_has_charset = outer_ct.contains("charset=");
     let outer_multipart = outer_ct.starts_with("multipart/");
-    if outer_is_text && !outer_has_charset {
-        if lower[header_end..].bytes().any(|b| b >= 0x80) {
+    if outer_is_text && !outer_has_charset
+        && lower[header_end..].bytes().any(|b| b >= 0x80) {
             return true;
         }
-    }
     if !outer_multipart {
         return false;
     }
@@ -16078,11 +16074,10 @@ fn has_missing_charset_hibit_t(text: &str) -> bool {
             }
             continue;
         }
-        if watch_body {
-            if l.bytes().any(|b| b >= 0x80) {
+        if watch_body
+            && l.bytes().any(|b| b >= 0x80) {
                 return true;
             }
-        }
     }
     false
 }
@@ -16313,7 +16308,7 @@ pub fn has_underscore_domain(raw: &[u8]) -> bool {
             }
             prev = c;
         }
-        for tok in cleaned.split(|c: char| c == ',' || c == ' ' || c == '\t' || c == '<' || c == '>') {
+        for tok in cleaned.split([',', ' ', '\t', '<', '>']) {
             let Some(at) = tok.rfind('@') else {
                 continue;
             };
@@ -16592,7 +16587,7 @@ fn has_epilogue_content_t(text: &str) -> bool {
             // 境界はここに入らないので入れ子で誤判定しない)
             if t.len() >= 4 && t.starts_with("--") && t.ends_with("--") {
                 let name = t[2..t.len() - 2].trim_end().to_ascii_lowercase();
-                if bounds.iter().any(|b| *b == name) {
+                if bounds.contains(&name) {
                     seen_close = true;
                 }
             }
@@ -16755,7 +16750,7 @@ pub fn has_system_addr_from(raw: &[u8]) -> bool {
             .or_else(|| l.strip_prefix("sender:"))
             .or_else(|| l.strip_prefix("return-path:"));
         let Some(v) = v else { continue };
-        for tok in v.split(|c: char| c == ',' || c == ' ' || c == '\t' || c == '<' || c == '>' || c == '"') {
+        for tok in v.split([',', ' ', '\t', '<', '>', '"']) {
             let Some(at) = tok.find('@') else {
                 continue;
             };
@@ -16923,7 +16918,7 @@ pub fn has_empty_param_name(raw: &[u8]) -> bool {
         if !is_ct && !is_cd {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         // `;` 直後の空白を飛ばして `=` が来る形を検査する
         let mut rest = v;
         while let Some(sep) = rest.find(';') {
@@ -17235,7 +17230,7 @@ pub fn has_star_boundary(raw: &[u8]) -> bool {
             {
                 return true;
             }
-            rest = &after;
+            rest = after;
         }
     }
     false
@@ -17747,7 +17742,7 @@ pub fn has_part_field_headers(raw: &[u8]) -> bool {
 }
 
 fn has_part_field_headers_t(text: &str) -> bool {
-    let declared = declared_boundaries(&text);
+    let declared = declared_boundaries(text);
     if declared.is_empty() {
         return false;
     }
@@ -19055,7 +19050,7 @@ fn has_mismatched_attachment_type_t(text: &str) -> bool {
         let mut rest = l;
         while let Some(p) = rest.find('=') {
             let ks = rest[..p]
-                .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                .rfind([';', ' ', '\t'])
                 .map(|i| i + 1)
                 .unwrap_or(0);
             let key = rest[ks..p].trim().trim_end_matches(|c: char| {
@@ -19243,7 +19238,7 @@ fn has_dash_filename_t(text: &str) -> bool {
         let mut rest = l;
         while let Some(p) = rest.find('=') {
             let ks = rest[..p]
-                .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                .rfind([';', ' ', '\t'])
                 .map(|i| i + 1)
                 .unwrap_or(0);
             let key = rest[ks..p]
@@ -19290,7 +19285,7 @@ fn has_shell_meta_filename_t(text: &str) -> bool {
         let mut rest = l;
         while let Some(p) = rest.find('=') {
             let ks = rest[..p]
-                .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                .rfind([';', ' ', '\t'])
                 .map(|i| i + 1)
                 .unwrap_or(0);
             let key = rest[ks..p]
@@ -19797,7 +19792,7 @@ fn has_misplaced_attachment_param_t(text: &str) -> bool {
         let mut rest = l;
         while let Some(p) = rest.find('=') {
             let ks = rest[..p]
-                .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                .rfind([';', ' ', '\t'])
                 .map(|i| i + 1)
                 .unwrap_or(0);
             let key = rest[ks..p]
@@ -20056,7 +20051,7 @@ pub fn has_dangling_param_semi(raw: &[u8]) -> bool {
         if !is_ct && !is_cd {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         // クオート内の ; は区切りでない — "..." 区間を潰してから走査
         let mut scrub = String::with_capacity(v.len());
         let mut rest = v;
@@ -20118,7 +20113,7 @@ pub fn has_spaced_param_value(raw: &[u8]) -> bool {
             continue;
         }
         // クオート内の `= ` は値の一部 — "..." 区間を潰してから走査
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let mut scrub = String::with_capacity(v.len());
         let mut rest = v;
         while let Some(q) = rest.find('"') {
@@ -20248,7 +20243,7 @@ pub fn has_bad_star_param(raw: &[u8]) -> bool {
         if !is_ct && !is_cd {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         for seg in v.split(';') {
             let seg = seg.trim();
             let Some(eq) = seg.find('=') else { continue };
@@ -20376,7 +20371,7 @@ pub fn has_nonascii_msgid(raw: &[u8]) -> bool {
         if !is_id {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let mut rest = v;
         while let Some(a) = rest.find('<') {
             let Some(z) = rest[a..].find('>') else { break };
@@ -20423,7 +20418,7 @@ pub fn has_spaced_param_name(raw: &[u8]) -> bool {
             continue;
         }
         // クオート区間を潰す — "a = b" 内の ` =` は値の一部
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let mut scrub = String::with_capacity(v.len());
         let mut rest = v;
         while let Some(q) = rest.find('"') {
@@ -20506,7 +20501,7 @@ fn has_dup_alternative_part_t(text: &str) -> bool {
             let is_closer = l[bound.len()..].trim_start().starts_with("--");
             if in_run {
                 let v = run_ct.take().unwrap_or_else(|| "text/plain".to_string());
-                if seen.iter().any(|s| *s == v) {
+                if seen.contains(&v) {
                     return true;
                 }
                 seen.push(v);
@@ -20529,7 +20524,7 @@ fn has_dup_alternative_part_t(text: &str) -> bool {
     }
     if in_run {
         let v = run_ct.unwrap_or_else(|| "text/plain".to_string());
-        if seen.iter().any(|s| *s == v) {
+        if seen.contains(&v) {
             return true;
         }
     }
@@ -20568,7 +20563,7 @@ pub fn has_mixed_case_param(raw: &[u8]) -> bool {
             continue;
         }
         // クオート区間を潰す
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let mut scrub = String::with_capacity(v.len());
         let mut rest = v;
         while let Some(q) = rest.find('"') {
@@ -20782,7 +20777,7 @@ pub fn has_broken_msgid_spec(raw: &[u8]) -> bool {
         if !is_id {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let mut rest = v;
         while let Some(a) = rest.find('<') {
             let Some(z) = rest[a..].find('>') else { break };
@@ -20962,7 +20957,7 @@ pub fn has_space_separated_param(raw: &[u8]) -> bool {
             continue;
         }
         // 最初の `;` の手前 (= 型トークン区間) に空白+`=` があるか
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let head = v.split(';').next().unwrap_or("");
         // クオート区間を潰してから検査
         let mut scrub = String::with_capacity(head.len());
@@ -20979,7 +20974,7 @@ pub fn has_space_separated_param(raw: &[u8]) -> bool {
         }
         scrub.push_str(rest);
         let scrub = scrub.trim();
-        if let Some(sp) = scrub.find(|c: char| c == ' ' || c == '\t') {
+        if let Some(sp) = scrub.find([' ', '\t']) {
             if scrub[sp..].contains('=') {
                 return true;
             }
@@ -21203,11 +21198,10 @@ pub fn has_b64_html_part(raw: &[u8]) -> bool {
             }
             continue;
         }
-        if collect {
-            if buf.len() < 8192 {
+        if collect
+            && buf.len() < 8192 {
                 buf.push_str(l.trim());
             }
-        }
     }
     if !found && collect && !buf.is_empty() {
         let dec = decode_b64_simple(&buf);
@@ -21298,7 +21292,7 @@ pub fn has_dotless_sender_domain(raw: &[u8]) -> bool {
         if !is_sender {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         // `<…>` の中身があればそれを、無ければ末尾トークンを採る
         let cand = if let (Some(a), Some(z)) = (v.find('<'), v.rfind('>')) {
             &v[a + 1..z.max(a + 1)]
@@ -21370,11 +21364,10 @@ pub fn has_empty_angle_addr(raw: &[u8]) -> bool {
                 in_q = !in_q;
             } else if !in_q && b == b'(' {
                 in_c = 1;
-            } else if !in_q && b == b'<' {
-                if v.as_bytes().get(i + 1) == Some(&b'>') {
+            } else if !in_q && b == b'<'
+                && v.as_bytes().get(i + 1) == Some(&b'>') {
                     return true;
                 }
-            }
             prev = b;
         }
     }
@@ -21496,7 +21489,7 @@ fn has_raw_nonascii_filename_t(text: &str) -> bool {
                 continue;
             }
             let v = part[eq + 1..].trim().trim_matches('"');
-            if v.chars().any(|c| !c.is_ascii()) {
+            if !v.is_ascii() {
                 return true;
             }
         }
@@ -21651,7 +21644,7 @@ pub fn has_multi_at_msgid(raw: &[u8]) -> bool {
         if !is_id {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let mut rest = v;
         while let Some(a) = rest.find('<') {
             let Some(z) = rest[a..].find('>') else { break };
@@ -21754,7 +21747,7 @@ pub fn has_spaced_msgid(raw: &[u8]) -> bool {
         if !is_id {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let mut rest = v;
         while let Some(a) = rest.find('<') {
             let Some(z) = rest[a..].find('>') else { break };
@@ -22011,7 +22004,7 @@ pub fn has_unclosed_msgid(raw: &[u8]) -> bool {
         if !is_id {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let mut rest = v;
         while let Some(a) = rest.find('<') {
             match rest[a..].find('>') {
@@ -23716,7 +23709,7 @@ pub fn has_special_local_char(raw: &[u8]) -> bool {
             }
             prev = b;
         }
-        for part in seg.split(|c: char| c == ',' || c == '<' || c == '>') {
+        for part in seg.split([',', '<', '>']) {
             for tok in part.split_whitespace() {
                 let Some(at) = tok.find('@') else { continue };
                 let local = &tok[..at];
@@ -23757,7 +23750,7 @@ fn has_digit_tld_addr_t(text: &str) -> bool {
         }
         let v = &l[colon + 1..];
         for seg in v.split(',') {
-            let seg = seg.trim_end_matches(|c: char| c == '>' || c == ')' || c == ';');
+            let seg = seg.trim_end_matches(['>', ')', ';']);
             let Some(at) = seg.rfind('@') else { continue };
             let dom = seg[at + 1..]
                 .trim_end_matches(|c: char| c.is_whitespace() || c == '>' || c == ')');
@@ -25339,7 +25332,7 @@ fn has_comma_media_value_t(text: &str) -> bool {
         if !is_mime {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let tok = v.split(';').next().unwrap_or(v);
         // クオート区間を潰してから `,` を探す
         let mut scrub = String::with_capacity(tok.len());
@@ -25542,7 +25535,7 @@ pub fn has_lf_only_headers(raw: &[u8]) -> bool {
         i += 1;
     }
     let headers = &raw[..header_end];
-    headers.iter().any(|&b| b == b'\n')
+    headers.contains(&b'\n')
         && !headers.windows(2).any(|w| w == [b'\r', b'\n'])
 }
 
@@ -25643,7 +25636,7 @@ fn has_unterm_param_quote_t(text: &str) -> bool {
             continue;
         }
         // 値部の `"` を数える — `\\"` のエスケープは数えない
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let mut quotes = 0usize;
         let mut prev = b' ';
         for &b in v.as_bytes() {
@@ -25695,7 +25688,7 @@ pub fn has_bare_list_url(raw: &[u8]) -> bool {
         if !is_list {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         if v.is_empty() {
             continue;
         }
@@ -26053,7 +26046,7 @@ pub fn has_unclosed_list_angle(raw: &[u8]) -> bool {
         if !is_list {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         let lt = v.bytes().filter(|&b| b == b'<').count();
         let gt = v.bytes().filter(|&b| b == b'>').count();
         if lt != gt {
@@ -26357,7 +26350,7 @@ pub fn has_star_param_no_apostrophe(raw: &[u8]) -> bool {
         if !is_ct {
             continue;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         // クオート区間を潰してから `;` 分割
         let mut scrub = String::with_capacity(v.len());
         let mut rest = v;
@@ -26828,11 +26821,10 @@ pub fn has_bad_domain_char(raw: &[u8]) -> bool {
                 if !in_q && !in_a {
                     after_at = false;
                 }
-            } else if after_at && !in_q && !in_lit {
-                if BAD.contains(&b) {
+            } else if after_at && !in_q && !in_lit
+                && BAD.contains(&b) {
                     return true;
                 }
-            }
             prev = b;
         }
     }
@@ -27280,7 +27272,7 @@ pub fn has_msgid_nonascii(raw: &[u8]) -> bool {
         let mut rest = v;
         while let Some(a) = rest.find('<') {
             let Some(z) = rest[a..].find('>') else { break };
-            if rest[a + 1..a + z].chars().any(|c| !c.is_ascii()) {
+            if !rest[a + 1..a + z].is_ascii() {
                 return true;
             }
             rest = &rest[a + z + 1..];
@@ -27986,7 +27978,7 @@ fn has_raw_param_nonascii_t(text: &str) -> bool {
             if key == "name" || key == "filename" || key.ends_with("*") {
                 continue; // name/filename は D1510、* 形は D1524
             }
-            if seg[eq + 1..].chars().any(|c| !c.is_ascii()) {
+            if !seg[eq + 1..].is_ascii() {
                 return true;
             }
         }
@@ -28197,7 +28189,7 @@ pub fn has_long_month(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         for tok in l[colon + 1..].split_whitespace() {
@@ -28406,7 +28398,7 @@ pub fn has_split_zone(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let toks: Vec<&str> = l[colon + 1..].split_whitespace().collect();
@@ -28453,7 +28445,7 @@ pub fn has_date_no_year(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let v = &l[colon + 1..];
@@ -28498,7 +28490,7 @@ pub fn has_dash_date(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         for t in l[colon + 1..].split_whitespace() {
@@ -28654,7 +28646,7 @@ pub fn has_date_two_times(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let mut n = 0u32;
@@ -28819,7 +28811,7 @@ pub fn has_two_daynames(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let mut n = 0u32;
@@ -28904,7 +28896,7 @@ pub fn has_unsigned_zone(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let mut seen_time = false;
@@ -29003,7 +28995,7 @@ pub fn has_year_first_date(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let mut toks = l[colon + 1..].split_whitespace().peekable();
@@ -29050,7 +29042,7 @@ pub fn has_ampm_time(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let mut seen_time = false;
@@ -29209,7 +29201,7 @@ pub fn has_slash_date(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         for t in l[colon + 1..].split_whitespace() {
@@ -29313,7 +29305,7 @@ pub fn has_bad_zone_len(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         for t in l[colon + 1..].split_whitespace() {
@@ -29357,7 +29349,7 @@ pub fn has_dot_date(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         for t in l[colon + 1..].split_whitespace() {
@@ -29406,7 +29398,7 @@ pub fn has_two_num_zones(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let mut n = 0u32;
@@ -29454,7 +29446,7 @@ pub fn has_received_no_from(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let v = l[colon + 1..].to_ascii_lowercase();
@@ -29495,7 +29487,7 @@ pub fn has_zone_colon(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         for t in l[colon + 1..].split_whitespace() {
@@ -29542,7 +29534,7 @@ pub fn has_two_years(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let mut n = 0u32;
@@ -29627,7 +29619,7 @@ pub fn has_zone_two_signs(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         for t in l[colon + 1..].split_whitespace() {
@@ -29671,7 +29663,7 @@ pub fn has_date_time_only(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let v = l[colon + 1..].trim();
@@ -29903,7 +29895,7 @@ pub fn has_zone_alpha(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         for t in l[colon + 1..].split_whitespace() {
@@ -29947,7 +29939,7 @@ pub fn has_zone_sign_only(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         for t in l[colon + 1..].split_whitespace() {
@@ -30052,7 +30044,7 @@ pub fn has_fused_date(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         for t in l[colon + 1..].split_whitespace() {
@@ -30088,7 +30080,7 @@ pub fn has_empty_received(raw: &[u8]) -> bool {
             continue;
         }
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         if l[colon + 1..].trim().is_empty() {
@@ -30125,7 +30117,7 @@ pub fn has_received_multi_from(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let v = l[colon + 1..].to_ascii_lowercase();
@@ -30167,7 +30159,7 @@ pub fn has_date_two_days(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let mut days = 0u32;
@@ -30221,7 +30213,7 @@ pub fn has_received_semi_only(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let v = l[colon + 1..].trim();
@@ -30261,7 +30253,7 @@ pub fn has_received_no_by(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let v = l[colon + 1..].to_ascii_lowercase();
@@ -30271,7 +30263,7 @@ pub fn has_received_no_by(raw: &[u8]) -> bool {
         let has_clause = toks
             .iter()
             .any(|t| matches!(*t, "from" | "with" | "id" | "for" | "via"));
-        if has_clause && !toks.iter().any(|t| *t == "by") {
+        if has_clause && !toks.contains(&"by") {
             return true;
         }
     }
@@ -30309,7 +30301,7 @@ pub fn has_date_two_months(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let n = l[colon + 1..]
@@ -30392,7 +30384,7 @@ pub fn has_multi_semi_received(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let v = &l[colon + 1..];
@@ -30431,12 +30423,12 @@ pub fn has_numeric_dow(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         let v = &l[colon + 1..];
         // 「数字,」の形 (曜日位置) — 先頭トークンが数字+`,`
-        let first_tok = v.trim_start().split_whitespace().next().unwrap_or("");
+        let first_tok = v.split_whitespace().next().unwrap_or("");
         let t = first_tok.trim_end_matches(',');
         if first_tok.ends_with(',')
             && !t.is_empty()
@@ -30621,7 +30613,7 @@ pub fn has_year_5digit(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
             continue;
         }
         for t in l[colon + 1..].split_whitespace() {
@@ -30730,7 +30722,7 @@ fn has_boundary_case_collide_t(text: &str) -> bool {
     let mut vals: Vec<String> = Vec::new();
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-type") {
             continue;
         }
         let mut rest = &l[colon + 1..];
@@ -30822,7 +30814,7 @@ pub fn has_received_from_empty(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         // `;` より前が節部 — `from` が末尾なら値無し、次が節語なら値無し
@@ -30908,7 +30900,7 @@ fn has_ct_no_subtype_t(text: &str) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-type") {
             continue;
         }
         let body = l[colon + 1..].split(';').next().unwrap_or("").trim();
@@ -30995,7 +30987,7 @@ pub fn has_received_multi_by(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31034,7 +31026,7 @@ fn has_cd_empty_type_t(text: &str) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-disposition" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-disposition") {
             continue;
         }
         let v = &l[colon + 1..];
@@ -31068,7 +31060,7 @@ pub fn has_received_from_quoted(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31113,7 +31105,7 @@ pub fn has_received_from_at(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31157,7 +31149,7 @@ pub fn has_received_multi_with(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31194,7 +31186,7 @@ pub fn has_received_multi_for(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31276,7 +31268,7 @@ pub fn has_padded_cte(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-transfer-encoding") {
             continue;
         }
         // コロン直後の標準的な SP 一つを除いた残りが trim と一致しない = 余分な空白
@@ -31310,7 +31302,7 @@ pub fn has_received_multi_id(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31391,7 +31383,7 @@ pub fn has_two_cte_values(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-transfer-encoding") {
             continue;
         }
         let n = l[colon + 1..]
@@ -31428,7 +31420,7 @@ fn has_alnumless_boundary_t(text: &str) -> bool {
         }
     }
     for l in logical.lines() {
-        let mut rest = &l[..];
+        let mut rest = l;
         while let Some(p) = rest.to_ascii_lowercase().find("boundary=") {
             let after = &rest[p + 9..];
             let val: &str = if let Some(q) = after.strip_prefix('"') {
@@ -31471,7 +31463,7 @@ pub fn has_received_multi_via(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31510,7 +31502,7 @@ pub fn has_received_by_empty(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31553,7 +31545,7 @@ fn has_cd_two_types_t(text: &str) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-disposition" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-disposition") {
             continue;
         }
         let before_semi = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31644,7 +31636,7 @@ pub fn has_received_with_empty(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31687,7 +31679,7 @@ pub fn has_received_id_empty(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31771,7 +31763,7 @@ pub fn has_received_for_empty(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -31815,7 +31807,7 @@ pub fn has_received_via_empty(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -32094,7 +32086,7 @@ pub fn has_ct_empty_subtype(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-type") {
             continue;
         }
         let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
@@ -32136,7 +32128,7 @@ pub fn has_cte_comma(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-transfer-encoding") {
             continue;
         }
         if l[colon + 1..].contains(',') {
@@ -32257,7 +32249,7 @@ pub fn has_received_date_empty(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let v = &l[colon + 1..];
@@ -32453,7 +32445,7 @@ pub fn has_received_port(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = &l[colon + 1..].split(';').next().unwrap_or("");
@@ -32555,7 +32547,7 @@ pub fn has_received_semi_lead(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let v = l[colon + 1..].trim_start();
@@ -32594,7 +32586,7 @@ pub fn has_cte_upper(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-transfer-encoding") {
             continue;
         }
         if l[colon + 1..].bytes().any(|b| b.is_ascii_uppercase()) {
@@ -32791,7 +32783,7 @@ pub fn has_ct_double_slash(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-type") {
             continue;
         }
         let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
@@ -32842,7 +32834,7 @@ pub fn has_boundary_inner_ws(raw: &[u8]) -> bool {
             }
             let v = p[eq + 1..].trim();
             // 裸値 (クオートなし) で内部空白
-            if !v.starts_with('"') && v.contains(|c: char| c == ' ' || c == '\t') {
+            if !v.starts_with('"') && v.contains([' ', '\t']) {
                 return true;
             }
         }
@@ -33185,7 +33177,7 @@ pub fn has_cte_semi_lead(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-transfer-encoding") {
             continue;
         }
         let v = l[colon + 1..].trim_start();
@@ -33264,7 +33256,7 @@ pub fn has_ct_eq_type(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-type") {
             continue;
         }
         let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
@@ -33303,7 +33295,7 @@ pub fn has_cd_eq_type(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-disposition" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-disposition") {
             continue;
         }
         let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
@@ -33389,7 +33381,7 @@ pub fn has_addr_amp_local(raw: &[u8]) -> bool {
             } else if b == b'@' {
                 // ローカル部 = @ 直前の非空白ラン
                 let local = seg.trim_end();
-                let local = local.rsplit(|c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':').next().unwrap_or("");
+                let local = local.rsplit([' ', '\t', ',', ';', '<', ':']).next().unwrap_or("");
                 if local.contains('&') {
                     return true;
                 }
@@ -33430,7 +33422,7 @@ pub fn has_ct_colon_type(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-type") {
             continue;
         }
         let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
@@ -33518,7 +33510,7 @@ pub fn has_same_addr_dup(raw: &[u8]) -> bool {
             prev = b;
         }
         let mut seen = std::collections::HashSet::new();
-        for tok in scrub.split(|c: char| c == ',' || c == ';') {
+        for tok in scrub.split([',', ';']) {
             for w in tok.split_whitespace() {
                 let w = w.trim_matches(|c: char| c == '<' || c == '>' || c == '(' || c == ')');
                 if w.contains('@') && !seen.insert(w.to_ascii_lowercase()) {
@@ -33604,7 +33596,7 @@ pub fn has_addr_tilde_local(raw: &[u8]) -> bool {
             } else if b == b'@' {
                 let local = seg
                     .trim_end()
-                    .rsplit(|c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':')
+                    .rsplit([' ', '\t', ',', ';', '<', ':'])
                     .next()
                     .unwrap_or("");
                 if local.contains('~') {
@@ -33647,7 +33639,7 @@ pub fn has_ct_paren(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-type") {
             continue;
         }
         let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
@@ -33702,7 +33694,7 @@ pub fn has_cd_colon_type(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-disposition" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-disposition") {
             continue;
         }
         let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
@@ -33744,7 +33736,7 @@ pub fn has_cd_paren(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-disposition" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-disposition") {
             continue;
         }
         let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
@@ -33845,7 +33837,7 @@ pub fn has_addr_brace_local(raw: &[u8]) -> bool {
             } else if b == b'@' {
                 let local = seg
                     .trim_end()
-                    .rsplit(|c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':')
+                    .rsplit([' ', '\t', ',', ';', '<', ':'])
                     .next()
                     .unwrap_or("");
                 if local.contains('{') || local.contains('}') {
@@ -33888,7 +33880,7 @@ pub fn has_cte_paren(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("content-transfer-encoding") {
             continue;
         }
         let v = l[colon + 1..].trim();
@@ -34031,7 +34023,7 @@ pub fn has_addr_caret_local(raw: &[u8]) -> bool {
             } else if b == b'@' {
                 let local = seg
                     .trim_end()
-                    .rsplit(|c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':')
+                    .rsplit([' ', '\t', ',', ';', '<', ':'])
                     .next()
                     .unwrap_or("");
                 if local.contains('^') {
@@ -34120,7 +34112,7 @@ pub fn has_addr_backtick_local(raw: &[u8]) -> bool {
             } else if b == b'@' {
                 let local = seg
                     .trim_end()
-                    .rsplit(|c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':')
+                    .rsplit([' ', '\t', ',', ';', '<', ':'])
                     .next()
                     .unwrap_or("");
                 if local.contains('`') {
@@ -34213,7 +34205,7 @@ pub fn has_received_by_at(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+        if !l[..colon].trim_end().eq_ignore_ascii_case("received") {
             continue;
         }
         let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
@@ -35592,7 +35584,7 @@ pub fn has_addr_pipe_local(raw: &[u8]) -> bool {
                     &v[..i]
                 };
                 let local = seg.trim_end().rsplit(
-                    |c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':',
+                    [' ', '\t', ',', ';', '<', ':'],
                 ).next().unwrap_or("");
                 if local.contains('|') {
                     return true;
@@ -35809,7 +35801,7 @@ pub fn has_addr_dollar_local(raw: &[u8]) -> bool {
                     &v[..i]
                 };
                 let local = seg.trim_end().rsplit(
-                    |c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':',
+                    [' ', '\t', ',', ';', '<', ':'],
                 ).next().unwrap_or("");
                 if local.contains('$') {
                     return true;
@@ -35883,7 +35875,7 @@ pub fn has_addr_quoted_local(raw: &[u8]) -> bool {
             {
                 return false;
             }
-            s[1..].find('"').map_or(false, |i| s[i + 2..].starts_with('@'))
+            s[1..].find('"').is_some_and(|i| s[i + 2..].starts_with('@'))
         });
         if hit {
             return true;
@@ -36150,7 +36142,7 @@ pub fn has_addr_pct_local(raw: &[u8]) -> bool {
                     &v[..i]
                 };
                 let local = seg.trim_end().rsplit(
-                    |c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':',
+                    [' ', '\t', ',', ';', '<', ':'],
                 ).next().unwrap_or("");
                 if local.contains('%') {
                     return true;
@@ -36375,7 +36367,7 @@ pub fn has_addr_hash_local(raw: &[u8]) -> bool {
                     &v[..i]
                 };
                 let local = seg.trim_end().rsplit(
-                    |c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':',
+                    [' ', '\t', ',', ';', '<', ':'],
                 ).next().unwrap_or("");
                 if local.contains('#') {
                     return true;
@@ -36599,7 +36591,7 @@ pub fn has_addr_star_local(raw: &[u8]) -> bool {
                     &v[..i]
                 };
                 let local = seg.trim_end().rsplit(
-                    |c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':',
+                    [' ', '\t', ',', ';', '<', ':'],
                 ).next().unwrap_or("");
                 if local.contains('*') {
                     return true;
@@ -36824,7 +36816,7 @@ pub fn has_addr_apos_local(raw: &[u8]) -> bool {
                     &v[..i]
                 };
                 let local = seg.trim_end().rsplit(
-                    |c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':',
+                    [' ', '\t', ',', ';', '<', ':'],
                 ).next().unwrap_or("");
                 if local.contains('\'') {
                     return true;
@@ -37894,10 +37886,9 @@ pub fn has_msgid_lparen_lead(raw: &[u8]) -> bool {
             continue;
         }
         let v = l[colon + 1..].trim();
-        if v.starts_with('(') {
+        if let Some(rest) = v.strip_prefix('(') {
             // `(<a…` — 開き括弧の内側に `<` が来る形のみ対象。
             // `(note)<a>` は合法なコメント+識別子なので不発火。
-            let rest = &v[1..];
             if let Some(p) = rest.find('<') {
                 match rest.find(')') {
                     None => return true,
@@ -47661,7 +47652,7 @@ pub fn has_confirm_reading_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -47722,7 +47713,7 @@ pub fn has_resent_reply_to_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -47791,7 +47782,7 @@ pub fn has_apparently_resent_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -47856,7 +47847,7 @@ pub fn has_x_orig_rcpt_to_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -47918,7 +47909,7 @@ pub fn has_confirm_reading_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -47979,7 +47970,7 @@ pub fn has_resent_reply_to_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48048,7 +48039,7 @@ pub fn has_apparently_resent_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48113,7 +48104,7 @@ pub fn has_x_orig_rcpt_to_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48170,7 +48161,7 @@ pub fn has_confirm_reading_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48231,7 +48222,7 @@ pub fn has_resent_reply_to_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48300,7 +48291,7 @@ pub fn has_apparently_resent_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48363,7 +48354,7 @@ pub fn has_confirm_reading_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48425,7 +48416,7 @@ pub fn has_resent_reply_to_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48492,7 +48483,7 @@ pub fn has_apparently_resent_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48557,7 +48548,7 @@ pub fn has_x_orig_rcpt_to_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48623,7 +48614,7 @@ pub fn has_confirm_reading_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48685,7 +48676,7 @@ pub fn has_resent_reply_to_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48752,7 +48743,7 @@ pub fn has_apparently_resent_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48817,7 +48808,7 @@ pub fn has_x_orig_rcpt_to_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48879,7 +48870,7 @@ pub fn has_confirm_reading_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -48941,7 +48932,7 @@ pub fn has_resent_reply_to_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -49008,7 +48999,7 @@ pub fn has_apparently_resent_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -49073,7 +49064,7 @@ pub fn has_x_orig_rcpt_to_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -49135,7 +49126,7 @@ pub fn has_confirm_reading_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -49197,7 +49188,7 @@ pub fn has_resent_reply_to_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -49264,7 +49255,7 @@ pub fn has_apparently_resent_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -49329,7 +49320,7 @@ pub fn has_x_orig_rcpt_to_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -49595,7 +49586,7 @@ pub fn has_confirm_reading_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -49657,7 +49648,7 @@ pub fn has_resent_reply_to_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -49724,7 +49715,7 @@ pub fn has_apparently_resent_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -49789,7 +49780,7 @@ pub fn has_x_orig_rcpt_to_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -49835,7 +49826,7 @@ pub fn has_ms_has_attach_bad(raw: &[u8]) -> bool {
         if !(l.starts_with("x-ms-has-attach:") || l.starts_with("x-has-attach:")) {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         !(v == "yes" || v == "no")
     })
 }
@@ -49861,7 +49852,7 @@ pub fn has_tnef_correlator_bad(raw: &[u8]) -> bool {
         if !(l.starts_with("x-ms-tnef-correlator:") || l.starts_with("x-tnefcorrelator:")) {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         v.is_empty()
             || v.len() < 8
             || !v.chars()
@@ -49892,7 +49883,7 @@ pub fn has_ms_latency_bad(raw: &[u8]) -> bool {
         {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         let t: Vec<&str> = v.split(':').collect();
         let ok = t.len() == 3
             && t.iter().take(2).all(|p| p.len() == 2 && p.chars().all(|c| c.is_ascii_digit()))
@@ -49929,7 +49920,7 @@ pub fn has_mailer_bad(raw: &[u8]) -> bool {
         if !(l.starts_with("x-mailer:") || l.starts_with("user-agent:") || l.starts_with("x-mimeole:")) {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         v.is_empty()
             || v.chars().any(|c| !c.is_ascii() || (c.is_ascii_control() && c != '\t'))
     })
@@ -50599,7 +50590,7 @@ pub fn has_path_bang_bad(raw: &[u8]) -> bool {
         };
         v.is_empty()
             || v.contains('@')
-            || !v.split('!').all(|t| node_ok(t))
+            || !v.split('!').all(node_ok)
     })
 }
 
@@ -51267,7 +51258,7 @@ pub fn has_display_ctrl_bad(raw: &[u8]) -> bool {
         if !is_addr_header_name(&name) {
             return false;
         }
-        display_phrase(&l[colon + 1..]).map(|p| bad(p)).unwrap_or(false)
+        display_phrase(&l[colon + 1..]).map(&bad).unwrap_or(false)
     })
 }
 
@@ -51396,7 +51387,7 @@ fn has_recv_spf_bad(bytes: &[u8]) -> bool {
             .or_else(|| low.strip_prefix("x-received-spf:"));
         if let Some(v) = hit {
             let v = v.trim();
-            let first = v.split(|c: char| c == ' ' || c == '\t').next().unwrap_or("");
+            let first = v.split([' ', '\t']).next().unwrap_or("");
             if !VOCAB.contains(&first) {
                 return true;
             }
@@ -51491,7 +51482,7 @@ fn has_control_bad(bytes: &[u8]) -> bool {
         if let Some(v) = low.strip_prefix("control:") {
             let v = v.trim();
             // 制御動詞 空白 引数 の形
-            let mut it = v.splitn(2, |c: char| c == ' ' || c == '\t');
+            let mut it = v.splitn(2, [' ', '\t']);
             let verb = it.next().unwrap_or("");
             let args = it.next().map(str::trim).unwrap_or("");
             let verb_ok = !verb.is_empty()
@@ -51535,7 +51526,7 @@ fn has_cancel_lock_bad(bytes: &[u8]) -> bool {
             .or_else(|| low.strip_prefix("cancel-key:"));
         if let Some(v) = hit {
             let v = v.trim();
-            let toks: Vec<&str> = v.split(|c: char| c == ' ' || c == '\t')
+            let toks: Vec<&str> = v.split([' ', '\t'])
                 .filter(|t| !t.is_empty()).collect();
             if toks.is_empty() {
                 return true;
@@ -51612,7 +51603,7 @@ pub fn has_display_raw_nonascii(raw: &[u8]) -> bool {
             return false;
         }
         phrase_head(&l[colon + 1..])
-            .map(|p| p.chars().any(|c| !c.is_ascii()))
+            .map(|p| !p.is_ascii())
             .unwrap_or(false)
     })
 }
@@ -52044,7 +52035,7 @@ pub fn has_subject_raw_nonascii(raw: &[u8]) -> bool {
             return false;
         }
         let v = l[8..].trim_start();
-        v.chars().any(|c| !c.is_ascii())
+        !v.is_ascii()
     })
 }
 
@@ -52339,7 +52330,7 @@ pub fn has_dkim_sig_no_s(raw: &[u8]) -> bool {
         if !(l.starts_with("dkim-signature:") || l.starts_with("domainkey-signature:")) {
             return false;
         }
-        let rest = l.splitn(2, ':').nth(1).unwrap_or("");
+        let rest = l.split_once(':').map(|x| x.1).unwrap_or("");
         !rest.split(';').any(|p| { let mut kv = p.trim_start().splitn(2, '='); kv.next().map(|k| k.trim() == "s").unwrap_or(false) && kv.next().is_some() })
     })
 }
@@ -52365,7 +52356,7 @@ pub fn has_dkim_sig_no_b(raw: &[u8]) -> bool {
         if !(l.starts_with("dkim-signature:") || l.starts_with("domainkey-signature:")) {
             return false;
         }
-        let rest = l.splitn(2, ':').nth(1).unwrap_or("");
+        let rest = l.split_once(':').map(|x| x.1).unwrap_or("");
         !rest.split(';').any(|p| { let mut kv = p.trim_start().splitn(2, '='); kv.next().map(|k| k.trim() == "b").unwrap_or(false) && kv.next().is_some() })
     })
 }
@@ -52391,7 +52382,7 @@ pub fn has_arc_seal_bad_i(raw: &[u8]) -> bool {
         if !(l.starts_with("arc-seal:") || l.starts_with("x-arc-seal:")) {
             return false;
         }
-        let rest = l.splitn(2, ':').nth(1).unwrap_or("");
+        let rest = l.split_once(':').map(|x| x.1).unwrap_or("");
         let get = |tag: &str| -> Option<String> {
             rest.split(';').find_map(|p| {
                 let mut kv = p.trim_start().splitn(2, '=');
@@ -52458,10 +52449,8 @@ pub fn has_auto_submitted_bad(raw: &[u8]) -> bool {
         if !l.starts_with("auto-submitted:") {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
-        !["auto-generated", "auto-replied", "auto-forwarded", "no"]
-            .iter()
-            .any(|k| v == *k)
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
+        !["auto-generated", "auto-replied", "auto-forwarded", "no"].contains(&v)
     })
 }
 
@@ -52486,7 +52475,7 @@ pub fn has_x_orig_ip_bad(raw: &[u8]) -> bool {
         if !l.starts_with("x-originating-ip:") {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         let bracketed = v.starts_with('[') && v.ends_with(']');
         let ipv4 = bracketed
             && v[1..v.len() - 1].split('.').count() == 4
@@ -52519,13 +52508,11 @@ pub fn has_x_auto_suppress_bad(raw: &[u8]) -> bool {
         if !l.starts_with("x-auto-response-suppress:") {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("");
         v.split(',').any(|t| {
             let t = t.trim();
             t.is_empty()
-                || !["oof", "autoreply", "rn", "nrn", "dr", "ndr", "all", "none"]
-                    .iter()
-                    .any(|k| t == *k)
+                || !["oof", "autoreply", "rn", "nrn", "dr", "ndr", "all", "none"].contains(&t)
         })
     })
 }
@@ -52555,7 +52542,7 @@ pub fn has_arrival_time_bad(raw: &[u8]) -> bool {
         {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         let w: Vec<&str> = v.split_whitespace().collect();
         let ok = w.len() >= 4
             && w[0].len() == 2
@@ -52596,7 +52583,7 @@ pub fn has_thread_index_bad(raw: &[u8]) -> bool {
         if !l.starts_with("thread-index:") {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         v.len() < 24
             || !v.chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
@@ -52624,7 +52611,7 @@ pub fn has_content_class_bad(raw: &[u8]) -> bool {
         if !(l.starts_with("content-class:") || l.starts_with("x-content-class:")) {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         !(v.starts_with("urn:content-classes:") && v.len() > "urn:content-classes:".len())
     })
 }
@@ -52650,7 +52637,7 @@ pub fn has_originator_org_bad(raw: &[u8]) -> bool {
         if !(l.starts_with("x-originatororg:") || l.starts_with("x-originator-org:")) {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         v.is_empty()
             || v.contains(' ')
             || v.contains('@')
@@ -52682,7 +52669,7 @@ pub fn has_ms_scl_bad(raw: &[u8]) -> bool {
         if !l.starts_with("x-ms-exchange-organization-scl:") {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         match v.parse::<i32>() {
             Ok(n) => !(-1..=9).contains(&n),
             Err(_) => true,
@@ -52713,7 +52700,7 @@ pub fn has_ms_nmi_bad(raw: &[u8]) -> bool {
         {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         let parts: Vec<&str> = v.split('-').collect();
         let lens = [8usize, 4, 4, 4, 12];
         !(parts.len() == 5
@@ -52747,7 +52734,7 @@ pub fn has_ms_as_report_bad(raw: &[u8]) -> bool {
         {
             return false;
         }
-        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        let v = l.split_once(':').map(|x| x.1).unwrap_or("").trim();
         v.is_empty()
             || v.split(';').any(|p| {
                 let p = p.trim();
@@ -52992,7 +52979,7 @@ fn has_ms_ct_oat_bad(bytes: &[u8]) -> bool {
         if let Some(v) =
             low.strip_prefix("x-ms-exchange-crosstenant-originalarrivaltime:")
         {
-            let w: Vec<&str> = v.trim().split_whitespace().collect();
+            let w: Vec<&str> = v.split_whitespace().collect();
             let ok = w.len() >= 4
                 && w[0].len() == 2
                 && w[0].chars().all(|c| c.is_ascii_digit())
@@ -54390,7 +54377,7 @@ fn has_ms_authmech_bad(bytes: &[u8]) -> bool {
             let ok = !t.is_empty()
                 && t.len() <= 2
                 && t.chars().all(|c| c.is_ascii_digit())
-                && t.parse::<u8>().map_or(false, |n| n <= 10);
+                && t.parse::<u8>().is_ok_and(|n| n <= 10);
             if !ok {
                 return true;
             }
@@ -54444,7 +54431,7 @@ fn has_ms_exp_time_bad(bytes: &[u8]) -> bool {
         if let Some(v) =
             low.strip_prefix("x-ms-exchange-organization-expirationstarttime:")
         {
-            let w: Vec<&str> = v.trim().split_whitespace().collect();
+            let w: Vec<&str> = v.split_whitespace().collect();
             let ok = w.len() >= 4
                 && !w[0].is_empty()
                 && w[0].len() <= 2
@@ -55558,7 +55545,7 @@ fn has_drcv_bad(bytes: &[u8]) -> bool {
         let w: Vec<&str> = t.split_whitespace().collect();
         let has_mon = w.iter().any(|p| {
             let p = p.trim_end_matches(',');
-            months.iter().any(|m| p == *m)
+            months.contains(&p)
         });
         let has_year = w.iter().any(|p| {
             p.trim_end_matches(',').len() == 4
@@ -55591,7 +55578,7 @@ fn has_xpip_bad(bytes: &[u8]) -> bool {
             || !parts.iter().all(|p| {
                 (1..=3).contains(&p.len())
                     && p.bytes().all(|b| b.is_ascii_digit())
-                    && p.parse::<u16>().map_or(false, |n| n <= 255)
+                    && p.parse::<u16>().is_ok_and(|n| n <= 255)
             })
     })
 }
@@ -56189,7 +56176,7 @@ pub fn has_confirm_reading_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56250,7 +56237,7 @@ pub fn has_resent_reply_to_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56319,7 +56306,7 @@ pub fn has_apparently_resent_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56384,7 +56371,7 @@ pub fn has_x_orig_rcpt_to_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56446,7 +56433,7 @@ pub fn has_confirm_reading_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56507,7 +56494,7 @@ pub fn has_resent_reply_to_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56576,7 +56563,7 @@ pub fn has_apparently_resent_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56641,7 +56628,7 @@ pub fn has_x_orig_rcpt_to_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56703,7 +56690,7 @@ pub fn has_confirm_reading_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56764,7 +56751,7 @@ pub fn has_resent_reply_to_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56833,7 +56820,7 @@ pub fn has_apparently_resent_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56898,7 +56885,7 @@ pub fn has_x_orig_rcpt_to_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -56960,7 +56947,7 @@ pub fn has_confirm_reading_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57021,7 +57008,7 @@ pub fn has_resent_reply_to_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57090,7 +57077,7 @@ pub fn has_apparently_resent_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57155,7 +57142,7 @@ pub fn has_x_orig_rcpt_to_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57217,7 +57204,7 @@ pub fn has_confirm_reading_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57278,7 +57265,7 @@ pub fn has_resent_reply_to_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57347,7 +57334,7 @@ pub fn has_apparently_resent_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57412,7 +57399,7 @@ pub fn has_x_orig_rcpt_to_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57474,7 +57461,7 @@ pub fn has_confirm_reading_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57537,7 +57524,7 @@ pub fn has_resent_reply_to_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57608,7 +57595,7 @@ pub fn has_apparently_resent_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57674,7 +57661,7 @@ pub fn has_x_orig_rcpt_to_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57735,7 +57722,7 @@ pub fn has_x_orig_rcpt_to_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57798,7 +57785,7 @@ pub fn has_confirm_reading_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57859,7 +57846,7 @@ pub fn has_resent_reply_to_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57928,7 +57915,7 @@ pub fn has_apparently_resent_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -57993,7 +57980,7 @@ pub fn has_x_orig_rcpt_to_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58055,7 +58042,7 @@ pub fn has_confirm_reading_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58116,7 +58103,7 @@ pub fn has_resent_reply_to_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58185,7 +58172,7 @@ pub fn has_apparently_resent_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58250,7 +58237,7 @@ pub fn has_x_orig_rcpt_to_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58317,7 +58304,7 @@ pub fn has_confirm_reading_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58378,7 +58365,7 @@ pub fn has_resent_reply_to_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58447,7 +58434,7 @@ pub fn has_apparently_resent_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58512,7 +58499,7 @@ pub fn has_x_orig_rcpt_to_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58569,7 +58556,7 @@ pub fn has_confirm_reading_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58630,7 +58617,7 @@ pub fn has_resent_reply_to_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58699,7 +58686,7 @@ pub fn has_apparently_resent_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58764,7 +58751,7 @@ pub fn has_x_orig_rcpt_to_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58821,7 +58808,7 @@ pub fn has_confirm_reading_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58882,7 +58869,7 @@ pub fn has_resent_reply_to_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -58951,7 +58938,7 @@ pub fn has_apparently_resent_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -59016,7 +59003,7 @@ pub fn has_x_orig_rcpt_to_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -60990,7 +60977,7 @@ pub fn has_x_orig_cc_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61053,7 +61040,7 @@ pub fn has_x_orig_reply_to_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61116,7 +61103,7 @@ pub fn has_disposition_to_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61179,7 +61166,7 @@ pub fn has_return_receipt_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61242,7 +61229,7 @@ pub fn has_x_orig_cc_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61304,7 +61291,7 @@ pub fn has_x_orig_reply_to_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61366,7 +61353,7 @@ pub fn has_disposition_to_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61428,7 +61415,7 @@ pub fn has_return_receipt_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61490,7 +61477,7 @@ pub fn has_x_orig_cc_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61552,7 +61539,7 @@ pub fn has_x_orig_reply_to_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61614,7 +61601,7 @@ pub fn has_disposition_to_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61676,7 +61663,7 @@ pub fn has_return_receipt_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61738,7 +61725,7 @@ pub fn has_x_orig_cc_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61800,7 +61787,7 @@ pub fn has_x_orig_reply_to_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61862,7 +61849,7 @@ pub fn has_disposition_to_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61924,7 +61911,7 @@ pub fn has_return_receipt_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -61986,7 +61973,7 @@ pub fn has_x_orig_cc_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62048,7 +62035,7 @@ pub fn has_x_orig_reply_to_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62110,7 +62097,7 @@ pub fn has_disposition_to_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62172,7 +62159,7 @@ pub fn has_return_receipt_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62300,7 +62287,7 @@ pub fn has_x_orig_cc_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62361,7 +62348,7 @@ pub fn has_x_orig_reply_to_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62422,7 +62409,7 @@ pub fn has_disposition_to_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62483,7 +62470,7 @@ pub fn has_return_receipt_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62545,7 +62532,7 @@ pub fn has_x_orig_cc_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62606,7 +62593,7 @@ pub fn has_x_orig_reply_to_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62667,7 +62654,7 @@ pub fn has_disposition_to_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62728,7 +62715,7 @@ pub fn has_return_receipt_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62790,7 +62777,7 @@ pub fn has_x_orig_cc_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62851,7 +62838,7 @@ pub fn has_x_orig_reply_to_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62912,7 +62899,7 @@ pub fn has_disposition_to_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -62973,7 +62960,7 @@ pub fn has_return_receipt_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63035,7 +63022,7 @@ pub fn has_x_orig_cc_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63096,7 +63083,7 @@ pub fn has_x_orig_reply_to_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63157,7 +63144,7 @@ pub fn has_disposition_to_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63218,7 +63205,7 @@ pub fn has_return_receipt_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63280,7 +63267,7 @@ pub fn has_x_orig_cc_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63341,7 +63328,7 @@ pub fn has_x_orig_reply_to_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63402,7 +63389,7 @@ pub fn has_disposition_to_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63463,7 +63450,7 @@ pub fn has_return_receipt_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63525,7 +63512,7 @@ pub fn has_x_orig_cc_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63586,7 +63573,7 @@ pub fn has_x_orig_reply_to_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63647,7 +63634,7 @@ pub fn has_disposition_to_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63708,7 +63695,7 @@ pub fn has_return_receipt_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63770,7 +63757,7 @@ pub fn has_x_orig_cc_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63831,7 +63818,7 @@ pub fn has_x_orig_reply_to_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63892,7 +63879,7 @@ pub fn has_disposition_to_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -63953,7 +63940,7 @@ pub fn has_return_receipt_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64015,7 +64002,7 @@ pub fn has_x_orig_cc_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64078,7 +64065,7 @@ pub fn has_x_orig_reply_to_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64141,7 +64128,7 @@ pub fn has_disposition_to_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64204,7 +64191,7 @@ pub fn has_return_receipt_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64262,7 +64249,7 @@ pub fn has_x_orig_cc_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64323,7 +64310,7 @@ pub fn has_x_orig_reply_to_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64384,7 +64371,7 @@ pub fn has_disposition_to_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64445,7 +64432,7 @@ pub fn has_return_receipt_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64508,7 +64495,7 @@ pub fn has_x_orig_cc_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64569,7 +64556,7 @@ pub fn has_x_orig_reply_to_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64630,7 +64617,7 @@ pub fn has_disposition_to_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64691,7 +64678,7 @@ pub fn has_return_receipt_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64753,7 +64740,7 @@ pub fn has_x_orig_cc_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64814,7 +64801,7 @@ pub fn has_x_orig_reply_to_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64875,7 +64862,7 @@ pub fn has_disposition_to_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -64936,7 +64923,7 @@ pub fn has_return_receipt_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65003,7 +64990,7 @@ pub fn has_x_orig_cc_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65064,7 +65051,7 @@ pub fn has_x_orig_reply_to_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65125,7 +65112,7 @@ pub fn has_disposition_to_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65186,7 +65173,7 @@ pub fn has_return_receipt_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65243,7 +65230,7 @@ pub fn has_x_orig_cc_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65304,7 +65291,7 @@ pub fn has_x_orig_reply_to_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65365,7 +65352,7 @@ pub fn has_disposition_to_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65426,7 +65413,7 @@ pub fn has_return_receipt_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65483,7 +65470,7 @@ pub fn has_x_orig_cc_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65544,7 +65531,7 @@ pub fn has_x_orig_reply_to_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65605,7 +65592,7 @@ pub fn has_disposition_to_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -65666,7 +65653,7 @@ pub fn has_return_receipt_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -67605,7 +67592,7 @@ pub fn has_apparently_to_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -67668,7 +67655,7 @@ pub fn has_apparently_to_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -67732,7 +67719,7 @@ pub fn has_apparently_from_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -67793,7 +67780,7 @@ pub fn has_x_orig_to_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -67854,7 +67841,7 @@ pub fn has_x_orig_from_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -67918,7 +67905,7 @@ pub fn has_apparently_from_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -67979,7 +67966,7 @@ pub fn has_x_orig_to_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68040,7 +68027,7 @@ pub fn has_x_orig_from_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68103,7 +68090,7 @@ pub fn has_apparently_to_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68167,7 +68154,7 @@ pub fn has_apparently_from_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68228,7 +68215,7 @@ pub fn has_x_orig_to_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68289,7 +68276,7 @@ pub fn has_x_orig_from_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68352,7 +68339,7 @@ pub fn has_apparently_to_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68416,7 +68403,7 @@ pub fn has_apparently_from_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68477,7 +68464,7 @@ pub fn has_x_orig_to_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68538,7 +68525,7 @@ pub fn has_x_orig_from_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68600,7 +68587,7 @@ pub fn has_apparently_to_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68664,7 +68651,7 @@ pub fn has_apparently_from_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68725,7 +68712,7 @@ pub fn has_x_orig_to_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68786,7 +68773,7 @@ pub fn has_x_orig_from_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68847,7 +68834,7 @@ pub fn has_apparently_to_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68911,7 +68898,7 @@ pub fn has_apparently_from_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -68972,7 +68959,7 @@ pub fn has_x_orig_to_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69033,7 +69020,7 @@ pub fn has_x_orig_from_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69100,7 +69087,7 @@ pub fn has_apparently_to_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69164,7 +69151,7 @@ pub fn has_apparently_from_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69225,7 +69212,7 @@ pub fn has_x_orig_to_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69286,7 +69273,7 @@ pub fn has_x_orig_from_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69348,7 +69335,7 @@ pub fn has_apparently_to_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69412,7 +69399,7 @@ pub fn has_apparently_from_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69473,7 +69460,7 @@ pub fn has_x_orig_to_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69534,7 +69521,7 @@ pub fn has_x_orig_from_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69596,7 +69583,7 @@ pub fn has_apparently_to_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69660,7 +69647,7 @@ pub fn has_apparently_from_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69721,7 +69708,7 @@ pub fn has_x_orig_to_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69782,7 +69769,7 @@ pub fn has_x_orig_from_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69844,7 +69831,7 @@ pub fn has_apparently_to_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69908,7 +69895,7 @@ pub fn has_apparently_from_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -69969,7 +69956,7 @@ pub fn has_x_orig_to_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70030,7 +70017,7 @@ pub fn has_x_orig_from_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70087,7 +70074,7 @@ pub fn has_apparently_to_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70151,7 +70138,7 @@ pub fn has_apparently_from_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70212,7 +70199,7 @@ pub fn has_x_orig_to_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70273,7 +70260,7 @@ pub fn has_x_orig_from_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70335,7 +70322,7 @@ pub fn has_apparently_to_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70399,7 +70386,7 @@ pub fn has_apparently_from_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70460,7 +70447,7 @@ pub fn has_x_orig_to_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70521,7 +70508,7 @@ pub fn has_x_orig_from_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70584,7 +70571,7 @@ pub fn has_apparently_to_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70648,7 +70635,7 @@ pub fn has_apparently_from_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70711,7 +70698,7 @@ pub fn has_x_orig_to_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70774,7 +70761,7 @@ pub fn has_x_orig_from_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70838,7 +70825,7 @@ pub fn has_apparently_to_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70902,7 +70889,7 @@ pub fn has_apparently_from_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -70965,7 +70952,7 @@ pub fn has_x_orig_to_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71028,7 +71015,7 @@ pub fn has_x_orig_from_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71089,7 +71076,7 @@ pub fn has_apparently_to_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71152,7 +71139,7 @@ pub fn has_apparently_from_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71214,7 +71201,7 @@ pub fn has_x_orig_to_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71276,7 +71263,7 @@ pub fn has_x_orig_from_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71339,7 +71326,7 @@ pub fn has_apparently_to_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71402,7 +71389,7 @@ pub fn has_apparently_from_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71464,7 +71451,7 @@ pub fn has_x_orig_to_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71526,7 +71513,7 @@ pub fn has_x_orig_from_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71587,7 +71574,7 @@ pub fn has_apparently_to_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71650,7 +71637,7 @@ pub fn has_apparently_from_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71712,7 +71699,7 @@ pub fn has_x_orig_to_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71774,7 +71761,7 @@ pub fn has_x_orig_from_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71836,7 +71823,7 @@ pub fn has_apparently_to_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71899,7 +71886,7 @@ pub fn has_apparently_from_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -71961,7 +71948,7 @@ pub fn has_x_orig_to_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -72023,7 +72010,7 @@ pub fn has_x_orig_from_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -72084,7 +72071,7 @@ pub fn has_apparently_to_quoted_local(raw: &[u8]) -> bool {
             && v.starts_with('"')
             && v[1..]
                 .find('"')
-                .map_or(false, |i| v[i + 2..].starts_with('@'))
+                .is_some_and(|i| v[i + 2..].starts_with('@'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -72137,7 +72124,7 @@ pub fn has_apparently_from_quoted_local(raw: &[u8]) -> bool {
             && v.starts_with('"')
             && v[1..]
                 .find('"')
-                .map_or(false, |i| v[i + 2..].starts_with('@'))
+                .is_some_and(|i| v[i + 2..].starts_with('@'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -72190,7 +72177,7 @@ pub fn has_x_orig_to_quoted_local(raw: &[u8]) -> bool {
             && v.starts_with('"')
             && v[1..]
                 .find('"')
-                .map_or(false, |i| v[i + 2..].starts_with('@'))
+                .is_some_and(|i| v[i + 2..].starts_with('@'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -72243,7 +72230,7 @@ pub fn has_x_orig_from_quoted_local(raw: &[u8]) -> bool {
             && v.starts_with('"')
             && v[1..]
                 .find('"')
-                .map_or(false, |i| v[i + 2..].starts_with('@'))
+                .is_some_and(|i| v[i + 2..].starts_with('@'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -72298,7 +72285,7 @@ pub fn has_apparently_to_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -72362,7 +72349,7 @@ pub fn has_apparently_from_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -72423,7 +72410,7 @@ pub fn has_x_orig_to_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -72484,7 +72471,7 @@ pub fn has_x_orig_from_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -74461,7 +74448,7 @@ pub fn has_env_to_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -74522,7 +74509,7 @@ pub fn has_delivered_to_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -74590,7 +74577,7 @@ pub fn has_env_from_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -74651,7 +74638,7 @@ pub fn has_errors_to_caret(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('^'))
+                .is_some_and(|d| d.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -74713,7 +74700,7 @@ pub fn has_env_to_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -74774,7 +74761,7 @@ pub fn has_delivered_to_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -74842,7 +74829,7 @@ pub fn has_env_from_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -74903,7 +74890,7 @@ pub fn has_errors_to_hash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('#'))
+                .is_some_and(|d| d.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -74965,7 +74952,7 @@ pub fn has_env_to_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75026,7 +75013,7 @@ pub fn has_delivered_to_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75094,7 +75081,7 @@ pub fn has_env_from_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75155,7 +75142,7 @@ pub fn has_errors_to_dollar(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('$'))
+                .is_some_and(|d| d.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75217,7 +75204,7 @@ pub fn has_env_to_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75278,7 +75265,7 @@ pub fn has_delivered_to_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75346,7 +75333,7 @@ pub fn has_env_from_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75407,7 +75394,7 @@ pub fn has_errors_to_star(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('*'))
+                .is_some_and(|d| d.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75464,7 +75451,7 @@ pub fn has_env_to_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75525,7 +75512,7 @@ pub fn has_delivered_to_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75593,7 +75580,7 @@ pub fn has_env_from_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75654,7 +75641,7 @@ pub fn has_errors_to_tilde(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('~'))
+                .is_some_and(|d| d.contains('~'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75716,7 +75703,7 @@ pub fn has_env_to_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75779,7 +75766,7 @@ pub fn has_env_to_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75840,7 +75827,7 @@ pub fn has_delivered_to_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75908,7 +75895,7 @@ pub fn has_env_from_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -75969,7 +75956,7 @@ pub fn has_errors_to_slash(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('/'))
+                .is_some_and(|d| d.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76030,7 +76017,7 @@ pub fn has_delivered_to_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76098,7 +76085,7 @@ pub fn has_env_from_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76159,7 +76146,7 @@ pub fn has_errors_to_pipe(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('|'))
+                .is_some_and(|d| d.contains('|'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76221,7 +76208,7 @@ pub fn has_env_to_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76282,7 +76269,7 @@ pub fn has_delivered_to_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76350,7 +76337,7 @@ pub fn has_env_from_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76411,7 +76398,7 @@ pub fn has_errors_to_underscore(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('_'))
+                .is_some_and(|d| d.contains('_'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76475,7 +76462,7 @@ pub fn has_env_to_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76536,7 +76523,7 @@ pub fn has_delivered_to_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76604,7 +76591,7 @@ pub fn has_env_from_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76665,7 +76652,7 @@ pub fn has_errors_to_backtick(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('`'))
+                .is_some_and(|d| d.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76725,7 +76712,7 @@ pub fn has_env_to_quoted_local(raw: &[u8]) -> bool {
             && v.starts_with('"')
             && v[1..]
                 .find('"')
-                .map_or(false, |i| v[i + 2..].starts_with('@'))
+                .is_some_and(|i| v[i + 2..].starts_with('@'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76778,7 +76765,7 @@ pub fn has_env_from_quoted_local(raw: &[u8]) -> bool {
             && v.starts_with('"')
             && v[1..]
                 .find('"')
-                .map_or(false, |i| v[i + 2..].starts_with('@'))
+                .is_some_and(|i| v[i + 2..].starts_with('@'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -76831,7 +76818,7 @@ pub fn has_errors_to_quoted_local(raw: &[u8]) -> bool {
             && v.starts_with('"')
             && v[1..]
                 .find('"')
-                .map_or(false, |i| v[i + 2..].starts_with('@'))
+                .is_some_and(|i| v[i + 2..].starts_with('@'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77042,7 +77029,7 @@ pub fn has_env_to_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77105,7 +77092,7 @@ pub fn has_delivered_to_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77168,7 +77155,7 @@ pub fn has_env_from_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77231,7 +77218,7 @@ pub fn has_errors_to_slash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('/'))
+                .is_some_and(|l0| l0.contains('/'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77295,7 +77282,7 @@ pub fn has_env_to_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77358,7 +77345,7 @@ pub fn has_env_from_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77421,7 +77408,7 @@ pub fn has_errors_to_star_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('*'))
+                .is_some_and(|l0| l0.contains('*'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77483,7 +77470,7 @@ pub fn has_env_to_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77544,7 +77531,7 @@ pub fn has_env_from_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77605,7 +77592,7 @@ pub fn has_errors_to_backtick_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('`'))
+                .is_some_and(|l0| l0.contains('`'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77666,7 +77653,7 @@ pub fn has_env_to_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77727,7 +77714,7 @@ pub fn has_env_from_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77788,7 +77775,7 @@ pub fn has_errors_to_caret_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('^'))
+                .is_some_and(|l0| l0.contains('^'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77849,7 +77836,7 @@ pub fn has_env_to_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77910,7 +77897,7 @@ pub fn has_env_from_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -77971,7 +77958,7 @@ pub fn has_errors_to_dollar_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('$'))
+                .is_some_and(|l0| l0.contains('$'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78032,7 +78019,7 @@ pub fn has_env_to_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78094,7 +78081,7 @@ pub fn has_env_from_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78156,7 +78143,7 @@ pub fn has_errors_to_hash_local(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .next()
-                .map_or(false, |l0| l0.contains('#'))
+                .is_some_and(|l0| l0.contains('#'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78218,7 +78205,7 @@ pub fn has_env_to_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78279,7 +78266,7 @@ pub fn has_delivered_to_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78347,7 +78334,7 @@ pub fn has_env_from_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78408,7 +78395,7 @@ pub fn has_errors_to_eq(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('='))
+                .is_some_and(|d| d.contains('='))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78469,7 +78456,7 @@ pub fn has_env_to_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78530,7 +78517,7 @@ pub fn has_delivered_to_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78598,7 +78585,7 @@ pub fn has_env_from_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78659,7 +78646,7 @@ pub fn has_errors_to_amp(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('&'))
+                .is_some_and(|d| d.contains('&'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78721,7 +78708,7 @@ pub fn has_env_to_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78782,7 +78769,7 @@ pub fn has_delivered_to_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78850,7 +78837,7 @@ pub fn has_env_from_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78911,7 +78898,7 @@ pub fn has_errors_to_lbrace(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('{'))
+                .is_some_and(|d| d.contains('{'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -78973,7 +78960,7 @@ pub fn has_env_to_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -79034,7 +79021,7 @@ pub fn has_delivered_to_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -79102,7 +79089,7 @@ pub fn has_env_from_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -79163,7 +79150,7 @@ pub fn has_errors_to_plus(raw: &[u8]) -> bool {
             && v
                 .split('@')
                 .nth(1)
-                .map_or(false, |d| d.contains('+'))
+                .is_some_and(|d| d.contains('+'))
             && !v.contains('\\')
             && !v.contains(':')
             && !v.contains(')')
@@ -93219,7 +93206,7 @@ pub fn has_resent_date_same_as_date(raw: &[u8]) -> bool {
 
 /// 指定ヘッダの最初の角括弧アドレス (または裸値の先頭語) を
 /// 取り出すヘルパ — 欄間同一性検査用。
-fn first_addr_of<'a>(logical: &'a str, name: &str) -> Option<String> {
+fn first_addr_of(logical: &str, name: &str) -> Option<String> {
     for l in logical.lines() {
         let lower = l.to_ascii_lowercase();
         let Some(colon) = lower.find(':') else { continue };
@@ -93873,8 +93860,8 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
             // 同じ宣言ブロック内の filename= を拾い危険拡張子判定
             if let Some(frel) = hdr.find("filename=") {
                 let fval = crate::magic_bytes::is_dangerous_windows_attachment(
-                    &hdr[frel + 9..]
-                        .trim_start_matches(|c| c == '"' || c == '\'')
+                    hdr[frel + 9..]
+                        .trim_start_matches(['"', '\''])
                         .split(|c: char| c == ';' || c == '"' || c.is_whitespace())
                         .next()
                         .unwrap_or(""),
@@ -105224,8 +105211,8 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
             has_open_tag(&lower, "object") || has_open_tag(&lower, "embed")
         },
         event_handler_attr: has_event_handler_attr(html),
-        ip_literal_href: has_host_flag(html, |h| is_ip_literal_host(&h)),
-        idn_href: has_host_flag(html, |h| is_idn_host(&h)),
+        ip_literal_href: has_host_flag(html, is_ip_literal_host),
+        idn_href: has_host_flag(html, is_idn_host),
         onion_href: has_host_flag(html, |h| h == "onion" || h.ends_with(".onion")),
         ping_attr: has_ping_attr(html),
         script_present: has_open_tag(&html.to_ascii_lowercase(), "script"),
@@ -105279,7 +105266,7 @@ fn has_remote_resource(html: &str) -> bool {
             Some(_) => {
                 let inner = &after[..end];
                 let is_anchor = inner.starts_with('a')
-                    && inner[1..].starts_with(|c: char| c == ' ' || c == '\t' || c == '/' || c == '>');
+                    && inner[1..].starts_with([' ', '\t', '/', '>']);
                 if !is_anchor {
                     for a in ATTRS {
                         if let Some(v) = tag_attr_value(inner, a) {
@@ -105591,7 +105578,7 @@ fn is_ip_literal_host(host: &str) -> bool {
 /// 定形手段。
 fn is_idn_host(host: &str) -> bool {
     host.split('.').any(|l| l.starts_with("xn--"))
-        || host.chars().any(|c| !c.is_ascii())
+        || !host.is_ascii()
 }
 
 /// `<` の直後のタグ名が `name` と一致するか (区切り確認付き)。
@@ -128844,7 +128831,7 @@ mod tests {
         // 実体参照でホストを難読した IP リテラル (&#52; = '4')
         assert!(html_to_text(r#"<a href="http://10.0.0.&#52;/">x</a>"#).ip_literal_href);
         // %エンコードのホスト (%65vil = 'evil')
-        assert!(html_to_text(r#"<a href="http://abc.onion%2f">x</a>"#).onion_href == false);
+        assert!(!html_to_text(r#"<a href="http://abc.onion%2f">x</a>"#).onion_href);
         // 表示と href の実体参照難読による link_mismatch 捕捉
         let e = html_to_text(
             r#"<a href="https://evil&#46;example">https://paypal.com</a>"#,
