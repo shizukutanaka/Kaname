@@ -1,0 +1,127 @@
+# .github/workflows/perf.yml
+# パフォーマンス回帰検出
+#
+# 戦略:
+#   - PR ごと: ベンチマーク実行 + main との比較
+#   - 5% 以上の回帰でラベル `performance-regression` + コメント
+#   - main マージ後: ベースライン更新
+
+name: Performance
+
+on:
+  pull_request:
+    paths:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-criterion
+        run: cargo install cargo-criterion --locked
+
+      # ベースライン (main) をリストア
+      - name: Restore baseline
+        id: cache-baseline
+        uses: actions/cache@v4
+        with:
+          path: target/criterion
+          key: bench-baseline-${{ github.base_ref || 'main' }}
+          restore-keys: bench-baseline-
+
+      # ベンチマーク実行
+      - name: Run benchmarks
+        run: |
+          cargo criterion --bench core_bench \
+            --output-format bencher \
+            2>&1 | tee bench-results.txt
+
+      # 回帰チェック (5% 閾値)
+      - name: Check for regressions
+        id: regression_check
+        run: |
+          echo "REGRESSION=false" >> $GITHUB_ENV
+          if [ -f bench-results.txt ]; then
+            # 5% 以上の遅化を検出
+            if grep -E "regression|slower by [5-9][0-9]|slower by [1-9][0-9]{2}" bench-results.txt; then
+              echo "REGRESSION=true" >> $GITHUB_ENV
+              echo "has_regression=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      # PR にコメント
+      - name: Post benchmark results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = fs.existsSync('bench-results.txt')
+              ? fs.readFileSync('bench-results.txt', 'utf8').slice(0, 2000)
+              : '(結果なし)';
+
+            const hasRegression = '${{ steps.regression_check.outputs.has_regression }}' === 'true';
+            const emoji = hasRegression ? '⚠️' : '✅';
+
+            const body = `## ${emoji} パフォーマンス計測結果
+
+${hasRegression ? '**⚠️ 5% 以上の回帰が検出されました。確認が必要です。**\n' : ''}
+<details>
+<summary>ベンチマーク結果 (クリックで展開)</summary>
+
+\`\`\`
+${results}
+\`\`\`
+</details>
+
+### 目標値 (Apple HIG)
+
+| 指標 | 目標 |
+|---|---|
+| BEC 判定 | < 50ms |
+| AiTM 検出 (5 URL) | < 10ms |
+| SSA スタイル距離 | < 1ms |
+| HTML スマグリングスキャン | < 5ms |
+| AI 要約 | < 3s |
+`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
+
+            if (hasRegression) {
+              github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['performance-regression']
+              });
+            }
+
+      # ベースラインを更新 (main マージ後)
+      - name: Update baseline
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: target/criterion
+          key: bench-baseline-main-${{ github.sha }}

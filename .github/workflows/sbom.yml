@@ -1,0 +1,138 @@
+# .github/workflows/sbom.yml
+# SBOM (Software Bill of Materials) 生成
+#
+# CycloneDX 形式で全依存をスキャンし、各リリースに添付する。
+# SOC2 監査・サプライチェーン攻撃検出のための必須成果物。
+
+name: SBOM Generation
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 1"  # 毎週月曜 UTC 0:00 に再生成
+
+permissions:
+  contents: write
+  security-events: write
+
+jobs:
+  rust-sbom:
+    name: "Rust SBOM"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      # cargo-cyclonedx で CycloneDX 形式の SBOM を生成
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx --locked
+
+      - name: Generate Rust SBOM (CycloneDX)
+        run: |
+          cargo cyclonedx \
+            --format json \
+            --override-filename rust-sbom
+
+      # cargo-about で第三者ライセンス開示を生成
+      - name: Install cargo-about
+        run: cargo install cargo-about --locked
+
+      - name: Generate license disclosure
+        run: |
+          cargo about generate -c about.toml --output-file LICENSE-THIRD-PARTY.md
+
+      # 結果アップロード
+      - name: Upload Rust SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-sbom
+          path: |
+            **/rust-sbom.cdx.json
+            LICENSE-THIRD-PARTY.md
+
+  npm-sbom:
+    name: "NPM SBOM"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: "npm" }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate NPM SBOM (CycloneDX)
+        run: |
+          npx --yes @cyclonedx/cyclonedx-npm \
+            --output-format JSON \
+            --output-file npm-sbom.cdx.json
+
+      - name: Upload NPM SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-sbom
+          path: npm-sbom.cdx.json
+
+  sbom-attest:
+    name: "SBOM Attestation"
+    runs-on: ubuntu-latest
+    needs: [rust-sbom, npm-sbom]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      id-token: write
+      attestations: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download SBOMs
+        uses: actions/download-artifact@v4
+        with:
+          path: sboms/
+
+      # GitHub Attestation で SBOM に署名 (SLSA Level 3)
+      - name: Attest SBOMs
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            sboms/rust-sbom/**/*.json
+            sboms/npm-sbom/*.json
+
+      # SBOM をリリースに添付
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sboms/rust-sbom/**/*.json
+            sboms/npm-sbom/*.json
+            sboms/rust-sbom/LICENSE-THIRD-PARTY.md
+
+  # Grype による脆弱性スキャン
+  vulnerability-scan:
+    name: "Grype Vulnerability Scan"
+    runs-on: ubuntu-latest
+    needs: [rust-sbom, npm-sbom]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download SBOMs
+        uses: actions/download-artifact@v4
+        with: { path: sboms/ }
+
+      - name: Run Grype
+        uses: anchore/scan-action@v3
+        with:
+          sbom: sboms/rust-sbom/rust-sbom.cdx.json
+          fail-build: true
+          severity-cutoff: high
+          output-format: sarif
+          output-file: grype-results.sarif
+
+      - name: Upload SARIF results to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: grype-results.sarif

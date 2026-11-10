@@ -1,0 +1,250 @@
+# .github/workflows/e2e.yml
+# Kaname E2E + 視覚的回帰 + アクセシビリティ自動テスト
+#
+# 実行頻度:
+#   - PR ごと (UI 変更があった場合のみ)
+#   - main へのマージ後 (回帰検出)
+#   - 毎日 02:00 UTC (フィッシングサイト UI が変わっていないか定期検証)
+#
+# 視覚的回帰:
+#   初回実行時にスナップショットを生成、artifact として保存。
+#   2回目以降はそのスナップショットと比較。
+#   差分が閾値を超えたら PR にコメント + 比較画像を添付。
+
+name: E2E Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "e2e/**"
+      - "playwright.config.ts"
+      - "package.json"
+      - ".github/workflows/e2e.yml"
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      update_snapshots:
+        description: "視覚的回帰のスナップショットを更新する"
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ────────────────────────────────────────────────────────────────
+  # 1. E2E テスト本体 (Chromium + WebKit + Firefox)
+  # ────────────────────────────────────────────────────────────────
+  e2e:
+    name: "E2E (${{ matrix.browser }})"
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit, firefox]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Rust + キャッシュ
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: e2e-${{ matrix.browser }}
+
+      # Linux 依存 (Tauri / Playwright)
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libssl-dev pkg-config build-essential \
+            xvfb
+
+      # Node.js
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: "npm" }
+      - run: npm ci
+
+      # Playwright ブラウザ
+      - name: Install Playwright (${{ matrix.browser }})
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      # JMAP モックサーバーをビルド (E2E 中にバックグラウンド実行)
+      - name: Build mockserver
+        run: cargo build -p kaname-mockserver --release --bin jmap-mock
+
+      # フロントエンドビルド
+      - name: Build frontend
+        run: npm run build
+
+      # E2E 実行
+      - name: Run E2E tests
+        run: |
+          xvfb-run --auto-servernum \
+            npx playwright test \
+              --project="${{ matrix.browser == 'chromium' && 'Chromium (Desktop)' || matrix.browser == 'webkit' && 'WebKit (Desktop)' || 'Firefox (Desktop)' }}" \
+              ${{ inputs.update_snapshots && '--update-snapshots' || '' }}
+
+      # 失敗時のスクリーンショット・トレース保存
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.browser }}-failure
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
+
+      # 視覚的回帰の差分画像
+      - name: Upload visual diffs
+        if: failure() && contains(github.event.head_commit.message, 'visual')
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diffs-${{ matrix.browser }}
+          path: test-results/**/*-diff.png
+          retention-days: 14
+
+  # ────────────────────────────────────────────────────────────────
+  # 2. アクセシビリティ専用 (axe-core)
+  # ────────────────────────────────────────────────────────────────
+  a11y:
+    name: "Accessibility (axe-core)"
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: "npm" }
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb \
+            libayatana-appindicator3-dev librsvg2-dev libssl-dev pkg-config
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: cargo build -p kaname-mockserver --release --bin jmap-mock
+      - run: npm run build
+
+      - name: Run accessibility tests
+        run: |
+          xvfb-run --auto-servernum \
+            npx playwright test e2e/a11y.spec.ts --project="Accessibility"
+
+      # アクセシビリティ違反レポート
+      - name: Upload a11y report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-violations
+          path: |
+            test-results/
+            playwright-report/
+
+  # ────────────────────────────────────────────────────────────────
+  # 3. スナップショット更新 (workflow_dispatch のみ)
+  # ────────────────────────────────────────────────────────────────
+  update-snapshots:
+    name: "Update Visual Snapshots"
+    if: inputs.update_snapshots == true
+    runs-on: ubuntu-22.04
+    needs: [e2e]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download updated snapshots
+        uses: actions/download-artifact@v4
+        with:
+          path: e2e/__snapshots__/
+
+      - name: Commit updated snapshots
+        run: |
+          git config user.name  "kaname-bot"
+          git config user.email "bot@kaname.app"
+          git add e2e/__snapshots__/
+          git commit -m "test(e2e): update visual snapshots [skip ci]" || echo "no changes"
+          git push
+
+  # ────────────────────────────────────────────────────────────────
+  # 4. PR コメント (テスト結果サマリー)
+  # ────────────────────────────────────────────────────────────────
+  comment-pr:
+    name: "Comment PR"
+    if: github.event_name == 'pull_request' && always()
+    needs: [e2e, a11y]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const e2e_status = '${{ needs.e2e.result }}';
+            const a11y_status = '${{ needs.a11y.result }}';
+            
+            const emoji = (s) => s === 'success' ? '✅' : s === 'failure' ? '❌' : '⏭️';
+            
+            const body = `## E2E Test Results
+            
+            | Suite | Status |
+            |---|---|
+            | E2E (Chromium/WebKit/Firefox) | ${emoji(e2e_status)} ${e2e_status} |
+            | Accessibility (axe-core) | ${emoji(a11y_status)} ${a11y_status} |
+            
+            ${e2e_status === 'failure' ? '⚠️ E2E が失敗しています。視覚的回帰の場合は \`workflow_dispatch\` で \`update_snapshots: true\` を実行してください。' : ''}
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
+
+  # スナップショット初回生成 (workflow_dispatch のみ)
+  init-snapshots:
+    name: "Initialize Snapshots"
+    if: github.event_name == 'workflow_dispatch' && inputs.update_snapshots == true
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: "npm" }
+      - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb libayatana-appindicator3-dev librsvg2-dev libssl-dev
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: cargo build -p kaname-mockserver --release --bin jmap-mock
+      - run: npm run build
+      - name: Generate snapshots
+        run: |
+          xvfb-run --auto-servernum \
+            npx playwright test --project="Chromium (Desktop)" --update-snapshots
+      - name: Commit snapshots
+        run: |
+          git config user.name "kaname-bot"
+          git config user.email "bot@kaname.app"
+          git add e2e/__snapshots__/
+          git diff --staged --quiet || git commit -m "test(e2e): initialize visual snapshots [skip ci]"
+          git push

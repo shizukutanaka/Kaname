@@ -1,0 +1,401 @@
+# .github/workflows/release.yml
+#
+# Kaname release pipeline.
+#
+# Design principles (Apple-style):
+#   1. Reproducible: same git SHA → same binary hash, on any runner
+#   2. Dual-signed: Ed25519 + ML-DSA-65 manifest. Clients verify BOTH.
+#   3. Hardware-gated: signing keys live on a hardware security module,
+#      accessed only via the `signing-service` OIDC-authed to GitHub.
+#   4. Multi-party: a release requires TWO approvals from separate operators.
+#   5. Platform-native trust: Apple notarization + Windows Authenticode +
+#      Linux reproducible SLSA-L3 provenance.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g., v1.0.0 — must already exist on main)"
+        required: true
+        type: string
+      channel:
+        description: "Release channel"
+        required: true
+        type: choice
+        options: [beta, stable, enterprise]
+
+# Global permissions: minimum necessary. Individual jobs tighten further.
+permissions:
+  contents: read
+  id-token: write   # for OIDC to signing service
+  attestations: write
+
+concurrency:
+  # A single release runs at a time. Queue the rest.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RUST_VERSION: "1.85"
+  CARGO_TERM_COLOR: always
+  # Reproducible build switches.
+  SOURCE_DATE_EPOCH: ${{ github.event.workflow_run.head_commit.timestamp }}
+
+jobs:
+  # ============================================================================
+  # 0. Gatekeeper — validates the release is authorized
+  # ============================================================================
+  preflight:
+    name: Preflight checks
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - name: Resolve tag → SHA
+        id: resolve
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = context.payload.inputs.tag;
+            const ref = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `tags/${tag}`,
+            });
+            core.setOutput('sha', ref.data.object.sha);
+
+      - name: Verify two operator approvals
+        uses: trstringer/manual-approval@v1
+        with:
+          # Manually-maintained list of release operators who hold hardware tokens.
+          approvers: yusuke,akane,security-lead,qsm-dri
+          minimum-approvals: 2
+          issue-title: "Release ${{ inputs.tag }} (${{ inputs.channel }})"
+          issue-body: |
+            Release authorization request.
+
+            Tag: ${{ inputs.tag }}
+            SHA: ${{ steps.resolve.outputs.sha }}
+            Channel: ${{ inputs.channel }}
+
+            Before approving, verify:
+            - [ ] All boundary conditions green on latest Monday review
+            - [ ] Adversarial corpus 99%+ pass rate this week
+            - [ ] No open P0/P1 security issues
+            - [ ] Changelog and keynote diff reviewed
+
+  # ============================================================================
+  # 1. Build each platform with reproducibility enforcement
+  # ============================================================================
+  build:
+    name: Build · ${{ matrix.target.name }}
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: macos-arm64,  os: macos-14,      triple: aarch64-apple-darwin }
+          - { name: macos-x86_64, os: macos-14,      triple: x86_64-apple-darwin }
+          - { name: win-x64,      os: windows-2022,  triple: x86_64-pc-windows-msvc }
+          - { name: win-arm64,    os: windows-2022,  triple: aarch64-pc-windows-msvc }
+          - { name: linux-x64,    os: ubuntu-24.04,  triple: x86_64-unknown-linux-musl }
+          - { name: linux-arm64,  os: ubuntu-24.04-arm, triple: aarch64-unknown-linux-musl }
+    runs-on: ${{ matrix.target.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+          # We need exactly the history of this commit — no PRs, no merges.
+          fetch-depth: 1
+
+      - name: Install Rust (pinned)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ matrix.target.triple }}
+          components: rust-src
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Cache key incorporates Cargo.lock — upgrades invalidate.
+          shared-key: "release-${{ matrix.target.triple }}"
+
+      - name: Build release
+        shell: bash
+        env:
+          # Reproducibility: deterministic timestamps and paths.
+          SOURCE_DATE_EPOCH: ${{ env.SOURCE_DATE_EPOCH }}
+          RUSTFLAGS: "--remap-path-prefix=${{ github.workspace }}=/build"
+        run: |
+          cargo build \
+            --release \
+            --locked \
+            --target ${{ matrix.target.triple }} \
+            --bin kaname
+
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom-${{ matrix.target.name }}.json
+
+      - name: Compute binary hash
+        shell: bash
+        run: |
+          cd target/${{ matrix.target.triple }}/release
+          if [ -f kaname.exe ]; then
+            sha256sum kaname.exe > ../../../binary.sha256
+          else
+            sha256sum kaname > ../../../binary.sha256
+          fi
+
+      - name: Upload unsigned artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-${{ matrix.target.name }}
+          path: |
+            target/${{ matrix.target.triple }}/release/kaname*
+            binary.sha256
+            sbom-${{ matrix.target.name }}.json
+          retention-days: 7
+
+  # ============================================================================
+  # 2. Cross-runner reproducibility check
+  #    Builds on a second runner type, then requires matching hashes.
+  # ============================================================================
+  repro_verify:
+    name: Reproducibility verification
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: unsigned-*
+          path: artifacts
+
+      - name: Rebuild linux-x64 in a container and compare hashes
+        run: |
+          docker run --rm -v $PWD:/src rust:${{ env.RUST_VERSION }}-slim \
+            bash -c "cd /src && SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH \
+                     cargo build --release --locked \
+                     --target x86_64-unknown-linux-musl"
+          EXPECTED=$(cat artifacts/unsigned-linux-x64/binary.sha256 | awk '{print $1}')
+          ACTUAL=$(sha256sum target/x86_64-unknown-linux-musl/release/kaname | awk '{print $1}')
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::Reproducibility check FAILED"
+            echo "  Expected (runner): $EXPECTED"
+            echo "  Actual (container): $ACTUAL"
+            exit 1
+          fi
+          echo "✓ Hash match: $EXPECTED"
+
+  # ============================================================================
+  # 3. Apple signing + notarization
+  # ============================================================================
+  sign_apple:
+    name: Sign & notarize Apple
+    needs: [build, repro_verify]
+    runs-on: macos-14
+    strategy:
+      matrix:
+        arch: [macos-arm64, macos-x86_64]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: unsigned-${{ matrix.arch }}
+          path: unsigned
+
+      - name: Obtain signing certificate from HSM (OIDC-authed)
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Signing key NEVER leaves the HSM. We use an OIDC-federated
+          # request to the signing service, which returns a short-lived
+          # keychain entry valid for this build only.
+          signing-client fetch-apple-cert \
+            --bundle-id app.kaname.desktop \
+            --validity 30m \
+            --output signing.keychain
+
+      - name: codesign
+        run: |
+          codesign --force --options runtime --timestamp \
+            --entitlements packaging/entitlements.plist \
+            --sign "Developer ID Application: Kaname K.K. (TEAMID)" \
+            unsigned/kaname
+
+      - name: Staple & notarize
+        env:
+          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+          AC_API_KEY_ISSUER: ${{ secrets.AC_API_KEY_ISSUER }}
+        run: |
+          # Zip for notarization submission
+          ditto -c -k --keepParent unsigned/kaname kaname.zip
+          # xcrun notarytool: submit, wait, staple
+          xcrun notarytool submit kaname.zip \
+            --key "$AC_API_KEY_FILE" \
+            --key-id "$AC_API_KEY_ID" \
+            --issuer "$AC_API_KEY_ISSUER" \
+            --wait
+          xcrun stapler staple unsigned/kaname
+
+      - name: Upload signed artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ matrix.arch }}
+          path: unsigned/kaname
+
+  # ============================================================================
+  # 4. Windows signing (Authenticode via cloud HSM)
+  # ============================================================================
+  sign_windows:
+    name: Sign Windows
+    needs: [build, repro_verify]
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        arch: [win-x64, win-arm64]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: unsigned-${{ matrix.arch }}
+          path: unsigned
+
+      - name: Sign with AzureSignTool (OV or EV cert in Azure Key Vault)
+        env:
+          AZ_KV_URL: ${{ secrets.AZURE_KEY_VAULT_URL }}
+          AZ_KV_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZ_KV_TENANT: ${{ secrets.AZURE_TENANT_ID }}
+          AZ_KV_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZ_KV_CERT_NAME: kaname-codesign-ev
+        run: |
+          dotnet tool install --global AzureSignTool
+          AzureSignTool sign `
+            --azure-key-vault-url "$env:AZ_KV_URL" `
+            --azure-key-vault-client-id "$env:AZ_KV_CLIENT_ID" `
+            --azure-key-vault-tenant-id "$env:AZ_KV_TENANT" `
+            --azure-key-vault-client-secret "$env:AZ_KV_SECRET" `
+            --azure-key-vault-certificate "$env:AZ_KV_CERT_NAME" `
+            --timestamp-rfc3161 http://timestamp.digicert.com `
+            --file-digest sha256 `
+            unsigned/kaname.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ matrix.arch }}
+          path: unsigned/kaname.exe
+
+  # ============================================================================
+  # 5. PQC dual-signature on update manifest (THIS IS THE KANAME DIFFERENTIATOR)
+  # ============================================================================
+  pqc_sign_manifest:
+    name: PQC dual-sign manifest
+    needs: [sign_apple, sign_windows, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Build update manifest
+        run: |
+          cat > manifest.json <<EOF
+          {
+            "version": "${{ inputs.tag }}",
+            "channel": "${{ inputs.channel }}",
+            "released_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "artifacts": {
+              "macos-arm64":  { "sha256": "$(sha256sum artifacts/signed-macos-arm64/kaname | awk '{print $1}')" },
+              "macos-x86_64": { "sha256": "$(sha256sum artifacts/signed-macos-x86_64/kaname | awk '{print $1}')" },
+              "win-x64":      { "sha256": "$(sha256sum artifacts/signed-win-x64/kaname.exe | awk '{print $1}')" },
+              "win-arm64":    { "sha256": "$(sha256sum artifacts/signed-win-arm64/kaname.exe | awk '{print $1}')" },
+              "linux-x64":    { "sha256": "$(sha256sum artifacts/unsigned-linux-x64/kaname | awk '{print $1}')" },
+              "linux-arm64":  { "sha256": "$(sha256sum artifacts/unsigned-linux-arm64/kaname | awk '{print $1}')" }
+            }
+          }
+          EOF
+
+      - name: Sign with Ed25519 (classical, via HSM)
+        env:
+          SIGNING_SERVICE_TOKEN: ${{ secrets.SIGNING_SERVICE_TOKEN }}
+        run: |
+          signing-client sign \
+            --algorithm ed25519 \
+            --key-id kaname-release-ed25519 \
+            --input manifest.json \
+            --output manifest.ed25519.sig
+
+      - name: Sign with ML-DSA-65 (post-quantum, via HSM)
+        env:
+          SIGNING_SERVICE_TOKEN: ${{ secrets.SIGNING_SERVICE_TOKEN }}
+        run: |
+          signing-client sign \
+            --algorithm ml-dsa-65 \
+            --key-id kaname-release-mldsa65 \
+            --input manifest.json \
+            --output manifest.mldsa65.sig
+
+      - name: Bundle manifest + both signatures
+        run: |
+          tar czf release-bundle.tar.gz \
+            manifest.json \
+            manifest.ed25519.sig \
+            manifest.mldsa65.sig \
+            artifacts/signed-*/kaname* \
+            artifacts/unsigned-linux-*/kaname
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: release-bundle.tar.gz
+
+  # ============================================================================
+  # 6. SLSA provenance + publish
+  # ============================================================================
+  publish:
+    name: Publish release
+    needs: pqc_sign_manifest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+
+      - name: Generate SLSA provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release-bundle.tar.gz
+
+      - name: Upload to release CDN
+        env:
+          CDN_TOKEN: ${{ secrets.CDN_DEPLOY_TOKEN }}
+        run: |
+          cdn-client publish \
+            --bundle release-bundle.tar.gz \
+            --channel ${{ inputs.channel }} \
+            --tag ${{ inputs.tag }}
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: Kaname ${{ inputs.tag }}
+          body_path: CHANGELOG.md
+          files: release-bundle.tar.gz
+          generate_release_notes: true
+
+      - name: Notify
+        run: |
+          echo "✓ Release ${{ inputs.tag }} published on channel ${{ inputs.channel }}"

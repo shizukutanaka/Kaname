@@ -1,0 +1,203 @@
+# .github/workflows/fuzzing.yml
+# Kaname ファジング CI
+#
+# 戦略:
+#   - PR ごと: 各ターゲット 2 分間 (ノイズ的バグ検出)
+#   - main マージ後: 各ターゲット 30 分間 (深い探索)
+#   - 毎週日曜: 各ターゲット 4 時間 (大規模回帰検出)
+#
+# クラッシュ発見時:
+#   1. 自動的に Issue を作成
+#   2. クラッシュ入力を artifact として保存
+#   3. minimization して再現可能な最小ケースに変換
+#
+# コーパス管理:
+#   - 各実行で発見した新カバレッジ入力を corpus に追加
+#   - GitHub Cache に保存して次回実行で再利用 (継続的学習)
+
+name: Fuzzing
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    paths:
+      - "crates/kaname-render/**"
+      - "crates/kaname-ai/**"
+      - "fuzz/**"
+  schedule:
+    - cron: "0 3 * * 0"  # 毎週日曜 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "ファジングターゲット"
+        type: choice
+        options: [all, mime_parser, html_sanitizer, prompt_injection]
+        default: all
+      duration_seconds:
+        description: "実行時間 (秒)"
+        type: string
+        default: "300"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  fuzz:
+    name: "Fuzz: ${{ matrix.target }}"
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - mime_parser
+          - html_sanitizer
+          - prompt_injection
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: fuzz-${{ matrix.target }}
+          workspaces: "fuzz"
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      # 既存コーパスを GitHub Cache から復元 (継続的学習)
+      - name: Restore corpus
+        uses: actions/cache@v4
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target }}-
+
+      # 実行時間を決定
+      - name: Determine duration
+        id: duration
+        run: |
+          case "${{ github.event_name }}" in
+            pull_request)      DURATION=120 ;;
+            push)              DURATION=1800 ;;
+            schedule)          DURATION=14400 ;;
+            workflow_dispatch) DURATION=${{ inputs.duration_seconds || 300 }} ;;
+            *)                 DURATION=300 ;;
+          esac
+          echo "seconds=$DURATION" >> $GITHUB_OUTPUT
+          echo "ファジング実行時間: $DURATION 秒"
+
+      - name: Run fuzz target
+        working-directory: fuzz
+        run: |
+          cargo +nightly fuzz run ${{ matrix.target }} \
+            -- \
+            -max_total_time=${{ steps.duration.outputs.seconds }} \
+            -timeout=30 \
+            -rss_limit_mb=2048
+
+      # クラッシュアーティファクト
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes-${{ matrix.target }}
+          path: |
+            fuzz/artifacts/${{ matrix.target }}/
+            fuzz/corpus/${{ matrix.target }}/
+          retention-days: 90
+
+      # クラッシュ最小化 (再現可能な最小ケース)
+      - name: Minimize crash inputs
+        if: failure()
+        working-directory: fuzz
+        run: |
+          for crash in artifacts/${{ matrix.target }}/crash-*; do
+            [ -f "$crash" ] && {
+              echo "Minimizing: $crash"
+              cargo +nightly fuzz tmin \
+                ${{ matrix.target }} "$crash" \
+                -- -max_total_time=120 || true
+            }
+          done
+
+      # 自動 Issue 作成
+      - name: Create issue on crash
+        if: failure() && github.event_name != 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = `fuzz/artifacts/${{ matrix.target }}`;
+            
+            let crashList = '';
+            try {
+              const files = fs.readdirSync(path).filter(f => f.startsWith('crash-'));
+              crashList = files.map(f => `- ${f}`).join('\n');
+            } catch (e) {
+              crashList = '(クラッシュ詳細の取得に失敗)';
+            }
+            
+            const title = `[Fuzz] ${{ matrix.target }} がクラッシュしました`;
+            const body = `## ファジング失敗
+            
+            ターゲット: \`${{ matrix.target }}\`
+            実行時間: ${{ steps.duration.outputs.seconds }} 秒
+            ワークフロー: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            ### 発見されたクラッシュ
+            ${crashList}
+            
+            ### 次のステップ
+            1. アーティファクト \`fuzz-crashes-${{ matrix.target }}\` をダウンロード
+            2. 該当の \`crash-*\` を \`fuzz/corpus/${{ matrix.target }}/\` に追加してリグレッションテストに変換
+            3. 最小化された再現ケースで原因特定
+            4. 修正後、コーパスに保持し続けて回帰防止
+            
+            ---
+            *この Issue は CI が自動作成しました*
+            `;
+            
+            // 既存の同名 Issue があれば追記
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'fuzz-crash',
+            });
+            
+            const existing = issues.data.find(i => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `新規クラッシュ発生 (Run ${{ github.run_id }}):\n${crashList}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['fuzz-crash', 'security', 'P0'],
+              });
+            }
+
+  # コーパス統合: 全ターゲットの結果を集約
+  consolidate-corpus:
+    name: "Consolidate Corpus"
+    needs: fuzz
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Save final corpus
+        uses: actions/cache/save@v4
+        with:
+          path: fuzz/corpus/
+          key: fuzz-corpus-final-${{ github.run_id }}
