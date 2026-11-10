@@ -104756,7 +104756,9 @@ pub fn sanitize_html(raw: &RawHtml) -> SanitizedBody {
     tag_attr_map.insert("ul", ["type"].iter().copied().collect());
     tag_attr_map.insert("span", ["lang"].iter().copied().collect());
     tag_attr_map.insert("div", ["lang"].iter().copied().collect());
-    tag_attr_map.insert("blockquote", ["cite"].iter().copied().collect());
+    // 注: blockquote には cite を許可しない。ammonia 4.2.0 の is_url_attr は
+    // cite を URL 属性と見なさないため url_schemes 検査が掛からず、
+    // data:/javascript: が素通りする (#857)。引用元表示の用途も無いため除去。
     tag_attr_map.insert("pre", ["class"].iter().copied().collect());
     tag_attr_map.insert("code", ["class"].iter().copied().collect());
 
@@ -104803,6 +104805,14 @@ pub fn sanitize_html(raw: &RawHtml) -> SanitizedBody {
 
 /// `<img src="...">` または `<img src='...'>` の src が `cid:` で始まらない場合は除去する。
 /// ammonia の url_schemes はグローバルなので img に限定した制限はポストフィルタで実施。
+///
+/// 重要 (#857 Fuzzing #17): 旧実装は正規表現を HTML 全体に適用していたため、
+/// `src="` が他の属性値やテキスト中に現れると、その `"` から次に現れる `"`
+/// までを削除して周辺の HTML を破壊した。実例: `<p title="A`src=">` の直後の
+/// テキストが title 値に splicing され、`ondat(` のような `on*` 属性が新生する
+/// (fuzz crash-8769e998…)。タグ境界を認識しない regex を生 HTML に掛けては
+/// ならない。修正版は `<img ...>` タグの内側にだけ regex を適用し、それ以外は
+/// バイト単位でそのまま残す。
 fn strip_non_cid_img_src(html: &str) -> String {
     // ダブルクォート版: src="..."
     let Ok(re_double) = regex::Regex::new(r#"\bsrc\s*=\s*"([^"]*)""#) else {
@@ -104823,8 +104833,55 @@ fn strip_non_cid_img_src(html: &str) -> String {
         }
     };
 
-    let after_double = re_double.replace_all(html, strip).to_string();
-    re_single.replace_all(&after_double, strip).to_string()
+    let bytes = html.as_bytes();
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        // `<img` タグ開始を探す (ammonia は小文字で出すが念のため大文字小文字不問)。
+        // 直後が区切り文字でないもの (`<imgx` 等) はタグではない。
+        let is_img_tag = bytes[i] == b'<'
+            && i + 4 <= bytes.len()
+            && bytes[i + 1].eq_ignore_ascii_case(&b'i')
+            && bytes[i + 2].eq_ignore_ascii_case(&b'm')
+            && bytes[i + 3].eq_ignore_ascii_case(&b'g')
+            && (i + 4 == bytes.len()
+                || matches!(bytes[i + 4], b' ' | b'\t' | b'\n' | b'\r' | b'/' | b'>'));
+        if is_img_tag {
+            // 引用符を考慮してタグ終端 `>` を探す (属性値内の `>` は終端ではない)。
+            let mut j = i + 4;
+            let mut quote: Option<u8> = None;
+            while j < bytes.len() {
+                let c = bytes[j];
+                match quote {
+                    Some(q) => {
+                        if c == q {
+                            quote = None;
+                        }
+                    }
+                    None => {
+                        if c == b'"' || c == b'\'' {
+                            quote = Some(c);
+                        } else if c == b'>' {
+                            break;
+                        }
+                    }
+                }
+                j += 1;
+            }
+            let end = if j < bytes.len() { j + 1 } else { bytes.len() };
+            let tag = &html[i..end];
+            let after_double = re_double.replace_all(tag, strip).to_string();
+            let fixed = re_single.replace_all(&after_double, strip).to_string();
+            out.push_str(&fixed);
+            i = end;
+        } else {
+            // 1文字進める (UTF-8 境界を保つため char 単位で)。
+            let ch_len = html[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+            out.push_str(&html[i..i + ch_len]);
+            i += ch_len;
+        }
+    }
+    out
 }
 
 fn is_bidi_override(c: char) -> bool {
@@ -106984,6 +107041,165 @@ mod tests {
         assert!(
             !out.as_str().contains("javascript:"),
             "javascript: href must be blocked"
+        );
+    }
+
+    #[test]
+    fn blockquote_cite_dangerous_scheme_stripped() {
+        // #857: ammonia 4.2.0 の is_url_attr は cite を URL 属性と見なさないため
+        // url_schemes 検査が掛からず、data:/javascript: が素通りしていた。
+        // cite 属性にコードベース上の正当な用途が無いため許可属性から外す。
+        let out = sanitize_html(&raw(
+            "<blockquote cite=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==\">quoted</blockquote>",
+        ));
+        assert!(
+            !out.as_str().contains("data:"),
+            "data: cite must be removed: {}",
+            out.as_str()
+        );
+        assert!(
+            out.as_str().contains("quoted"),
+            "blockquote text must survive: {}",
+            out.as_str()
+        );
+        let out = sanitize_html(&raw(
+            "<blockquote cite=\"javascript:alert(1)\">quoted</blockquote>",
+        ));
+        assert!(
+            !out.as_str().contains("javascript:"),
+            "javascript: cite must be removed: {}",
+            out.as_str()
+        );
+        // https の cite も属性ごと除去される（blockquote 自体は残る）
+        let out = sanitize_html(&raw(
+            "<blockquote cite=\"https://example.com/source\">quoted</blockquote>",
+        ));
+        assert!(
+            !out.as_str().contains("cite="),
+            "cite attribute must be removed entirely: {}",
+            out.as_str()
+        );
+        assert!(out.as_str().contains("quoted"));
+    }
+
+    /// 属性名だけを列挙する小さなスキャナ (fuzz ハーネスの tag_attrs と同じ規則)。
+    /// 引用符内の `>` はタグ終端とせず、テキスト中の `on...` を属性と誤認しない。
+    fn attr_names(html: &str) -> Vec<String> {
+        let b = html.as_bytes();
+        let mut names = Vec::new();
+        let mut i = 0;
+        while i < b.len() {
+            if b[i] != b'<' {
+                i += 1;
+                continue;
+            }
+            i += 1;
+            if i < b.len() && (b[i] == b'!' || b[i] == b'?' || b[i] == b'/') {
+                while i < b.len() && b[i] != b'>' {
+                    i += 1;
+                }
+                i += 1;
+                continue;
+            }
+            while i < b.len() && !b[i].is_ascii_whitespace() && b[i] != b'>' && b[i] != b'/' {
+                i += 1;
+            }
+            while i < b.len() && b[i] != b'>' {
+                while i < b.len() && b[i].is_ascii_whitespace() {
+                    i += 1;
+                }
+                if i >= b.len() || b[i] == b'>' {
+                    break;
+                }
+                if b[i] == b'/' {
+                    i += 1;
+                    continue;
+                }
+                let start = i;
+                while i < b.len()
+                    && !b[i].is_ascii_whitespace()
+                    && b[i] != b'='
+                    && b[i] != b'>'
+                    && b[i] != b'/'
+                {
+                    i += 1;
+                }
+                names.push(html[start..i].to_lowercase());
+                while i < b.len() && b[i].is_ascii_whitespace() {
+                    i += 1;
+                }
+                if i < b.len() && b[i] == b'=' {
+                    i += 1;
+                    while i < b.len() && b[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if i < b.len() && (b[i] == b'"' || b[i] == b'\'') {
+                        let q = b[i];
+                        i += 1;
+                        while i < b.len() && b[i] != q {
+                            i += 1;
+                        }
+                        if i < b.len() {
+                            i += 1;
+                        }
+                    } else {
+                        while i < b.len() && !b[i].is_ascii_whitespace() && b[i] != b'>' {
+                            i += 1;
+                        }
+                    }
+                }
+            }
+            i += 1;
+        }
+        names
+    }
+
+    #[test]
+    fn fuzzing17_crash_input_no_attr_splicing() {
+        // #857 Fuzzing #17 (PR #861 の CI): 破損マークアップのクラッシュ入力。
+        // 旧 strip_non_cid_img_src は `src="` を HTML 全体から正規表現で探し、
+        // title 属性値内の `src="` から次の `"` までを削除して周辺を破壊し、
+        // テキストが title 値に splicing されて `ondat(` のような `on*` 属性が
+        // 新生した。修正版は `<img>` タグ内だけを処理するため再現しない。
+        // 注意: `ondaT` という文字列自体はテキストとして残るのが正しい
+        // (属性ではない)。属性コンテキストでのみ検査する。
+        let bytes = include_bytes!(
+            "../../../fuzz/corpus/html_sanitizer/crash-8769e998d58cb53c11efd6e7bfc60d67c2261546"
+        );
+        let input = std::str::from_utf8(bytes).expect("crash input is UTF-8");
+        let out = sanitize_html(&raw(input));
+        let s = out.as_str();
+        // title 属性が `src=` まで保たれ、タグが正しく閉じていること。
+        assert!(
+            s.contains("`src=\">"),
+            "title attribute must stay intact and tag must close: {s}"
+        );
+        // splicing による `on*` 属性の新生がないこと (属性コンテキストで検査)。
+        for name in attr_names(s) {
+            assert!(
+                !name.starts_with("on"),
+                "spliced on* attribute must not appear: {name} in {s}"
+            );
+        }
+        // 後続テキストがテキストとして残っていること。
+        assert!(
+            s.contains("\"a (so: s h/ref=#"),
+            "trailing text must survive as text: {s}"
+        );
+    }
+
+    #[test]
+    fn postfilter_does_not_splice_text_into_attrs() {
+        // #857: `src="` を含む title 属性値と、その直後に `"` で始まるテキスト
+        // がある場合、旧 regex は `src=">"` を削除してテキストを属性値に
+        // splicing し、`onmouseover` のようなイベントハンドラ属性を新生させた。
+        // 修正版は `<img>` タグ以外に触れないため、出力は入力と同一になる。
+        let input = "<p title=\"A src=\"> \" x=\"y\" onmouseover=\"alert(1)</p>";
+        let out = sanitize_html(&raw(input));
+        assert_eq!(
+            out.as_str(),
+            "<p title=\"A src=\"> \" x=\"y\" onmouseover=\"alert(1)</p>",
+            "post-filter must not rewrite non-img markup"
         );
     }
 
