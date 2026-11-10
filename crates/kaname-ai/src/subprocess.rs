@@ -32,7 +32,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -134,7 +134,7 @@ impl LlmSubprocess {
     /// モデルが存在しない場合はモックモードで起動する。
     pub fn spawn(
         mode: SubprocessMode,
-        model_path: &PathBuf,
+        model_path: &Path,
         timeout: Duration,
     ) -> Result<Self, SubprocessError> {
         if !model_path.exists() {
@@ -215,6 +215,9 @@ impl LlmSubprocess {
     /// target/{debug,release}/ と配布バンドルで隣接配置される)、
     /// (2) PATH。見つからない場合は PATH 探索に任せて `Command::new` が
     /// spawn 時にエラーを返す。
+    ///
+    /// macOS でのみ使用する (Linux/Windows はフェイルクローズで早期 return)。
+    #[cfg(target_os = "macos")]
     fn runner_program(name: &str) -> PathBuf {
         if let Ok(exe) = std::env::current_exe() {
             if let Some(dir) = exe.parent() {
@@ -228,10 +231,11 @@ impl LlmSubprocess {
     }
 
     /// OS に応じたコマンドを構築する。
-    fn build_command(
-        mode: SubprocessMode,
-        model_path: &PathBuf,
-    ) -> Result<Command, SubprocessError> {
+    ///
+    /// macOS 以外では引数は未使用 (Linux/Windows はサンドボックス未実装のため
+    /// フェイルクローズで早期 return する)。
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+    fn build_command(mode: SubprocessMode, model_path: &Path) -> Result<Command, SubprocessError> {
         #[cfg(target_os = "linux")]
         {
             // D128: seccomp は現状「主張のみ・実装なし」だった —
