@@ -65,6 +65,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@cargo-nextest
 
+      # kaname-tauri の generate_context マクロが frontendDist (../dist) の
+      # 存在を要求し、無いとテスト用バイナリのコンパイルが落ちる。
+      # テストではフロントエンド自体は使わないため最小のプレースホルダで足りる
+      - name: Prepare frontend dist placeholder
+        run: |
+          mkdir -p dist
+          printf '<!doctype html><html><body></body></html>\n' > dist/index.html
+
       - name: Run tests
         run: |
           cargo nextest run \
