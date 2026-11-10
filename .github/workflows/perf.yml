@@ -82,25 +82,25 @@ jobs:
 
             const body = `## ${emoji} パフォーマンス計測結果
 
-${hasRegression ? '**⚠️ 5% 以上の回帰が検出されました。確認が必要です。**\n' : ''}
-<details>
-<summary>ベンチマーク結果 (クリックで展開)</summary>
+            ${hasRegression ? '**⚠️ 5% 以上の回帰が検出されました。確認が必要です。**\n' : ''}
+            <details>
+            <summary>ベンチマーク結果 (クリックで展開)</summary>
 
-\`\`\`
-${results}
-\`\`\`
-</details>
+            \`\`\`
+            ${results}
+            \`\`\`
+            </details>
 
-### 目標値 (Apple HIG)
+            ### 目標値 (Apple HIG)
 
-| 指標 | 目標 |
-|---|---|
-| BEC 判定 | < 50ms |
-| AiTM 検出 (5 URL) | < 10ms |
-| SSA スタイル距離 | < 1ms |
-| HTML スマグリングスキャン | < 5ms |
-| AI 要約 | < 3s |
-`;
+            | 指標 | 目標 |
+            |---|---|
+            | BEC 判定 | < 50ms |
+            | AiTM 検出 (5 URL) | < 10ms |
+            | SSA スタイル距離 | < 1ms |
+            | HTML スマグリングスキャン | < 5ms |
+            | AI 要約 | < 3s |
+            `;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
