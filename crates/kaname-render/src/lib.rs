@@ -104746,7 +104746,9 @@ pub fn sanitize_html(raw: &RawHtml) -> SanitizedBody {
     tag_attr_map.insert("ul", ["type"].iter().copied().collect());
     tag_attr_map.insert("span", ["lang"].iter().copied().collect());
     tag_attr_map.insert("div", ["lang"].iter().copied().collect());
-    tag_attr_map.insert("blockquote", ["cite"].iter().copied().collect());
+    // 注: blockquote には cite を許可しない。ammonia 4.2.0 の is_url_attr は
+    // cite を URL 属性と見なさないため url_schemes 検査が掛からず、
+    // data:/javascript: が素通りする (#857)。引用元表示の用途も無いため除去。
     tag_attr_map.insert("pre", ["class"].iter().copied().collect());
     tag_attr_map.insert("code", ["class"].iter().copied().collect());
 
@@ -106975,6 +106977,44 @@ mod tests {
             !out.as_str().contains("javascript:"),
             "javascript: href must be blocked"
         );
+    }
+
+    #[test]
+    fn blockquote_cite_dangerous_scheme_stripped() {
+        // #857: ammonia 4.2.0 の is_url_attr は cite を URL 属性と見なさないため
+        // url_schemes 検査が掛からず、data:/javascript: が素通りしていた。
+        // cite 属性にコードベース上の正当な用途が無いため許可属性から外す。
+        let out = sanitize_html(&raw(
+            "<blockquote cite=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==\">quoted</blockquote>",
+        ));
+        assert!(
+            !out.as_str().contains("data:"),
+            "data: cite must be removed: {}",
+            out.as_str()
+        );
+        assert!(
+            out.as_str().contains("quoted"),
+            "blockquote text must survive: {}",
+            out.as_str()
+        );
+        let out = sanitize_html(&raw(
+            "<blockquote cite=\"javascript:alert(1)\">quoted</blockquote>",
+        ));
+        assert!(
+            !out.as_str().contains("javascript:"),
+            "javascript: cite must be removed: {}",
+            out.as_str()
+        );
+        // https の cite も属性ごと除去される（blockquote 自体は残る）
+        let out = sanitize_html(&raw(
+            "<blockquote cite=\"https://example.com/source\">quoted</blockquote>",
+        ));
+        assert!(
+            !out.as_str().contains("cite="),
+            "cite attribute must be removed entirely: {}",
+            out.as_str()
+        );
+        assert!(out.as_str().contains("quoted"));
     }
 
     // ── quoted local part の @ バイパステスト ────────────────────────────
