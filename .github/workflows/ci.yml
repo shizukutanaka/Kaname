@@ -139,6 +139,10 @@ jobs:
   deny:
     name: "Cargo Deny"
     runs-on: ubuntu-latest
+    env:
+      # cargo-deny-action's container has no sccache; the workflow-level
+      # RUSTC_WRAPPER would make cargo metadata fail before checks run.
+      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
