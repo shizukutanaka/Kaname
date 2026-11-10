@@ -2602,6 +2602,7 @@ dependencies = [
  "hmac 0.12.1",
  "kaname-screen",
  "llama-cpp-2",
+ "llama-cpp-sys-2",
  "proptest",
  "rand 0.8.6",
  "reqwest 0.12.28",
