@@ -28723,7 +28723,16 @@ fn has_boundary_edge_ws_t(text: &str) -> bool {
                     continue;
                 }
             }
-            rest = &after[9.min(after.len())..];
+            // 9 バイト進める際は文字境界に丸める。`after` の先頭に
+            // マルチバイト文字 (lossy 変換の U+FFFD を含む) があると
+            // 9 がその途中になり、次のスライスが char boundary
+            // パニックを起こす (#865)。ASCII 針は境界を跨げないため
+            // 境界まで進めても "boundary=" の見逃しはない。
+            let mut adv = 9.min(after.len());
+            while !after.is_char_boundary(adv) {
+                adv += 1;
+            }
+            rest = &after[adv..];
         }
     }
     false
@@ -123022,6 +123031,25 @@ mod tests {
         assert!(!has_boundary_edge_ws(b"Content-Type: multipart/mixed; boundary=abc\r\n\r\nx"));
         assert!(!has_boundary_edge_ws(b"Content-Type: multipart/mixed; boundary=\"a b\"\r\n\r\nx"));
         assert!(!has_boundary_edge_ws(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn boundary_edge_ws_は境界値の直後のマルチバイト文字でパニックしない() {
+        // #865: 検索位置を 9 バイト進める処理が文字境界を踏み、
+        // boundary= の値にマルチバイト文字が続くとパニックした。
+        let mut v = b"Content-Type: multipart/mixed; boundary=1234567".to_vec();
+        v.push(0xa9);
+        assert!(!has_boundary_edge_ws(&v));
+        // 実クラッシュ入力と同型 (不正バイト列が lossy 変換で U+FFFD になる)
+        let crash1 = b"MIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=\xa9BOUN\xd6DARY";
+        assert!(!has_boundary_edge_ws(crash1));
+        // 値が 9 バイト未満で終わる場合も範囲外にならない。
+        assert!(!has_boundary_edge_ws(b"Content-Type: boundary=ab"));
+        // 境界を安全に越えた後も、後続の本物の端空白は検出する。
+        let mut u = b"Content-Type: multipart/mixed; boundary=1234567".to_vec();
+        u.push(0xa9);
+        u.extend_from_slice(b"; boundary=\" x\"\r\n\r\nx");
+        assert!(has_boundary_edge_ws(&u));
     }
 
     #[test]
