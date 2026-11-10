@@ -71,7 +71,7 @@ jobs:
             --workspace \
             --all-features \
             --no-fail-fast \
-            --test-threads=auto \
+            --test-threads=num-cpus \
             --failure-output=immediate \
             --status-level=fail
 
