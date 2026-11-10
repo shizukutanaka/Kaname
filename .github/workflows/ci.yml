@@ -107,6 +107,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # pedantic はクレート単位のオプトインとする (2026-11-11 ラチェット)。
+      # 以前はここで -W clippy::pedantic を全体に被せていたが、追随できて
+      # いないクレートが大半でゲートが常時赤になり、誰も見なくなっていた。
+      # 採用するクレートは自クレートの属性で warn(pedantic) + allow リストを
+      # 持つ方式に統一する (kaname-sandbox 等の既存方式)。
       - name: cargo clippy
         run: |
           cargo clippy \
@@ -118,7 +123,6 @@ jobs:
             -D clippy::unwrap_used \
             -D clippy::expect_used \
             -D clippy::panic \
-            -W clippy::pedantic \
             -A clippy::module_name_repetitions \
             -A clippy::missing_errors_doc
 

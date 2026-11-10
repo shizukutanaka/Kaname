@@ -371,11 +371,11 @@ pub struct VsockChannel {
 }
 
 impl VsockChannel {
-    #[allow(clippy::unused_async_trait_impl)] // トレイト実装のシグネチャ維持用スタブ
+    #[allow(clippy::unused_async)] // シグネチャ維持用スタブ (async だが await しない)
     async fn send(&mut self, _msg: VsockMsg) -> Result<(), SandboxError> {
         Ok(())
     }
-    #[allow(clippy::unused_async_trait_impl)]
+    #[allow(clippy::unused_async)]
     async fn recv(&mut self) -> Result<VsockMsg, SandboxError> {
         Ok(VsockMsg::Ready)
     }
