@@ -16534,7 +16534,12 @@ fn has_preamble_content_t(text: &str) -> bool {
     if bounds.is_empty() {
         return false;
     }
-    let body = &text[header_end + 2..];
+    // "\n\n" が無い (ヘッダのみで本文が存在しない) 入力では header_end ==
+    // text.len() となり、+2 すると範囲外で panic する (fuzz #856 で実証)。
+    // 本文が無ければ preamble/epilogue の内容も無いので false。
+    let Some(body) = text.get(header_end + 2..) else {
+        return false;
+    };
     for l in body.lines() {
         let t = l.trim();
         if t.is_empty() {
@@ -16572,7 +16577,12 @@ fn has_epilogue_content_t(text: &str) -> bool {
     if bounds.is_empty() {
         return false;
     }
-    let body = &text[header_end + 2..];
+    // "\n\n" が無い (ヘッダのみで本文が存在しない) 入力では header_end ==
+    // text.len() となり、+2 すると範囲外で panic する (fuzz #856 で実証)。
+    // 本文が無ければ preamble/epilogue の内容も無いので false。
+    let Some(body) = text.get(header_end + 2..) else {
+        return false;
+    };
     let mut seen_close = false;
     for l in body.lines() {
         let t = l.trim_end();
@@ -109564,6 +109574,11 @@ mod tests {
         assert!(!has_preamble_content(
             b"Content-Type: text/plain\r\n\r\nbody"
         ));
+        // ヘッダのみで "\n\n" が無い入力 (fuzz #856 の実クラッシュ形) は
+        // panic せず不発火 — header_end == len のまま +2 スライスしていた
+        assert!(!has_preamble_content(
+            b"Content-Type: multipart/mixed; boundary=b\nFrom: a@b\nSubject: x"
+        ));
     }
 
     #[test]
@@ -109578,6 +109593,10 @@ mod tests {
         ));
         assert!(!has_epilogue_content(
             b"Content-Type: text/plain\r\n\r\nbody"
+        ));
+        // preamble と同型: "\n\n" の無いヘッダのみ入力でも panic しない
+        assert!(!has_epilogue_content(
+            b"Content-Type: multipart/mixed; boundary=b\nFrom: a@b\nSubject: x"
         ));
     }
 
