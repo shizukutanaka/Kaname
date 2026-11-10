@@ -93875,7 +93875,13 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
                 }
             }
         }
-        pos = hpos + 21;
+        // 次の検索位置は needle (20 バイトの ASCII) の直後にする。
+        // hpos + 20 は needle が ASCII であるため常に文字境界になるが、
+        // +1 余分に進めると、直後にマルチバイト文字 (lossy 変換の
+        // U+FFFD を含む) が続く場合にその途中に着地し、次の
+        // lower[pos..] が char boundary パニックを起こす (#862)。
+        // また入力末尾で needle が終わる場合は範囲外にもなる。
+        pos = hpos + 20;
     }
     false
 }
@@ -128940,6 +128946,29 @@ mod tests {
         assert!(!has_inline_dangerous_attachment(inline_txt));
         let inline_lnk = b"Content-Disposition: inline; filename=\"doc.lnk\"\r\n\r\nx";
         assert!(has_inline_dangerous_attachment(inline_lnk));
+    }
+
+    #[test]
+    fn scan_はinline危険添付の針の直後のマルチバイト文字でパニックしない() {
+        // #862: 検索位置を needle の長さ +1 進めていたため、直後に
+        // マルチバイト文字が続くと文字境界でない位置でスライスして
+        // パニックしていた (fuzz: mime_parser)。
+        let mut v = b"content-disposition:".to_vec();
+        v.extend_from_slice("あ".as_bytes());
+        assert!(!has_inline_dangerous_attachment(&v));
+        // 実クラッシュ入力のパターン: 不正バイト列が lossy 変換で
+        // U+FFFD (3 バイト) になり、その途中が検索位置になった。
+        let mut w = b"Content-Disposition:".to_vec();
+        w.extend_from_slice(&[0xe0, 0x9c]);
+        w.extend_from_slice(b"nline\n\nbody");
+        assert!(!has_inline_dangerous_attachment(&w));
+        // 入力末尾で needle が終わる場合も範囲外にならない。
+        assert!(!has_inline_dangerous_attachment(b"content-disposition:"));
+        // 境界を安全に越えた後も、後続の本物の inline 危険添付は検出する。
+        let mut u = b"content-disposition:".to_vec();
+        u.extend_from_slice("あ".as_bytes());
+        u.extend_from_slice(b"\n\nContent-Disposition: inline; filename=\"run.exe\"\r\n\r\nMZ");
+        assert!(has_inline_dangerous_attachment(&u));
     }
 
     #[test]
