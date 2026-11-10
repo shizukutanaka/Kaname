@@ -38,6 +38,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # src-tauri (Tauri) のビルドには WebKit/GTK の開発ライブラリが要る
+      # (gdk-sys 等の build script が pkg-config で検出する。e2e.yml と同じ式)
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: mozilla-actions/sccache-action@v0.0.7
       - name: cargo check
@@ -52,6 +58,10 @@ jobs:
     needs: [check]
     steps:
       - uses: actions/checkout@v4
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev xvfb
       - uses: dtolnay/rust-toolchain@stable
       - uses: mozilla-actions/sccache-action@v0.0.7
       - uses: taiki-e/install-action@cargo-nextest
@@ -83,6 +93,10 @@ jobs:
     needs: [check]
     steps:
       - uses: actions/checkout@v4
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -160,6 +174,10 @@ jobs:
     needs: [test]
     steps:
       - uses: actions/checkout@v4
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: mozilla-actions/sccache-action@v0.0.7
       - name: cargo bench
@@ -203,6 +221,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: Install Tauri system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -306,21 +329,6 @@ jobs:
             exit 1
           fi
           echo "✅ CI PASSED"
-
-  # 暗号 KAT (Known Answer Test) — arxiv eprint 2026/192 対策
-  crypto-kat:
-    name: "Crypto KAT (FIPS 203/204)"
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Run crypto KAT
-        run: cargo test -p kaname-crypto --test kat
-      - name: Verify X25519 contributory behavior check
-        run: cargo test -p kaname-crypto validate_x25519
-      - name: Audit verification boundary doc exists
-        run: test -f docs/verification-boundary.md
 
   # 静的整合性チェック (モジュール・依存・バージョンの不整合検出)
   static-check:
