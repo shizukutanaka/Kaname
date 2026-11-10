@@ -20,6 +20,10 @@ tokio         = { workspace = true }
 # llama.cpp FFI の safe wrapper。0.1.x は API 破壊的変更が頻繁なため
 # 実装検証済みのバージョンにピン留め (D2 Phase 1)。
 llama-cpp-2   = "=0.1.156"
+# llama-cpp-sys-2 は ^0.1.156 指定だと 0.1.161 等へ漂流し、同梱 llama.cpp の
+# llama_rs_fit_params が 9 引数化して llama-cpp-2 0.1.156 と不整合 (E0061) になる。
+# fuzz ワークスペースは専用 lock を持たず毎回新規解決するため、ここで直接固定する。
+llama-cpp-sys-2 = "=0.1.156"
 encoding_rs   = "0.8"  # llama-cpp-2 の token_to_piece が要求する UTF-8 デコーダ
 # Phase 2 (モデル配布): ストリーミング DL に stream feature、イテレートに futures-util
 reqwest       = { workspace = true, features = ["stream"] }
