@@ -501,6 +501,7 @@ impl Default for BridgePolicy {
                 "system prompt",
                 "you are now",
                 "dan mode",
+                "jailbreak",
                 "send all emails",
                 "send to attacker",
                 "execute code",
@@ -1073,6 +1074,54 @@ mod tests {
             result,
             Err(BridgeError::AttackMarkerDetected { .. })
         ));
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // 回帰テスト: Issue #855 (fuzz prompt_injection クラッシュ)
+    //
+    // crash-bf9676240eed8902bb125f1fafab68e604e4da8f:
+    // "Instructions: summarize this document" のような要約が Bridge を
+    // すり抜けて Trusted 化され、fuzz ハーネスの不変条件
+    // (prompt_injection.rs:121: Trusted テキストに攻撃マーカーが残存しないこと)
+    // に違反した。根因は Bridge の既定マーカーリストに "jailbreak" が
+    // 欠けていたことで、他のハーネスマーカー
+    // ("ignore previous instructions" / "you are now" / "send all emails" /
+    // "dan mode") は Bridge の部分一致マーカーで網羅されていたが
+    // "jailbreak" だけが素通りし、OutputAuditor も検出しなかった。
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn bridge_rejects_jailbreak_marker_issue_855() {
+        let bridge = Bridge::new();
+        let untrusted = make_untrusted("e1", "hello");
+        let mut report = make_valid_report("e1");
+        // fuzz クラッシュ入力を最小化した再現ケース:
+        // 一見無害な要約指示の後に jailbreak マーカーが続く
+        report.summary = BoundedString::new(
+            "Instructions: summarize this document. This is a jailbreak attempt.",
+        )
+        .unwrap_or_else(|e| panic!("test data invalid: {e}"));
+
+        let result = bridge.validate_and_promote(report, &untrusted);
+        assert!(
+            matches!(result, Err(BridgeError::AttackMarkerDetected { .. })),
+            "jailbreak を含む要約は拒否されなければならない: {result:?}"
+        );
+    }
+
+    #[test]
+    fn bridge_rejects_jailbreak_marker_case_insensitive_issue_855() {
+        let bridge = Bridge::new();
+        let untrusted = make_untrusted("e1", "hello");
+        let mut report = make_valid_report("e1");
+        report.summary = BoundedString::new("Enable JAILBREAK mode for this summary")
+            .unwrap_or_else(|e| panic!("test data invalid: {e}"));
+
+        let result = bridge.validate_and_promote(report, &untrusted);
+        assert!(
+            matches!(result, Err(BridgeError::AttackMarkerDetected { .. })),
+            "大文字の JAILBREAK も拒否されなければならない: {result:?}"
+        );
     }
 
     #[test]
