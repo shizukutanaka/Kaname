@@ -817,8 +817,8 @@ fn is_google_host(domain: &str) -> bool {
 /// - v1: `u=<percent-encoded>&k=` → percent-decode → html-unescape
 /// - v2: `u=<translated>&[dc]=` → `-`→`%`, `_`→`/` 置換 → percent-decode → html-unescape
 /// - v3: `/v3/__<マングル URL>__;<urlsafe-b64>!` → 単一スラッシュ修復 →
-///       percent-decode → `*` (1 文字) / `**X` (run 長マッピング) トークンを
-///       base64 デコード済みバイト列で置換
+///   percent-decode → `*` (1 文字) / `**X` (run 長マッピング) トークンを
+///   base64 デコード済みバイト列で置換
 fn decode_urldefense(url: &str) -> Option<String> {
     // v3: /v3/__(マングル URL)__;(urlsafe-b64)!
     if let Some(v3_pos) = url.find("/v3/") {

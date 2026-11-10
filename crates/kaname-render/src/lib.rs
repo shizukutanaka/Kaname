@@ -12418,8 +12418,8 @@ fn trim_bytes(b: &[u8]) -> &[u8] {
 /// ヘッダ run 中に `Field-Name:` の形を持たない行があるか判定する
 /// (D1330)。
 ///
-/// ヘッダ行は 1 文字以上のフィールド名 (表示可能 ASCII・コロン不可)
-/// + `:` で始まる。コロンを欠く行・名前が空の行・名前中に空白や
+/// ヘッダ行は 1 文字以上のフィールド名 (表示可能 ASCII・コロン不可) +
+/// `:` で始まる。コロンを欠く行・名前が空の行・名前中に空白や
 /// 制御文字を含む行は、そこでヘッダ終端と見る実装・行を捨てる実装・
 /// 次行と結合する実装で以降全体の解釈がずれる。D1305 の空白前置名は
 /// この一般形の一部。
@@ -13364,8 +13364,8 @@ fn has_missing_part_content_type_t(text: &str) -> bool {
     // 「CT 無しパート」と誤検出されるのを防ぐ (宣言が無ければパートは無い)
     let declared = declared_boundaries(text);
     for l in text.to_ascii_lowercase().lines() {
-        if l.starts_with("--") {
-            let is_delim = l[2..]
+        if let Some(l_rest) = l.strip_prefix("--") {
+            let is_delim = l_rest
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
@@ -14128,8 +14128,8 @@ pub fn has_undeclared_base64_block(raw: &[u8]) -> bool {
     let mut in_part_headers = false;
     let mut run = 0u32;
     for l in text[header_end..].lines().map(|l| l.trim_end()) {
-        if l.starts_with("--") {
-            let is_delim = l[2..]
+        if let Some(l_rest) = l.strip_prefix("--") {
+            let is_delim = l_rest
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
@@ -14455,11 +14455,11 @@ fn has_ansi_escape_body_t(text: &str) -> bool {
             }
             continue;
         }
-        if l.starts_with("--") {
+        if let Some(l_rest) = l.strip_prefix("--") {
             // 宣言済み boundary の前方一致のみ区切りとする — 宣言の無い
             // `--` 始まりの本文行で走査を止める抑止を防ぐ。
             // `--b--` 終端境界はヘッダ run を開始しない
-            let is_delim = l[2..]
+            let is_delim = l_rest
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
@@ -14564,8 +14564,8 @@ fn has_bidi_override_body_t(text: &str) -> bool {
             }
             continue;
         }
-        if l.starts_with("--") {
-            let is_delim = l[2..]
+        if let Some(l_rest) = l.strip_prefix("--") {
+            let is_delim = l_rest
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
@@ -14673,8 +14673,8 @@ fn has_duplicate_content_id_t(text: &str) -> bool {
     // 外側ヘッダはスキップ — パートヘッダ run 内の content-id/location のみ
     let mut in_part_headers = false;
     for l in text[header_end..].to_ascii_lowercase().lines() {
-        if l.starts_with("--") {
-            let is_delim = l[2..]
+        if let Some(l_rest) = l.strip_prefix("--") {
+            let is_delim = l_rest
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
@@ -14800,8 +14800,8 @@ fn has_overlong_base64_line_t(text: &str) -> bool {
             }
             continue;
         }
-        if l.starts_with("--") {
-            let is_delim = l[2..]
+        if let Some(l_rest) = l.strip_prefix("--") {
+            let is_delim = l_rest
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
@@ -14955,8 +14955,8 @@ fn has_part_mime_version_t(text: &str) -> bool {
     let declared = declared_boundaries(text);
     let mut in_part_headers = false;
     for l in text[header_end..].to_ascii_lowercase().lines() {
-        if l.starts_with("--") {
-            let is_delim = l[2..]
+        if let Some(l_rest) = l.strip_prefix("--") {
+            let is_delim = l_rest
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
@@ -15378,8 +15378,8 @@ fn has_leading_continuation_t(text: &str) -> bool {
     }
     let mut expect_run_start = false;
     for l in text.to_ascii_lowercase().lines() {
-        if l.starts_with("--") {
-            let is_delim = l[2..]
+        if let Some(l_rest) = l.strip_prefix("--") {
+            let is_delim = l_rest
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
@@ -15795,8 +15795,8 @@ fn has_unbracketed_content_id_t(text: &str) -> bool {
     let declared = declared_boundaries(text);
     let mut in_part_headers = false;
     for l in text[header_end..].to_ascii_lowercase().lines() {
-        if l.starts_with("--") {
-            let is_delim = l[2..]
+        if let Some(l_rest) = l.strip_prefix("--") {
+            let is_delim = l_rest
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
@@ -15942,8 +15942,8 @@ fn has_part_header_dup_t(text: &str) -> bool {
     let mut in_part_headers = false;
     let mut seen: Vec<&str> = Vec::new();
     for l in text[header_end..].to_ascii_lowercase().lines() {
-        if l.starts_with("--") {
-            let is_delim = l[2..]
+        if let Some(l_rest) = l.strip_prefix("--") {
+            let is_delim = l_rest
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
@@ -16041,8 +16041,8 @@ fn has_missing_charset_hibit_t(text: &str) -> bool {
     let mut pending_hibit = false;
     let body_text = &lower[header_end..];
     for l in body_text.lines() {
-        if l.starts_with("--") {
-            let is_delim = l[2..]
+        if let Some(l_rest) = l.strip_prefix("--") {
+            let is_delim = l_rest
                 .split(|c: char| c.is_whitespace())
                 .next()
                 .is_some_and(|b| {
@@ -16873,10 +16873,10 @@ pub fn has_long_filename(raw: &[u8]) -> bool {
             while let Some(rel) = l[pos..].find(needle) {
                 let s = pos + rel + needle.len();
                 let rest = &l[s..];
-                let val = if rest.starts_with('"') {
-                    match rest[1..].find('"') {
-                        Some(e) => &rest[1..1 + e],
-                        None => &rest[1..],
+                let val = if let Some(stripped) = rest.strip_prefix('"') {
+                    match stripped.find('"') {
+                        Some(e) => &stripped[..e],
+                        None => stripped,
                     }
                 } else {
                     rest.split(';').next().unwrap_or("").trim()
@@ -17510,7 +17510,7 @@ pub fn has_routing_addr(raw: &[u8]) -> bool {
             continue;
         }
         // クオート・コメントの外で @ を含むトークンに %/! が混ざるか
-        let bytes = lower[colon + 1..].as_bytes();
+        let bytes = &lower.as_bytes()[colon + 1..];
         let mut in_q = false;
         let mut in_c = 0u32;
         let mut prev = b'\0';
@@ -17749,8 +17749,8 @@ fn has_part_field_headers_t(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     let mut in_part_hdr = false;
     for l in lower.lines() {
-        if l.starts_with("--") {
-            let tok = l[2..]
+        if let Some(l_rest) = l.strip_prefix("--") {
+            let tok = l_rest
                 .split(|c: char| c.is_whitespace() || c == ';')
                 .next()
                 .unwrap_or("");
@@ -24412,7 +24412,7 @@ pub fn has_bare_list_id(raw: &[u8]) -> bool {
         }
         let v = &l[l.find(':').unwrap_or(0) + 1..];
         let v = v.trim();
-        if !v.is_empty() && !(v.contains('<') && v.contains('>')) {
+        if !(v.is_empty() || v.contains('<') && v.contains('>')) {
             return true;
         }
     }
@@ -25177,7 +25177,7 @@ fn has_addr_before_angle_t(text: &str) -> bool {
         if !is_addr_header_name(low[..colon].trim_end()) {
             continue;
         }
-        let v = l[colon + 1..].as_bytes();
+        let v = &l.as_bytes()[colon + 1..];
         // 各トップレベル区切り `,` ごとに: `<` が出る前に裸 `@` があるか
         let (mut in_q, mut in_c, mut in_a, mut bare_at, mut prev) =
             (false, 0i32, false, false, b'\0');
@@ -28700,9 +28700,9 @@ fn has_boundary_edge_ws_t(text: &str) -> bool {
         let mut rest = v;
         while let Some(i) = rest.to_ascii_lowercase().find("boundary=") {
             let after = &rest[i + 9..];
-            if after.starts_with('"') {
-                if let Some(e) = after[1..].find('"') {
-                    let inner = &after[1..1 + e];
+            if let Some(stripped) = after.strip_prefix('"') {
+                if let Some(e) = stripped.find('"') {
+                    let inner = &stripped[..e];
                     if !inner.is_empty()
                         && (inner.starts_with(' ')
                             || inner.starts_with('\t')
@@ -34435,8 +34435,8 @@ pub fn has_addr_noname_group(raw: &[u8]) -> bool {
         }
         let v = l[colon + 1..].trim_start();
         // `:` 始まりで `;` までに要素がある — 無名グループ
-        if v.starts_with(':') {
-            let members = v[1..].split(';').next().unwrap_or("");
+        if let Some(stripped) = v.strip_prefix(':') {
+            let members = stripped.split(';').next().unwrap_or("");
             if !members.trim().is_empty() {
                 return true;
             }
@@ -55444,10 +55444,9 @@ fn has_xmid_bad(bytes: &[u8]) -> bool {
         let low = l.to_lowercase();
         if let Some(v) = low.strip_prefix("x-message-id:") {
             let t = v.trim();
-            let bad = !(t.starts_with('<') && t.ends_with('>') && t.len() > 2)
-                || !t[1..t.len() - 1]
+            let bad = !(t.starts_with('<') && t.ends_with('>') && t.len() > 2 && t[1..t.len() - 1]
                     .chars()
-                    .all(|c| (0x21..=0x7e).contains(&(c as u32)) && c != '<' && c != '>');
+                    .all(|c| (0x21..=0x7e).contains(&(c as u32)) && c != '<' && c != '>'));
             if bad {
                 return true;
             }
@@ -136012,6 +136011,7 @@ body";
     }
 
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 一覧操作欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nList-Unsubscribe: mailto:a@x.com\r\n\r\nx").unwrap();
     assert!(e.list_uri_bad);
@@ -136019,6 +136019,7 @@ fn 一覧操作欄が異形なら発火() {
     assert!(!e.list_uri_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 解除投稿欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nList-Unsubscribe-Post: x\r\n\r\nx").unwrap();
     assert!(e.unsub_post_bad);
@@ -136026,6 +136027,7 @@ fn 解除投稿欄が異形なら発火() {
     assert!(!e.unsub_post_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 保管先欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nArchived-At: \r\n\r\nx").unwrap();
     assert!(e.archived_at_bad);
@@ -136033,6 +136035,7 @@ fn 保管先欄が異形なら発火() {
     assert!(!e.archived_at_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 注入情報欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nInjection-Info: x\r\n\r\nx").unwrap();
     assert!(e.injection_info_bad);
@@ -136041,6 +136044,7 @@ fn 注入情報欄が異形なら発火() {
 }
 
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 通知選択欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nDisposition-Notification-Options: x\r\n\r\nx").unwrap();
     assert!(e.dnt_opt_bad);
@@ -136048,6 +136052,7 @@ fn 通知選択欄が異形なら発火() {
     assert!(!e.dnt_opt_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 信託情報欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nVBR-Info: x\r\n\r\nx").unwrap();
     assert!(e.vbr_info_bad);
@@ -136055,6 +136060,7 @@ fn 信託情報欄が異形なら発火() {
     assert!(!e.vbr_info_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 反応種別欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nFeedback-Type: x\r\n\r\nx").unwrap();
     assert!(e.feedback_type_bad);
@@ -136062,6 +136068,7 @@ fn 反応種別欄が異形なら発火() {
     assert!(!e.feedback_type_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 反応識別欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nFeedback-ID: a:b\r\n\r\nx").unwrap();
     assert!(e.feedback_id_bad);
@@ -136070,6 +136077,7 @@ fn 反応識別欄が異形なら発火() {
 }
 
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 優先順位欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nPrecedence: \r\n\r\nx").unwrap();
     assert!(e.precedence_bad);
@@ -136077,6 +136085,7 @@ fn 優先順位欄が異形なら発火() {
     assert!(!e.precedence_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 巡回欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-Loop: notanaddr\r\n\r\nx").unwrap();
     assert!(e.x_loop_bad);
@@ -136084,6 +136093,7 @@ fn 巡回欄が異形なら発火() {
     assert!(!e.x_loop_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 一意識別欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-UIDL: has space\r\n\r\nx").unwrap();
     assert!(e.uidl_bad);
@@ -136091,6 +136101,7 @@ fn 一意識別欄が異形なら発火() {
     assert!(!e.uidl_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 副受信欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-Received: garbage\r\n\r\nx").unwrap();
     assert!(e.x_received_bad);
@@ -136099,6 +136110,7 @@ fn 副受信欄が異形なら発火() {
 }
 
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 起源識別欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-Originating-IP: notanip\r\n\r\nx").unwrap();
     assert!(e.origin_ip_bad);
@@ -136106,6 +136118,7 @@ fn 起源識別欄が異形なら発火() {
     assert!(!e.origin_ip_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 虐待窓口欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-Complaints-To: x\r\n\r\nx").unwrap();
     assert!(e.abuse_uri_bad);
@@ -136113,6 +136126,7 @@ fn 虐待窓口欄が異形なら発火() {
     assert!(!e.abuse_uri_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 自動応答欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nAuto-Submitted: x y\r\n\r\nx").unwrap();
     assert!(e.auto_sub_bad);
@@ -136120,6 +136134,7 @@ fn 自動応答欄が異形なら発火() {
     assert!(!e.auto_sub_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 認証送信人欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-Authenticated-Sender: x\r\n\r\nx").unwrap();
     assert!(e.auth_sender_bad);
@@ -136128,6 +136143,7 @@ fn 認証送信人欄が異形なら発火() {
 }
 
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 迷惑報告欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-Spam-Report: x\r\n\r\nx").unwrap();
     assert!(e.spam_report_bad);
@@ -136135,6 +136151,7 @@ fn 迷惑報告欄が異形なら発火() {
     assert!(!e.spam_report_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 検査版欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-Spam-Checker-Version: x\r\n\r\nx").unwrap();
     assert!(e.spam_ver_bad);
@@ -136142,6 +136159,7 @@ fn 検査版欄が異形なら発火() {
     assert!(!e.spam_ver_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 巡回跡欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-BeenThere: x\r\n\r\nx").unwrap();
     assert!(e.beenthere_bad);
@@ -136149,6 +136167,7 @@ fn 巡回跡欄が異形なら発火() {
     assert!(!e.beenthere_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 保存抑止欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-No-Archive: x\r\n\r\nx").unwrap();
     assert!(e.no_archive_bad);
@@ -136157,6 +136176,7 @@ fn 保存抑止欄が異形なら発火() {
 }
 
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 迷惑旗欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-Spam-Flag: x\r\n\r\nx").unwrap();
     assert!(e.spam_flag_bad);
@@ -136164,6 +136184,7 @@ fn 迷惑旗欄が異形なら発火() {
     assert!(!e.spam_flag_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 迷惑状態欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-Spam-Status: x\r\n\r\nx").unwrap();
     assert!(e.spam_status_bad);
@@ -136171,6 +136192,7 @@ fn 迷惑状態欄が異形なら発火() {
     assert!(!e.spam_status_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 迷惑度欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-Spam-Level: x\r\n\r\nx").unwrap();
     assert!(e.spam_level_bad);
@@ -136178,6 +136200,7 @@ fn 迷惑度欄が異形なら発火() {
     assert!(!e.spam_level_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 迷惑点欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nX-Spam-Score: x\r\n\r\nx").unwrap();
     assert!(e.spam_score_bad);
@@ -136430,6 +136453,7 @@ fn 迷惑点欄が異形なら発火() {
     }
 
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 受信素朴判定欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nReceived-SPF: x\r\n\r\nx").unwrap();
     assert!(e.recv_spf_bad);
@@ -136437,6 +136461,7 @@ fn 受信素朴判定欄が異形なら発火() {
     assert!(!e.recv_spf_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 暗号必須欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nTLS-Required: x\r\n\r\nx").unwrap();
     assert!(e.tls_required_bad);
@@ -136444,6 +136469,7 @@ fn 暗号必須欄が異形なら発火() {
     assert!(!e.tls_required_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 受取人時限欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nRequire-Recipient-Valid-Since: x\r\n\r\nx").unwrap();
     assert!(e.req_rcpt_bad);
@@ -136451,6 +136477,7 @@ fn 受取人時限欄が異形なら発火() {
     assert!(!e.req_rcpt_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 印章欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nBIMI-Location: http://x.com/a.svg\r\n\r\nx").unwrap();
     assert!(e.bimi_mark_bad);
@@ -136459,6 +136486,7 @@ fn 印章欄が異形なら発火() {
 }
 
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 制御欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nControl: cancel\r\n\r\nx").unwrap();
     assert!(e.control_bad);
@@ -136466,6 +136494,7 @@ fn 制御欄が異形なら発火() {
     assert!(!e.control_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 置換欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nSupersedes: abc\r\n\r\nx").unwrap();
     assert!(e.supersedes_bad);
@@ -136473,6 +136502,7 @@ fn 置換欄が異形なら発火() {
     assert!(!e.supersedes_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 解除錠欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nCancel-Lock: sha256\r\n\r\nx").unwrap();
     assert!(e.cancel_lock_bad);
@@ -136480,6 +136510,7 @@ fn 解除錠欄が異形なら発火() {
     assert!(!e.cancel_lock_bad);
 }
 #[test]
+#[allow(clippy::unwrap_used)] // テスト: 対象処理の成功が前提
 fn 投稿機欄が異形なら発火() {
     let e = parse(b"From: a@x.com\r\nNNTP-Posting-Host: a@b.com\r\n\r\nx").unwrap();
     assert!(e.posting_host_bad);
