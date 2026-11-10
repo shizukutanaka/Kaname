@@ -24,10 +24,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0           # CI では無効化 (キャッシュと競合)
+  CARGO_INCREMENTAL: 0           # CI では無効化
   RUST_BACKTRACE: 1
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: "sccache"
+  # sccache は使わない (2026-11-11 恒久対策): GitHub 公式障害で ghac 経由の
+  # sccache 起動失敗が CI 全ジョブを停止させた。キャッシュは最適化であり、
+  # 単一障害点にしてはならないため、ラッパー自体を置かない。
 
 jobs:
   # ────────────────────────────────────────────────────────────────
@@ -45,7 +46,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
       - uses: dtolnay/rust-toolchain@stable
-      - uses: mozilla-actions/sccache-action@v0.0.7
       - name: cargo check
         run: cargo check --workspace --all-targets
 
@@ -63,7 +63,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev xvfb
       - uses: dtolnay/rust-toolchain@stable
-      - uses: mozilla-actions/sccache-action@v0.0.7
       - uses: taiki-e/install-action@cargo-nextest
 
       - name: Run tests
@@ -100,7 +99,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.7
       - name: cargo clippy
         run: |
           cargo clippy \
@@ -153,10 +151,6 @@ jobs:
   deny:
     name: "Cargo Deny"
     runs-on: ubuntu-latest
-    env:
-      # cargo-deny-action's container has no sccache; the workflow-level
-      # RUSTC_WRAPPER would make cargo metadata fail before checks run.
-      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -179,7 +173,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
       - uses: dtolnay/rust-toolchain@stable
-      - uses: mozilla-actions/sccache-action@v0.0.7
       - name: cargo bench
         # --bench '*' は glob として解釈されない (D119) — 実在ベンチ名を指定
         run: cargo bench --workspace --bench core_bench -- --output-format bencher | tee bench_output.txt
@@ -229,7 +222,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - uses: mozilla-actions/sccache-action@v0.0.7
 
       # Node.js (フロントエンドビルド用)
       - uses: actions/setup-node@v4
