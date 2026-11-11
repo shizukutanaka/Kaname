@@ -12,6 +12,8 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/shizukutanaka/kaname/releases)
 [![Status](https://img.shields.io/badge/status-v0.7.1-orange.svg)](docs/maturity.md)
 
+全プロジェクトの実測一覧: [玄関ポータル](https://muse.ai/s/xuan-guan-potaru-ja6aqxqxlpxbxnxl/DpY3e_2xwrRyU5918RAV9v0G3UfbMvPX0HeuI-0ab-s)
+
 ---
 
 ## ⚠️ 実装ステータス (公開前に必読)
