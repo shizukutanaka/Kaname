@@ -1389,12 +1389,16 @@ END:VCALENDAR"#;
             CalendarRisk::AutoRegistrationAbuse { reason, .. } => Some(reason.clone()),
             _ => None,
         });
-        match auto_reg {
-            Some(reason) => assert!(
+        assert!(
+            auto_reg.is_some(),
+            "AutoRegistrationAbuse が検出されるべき: {:?}",
+            scan.risks
+        );
+        if let Some(reason) = auto_reg {
+            assert!(
                 reason.contains("元メールを削除しても"),
                 "永続化 (メール削除で消えない) の警告文が含まれるべき: {reason}"
-            ),
-            None => panic!("AutoRegistrationAbuse が検出されるべき: {:?}", scan.risks),
+            );
         }
     }
 

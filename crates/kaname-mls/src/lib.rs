@@ -695,6 +695,7 @@ impl MlsMailClient {
     ///
     /// CSPRNG 初期化に失敗する環境でのみ失敗し得る。
     #[must_use]
+    #[allow(clippy::panic)] // 後方互換コンストラクタの契約: 初期化失敗で panic する。失敗を処理する場合は try_new を使う
     pub fn new(identity: Identity) -> Self {
         match Self::try_new(identity) {
             Ok(c) => c,
@@ -1466,7 +1467,7 @@ pub enum MlsMailError {
 // ============================================================================
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 

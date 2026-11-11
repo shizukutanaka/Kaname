@@ -55,6 +55,7 @@ mod adv_harness {
 
     /// Assert the outcome is a Block containing at least one of the expected findings.
     #[must_use]
+    #[allow(clippy::panic)] // テスト支援アサーション: 期待と異なる結果は panic で失敗させる契約
     pub fn assert_blocked_with<F: Fn(&Finding) -> bool>(outcome: &Outcome, pred: F, msg: &str) {
         match &outcome.preflight {
             PreflightResult::Block(findings) => {
@@ -70,6 +71,7 @@ mod adv_harness {
     }
 
     /// Assert the outcome is at least Advisory.
+    #[allow(clippy::panic)] // テスト支援アサーション: 期待と異なる結果は panic で失敗させる契約
     pub fn assert_at_least_advisory(outcome: &Outcome, msg: &str) {
         match &outcome.preflight {
             PreflightResult::Clean => panic!("{}: expected Advisory or Block, got Clean", msg),

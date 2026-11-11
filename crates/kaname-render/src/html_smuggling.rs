@@ -279,7 +279,7 @@ impl HtmlSmugglingDetector {
         //   偽 CAPTCHA + 実行手順の組み合わせは人を介してコマンド実行させる
         //   本体なので Critical。ClipboardWrite や誘導文言の単独ヒットは
         //   正規の「コードをコピー」UI でもあり得るため Caution に留める。
-        if (has_clip && has_lure) || (has_lure && has_captcha) {
+        if has_lure && (has_clip || has_captcha) {
             return SmugglingRisk::Critical;
         }
 

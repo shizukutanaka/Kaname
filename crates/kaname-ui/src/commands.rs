@@ -10767,6 +10767,7 @@ async fn reset_globals() {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic)]
 mod tests {
     use super::*;
 
@@ -12002,7 +12003,7 @@ mod tests {
             ご請求金額に関する確認はサポート窓口 0120-123-4567 までお電話ください。\r\n\
             解約のお手続きもお電話のみで承っております。\r\n"
             .as_bytes();
-        let r = analyze_raw_email(&eml).await?;
+        let r = analyze_raw_email(eml).await?;
         assert!(
             r.body.render_risks.iter().any(|s| s.contains("TOAD")),
             "TOAD 警告が出るべき: {:?}",
@@ -12025,7 +12026,7 @@ mod tests {
             Agenda is here: https://example.org/agenda\r\n\
             連絡先: 03-1234-5678\r\n"
             .as_bytes();
-        let r = analyze_raw_email(&eml).await?;
+        let r = analyze_raw_email(eml).await?;
         assert!(
             !r.body.render_risks.iter().any(|s| s.contains("TOAD")),
             "URL あり・誘導なしの連絡先表記では発火しないべき: {:?}",
@@ -12158,7 +12159,7 @@ mod tests {
             \r\n\
             See the attached document.\r\n"
             .as_bytes();
-        let r = analyze_raw_email(&eml).await?;
+        let r = analyze_raw_email(eml).await?;
         assert!(
             r.body
                 .render_risks
@@ -12375,6 +12376,7 @@ impl From<CeremonyError> for V02CommandError {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic)]
 mod v02_tests {
     use super::*;
 
