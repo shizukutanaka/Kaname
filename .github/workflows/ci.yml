@@ -107,6 +107,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+
+      # kaname-tauri の generate_context マクロが frontendDist (../dist) の
+      # 存在を要求し、無いとテスト用バイナリのコンパイルが落ちる。
+      # テストではフロントエンド自体は使わないため最小のプレースホルダで足りる
+      - name: Prepare frontend dist placeholder
+        run: |
+          mkdir -p dist
+          printf '<!doctype html><html><body></body></html>\n' > dist/index.html
+
       # pedantic はクレート単位のオプトインとする (2026-11-11 ラチェット)。
       # 以前はここで -W clippy::pedantic を全体に被せていたが、追随できて
       # いないクレートが大半でゲートが常時赤になり、誰も見なくなっていた。
