@@ -2,6 +2,10 @@
 
 > AIが助けてくれるのに、裏切らない唯一のメールクライアント
 
+> **スコープ**: Kaname は法人向けのセキュアメールクライアントです。
+> サーバ接続は **JMAP のみ**に対応しており、IMAP / SMTP には対応していません。
+> また、端末間暗号化（E2EE）メッセンジャーではありません（MLS はモック、ローカル LLM はスタブです。下記「実装ステータス」参照）。
+
 [![CI](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml/badge.svg)](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml)
 [![Security Audit](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml/badge.svg?job=audit)](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
