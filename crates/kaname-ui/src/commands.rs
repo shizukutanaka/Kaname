@@ -492,6 +492,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         thread_context: thread_ctx,
         past_thread_bodies: &past_bodies,
         dkim_signature_header: env.dkim_signature.as_deref(),
+        // DKIM 暗号的検証用に生メッセージ全体を渡す (この解析経路だけが
+        // RFC 5322 バイト列を保持している)。
+        raw_message: Some(bytes),
     };
 
     let assessment = bec_detector()
@@ -10165,6 +10168,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             thread_context: thread_ctx,
             past_thread_bodies: &past_bodies,
             dkim_signature_header: env.dkim_signature.as_deref(),
+            raw_message: None,
         };
 
         let (verdict, score) = match bec_detector().assess(req) {
@@ -13108,6 +13112,7 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
         thread_context: thread_ctx,
         past_thread_bodies: &past_bodies,
         dkim_signature_header: dkim_signature,
+        raw_message: None,
     };
     match bec_detector().assess(req) {
         Ok(a) => match a.verdict {
@@ -13872,7 +13877,15 @@ fn bec_llm_score(subject: &str, body: &str, context: Option<&str>) -> kaname_bec
 /// または `ai_llm_start` 未実行) なら LLM 寄与 0 — 決定論的シグナルのみで
 /// 判定する。LLM なしでも製品が動く設計を維持する (`NullLlm` と同じ失敗側)。
 fn bec_detector() -> kaname_bec::BecDetector {
-    kaname_bec::BecDetector::new(Box::new(bec_llm_score))
+    let detector = kaname_bec::BecDetector::new(Box::new(bec_llm_score));
+    // DKIM 署名の独立検証: システムの DNS リゾルバが引ける環境でのみ有効化する
+    // (引けない環境では従来どおりヘッダベースの判定のみ)。
+    match kaname_bec::dkim_verify::UdpDkimKeyResolver::system() {
+        Some(resolver) => {
+            detector.with_dkim_resolver(std::sync::Arc::new(resolver))
+        }
+        None => detector,
+    }
 }
 
 /// AI モデル状態の IPC 向け DTO (D2 Phase 5)。

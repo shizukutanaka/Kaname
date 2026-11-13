@@ -2618,10 +2618,14 @@ dependencies = [
 name = "kaname-bec"
 version = "0.7.1"
 dependencies = [
+ "base64 0.22.1",
+ "ed25519-dalek",
  "kaname-memory-guard",
  "kaname-pivot",
  "kaname-screen",
+ "num-bigint",
  "serde",
+ "sha2 0.10.9",
  "thiserror 1.0.69",
 ]
 

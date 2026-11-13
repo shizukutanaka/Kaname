@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+### Added — DKIM 署名の独立検証 (`kaname-bec::dkim_verify`): DNS の `<selector>._domainkey.<domain>` TXT レコードから公開鍵を取得し、DKIM-Signature を暗号的に検証する (rsa-sha256 / ed25519-sha256、simple/relaxed 正規化、`bh=` 本文ハッシュ照合、`l=` 対応)。BEC 判定に組み込み、検証失敗はリスク寄与 +0.45、検証成功は −0.10 のシグナルとして扱う。DNS 取得不能・未対応方式は中立 (Neutral) とし既存判定を変えない。DNS 参照は `DkimKeyResolver` トレイトで抽象化し、単体テストはネットワークなしで実行可能。本番用リゾルバは std のみで実装 (UDP + EDNS0)。SPF/DMARC の独立検証と authserv-id 検証は引き続き未実装。
+
 ### Performance — D3573: ヘッダ専用ヘルパー (`*_hdr_text` 18 本・`dc_each`・`any_hdr_bad`・`hdr_end`・`dc_hdr_end`) の冒頭で入力を `detection_input` のヘッダ範囲へ切り詰めるよう変更 — 呼び出しごとにメッセージ全文を UTF-8 変換・CRLF 正規化・全文走査していたのをやめ、10MB メール実測で `parse()` 約 2.9 秒 → 約 2.0 秒。検出結果は不変 (空行直後が WSP 継続行の場合のみ従来どおり全文を走査)。
 
 ### Performance — D3572: 本文込みの正規化テキストを使う 191 個の検出器に、呼び出しごとの UTF-8 lossy 変換・CRLF 正規化をやめさせ、`parse()` で一度だけ生成した正規化テキストを `&str` で共有するよう変更 (公開シグネチャ不変、内部を `*_t(text: &str)` 実体へ移譲) — 10MB メール実測で `parse()` 約 2.9 秒 → 約 1.3 秒。
