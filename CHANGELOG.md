@@ -5849,6 +5849,31 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - **§3.14 (SVG guard)**: 「添付処理パイプラインに未配線」という記述が誤りだったと判明。`scan_attachments` が実際に `svg_guard::scan_svg` を呼んでおり、D10 解消後は実メール添付に適用されている (安全側の訂正)
   - いずれもコード変更は無く、脅威モデルの記述精度のみを実態に合わせた
 
+## [0.7.2] - 2026-11-13 — DKIM 署名の独立検証を追加し、Clippy が Tauri を実際に検査するよう CI を修理したリリース
+
+v0.7.1 (タグ) 以後の変更は3系統。送信ドメイン認証の独立検証として
+DKIM 検証を新規に追加した (SPF/DMARC の独立検証は引き続き未実装)。
+CI では Clippy ジョブが `kaname-tauri` を実際にはコンパイルしておらず
+lint が素通りしていた問題を修理した。文書では README 冒頭にスコープを
+明記し、寄付募集をリポジトリページから除去した (導線は所有者
+プロフィール側の GitHub Sponsors に一本化する方針変更に伴うもの)。
+
+### Added
+- **DKIM 署名の独立検証 (`kaname-bec::dkim_verify`)** (PR #872)
+  - DNS の `<selector>._domainkey.<domain>` TXT レコードから公開鍵を取得し、DKIM-Signature を暗号的に検証する (rsa-sha256 / ed25519-sha256、simple/relaxed 正規化、`bh=` 本文ハッシュ照合、`l=` 対応)
+  - BEC 判定に組み込み、検証失敗はリスク寄与 +0.45、検証成功は −0.10 のシグナルとして扱う。DNS 取得不能・未対応方式は中立 (Neutral) とし既存判定を変えない
+  - DNS 参照は `DkimKeyResolver` トレイトで抽象化し、単体テストはネットワークなしで実行可能。本番用リゾルバは std のみで実装 (UDP + EDNS0)
+  - SPF/DMARC の独立検証と authserv-id 検証は引き続き未実装
+
+### Fixed
+- **CI の Clippy ジョブが `kaname-tauri` を実際にはコンパイルしていなかった** (PR #869)
+  - フロントエンドの dist プレースホルダが Clippy ジョブに無く、tauri がビルド対象から外れて lint が素通りしていた。プレースホルダを追加して実際にコンパイル・lint させ、初めて見えた指摘を解消した
+
+### Changed
+- **README 冒頭にスコープ (対象範囲) を明記** (PR #870)
+- **README に全プロジェクトのポータルリンクを追加し、URL を現行に更新** (PR #871)
+- **リポジトリページから寄付募集を除去** — 寄付の導線はプロフィール最下部の1行と Sponsors ページだけに残す表示方針への追随
+
 ## [0.7.1] - 2026-09-14 — CLAUDE.md 不変条件の検証と、自分自身の記録の訂正
 
 v0.7.0 に続き、CLAUDE.md の不変条件 (I5/I6) を初めて検証し、I5 を守る
