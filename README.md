@@ -256,22 +256,21 @@ Kaname は arxiv の最新研究を継続的に反映している:
 検証境界は [docs/verification-boundary.md](docs/verification-boundary.md) に明示。
 「形式検証済み」を盲信せず、独自 sanity check + KAT + microVM 分離で多層防御する。
 
-## プロジェクト統計 (v0.3.20)
+## プロジェクト統計
 
-| 項目 | 数値 |
-|---|---|
-| Rust クレート | 23 |
-| Rust LOC | 約 41,200 |
-| Rust テスト (nextest) | 1,182 (うち kaname-tests 統合/敵対 104) |
-| Playwright E2E | 19 spec (62 pass / 1 skip・3 ブラウザ行列) |
-| vitest | 6 |
-| ファジングターゲット | 3 (corpus 34 シード) |
-| プロパティテスト | 19 |
-| unsafe ブロック | 0 |
-| 本番 unwrap() | 0 |
-| docs/ 文書数 | 24 (索引付き) |
+規模の数値（クレート数・コード行数・テスト数・文書数など）は開発の進展で
+絶えず変動するため、この README には固定値を載せていません
+（過去に載せていた v0.3.20 時点の表は実態から大きく乖離したため廃止しました）。
+最新の実測値はいつでも同梱スクリプトで取得できます:
 
-詳細なドキュメントは [docs/README.md](docs/README.md) を参照。
+```bash
+bash scripts/stats.sh          # 人間向けサマリー
+bash scripts/stats.sh --json   # 機械可読形式
+```
+
+ワークスペースは `crates/` 配下のクレート群と `src-tauri`（デスクトップシェル）で
+構成されます。各クレートの役割は [docs/README.md](docs/README.md) と
+各クレートの README を参照してください。
 
 
 ## ライセンス
