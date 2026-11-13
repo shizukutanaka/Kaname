@@ -15,7 +15,7 @@
 #   5. バージョン番号を全ファイルで更新
 #   6. SBOM 生成
 #   7. git tag を作成
-#   8. タグ push (D7: CI ワークフローは存在しない — ビルド・配布は手動で行うこと)
+#   8. タグ push (その後 Release ワークフローを手動 dispatch すること)
 
 set -euo pipefail
 
@@ -190,9 +190,9 @@ Apple Rules of the Road:
 - SBOM 生成
 - CHANGELOG 更新済み
 
-注意: CI ワークフローは存在しません (docs/gap-analysis.md D7)。
-タグを push しても自動ビルド・配布は起きないため、
-手動で `cargo tauri build` → 配布物のアップロードを行ってください。
+注意: タグを push しただけでは何も起きません。
+GitHub Actions の Release ワークフローを tag=v$VERSION で手動 dispatch すると、
+署名なしバンドルのビルドと GitHub Release の作成が行われます。
 "
 
 ok "タグ作成: v$VERSION"
@@ -206,11 +206,10 @@ echo
 echo "次のステップ:"
 echo "  1. git push origin main"
 echo "  2. git push origin v$VERSION"
-echo "  3. GitHub Actions が自動的に:"
-echo "     - 4 プラットフォーム向けビルド"
-echo "     - コードサイニング (Apple/Authenticode)"
-echo "     - GitHub Release 作成"
-echo "     - SBOM 添付 + SLSA Provenance"
+echo "  3. GitHub Actions の Release ワークフローを手動 dispatch (tag: v$VERSION):"
+echo "     - macOS / Windows / Linux 向け署名なしバンドルのビルド"
+echo "     - GitHub Release 作成 (CHANGELOG 該当節 + SHA256SUMS.txt 添付)"
+echo "     - コードサイニング・公証は未対応 (利用時に OS の警告が出ます)"
 echo
 echo "リリースをキャンセルする場合:"
 echo "  git tag -d v$VERSION"
