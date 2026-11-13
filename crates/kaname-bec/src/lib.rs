@@ -91,6 +91,15 @@ pub struct AssessmentRequest<'a> {
     /// `None` の場合は DKIM 詳細チェックをスキップする
     /// (SPF/DKIM/DMARC の合否自体は `auth` フィールドで別途評価される)。
     pub dkim_signature_header: Option<&'a str>,
+    /// 生の RFC 5322 メッセージ全体 (省略可)。
+    ///
+    /// `dkim_verify` による DKIM 署名の暗号的検証に使用する。
+    /// 署名対象ヘッダの正規化には折り返しを含む生ヘッダ列が、
+    /// 本文ハッシュ (`bh=`) の照合には生本文が必要なため、
+    /// 加工済みのフィールドとは別に丸ごと渡す。
+    /// `None` の場合、または検出器に `DkimKeyResolver` が設定されて
+    /// いない場合は暗号的検証をスキップする (既存の判定は不変)。
+    pub raw_message: Option<&'a [u8]>,
 }
 
 /// パースされた SPF/DKIM/DMARC の判定。
@@ -236,6 +245,11 @@ pub struct BecDetector {
     /// `DkimReplayTracker::observe` の `&mut self` 要求を満たすには
     /// 内部可変性が必要。`Mutex` で保護する。
     dkim_replay_tracker: std::sync::Mutex<dkim_check::DkimReplayTracker>,
+    /// DKIM 署名の暗号的検証に使う DNS リゾルバ (任意)。
+    ///
+    /// `None` の場合は暗号的検証を行わない (従来動作)。
+    /// [`BecDetector::with_dkim_resolver`] で設定する。
+    dkim_resolver: Option<std::sync::Arc<dyn dkim_verify::DkimKeyResolver>>,
 }
 
 /// Trait for the local LLM used for semantic scoring.
@@ -304,7 +318,21 @@ impl BecDetector {
             thresholds: Thresholds::default(),
             llm,
             dkim_replay_tracker: std::sync::Mutex::new(dkim_check::DkimReplayTracker::new()),
+            dkim_resolver: None,
         }
+    }
+
+    /// DKIM 署名の暗号的検証を有効化する。
+    ///
+    /// 設定したリゾルバで DNS から公開鍵を引き、`assess()` のたびに
+    /// `AssessmentRequest.raw_message` の DKIM 署名を本検出器自身が
+    /// 検証する (接続先サーバの `Authentication-Results` 申告とは独立)。
+    pub fn with_dkim_resolver(
+        mut self,
+        resolver: std::sync::Arc<dyn dkim_verify::DkimKeyResolver>,
+    ) -> Self {
+        self.dkim_resolver = Some(resolver);
+        self
     }
 
     /// Assess a message. Runs all signal families and combines.
@@ -338,6 +366,9 @@ impl BecDetector {
 
         // --- 5e. DKIM l= タグ濫用 + リプレイ検出
         self.check_dkim(&req, &mut signals);
+
+        // --- 5f. DKIM 署名の暗号的検証 (独立検証)
+        self.check_dkim_crypto(&req, &mut signals);
 
         // --- 6. LLM signal (the expensive one; done last)
         self.check_llm(&req, &mut signals)?;
@@ -968,6 +999,56 @@ impl BecDetector {
                     ),
                 });
             }
+        }
+    }
+
+    /// DKIM 署名の暗号的検証 (独立検証)。
+    ///
+    /// 接続先サーバの `Authentication-Results` 申告 (`req.auth`) とは
+    /// 独立に、本検出器自身が DNS 公開鍵で署名を検証する。
+    /// リゾルバ未設定・生メッセージ未提供・署名なしの場合は何もしない
+    /// (既存の判定は不変)。DNS 取得不能などの「検証できない」は
+    /// 中立としてシグナルを出さない。
+    fn check_dkim_crypto(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
+        let (Some(resolver), Some(raw)) = (&self.dkim_resolver, req.raw_message) else {
+            return;
+        };
+        let results = dkim_verify::verify_message(resolver.as_ref(), raw);
+        // 複数署名がある場合は最も強い事実を 1 件だけシグナル化する
+        // (Fail があれば Fail、無ければ Pass)。
+        if let Some(fail) = results
+            .iter()
+            .find(|r| r.status == dkim_verify::DkimVerificationStatus::Fail)
+        {
+            signals.push(Signal {
+                family: SignalFamily::Authentication,
+                contribution: 0.45,
+                label: "DKIM 署名の暗号的検証に失敗".to_string(),
+                rationale: format!(
+                    "DKIM 署名を DNS 公開鍵で独立に検証した結果、無効でした (d={}, s={}): {}。\
+                     サーバ申告の認証結果ではなく本検出器自身の検証結果です。",
+                    fail.domain.as_deref().unwrap_or("不明"),
+                    fail.selector.as_deref().unwrap_or("不明"),
+                    fail.detail
+                ),
+            });
+            return;
+        }
+        if let Some(pass) = results
+            .iter()
+            .find(|r| r.status == dkim_verify::DkimVerificationStatus::Pass)
+        {
+            signals.push(Signal {
+                family: SignalFamily::Authentication,
+                contribution: -0.10,
+                label: "DKIM 署名を暗号的に検証済み".to_string(),
+                rationale: format!(
+                    "DKIM 署名と本文ハッシュを DNS 公開鍵で独立に検証し、正当と確認しました \
+                     (d={}, s={})。サーバ申告への依存なしに認証できています。",
+                    pass.domain.as_deref().unwrap_or("不明"),
+                    pass.selector.as_deref().unwrap_or("不明"),
+                ),
+            });
         }
     }
 
@@ -1693,6 +1774,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert_eq!(a.verdict, Verdict::Safe);
@@ -1727,6 +1809,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert!(
@@ -1769,6 +1852,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &past,
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert!(
@@ -1803,6 +1887,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert!(
@@ -1839,6 +1924,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: Some("v=1; a=rsa-sha256; d=ally-corp.com; s=sel; l=200; b=AAAA"),
+            raw_message: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert!(
@@ -1872,6 +1958,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: Some("d=ally-corp.com; b=SameSignatureRepeated123"),
+            raw_message: None,
         };
 
         let a1 = det.assess(make_req()).expect("assess 1 failed");
@@ -1910,6 +1997,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert!(
@@ -1943,6 +2031,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert_eq!(
@@ -1983,6 +2072,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -2082,6 +2172,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -2179,6 +2270,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         // パニックせず正常な結果を返すこと
         let result = det.assess(req);
@@ -2210,6 +2302,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let result = det.assess(req);
         assert!(result.is_ok(), "大量URLでpanicしてはならない: {result:?}");
@@ -2286,6 +2379,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: Some("v=1; a=rsa-sha256; d=google.com; s=sel; b=AAAA1111"),
+            raw_message: None,
         };
         let a = det.assess(req).expect("assess failed");
         assert!(
@@ -2319,6 +2413,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: Some("v=1; a=rsa-sha256; d=ally-corp.com; s=sel; b=BBBB2222"),
+            raw_message: None,
         };
         let a = det.assess(req).expect("assess failed");
         assert!(
@@ -2352,6 +2447,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: Some("v=1; a=rsa-sha256; d=ally-corp.com; s=sel; b=CCCC3333"),
+            raw_message: None,
         };
         let a = det.assess(req).expect("assess failed");
         assert!(
@@ -2475,6 +2571,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -2511,6 +2608,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -2546,6 +2644,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -2582,6 +2681,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -2606,6 +2706,7 @@ mod tests {
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
+            raw_message: None,
         }
     }
 
@@ -2771,10 +2872,122 @@ mod tests {
             "真の認証問題では複合ボーナスが発火すべき"
         );
     }
+
+    // ── DKIM 暗号的検証 (dkim_verify) の判定統合テスト ──────────────────
+
+    /// テスト用モックリゾルバ (RFC 8463 付録 A の鍵レコードを返す)。
+    struct Rfc8463Resolver;
+
+    impl crate::dkim_verify::DkimKeyResolver for Rfc8463Resolver {
+        fn lookup_txt(
+            &self,
+            name: &str,
+        ) -> Result<Vec<String>, crate::dkim_verify::DkimResolveError> {
+            let record = match name {
+                "brisbane._domainkey.football.example.com" => {
+                    "v=DKIM1; k=ed25519; p=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+                }
+                "test._domainkey.football.example.com" => {
+                    "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDkHlOQoBTzWRiGs5V6NpP3idY6Wk08a5qhdR6wy5bdOKb2jLQiY/J16JYi0Qvx/byYzCNb3W91y3FutACDfzwQ/BC/e/8uBsCR+yz1Lxj+PL6lHvqMKrM3rG4hstT5QjvHO9PzoxZyVYLzBfO2EeC3Ip3G+2kryOTIKT+l/K4w3QIDAQAB"
+                }
+                _ => return Err(crate::dkim_verify::DkimResolveError::NotFound),
+            };
+            Ok(vec![record.to_string()])
+        }
+    }
+
+    /// RFC 8463 付録 A の署名済みメッセージ (dkim_verify のテストと同一)。
+    const RFC8463_MESSAGE: &str = "DKIM-Signature: v=1; a=ed25519-sha256; c=relaxed/relaxed;\r\n d=football.example.com; i=@football.example.com;\r\n q=dns/txt; s=brisbane; t=1528637909; h=from : to :\r\n subject : date : message-id : from : subject : date;\r\n bh=2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8=;\r\n b=/gCrinpcQOoIfuHNQIbq4pgh9kyIK3AQUdt9OdqQehSwhEIug4D11Bus\r\n Fa3bT3FY5OsU7ZbnKELq+eXdp1Q1Dw==\r\nDKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;\r\n d=football.example.com; i=@football.example.com;\r\n q=dns/txt; s=test; t=1528637909; h=from : to : subject :\r\n date : message-id : from : subject : date;\r\n bh=2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8=;\r\n b=F45dVWDfMbQDGHJFlXUNB2HKfbCeLRyhDXgFpEL8GwpsRe0IeIixNTe3\r\n DhCVlUrSjV4BwcVcOF6+FF3Zo9Rpo1tFOeS9mPYQTnGdaSGsgeefOsk2Jz\r\n dA+L10TeYt9BgDfQNZtKdN1WO//KgIqXP7OdEFE4LjFYNcUxZQ4FADY+8=\r\nFrom: Joe SixPack <joe@football.example.com>\r\nTo: Suzie Q <suzie@shopping.example.net>\r\nSubject: Is dinner ready?\r\nDate: Fri, 11 Jul 2003 21:00:37 -0700 (PDT)\r\nMessage-ID: <20030712040037.46341.5F8J@football.example.com>\r\n\r\nHi.\r\n\r\nWe lost the game.  Are you hungry yet?\r\n\r\nJoe.\r\n\r\n";
+
+    const RFC8463_ED25519_HEADER: &str = "v=1; a=ed25519-sha256; c=relaxed/relaxed; d=football.example.com; i=@football.example.com; q=dns/txt; s=brisbane; t=1528637909; h=from : to : subject : date : message-id : from : subject : date; bh=2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8=; b=/gCrinpcQOoIfuHNQIbq4pgh9kyIK3AQUdt9OdqQehSwhEIug4D11BusFa3bT3FY5OsU7ZbnKELq+eXdp1Q1Dw==";
+
+    fn rfc8463_req<'a>(raw: &'a [u8]) -> AssessmentRequest<'a> {
+        AssessmentRequest {
+            from_header: "Joe SixPack <joe@football.example.com>",
+            return_path: Some("joe@football.example.com"),
+            subject: "Is dinner ready?",
+            body_text: "Hi. We lost the game. Are you hungry yet? Joe.",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "shopping.example.net",
+            known_contacts: &[],
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: Some(RFC8463_ED25519_HEADER),
+            raw_message: Some(raw),
+        }
+    }
+
+    #[test]
+    fn dkim_crypto_pass_adds_verified_signal() {
+        let det = BecDetector::new(Box::new(MockLlm {
+            prob: 0.05,
+            expl: "normal".into(),
+        }))
+        .with_dkim_resolver(std::sync::Arc::new(Rfc8463Resolver));
+        let a = det
+            .assess(rfc8463_req(RFC8463_MESSAGE.as_bytes()))
+            .expect("assess failed");
+        let sig = a
+            .signals
+            .iter()
+            .find(|s| s.label.contains("暗号的に検証済み"));
+        assert!(
+            sig.is_some(),
+            "暗号的検証 Pass のシグナルが付くべき: {:?}",
+            a.signals
+        );
+        assert_eq!(sig.map(|s| s.contribution), Some(-0.10));
+    }
+
+    #[test]
+    fn dkim_crypto_tampered_body_adds_fail_signal() {
+        let det = BecDetector::new(Box::new(MockLlm {
+            prob: 0.05,
+            expl: "normal".into(),
+        }))
+        .with_dkim_resolver(std::sync::Arc::new(Rfc8463Resolver));
+        let tampered = RFC8463_MESSAGE.replace("We lost the game", "We won the game!");
+        let a = det
+            .assess(rfc8463_req(tampered.as_bytes()))
+            .expect("assess failed");
+        let sig = a
+            .signals
+            .iter()
+            .find(|s| s.label.contains("暗号的検証に失敗"));
+        assert!(
+            sig.is_some(),
+            "改竄メールには暗号的検証 Fail のシグナルが付くべき: {:?}",
+            a.signals
+        );
+        assert_eq!(sig.map(|s| s.contribution), Some(0.45));
+    }
+
+    #[test]
+    fn dkim_crypto_skipped_without_resolver() {
+        // リゾルバ未設定なら生メッセージがあっても暗号的検証シグナルは
+        // 付かない (従来動作のまま)。
+        let det = BecDetector::new(Box::new(MockLlm {
+            prob: 0.05,
+            expl: "normal".into(),
+        }));
+        let a = det
+            .assess(rfc8463_req(RFC8463_MESSAGE.as_bytes()))
+            .expect("assess failed");
+        assert!(
+            !a.signals.iter().any(|s| s.label.contains("暗号的")),
+            "リゾルバ未設定では暗号的検証シグナルは付かないべき: {:?}",
+            a.signals
+        );
+    }
 }
 
 pub mod account_diff;
 pub mod aitm;
 pub mod dkim_check;
+/// DKIM 署名の暗号的検証 (DNS 公開鍵による独立検証)。
+pub mod dkim_verify;
 /// Reply-To スプーフィング + 表示名詐称の検出。
 pub mod reply_to_spoof;
