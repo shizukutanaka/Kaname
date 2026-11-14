@@ -797,6 +797,8 @@ echo "== 12. 「送信側が自称」警告の文言契約と DMARC ゲート (D
 # SELF_CLAIM_SUFFIXES のいずれかで終わり、analyze_raw_email の最後の変更の後にある
 # DMARC ゲートで一括除去される。文言がずれた検出器はゲートをすり抜けて
 # 認証済みの正規メールに誤警報を出すため、末尾・ゲートの存在・ゲート位置を検査する。
+# なお push の検出は、rustfmt が長い行で採用するチェーン形式
+# (render_risks\n.push(...)) も許容する。整形と本検査が競合しないための措置。
 python3 - <<'PY2' || fail=1
 import re, sys
 s = open('crates/kaname-ui/src/commands.rs', encoding='utf-8').read()
@@ -811,7 +813,7 @@ if start < 0 or end < 0:
     print("  NG analyze_raw_email / Ok(ImportedEmail { が見つからない"); sys.exit(1)
 body = s[start:end]
 opens = re.findall(r'if env\.([a-z0-9_]+_marks) \{', body)
-lits = re.findall(r'if env\.([a-z0-9_]+_marks) \{\s*render_risks\.push\(\s*"([^"]*)"', body)
+lits = re.findall(r'if env\.([a-z0-9_]+_marks) \{\s*render_risks\s*\.\s*push\(\s*"([^"]*)"', body)
 if len(opens) != len(lits):
     got = {f for f, _ in lits}
     for f in opens:
@@ -824,7 +826,7 @@ gate = body.rfind('render_risks.retain(|r| !is_self_claim_warning(r))')
 if gate < 0:
     print("  NG DMARC ゲート (render_risks.retain(|r| !is_self_claim_warning(r))) が無い"); bad += 1
 else:
-    marks_pos = [mm.start() for mm in re.finditer(r'if env\.[a-z0-9_]+ \{\s*render_risks\.push\(', body)]
+    marks_pos = [mm.start() for mm in re.finditer(r'if env\.[a-z0-9_]+ \{\s*render_risks\s*\.\s*push\(', body)]
     last = max([body.rfind('render_risks.push('), body.rfind('render_risks.extend(')] + marks_pos)
     if last > gate:
         print("  NG DMARC ゲートより後に render_risks への追加がある — 後続の警告がゲートを通らない"); bad += 1
