@@ -537,10 +537,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // 本文の構造リスクに加え、リンク先の評判判定も併記する。
     let mut render_risks = analyze_body_risks(analysis_text);
     // D160: 非表示テキスト混入 (hidden text salting) の兆候。
-    if html_extract
-        .as_ref()
-        .is_some_and(|e| e.hidden_content)
-    {
+    if html_extract.as_ref().is_some_and(|e| e.hidden_content) {
         render_risks.push(
             "HTML 本文に非表示テキスト (display:none 等の隠し文字列) — 検出回避の兆候".to_string(),
         );
@@ -584,9 +581,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // D962: meta refresh による自動転送
     if html_extract.as_ref().is_some_and(|e| e.meta_refresh) {
-        render_risks.push(
-            "meta refresh — 開封と同時に外部サイトへ転送される可能性があります".to_string(),
-        );
+        render_risks
+            .push("meta refresh — 開封と同時に外部サイトへ転送される可能性があります".to_string());
     }
 
     // D963: base タグによる相対 URL 解決基準の書き換え
@@ -617,10 +613,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
 
     // D966: svg/math (スクリプト実行可能なマークアップ)
-    if html_extract
-        .as_ref()
-        .is_some_and(|e| e.svg_math_present)
-    {
+    if html_extract.as_ref().is_some_and(|e| e.svg_math_present) {
         render_risks.push(
             "svg/math 要素 — スクリプト実行可能なマークアップの埋め込み (SVG スマグリング等) の兆候です"
                 .to_string(),
@@ -639,10 +632,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
 
     // D968: on* イベントハンドラ属性 (onerror/onload/onclick 等)
-    if html_extract
-        .as_ref()
-        .is_some_and(|e| e.event_handler_attr)
-    {
+    if html_extract.as_ref().is_some_and(|e| e.event_handler_attr) {
         render_risks.push(
             "on* イベントハンドラ属性 (onerror/onload 等) — スクリプト実行の意図を持つマークアップの兆候です"
                 .to_string(),
@@ -667,9 +657,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // D971: .onion ドメインへのリンク
     if html_extract.as_ref().is_some_and(|e| e.onion_href) {
-        render_risks.push(
-            ".onion ドメインへのリンク — Tor 経由の外部誘導の兆候です".to_string(),
-        );
+        render_risks.push(".onion ドメインへのリンク — Tor 経由の外部誘導の兆候です".to_string());
     }
 
     // D972: <a ping="..."> ハイパーリンク監査
@@ -682,9 +670,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // D974: script タグ (スクリプト実行意図)
     if html_extract.as_ref().is_some_and(|e| e.script_present) {
-        render_risks.push(
-            "script タグ — メール本文中のスクリプト実行意図の兆候です".to_string(),
-        );
+        render_risks.push("script タグ — メール本文中のスクリプト実行意図の兆候です".to_string());
     }
 
     // D975: frame/frameset (外部コンテンツ枠)
@@ -696,10 +682,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
 
     // D976: template (不活性ペイロード格納)
-    if html_extract
-        .as_ref()
-        .is_some_and(|e| e.template_present)
-    {
+    if html_extract.as_ref().is_some_and(|e| e.template_present) {
         render_risks.push(
             "template 要素 — 描画されない DOM へのペイロード格納 (HTML スマグリングのデータ島) の兆候です"
                 .to_string(),
@@ -708,17 +691,12 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // D977: <a download> (ファイル保存強制)
     if html_extract.as_ref().is_some_and(|e| e.download_attr) {
-        render_risks.push(
-            "a download 属性 — クリック時にファイル保存を強制する誘導の兆候です"
-                .to_string(),
-        );
+        render_risks
+            .push("a download 属性 — クリック時にファイル保存を強制する誘導の兆候です".to_string());
     }
 
     // D978: meta charset 危険指定 (utf-7 等)
-    if html_extract
-        .as_ref()
-        .is_some_and(|e| e.meta_charset_danger)
-    {
+    if html_extract.as_ref().is_some_and(|e| e.meta_charset_danger) {
         render_risks.push(
             "meta charset による危険な文字コード指定 (utf-7 等) — エンコーディング偽装の兆候です"
                 .to_string(),
@@ -741,10 +719,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     //    不可視タグ文字で 'funding' 等の金融ルアー語を分割しフィルタを
     //    回避する大量キャンペーンが観測された。KnowBe4 (2026-06) も
     //    不可視ノイズ文字 + 系統的ホモグリフ置換の併用を報告。
-    if html_extract
-        .as_ref()
-        .is_some_and(|e| e.unicode_tag_chars)
-    {
+    if html_extract.as_ref().is_some_and(|e| e.unicode_tag_chars) {
         render_risks.push(
             "本文に不可視の Unicode タグ文字 (U+E0000–E007F) が含まれています — \
              語を分割してフィルタを回避する ASCII スマグリングの兆候です"
@@ -765,10 +740,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // D1273: 装飾英数字 (太字/斜体/囲み/二乗ラテン) — 見た目は
     //    「Amazon」等のブランド語だがキーワード照合が効かない文字種
     //    変換回避 (フィッシング対策協議会 2026 報告)。
-    if html_extract
-        .as_ref()
-        .is_some_and(|e| e.styled_alphanum)
-    {
+    if html_extract.as_ref().is_some_and(|e| e.styled_alphanum) {
         render_risks.push(
             "本文に装飾英数字 (太字・斜体・囲み文字等) が含まれています — \
              見た目は通常語でもキーワード照合を破る文字種変換の兆候です"
@@ -845,9 +817,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         let idn_risks = kaname_bec::idn_homograph::analyze_display_name(name);
         let flagged = idn_risks.iter().any(|r| match r {
             kaname_bec::idn_homograph::IdnRisk::HomoglyphCharacters { chars } => {
-                chars
-                    .iter()
-                    .any(|c| !('\u{FF01}'..='\u{FF5E}').contains(c))
+                chars.iter().any(|c| !('\u{FF01}'..='\u{FF5E}').contains(c))
             }
             _ => true,
         });
@@ -885,10 +855,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // D1270: HTML 本文のリモートリソース参照 — 描画時には除去されるが、
     //    参照の存在自体が開封確認トラッキング (生存確認の偵察) の兆候。
-    if html_extract
-        .as_ref()
-        .is_some_and(|e| e.remote_resource)
-    {
+    if html_extract.as_ref().is_some_and(|e| e.remote_resource) {
         render_risks.push(
             "HTML 本文に外部リソースへの参照 (リモート画像等) が含まれています — \
              描画時には除去されますが、開封確認トラッキングの兆候の可能性があります"
@@ -901,10 +868,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     //    電話自体が唯一のペイロード。KnowBe4 観測で前年比 +449%。
     //    「番号がある」だけでは誤検出が多いため、「お電話で」系の誘導
     //    文脈と URL 不在の両方を条件にする。
-    if urls.is_empty()
-        && contains_phone_number(analysis_text)
-        && has_callback_lure(analysis_text)
-    {
+    if urls.is_empty() && contains_phone_number(analysis_text) && has_callback_lure(analysis_text) {
         render_risks.push(
             "URL を含まず電話番号への連絡のみを促しています (コールバック詐欺 / TOAD の兆候) — \
              番号に電話をかける前に、請求・解約等の件が本物か発信元へ別経路で確認してください"
@@ -994,8 +958,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // D327: abuse 報告先自称
     if env.abuse_headers {
         render_risks.push(
-            "Complaints-To/X-Report-Abuse 等 — 「監視あり」の体裁を自署する兆候です"
-                .to_string(),
+            "Complaints-To/X-Report-Abuse 等 — 「監視あり」の体裁を自署する兆候です".to_string(),
         );
     }
 
@@ -1010,8 +973,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // D329: Feedback-ID 自称
     if env.feedback_id {
         render_risks.push(
-            "Feedback-ID/X-Feedback-ID — ISP 苦情ループ登録の体裁を自署する兆候です"
-                .to_string(),
+            "Feedback-ID/X-Feedback-ID — ISP 苦情ループ登録の体裁を自署する兆候です".to_string(),
         );
     }
 
@@ -1025,9 +987,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // D364: DCC チェックサム印自称
     if env.dcc_marks {
-        render_risks.push(
-            "X-DCC-* — 分散検査基盤のチェックサム印を送信側が自称する兆候です".to_string(),
-        );
+        render_risks
+            .push("X-DCC-* — 分散検査基盤のチェックサム印を送信側が自称する兆候です".to_string());
     }
 
     // D365: 自動生成印自称
@@ -2642,9 +2603,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // 「中身を検査できない添付」と「解凍方法を本文で教える」の組み合わせは
     // ゲートウェイ回避の典型手口 (Sublime Security 検知ルール
     // `body_encrypted_zip_password_attachment` と同型)。
-    if attachment_scans.iter().any(|a| a.is_encrypted)
-        && body_mentions_password(analysis_text)
-    {
+    if attachment_scans.iter().any(|a| a.is_encrypted) && body_mentions_password(analysis_text) {
         render_risks.push(
             "パスワード付き ZIP 添付に加え、本文にパスワードらしき記載があります — \
              内容物を検査できないまま開封させるマルウェア配布の典型手口です"
@@ -2682,7 +2641,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 continue;
             }
             if (!our.is_empty() && inner_domain == our)
-                || to_domains.iter().any(|d| !d.is_empty() && *d == inner_domain)
+                || to_domains
+                    .iter()
+                    .any(|d| !d.is_empty() && *d == inner_domain)
             {
                 render_risks.push(format!(
                     "添付メール内側の差出人 ({inner}) が受信側ドメインを騙っています — \
@@ -5739,7 +5700,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
 
     if env.received_multi_from {
-        render_risks.push("Received 欄に from 節が二度あります—最初と最後の採用で経路解析がずれます".to_string());
+        render_risks.push(
+            "Received 欄に from 節が二度あります—最初と最後の採用で経路解析がずれます".to_string(),
+        );
     }
     if env.date_two_days {
         render_risks.push("Date 欄に日が二つあります—先採用と後採用で日付がずれます".to_string());
@@ -5748,31 +5711,55 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Received 欄が「;」しかありません—空欄として破棄する実装と節として読む実装で経路がずれます".to_string());
     }
     if env.received_no_by {
-        render_risks.push("Received 欄に by 節がありません—必須と読む実装と任意と読む実装で経路解析がずれます".to_string());
+        render_risks.push(
+            "Received 欄に by 節がありません—必須と読む実装と任意と読む実装で経路解析がずれます"
+                .to_string(),
+        );
     }
     if env.date_two_months {
         render_risks.push("Date 欄に月名が二つあります—先採用と後採用で日付がずれます".to_string());
     }
     if env.trailing_semi_param {
-        render_risks.push("欄の末尾に空のパラメータがあります—無視する実装と構文エラーとする実装で読みがずれます".to_string());
+        render_risks.push(
+            "欄の末尾に空のパラメータがあります—無視する実装と構文エラーとする実装で読みがずれます"
+                .to_string(),
+        );
     }
     if env.multi_semi_received {
-        render_risks.push("Received 欄に「;」が二つ以上あります—最初と最後で切る実装で日時印がずれます".to_string());
+        render_risks.push(
+            "Received 欄に「;」が二つ以上あります—最初と最後で切る実装で日時印がずれます"
+                .to_string(),
+        );
     }
     if env.numeric_dow {
-        render_risks.push("Date 欄の曜日が数字です—曜日として捨てる実装と日番号と読む実装で日付がずれます".to_string());
+        render_risks.push(
+            "Date 欄の曜日が数字です—曜日として捨てる実装と日番号と読む実装で日付がずれます"
+                .to_string(),
+        );
     }
     if env.param_empty_value {
-        render_risks.push("パラメータに値がない名札があります—空文字として採る実装と破棄する実装で読みがずれます".to_string());
+        render_risks.push(
+            "パラメータに値がない名札があります—空文字として採る実装と破棄する実装で読みがずれます"
+                .to_string(),
+        );
     }
     if env.single_label_domain {
-        render_risks.push("宛名のドメインにドットがありません—FQDNを要求する実装と受理する実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名のドメインにドットがありません—FQDNを要求する実装と受理する実装で宛先がずれます"
+                .to_string(),
+        );
     }
     if env.pre_eq_space {
-        render_risks.push("パラメータの「=」の前に空白があります—キーに含める実装と除く実装で読みがずれます".to_string());
+        render_risks.push(
+            "パラメータの「=」の前に空白があります—キーに含める実装と除く実装で読みがずれます"
+                .to_string(),
+        );
     }
     if env.year_5digit {
-        render_risks.push("Date 欄に5桁以上の年があります—4桁まで読む実装とそのまま拾う実装で日付がずれます".to_string());
+        render_risks.push(
+            "Date 欄に5桁以上の年があります—4桁まで読む実装とそのまま拾う実装で日付がずれます"
+                .to_string(),
+        );
     }
     if env.param_quoted_eq {
         render_risks.push("パラメータの引用値に「=」が含まれています—最初の=で切る実装と引用読みの実装で値がずれます".to_string());
@@ -5781,22 +5768,33 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("boundary が大小写だけ違う値で二度名乗られています—区別する実装と同一視する実装で区切りがずれます".to_string());
     }
     if env.two_list_ids {
-        render_risks.push("List-Id 欄に識別子が二つあります—先採用と後採用でML判定がずれます".to_string());
+        render_risks
+            .push("List-Id 欄に識別子が二つあります—先採用と後採用でML判定がずれます".to_string());
     }
     if env.received_from_empty {
         render_risks.push("Received 欄の from 節に値がありません—次の語をホスト名と読む実装と空節と読む実装で経路がずれます".to_string());
     }
     if env.slash_param_value {
-        render_risks.push("パラメータの値に「/」があります—値ごと採る実装とparamを捨てる実装で読みがずれます".to_string());
+        render_risks.push(
+            "パラメータの値に「/」があります—値ごと採る実装とparamを捨てる実装で読みがずれます"
+                .to_string(),
+        );
     }
     if env.ct_no_subtype {
-        render_risks.push("Content-Type にサブ型がありません—既定値で丸める実装と欄を捨てる実装で読みがずれます".to_string());
+        render_risks.push(
+            "Content-Type にサブ型がありません—既定値で丸める実装と欄を捨てる実装で読みがずれます"
+                .to_string(),
+        );
     }
     if env.msgid_dotless_domain {
-        render_risks.push("識別子のドメインにドットがありません—FQDNを要求する実装と受理する実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子のドメインにドットがありません—FQDNを要求する実装と受理する実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.received_multi_by {
-        render_risks.push("Received 欄に by 節が二つあります—先採用と後採用で経路がずれます".to_string());
+        render_risks
+            .push("Received 欄に by 節が二つあります—先採用と後採用で経路がずれます".to_string());
     }
     if env.cd_empty_type {
         render_risks.push("Content-Disposition に型がありません—attachment扱いする実装と欄を捨てる実装で添付判定がずれます".to_string());
@@ -5808,10 +5806,13 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Received 欄の from 節にアドレス形があります—ホスト名と採る実装とローカル部を捨てる実装で経路がずれます".to_string());
     }
     if env.received_multi_with {
-        render_risks.push("Received 欄に with 節が二つあります—先採用と後採用で経路がずれます".to_string());
+        render_risks
+            .push("Received 欄に with 節が二つあります—先採用と後採用で経路がずれます".to_string());
     }
     if env.received_multi_for {
-        render_risks.push("Received 欄に for 節が二つあります—先採用と後採用で配送先がずれます".to_string());
+        render_risks.push(
+            "Received 欄に for 節が二つあります—先採用と後採用で配送先がずれます".to_string(),
+        );
     }
     if env.at_param_name {
         render_risks.push("パラメータの名に「@」があります—名を区切りまで読む実装と欄を捨てる実装で読みがずれます".to_string());
@@ -5820,154 +5821,274 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("符号化の値に余分な空白があります—空白を除く実装とそのまま比較する実装でデコードがずれます".to_string());
     }
     if env.received_multi_id {
-        render_risks.push("Received 欄に id 節が二つあります—先採用と後採用で識別子がずれます".to_string());
+        render_risks
+            .push("Received 欄に id 節が二つあります—先採用と後採用で識別子がずれます".to_string());
     }
     if env.slash_param_name {
         render_risks.push("パラメータの名に「/」があります—名を区切りまで読む実装と欄を捨てる実装で読みがずれます".to_string());
     }
     if env.two_cte_values {
-        render_risks.push("符号化の値が二つあります—先採用と欄破棄で本文のデコードがずれます".to_string());
+        render_risks
+            .push("符号化の値が二つあります—先採用と欄破棄で本文のデコードがずれます".to_string());
     }
     if env.alnumless_boundary {
-        render_risks.push("boundary に英数字がありません—区切り行の綴りが実装ごとにずれます".to_string());
+        render_risks
+            .push("boundary に英数字がありません—区切り行の綴りが実装ごとにずれます".to_string());
     }
     if env.received_multi_via {
-        render_risks.push("Received 欄に via 節が二つあります—先採用と後採用で経路がずれます".to_string());
+        render_risks
+            .push("Received 欄に via 節が二つあります—先採用と後採用で経路がずれます".to_string());
     }
     if env.received_by_empty {
-        render_risks.push("Received 欄の by 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received 欄の by 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.cd_two_types {
-        render_risks.push("Content-Disposition の型が二つあります—先採用と欄破棄で添付判定がずれます".to_string());
+        render_risks.push(
+            "Content-Disposition の型が二つあります—先採用と欄破棄で添付判定がずれます".to_string(),
+        );
     }
     if env.msgid_two_at {
-        render_risks.push("識別子の中にアットが二つあります—先で分ける実装と後で分ける実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子の中にアットが二つあります—先で分ける実装と後で分ける実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_empty {
-        render_risks.push("Received 欄の with 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received 欄の with 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_empty {
-        render_risks.push("Received 欄の id 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received 欄の id 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.boundary_param_dup {
-        render_risks.push("同じ欄に boundary が二度あります—先採用と後採用で区切りがずれます".to_string());
+        render_risks
+            .push("同じ欄に boundary が二度あります—先採用と後採用で区切りがずれます".to_string());
     }
     if env.received_for_empty {
-        render_risks.push("Received 欄の for 節が空です—次の語を継ぐ実装と空節とする実装で配送先がずれます".to_string());
+        render_risks.push(
+            "Received 欄の for 節が空です—次の語を継ぐ実装と空節とする実装で配送先がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_empty {
-        render_risks.push("Received 欄の via 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received 欄の via 節が空です—次の語を継ぐ実装と空節とする実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.param_name_dup {
-        render_risks.push("同じ欄に同名のパラメータが二度あります—先採用と後採用で値がずれます".to_string());
+        render_risks.push(
+            "同じ欄に同名のパラメータが二度あります—先採用と後採用で値がずれます".to_string(),
+        );
     }
     if env.msgid_ref_comma {
-        render_risks.push("識別子の列にコンマがあります—区切る実装と識別子の一部と読む実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子の列にコンマがあります—区切る実装と識別子の一部と読む実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.addr_semicolon_only {
-        render_risks.push("宛名欄が区切りだけです—欄を破棄する実装と空集合とする実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名欄が区切りだけです—欄を破棄する実装と空集合とする実装で宛先がずれます".to_string(),
+        );
     }
     if env.msgid_ref_semicolon {
-        render_risks.push("識別子の列にセミコロンがあります—区切る実装と識別子の一部と読む実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子の列にセミコロンがあります—区切る実装と識別子の一部と読む実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.addr_comma_only {
-        render_risks.push("宛名欄がコンマだけです—欄を破棄する実装と空要素とする実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名欄がコンマだけです—欄を破棄する実装と空要素とする実装で宛先がずれます".to_string(),
+        );
     }
     if env.ct_empty_subtype {
-        render_risks.push("Content-Type の型が斜線だけです—既定値と読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "Content-Type の型が斜線だけです—既定値と読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.cte_comma {
-        render_risks.push("符号化の値にコンマがあります—区切って先を採る実装と欄を捨てる実装でデコードがずれます".to_string());
+        render_risks.push(
+            "符号化の値にコンマがあります—区切って先を採る実装と欄を捨てる実装でデコードがずれます"
+                .to_string(),
+        );
     }
     if env.param_star_name {
-        render_risks.push("パラメータ名が星で始まります—名に含める実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "パラメータ名が星で始まります—名に含める実装と欄を捨てる実装で値がずれます".to_string(),
+        );
     }
     if env.resent_out_of_order {
-        render_risks.push("再送欄の並びが規格と逆です—順序を見ない実装と欄順から転送を推す実装で経路がずれます".to_string());
+        render_risks.push(
+            "再送欄の並びが規格と逆です—順序を見ない実装と欄順から転送を推す実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_date_empty {
-        render_risks.push("経過印の日付節が空です—無視する実装と欄を捨てる実装で日時記録がずれます".to_string());
+        render_risks.push(
+            "経過印の日付節が空です—無視する実装と欄を捨てる実装で日時記録がずれます".to_string(),
+        );
     }
     if env.addr_two_groups {
-        render_risks.push("宛名欄に二つのグループがあります—結合する実装と先だけ採る実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名欄に二つのグループがあります—結合する実装と先だけ採る実装で宛先がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_edge_dot_domain {
-        render_risks.push("識別子のドメインがドットで始まるか終わります—剥く実装と捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子のドメインがドットで始まるか終わります—剥く実装と捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.boundary_dot_edge {
-        render_risks.push("区切りの値がドットで始まるか終わります—削る実装と生採用の実装でパート区切りがずれます".to_string());
+        render_risks.push(
+            "区切りの値がドットで始まるか終わります—削る実装と生採用の実装でパート区切りがずれます"
+                .to_string(),
+        );
     }
     if env.received_port {
-        render_risks.push("経過印の節の値にコロンがあります—切る実装と生採用の実装で経路解析がずれます".to_string());
+        render_risks.push(
+            "経過印の節の値にコロンがあります—切る実装と生採用の実装で経路解析がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_ref_dup {
-        render_risks.push("同じ識別子が二度あります—捨てる実装と連結する実装で照合がずれます".to_string());
+        render_risks
+            .push("同じ識別子が二度あります—捨てる実装と連結する実装で照合がずれます".to_string());
     }
     if env.received_semi_lead {
-        render_risks.push("経過印が区切りで始まります—空の節を無視する実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "経過印が区切りで始まります—空の節を無視する実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.cte_upper {
-        render_risks.push("符号化の値が大文字です—厳密比較の実装は拾えずデコード経路がずれます".to_string());
+        render_risks.push(
+            "符号化の値が大文字です—厳密比較の実装は拾えずデコード経路がずれます".to_string(),
+        );
     }
     if env.addr_two_angle {
-        render_risks.push("宛名欄に額縁が二組あります—結合する実装と先だけ採る実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名欄に額縁が二組あります—結合する実装と先だけ採る実装で宛先がずれます".to_string(),
+        );
     }
     if env.msgid_no_at {
-        render_risks.push("識別子にアットマークがありません—受理する実装と捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子にアットマークがありません—受理する実装と捨てる実装で照合がずれます".to_string(),
+        );
     }
     if env.two_at_addr {
-        render_risks.push("宛名にアットマークが二つあります—先で割る実装と後で割る実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名にアットマークが二つあります—先で割る実装と後で割る実装で宛先がずれます"
+                .to_string(),
+        );
     }
     if env.ct_double_slash {
-        render_risks.push("Content-Type の型に二重の斜線があります—読み飛ばす実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "Content-Type の型に二重の斜線があります—読み飛ばす実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.boundary_inner_ws {
-        render_risks.push("区切りの裸値の内側に空白があります—切る実装と生採用の実装でパート区切りがずれます".to_string());
+        render_risks.push(
+            "区切りの裸値の内側に空白があります—切る実装と生採用の実装でパート区切りがずれます"
+                .to_string(),
+        );
     }
     if env.addr_colon_only {
-        render_risks.push("宛名欄がコロンだけです—欄を破棄する実装と空のグループと読む実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名欄がコロンだけです—欄を破棄する実装と空のグループと読む実装で宛先がずれます"
+                .to_string(),
+        );
     }
     if env.ref_lead_sep {
-        render_risks.push("識別子列が区切り字で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子列が区切り字で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_paren {
-        render_risks.push("識別子の額縁にコメントが隣接しています—剥がす実装と結合する実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子の額縁にコメントが隣接しています—剥がす実装と結合する実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.addr_gt_lead {
         render_risks.push("宛名欄が閉じ額で始まっています—先頭語を捨てる実装と住所の一部と読む実装で宛先がずれます".to_string());
     }
     if env.msgid_empty_side {
-        render_risks.push("識別子のアットマークの片側が空です—受理する実装と捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子のアットマークの片側が空です—受理する実装と捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_semi_lead {
-        render_risks.push("識別子欄が仕切り字で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が仕切り字で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.cte_semi_lead {
-        render_risks.push("符号化欄が仕切り字で始まっています—読み飛ばす実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符号化欄が仕切り字で始まっています—読み飛ばす実装と欄を捨てる実装で復号がずれます"
+                .to_string(),
+        );
     }
     if env.ref_gt_lead {
-        render_risks.push("識別子列が閉じ額で始まっています—捨てる実装と識別子の一部と読む実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子列が閉じ額で始まっています—捨てる実装と識別子の一部と読む実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.ct_eq_type {
-        render_risks.push("Content-Type の型に等号があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "Content-Type の型に等号があります—型として読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.cd_eq_type {
         render_risks.push("Content-Disposition の型に等号があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
     }
     if env.addr_amp_local {
-        render_risks.push("宛名のローカル部に連結号があります—拒否する実装と採用する実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名のローカル部に連結号があります—拒否する実装と採用する実装で宛先がずれます"
+                .to_string(),
+        );
     }
     if env.ct_colon_type {
-        render_risks.push("Content-Type の型に二重連があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "Content-Type の型に二重連があります—型として読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.same_addr_dup {
-        render_risks.push("宛名欄に同じアドレスが二度書かれています—重複を除く実装と採用する実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名欄に同じアドレスが二度書かれています—重複を除く実装と採用する実装で宛先がずれます"
+                .to_string(),
+        );
     }
     if env.addr_tilde_local {
-        render_risks.push("宛名のローカル部に波線があります—拒否する実装と採用する実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名のローカル部に波線があります—拒否する実装と採用する実装で宛先がずれます"
+                .to_string(),
+        );
     }
     if env.ct_paren {
-        render_risks.push("Content-Type の型に括弧があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "Content-Type の型に括弧があります—型として読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.cd_colon_type {
         render_risks.push("Content-Disposition の型に二重連があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
@@ -5976,82 +6097,143 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Content-Disposition の型に括弧があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
     }
     if env.addr_brace_local {
-        render_risks.push("宛名のローカル部に波括弧があります—拒否する実装と採用する実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名のローカル部に波括弧があります—拒否する実装と採用する実装で宛先がずれます"
+                .to_string(),
+        );
     }
     if env.cte_paren {
-        render_risks.push("符号化欄に括弧があります—値として読む実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符号化欄に括弧があります—値として読む実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.msgid_comma_lead {
-        render_risks.push("識別子欄が連結で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が連結で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.addr_caret_local {
-        render_risks.push("宛名のローカル部に山形があります—拒否する実装と採用する実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名のローカル部に山形があります—拒否する実装と採用する実装で宛先がずれます"
+                .to_string(),
+        );
     }
     if env.addr_backtick_local {
-        render_risks.push("宛名のローカル部に反転符があります—拒否する実装と採用する実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名のローカル部に反転符があります—拒否する実装と採用する実装で宛先がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_ws_inner {
-        render_risks.push("識別子の額縁の内側に空白があります—削る実装と残す実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子の額縁の内側に空白があります—削る実装と残す実装で照合がずれます".to_string(),
+        );
     }
     if env.received_by_at {
-        render_risks.push("Received の受け取り節が宛名形です—ホスト名と読む実装と宛名と読む実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け取り節が宛名形です—ホスト名と読む実装と宛名と読む実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_eq_lead {
-        render_risks.push("識別子欄が等号で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が等号で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.boundary_quoted_semi {
         render_risks.push("引用された境界値の内側に仕切り記号があります—引用内を許す実装と規格文字を検査する実装で区切りがずれます".to_string());
     }
     if env.cd_star_type {
-        render_risks.push("添付扱い欄の型がワイルドカードです—受理する実装と欄を捨てる実装で添付判定がずれます".to_string());
+        render_risks.push(
+            "添付扱い欄の型がワイルドカードです—受理する実装と欄を捨てる実装で添付判定がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_two_at {
         render_risks.push("Received の届け先節にアットが二つあります—先で割る実装と後で割る実装で配送先がずれます".to_string());
     }
     if env.addr_noname_group {
-        render_risks.push("宛名欄に名のないグループがあります—受理する実装と要素を捨てる実装で宛先がずれます".to_string());
+        render_risks.push(
+            "宛名欄に名のないグループがあります—受理する実装と要素を捨てる実装で宛先がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_pct_lead {
         render_risks.push("識別子欄がパーセント記号で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
     }
     if env.cte_eq {
-        render_risks.push("符号化欄の値に等号が含まれています—先で割る実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符号化欄の値に等号が含まれています—先で割る実装と欄を捨てる実装で復号がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_bang {
         render_risks.push("Received の差出節に感嘆符があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.param_backtick_name {
-        render_risks.push("パラメータの名札に反転符があります—名として読む実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "パラメータの名札に反転符があります—名として読む実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_colon_lead {
-        render_risks.push("識別子欄がコロンで始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄がコロンで始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.ct_bslash_type {
-        render_risks.push("種類欄の型に逆斜線があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "種類欄の型に逆斜線があります—型として読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_bang {
         render_risks.push("Received の識別子節に感嘆符があります—識別子と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.cd_bslash_type {
-        render_risks.push("添付扱い欄の型に逆斜線があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
+        render_risks.push(
+            "添付扱い欄の型に逆斜線があります—型として読む実装と欄を捨てる実装で添付判定がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_lt_lead {
-        render_risks.push("識別子欄が二重の開き括弧で始まっています—剥がす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が二重の開き括弧で始まっています—剥がす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.cte_bslash {
-        render_risks.push("符号化欄の値に逆斜線があります—値として読む実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符号化欄の値に逆斜線があります—値として読む実装と欄を捨てる実装で復号がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_at {
-        render_risks.push("Received の便り節が宛名形です—手段と読む実装と宛名と読む実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節が宛名形です—手段と読む実装と宛名と読む実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_bslash {
-        render_risks.push("識別子の額縁の内側に逆斜線があります—外す実装と字とする実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子の額縁の内側に逆斜線があります—外す実装と字とする実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_gt_lead {
-        render_risks.push("識別子欄が閉じ括弧で始まっています—語を捨てる実装と含める実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が閉じ括弧で始まっています—語を捨てる実装と含める実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.ct_gt_type {
-        render_risks.push("種類欄の型に閉じ括弧があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "種類欄の型に閉じ括弧があります—型として読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_pct {
         render_risks.push("Received の受け取り節に百分率があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
@@ -6060,19 +6242,31 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("添付扱い欄の型に閉じ括弧があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
     }
     if env.msgid_qmark_lead {
-        render_risks.push("識別子欄が疑問符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が疑問符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.ct_lt_type {
-        render_risks.push("種類欄の型に開き括弧があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "種類欄の型に開き括弧があります—型として読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_pct {
         render_risks.push("Received の差出節に百分率があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.cte_gt {
-        render_risks.push("符号化欄の値に閉じ括弧があります—値として読む実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符号化欄の値に閉じ括弧があります—値として読む実装と欄を捨てる実装で復号がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_at_lead {
-        render_risks.push("識別子欄がアットマークで始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄がアットマークで始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_pct {
         render_risks.push("Received の荷印節に百分率があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
@@ -6081,268 +6275,458 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("添付扱い欄の型に開き括弧があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
     }
     if env.addr_pipe_local {
-        render_risks.push("宛名の手前側に縦線があります—拒否する実装と採用する実装で宛名がずれます".to_string());
+        render_risks.push(
+            "宛名の手前側に縦線があります—拒否する実装と採用する実装で宛名がずれます".to_string(),
+        );
     }
     if env.msgid_bang_lead {
-        render_risks.push("識別子欄が感嘆符で始まっています—bang経路と読む実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が感嘆符で始まっています—bang経路と読む実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_pct {
         render_risks.push("Received の届け先節に百分率があります—旧式経路と読む実装と欄を捨てる実装で配送先がずれます".to_string());
     }
     if env.cte_lt {
-        render_risks.push("符号化欄の値に開き括弧があります—値として読む実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符号化欄の値に開き括弧があります—値として読む実装と欄を捨てる実装で復号がずれます"
+                .to_string(),
+        );
     }
     if env.addr_dollar_local {
-        render_risks.push("宛名の手前側にドル符があります—拒否する実装と採用する実装で宛名がずれます".to_string());
+        render_risks.push(
+            "宛名の手前側にドル符があります—拒否する実装と採用する実装で宛名がずれます".to_string(),
+        );
     }
     if env.addr_quoted_local {
         render_risks.push("宛名の手前側が鉤括弧囲みです—鉤括弧の扱いで宛名がずれます".to_string());
     }
     if env.msgid_slash_lead {
-        render_risks.push("識別子欄が斜線で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が斜線で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.ct_at_type {
-        render_risks.push("種類欄の型にアットマークがあります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "種類欄の型にアットマークがあります—型として読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_pct {
         render_risks.push("Received の便り節に百分率があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.param_qmark_name {
-        render_risks.push("パラメータ名に疑問符があります—名を読む実装と値を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "パラメータ名に疑問符があります—名を読む実装と値を捨てる実装で値がずれます".to_string(),
+        );
     }
     if env.addr_pct_local {
-        render_risks.push("宛名の手前側に百分率があります—旧式経路と読む実装と拒否する実装で宛名がずれます".to_string());
+        render_risks.push(
+            "宛名の手前側に百分率があります—旧式経路と読む実装と拒否する実装で宛名がずれます"
+                .to_string(),
+        );
     }
     if env.ct_qmark_type {
-        render_risks.push("種類欄の型に疑問符があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "種類欄の型に疑問符があります—型として読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_bang {
         render_risks.push("Received の受け口節に嘆き符があります—bang 経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.msgid_hash_lead {
-        render_risks.push("識別子欄が井桁で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が井桁で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.addr_hash_local {
-        render_risks.push("宛名の手前側に井桁があります—拒否する実装と採用する実装で宛名がずれます".to_string());
+        render_risks.push(
+            "宛名の手前側に井桁があります—拒否する実装と採用する実装で宛名がずれます".to_string(),
+        );
     }
     if env.ct_comma_type {
-        render_risks.push("種類欄の型に句読点があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "種類欄の型に句読点があります—型として読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_bang {
         render_risks.push("Received の便り節に嘆き符があります—bang 経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.msgid_amp_lead {
-        render_risks.push("識別子欄が連結符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が連結符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.addr_star_local {
-        render_risks.push("宛名の手前側に星印があります—拒否する実装と採用する実装で宛名がずれます".to_string());
+        render_risks.push(
+            "宛名の手前側に星印があります—拒否する実装と採用する実装で宛名がずれます".to_string(),
+        );
     }
     if env.ct_lbracket_type {
-        render_risks.push("種類欄の型に開き角括弧があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "種類欄の型に開き角括弧があります—型として読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_bang {
         render_risks.push("Received の届け先節に嘆き符があります—bang 経路と読む実装と欄を捨てる実装で配送先がずれます".to_string());
     }
     if env.msgid_tilde_lead {
-        render_risks.push("識別子欄が波線で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が波線で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.addr_apos_local {
-        render_risks.push("宛名の手前側に引用符があります—拒否する実装と採用する実装で宛名がずれます".to_string());
+        render_risks.push(
+            "宛名の手前側に引用符があります—拒否する実装と採用する実装で宛名がずれます".to_string(),
+        );
     }
     if env.ct_rbracket_type {
-        render_risks.push("種類欄の型に閉じ角括弧があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+        render_risks.push(
+            "種類欄の型に閉じ角括弧があります—型として読む実装と欄を捨てる実装で型がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_pct {
         render_risks.push("Received の渡し方節に百分率があります—旧式経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.msgid_pipe_lead {
-        render_risks.push("識別子欄が縦線で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が縦線で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_at {
-        render_risks.push("Received の荷印節にアットがあります—宛名と読む実装と欄を捨てる実装で識別子がずれます".to_string());
+        render_risks.push(
+            "Received の荷印節にアットがあります—宛名と読む実装と欄を捨てる実装で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.param_bang_name {
-        render_risks.push("引数欄の名に嘆き符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に嘆き符があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cd_at_type {
-        render_risks.push("荷印欄の型にアットがあります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
+        render_risks.push(
+            "荷印欄の型にアットがあります—型として読む実装と欄を捨てる実装で添付判定がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_backtick_lead {
-        render_risks.push("識別子欄が反転符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が反転符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_amp_name {
-        render_risks.push("引数欄の名に連結符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に連結符があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_at {
-        render_risks.push("符丁欄にアットがあります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄にアットがあります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_with_bang {
         render_risks.push("Received の渡し方節に嘆き符があります—bang 経路と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.msgid_caret_lead {
-        render_risks.push("識別子欄が曲折符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が曲折符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_colon_name {
-        render_risks.push("引数欄の名に二点があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に二点があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string(),
+        );
     }
     if env.cte_pct {
-        render_risks.push("符丁欄に百分率符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に百分率符があります—値を継続する実装と欄を捨てる実装で復号がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_at {
-        render_risks.push("Received の渡し方節にアットがあります—宛名と読む実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節にアットがあります—宛名と読む実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_dollar_lead {
-        render_risks.push("識別子欄がドル符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄がドル符で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_pct_name {
-        render_risks.push("引数欄の名に百分率符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に百分率符があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_bang {
-        render_risks.push("符丁欄に嘆き符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に嘆き符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_via_eq {
-        render_risks.push("Received の便り節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_rparen_lead {
-        render_risks.push("識別子欄が閉じ括弧で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が閉じ括弧で始まっています—読み飛ばす実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_comma_name {
-        render_risks.push("引数欄の名に句読点があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に句読点があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_qmark {
-        render_risks.push("符丁欄に疑問符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に疑問符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_by_eq {
-        render_risks.push("Received の受け口節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_lparen_lead {
         render_risks.push("識別子欄が開き括弧で始まっています—コメントと読む実装と識別子を拾う実装で照合がずれます".to_string());
     }
     if env.param_lbrack_name {
-        render_risks.push("引数欄の名に角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_slash {
-        render_risks.push("符丁欄に斜線があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に斜線があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_id_eq {
-        render_risks.push("Received の識票節に等号があります—代入式と読む実装と欄を捨てる実装で識別子がずれます".to_string());
+        render_risks.push(
+            "Received の識票節に等号があります—代入式と読む実装と欄を捨てる実装で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_squote_lead {
-        render_risks.push("識別子欄が引用符で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が引用符で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_rbrack_name {
-        render_risks.push("引数欄の名に閉じ角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に閉じ角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_lbrack {
-        render_risks.push("符丁欄に角括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に角括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_for_eq {
         render_risks.push("Received の届け先節に等号があります—代入式と読む実装と欄を捨てる実装で配送先がずれます".to_string());
     }
     if env.msgid_plus_lead {
-        render_risks.push("識別子欄が加符で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が加符で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_lbrace_name {
-        render_risks.push("引数欄の名に波括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に波括弧があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_rbrack {
-        render_risks.push("符丁欄に閉じ角括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に閉じ角括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_eq {
-        render_risks.push("Received の渡し方節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_dquote_lead {
         render_risks.push("識別子欄が二重引用符で始まっています—引用字列と読む実装と識別子を拾う実装で照合がずれます".to_string());
     }
     if env.param_rbrace_name {
-        render_risks.push("引数欄の名に閉じ波括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に閉じ波括弧があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_lbrace {
-        render_risks.push("符丁欄に波括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に波括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_from_eq {
-        render_risks.push("Received の差出節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に等号があります—代入式と読む実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_minus_lead {
-        render_risks.push("識別子欄が連結符で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が連結符で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_pipe_name {
-        render_risks.push("引数欄の名に縦線があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に縦線があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string(),
+        );
     }
     if env.cte_rbrace {
-        render_risks.push("符丁欄に閉じ波括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に閉じ波括弧があります—値を継続する実装と欄を捨てる実装で復号がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_lt {
         render_risks.push("Received の受け口節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.msgid_lbrack_lead {
-        render_risks.push("識別子欄が角括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が角括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_caret_name {
-        render_risks.push("引数欄の名に曲折符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に曲折符があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_pipe {
-        render_risks.push("符丁欄に縦線があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に縦線があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_via_lt {
         render_risks.push("Received の便り節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.msgid_rbrack_lead {
-        render_risks.push("識別子欄が閉じ角括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が閉じ角括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_tilde_name {
-        render_risks.push("引数欄の名に波線があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に波線があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string(),
+        );
     }
     if env.cte_caret {
-        render_risks.push("符丁欄に曲折符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に曲折符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_id_lt {
         render_risks.push("Received の識別子節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で識別子がずれます".to_string());
     }
     if env.msgid_lbrace_lead {
-        render_risks.push("識別子欄が開き波括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が開き波括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_dollar_name {
-        render_risks.push("引数欄の名に通貨符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に通貨符があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_tilde {
-        render_risks.push("符丁欄に波線があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に波線があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_from_lt {
         render_risks.push("Received の差出節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.msgid_rbrace_lead {
-        render_risks.push("識別子欄が閉じ波括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が閉じ波括弧で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_hash_name {
-        render_risks.push("引数欄の名に井桁があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に井桁があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string(),
+        );
     }
     if env.cte_star {
-        render_risks.push("符丁欄に星があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に星があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_with_lt {
         render_risks.push("Received の渡し方節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.msgid_uscore_lead {
-        render_risks.push("識別子欄が下線で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます".to_string());
+        render_risks.push(
+            "識別子欄が下線で始まっています—語に継ぐ実装と欄を捨てる実装で照合がずれます"
+                .to_string(),
+        );
     }
     if env.param_apos_name {
-        render_risks.push("引数欄の名に単一引用符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に単一引用符があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_hash {
-        render_risks.push("符丁欄に井桁があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に井桁があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_for_lt {
         render_risks.push("Received の届け先節に開き角括弧があります—角括弧と読む実装と欄を捨てる実装で配送先がずれます".to_string());
     }
     if env.param_plus_name {
-        render_risks.push("引数欄の名に加符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に加符があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string(),
+        );
     }
     if env.param_lparen_name {
-        render_risks.push("引数欄の名に開き括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に開き括弧があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_dollar {
-        render_risks.push("符丁欄に通貨符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に通貨符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string(),
+        );
     }
     if env.received_from_gt {
         render_risks.push("Received の差出節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
@@ -6351,10 +6735,16 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Received の受け口節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.param_rparen_name {
-        render_risks.push("引数欄の名に閉じ括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に閉じ括弧があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_apos {
-        render_risks.push("符丁欄に単一引用符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に単一引用符があります—値を継続する実装と欄を捨てる実装で復号がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_gt {
         render_risks.push("Received の便り節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
@@ -6363,10 +6753,16 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Received の届け先節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で配送先がずれます".to_string());
     }
     if env.param_gt_name {
-        render_risks.push("引数欄の名に閉じ角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に閉じ角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.cte_quote {
-        render_risks.push("符丁欄に二重引用符があります—値を継続する実装と欄を捨てる実装で復号がずれます".to_string());
+        render_risks.push(
+            "符丁欄に二重引用符があります—値を継続する実装と欄を捨てる実装で復号がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_gt {
         render_risks.push("Received の識別子節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で識別子がずれます".to_string());
@@ -6375,121 +6771,232 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Received の渡し方節に閉じ角括弧があります—角括弧と読む実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.param_lt_name {
-        render_risks.push("引数欄の名に開き角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます".to_string());
+        render_risks.push(
+            "引数欄の名に開き角括弧があります—名を継続する実装と欄を捨てる実装で値がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_qmark {
-        render_risks.push("Received の差出節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_hash {
-        render_risks.push("Received の受け口節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_quote {
         render_risks.push("Received の識別子節に二重引用符があります—引用字列と読む実装と欄を捨てる実装で識別子がずれます".to_string());
     }
     if env.received_for_qmark {
-        render_risks.push("Received の届け先節に疑問符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+        render_risks.push(
+            "Received の届け先節に疑問符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_hash {
-        render_risks.push("Received の便り節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_colon {
-        render_risks.push("Received の渡し方節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_comma {
-        render_risks.push("Received の差出節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_slash {
-        render_risks.push("Received の届け先節に斜線があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+        render_risks.push(
+            "Received の届け先節に斜線があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_bslash {
-        render_risks.push("Received の受け口節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_apos {
-        render_risks.push("Received の便り節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_hash {
-        render_risks.push("Received の識別子節に井桁があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+        render_risks.push(
+            "Received の識別子節に井桁があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_tilde {
-        render_risks.push("Received の届け先節に波線があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+        render_risks.push(
+            "Received の届け先節に波線があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_pipe {
-        render_risks.push("Received の受け口節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_tilde {
-        render_risks.push("Received の便り節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_pipe {
-        render_risks.push("Received の識別子節に縦線があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+        render_risks.push(
+            "Received の識別子節に縦線があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_dollar {
-        render_risks.push("Received の差出節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_amp {
-        render_risks.push("Received の受け口節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_dollar {
-        render_risks.push("Received の便り節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_caret {
-        render_risks.push("Received の届け先節に曲折符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+        render_risks.push(
+            "Received の届け先節に曲折符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_tilde {
-        render_risks.push("Received の差出節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_dollar {
-        render_risks.push("Received の受け口節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_amp {
-        render_risks.push("Received の渡し方節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_caret {
-        render_risks.push("Received の識別子節に曲折符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+        render_risks.push(
+            "Received の識別子節に曲折符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_pipe {
-        render_risks.push("Received の差出節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_qmark {
-        render_risks.push("Received の受け口節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_amp {
-        render_risks.push("Received の便り節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_dollar {
-        render_risks.push("Received の届け先節に通貨符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+        render_risks.push(
+            "Received の届け先節に通貨符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_qmark {
-        render_risks.push("Received の渡し方節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_tilde {
-        render_risks.push("Received の識別子節に波線があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+        render_risks.push(
+            "Received の識別子節に波線があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_amp {
-        render_risks.push("Received の届け先節に連結符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+        render_risks.push(
+            "Received の届け先節に連結符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_apos {
-        render_risks.push("Received の差出節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_hash {
-        render_risks.push("Received の届け先節に井桁があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+        render_risks.push(
+            "Received の届け先節に井桁があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_comma {
-        render_risks.push("Received の渡し方節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_dollar {
-        render_risks.push("Received の識別子節に通貨符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+        render_risks.push(
+            "Received の識別子節に通貨符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_comma {
-        render_risks.push("Received の受け口節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_colon {
-        render_risks.push("Received の受け口節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_quote {
         render_risks.push("Received の届け先節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
     }
     if env.received_via_qmark {
-        render_risks.push("Received の便り節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に疑問符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_quote {
         render_risks.push("Received の渡し方節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
@@ -6498,67 +7005,127 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Received の識別子節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
     }
     if env.received_via_colon {
-        render_risks.push("Received の便り節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_tilde {
-        render_risks.push("Received の渡し方節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_apos {
         render_risks.push("Received の届け先節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
     }
     if env.received_id_qmark {
-        render_risks.push("Received の識別子節に疑問符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+        render_risks.push(
+            "Received の識別子節に疑問符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_comma {
-        render_risks.push("Received の便り節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に句読点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_pipe {
-        render_risks.push("Received の渡し方節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_colon {
-        render_risks.push("Received の届け先節に二点があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+        render_risks.push(
+            "Received の届け先節に二点があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_comma {
-        render_risks.push("Received の識別子節に句読点があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+        render_risks.push(
+            "Received の識別子節に句読点があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_quote {
-        render_risks.push("Received の便り節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_dollar {
-        render_risks.push("Received の渡し方節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に通貨符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_comma {
-        render_risks.push("Received の届け先節に句読点があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+        render_risks.push(
+            "Received の届け先節に句読点があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_colon {
-        render_risks.push("Received の識別子節に二点があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+        render_risks.push(
+            "Received の識別子節に二点があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_caret {
-        render_risks.push("Received の便り節に曲折符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に曲折符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_caret {
-        render_risks.push("Received の渡し方節に曲折符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に曲折符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_for_pipe {
-        render_risks.push("Received の届け先節に縦線があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます".to_string());
+        render_risks.push(
+            "Received の届け先節に縦線があります—語に継ぐ実装と欄を捨てる実装で配送先がずれます"
+                .to_string(),
+        );
     }
     if env.received_id_amp {
-        render_risks.push("Received の識別子節に連結符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます".to_string());
+        render_risks.push(
+            "Received の識別子節に連結符があります—語に継ぐ実装と欄を捨てる実装で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_pipe {
-        render_risks.push("Received の便り節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に縦線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_hash {
-        render_risks.push("Received の渡し方節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_tilde {
-        render_risks.push("Received の受け口節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に波線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_hash {
-        render_risks.push("Received の差出節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に井桁があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_slash {
-        render_risks.push("Received の便り節に斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_apos {
         render_risks.push("Received の渡し方節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
@@ -6567,43 +7134,79 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Received の受け口節に単一引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.received_from_quote {
-        render_risks.push("Received の差出節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_bslash {
-        render_risks.push("Received の便り節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_amp {
-        render_risks.push("Received の差出節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に連結符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_quote {
         render_risks.push("Received の受け口節に二重引用符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.received_from_caret {
-        render_risks.push("Received の差出節に曲折符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に曲折符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_star {
-        render_risks.push("Received の渡し方節に星があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に星があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_star {
-        render_risks.push("Received の受け口節に星があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に星があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_lbracket {
-        render_risks.push("Received の便り節に開き角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に開き角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_colon {
-        render_risks.push("Received の差出節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に二点があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_plus {
-        render_risks.push("Received の渡し方節に加符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に加符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_plus {
-        render_risks.push("Received の受け口節に加符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の受け口節に加符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_rbracket {
-        render_risks.push("Received の便り節に閉じ角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に閉じ角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_slash {
-        render_risks.push("Received の差出節に斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_lbrace {
         render_risks.push("Received の渡し方節に開き波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
@@ -6612,10 +7215,16 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Received の受け口節に開き角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.received_via_star {
-        render_risks.push("Received の便り節に星があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に星があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_from_bslash {
-        render_risks.push("Received の差出節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の差出節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_rbrace {
         render_risks.push("Received の渡し方節に閉じ波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
@@ -6624,13 +7233,22 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Received の受け口節に閉じ角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.received_via_plus {
-        render_risks.push("Received の便り節に加符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に加符があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_lbrace {
-        render_risks.push("Received の便り節に開き波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に開き波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_via_rbrace {
-        render_risks.push("Received の便り節に閉じ波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の便り節に閉じ波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_with_lbracket {
         render_risks.push("Received の渡し方節に開き角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
@@ -6639,7 +7257,10 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Received の渡し方節に閉じ角括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
     }
     if env.received_with_bslash {
-        render_risks.push("Received の渡し方節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
+        render_risks.push(
+            "Received の渡し方節に逆斜線があります—語に継ぐ実装と欄を捨てる実装で経路がずれます"
+                .to_string(),
+        );
     }
     if env.received_by_lbrace {
         render_risks.push("Received の受け口節に開き波括弧があります—語に継ぐ実装と欄を捨てる実装で経路がずれます".to_string());
@@ -6654,16 +7275,28 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("References/In-Reply-To が感嘆符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
     }
     if env.refs_eq_lead {
-        render_risks.push("References/In-Reply-To が等号で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+        render_risks.push(
+            "References/In-Reply-To が等号で始まります—欄名継続読みと識別子拾いで糸参照がずれます"
+                .to_string(),
+        );
     }
     if env.refs_colon_lead {
-        render_risks.push("References/In-Reply-To が二点で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+        render_risks.push(
+            "References/In-Reply-To が二点で始まります—欄名継続読みと識別子拾いで糸参照がずれます"
+                .to_string(),
+        );
     }
     if env.refs_star_lead {
-        render_risks.push("References/In-Reply-To が星で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+        render_risks.push(
+            "References/In-Reply-To が星で始まります—欄名継続読みと識別子拾いで糸参照がずれます"
+                .to_string(),
+        );
     }
     if env.refs_hash_lead {
-        render_risks.push("References/In-Reply-To が井桁で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+        render_risks.push(
+            "References/In-Reply-To が井桁で始まります—欄名継続読みと識別子拾いで糸参照がずれます"
+                .to_string(),
+        );
     }
     if env.refs_dollar_lead {
         render_risks.push("References/In-Reply-To が通貨符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
@@ -6681,10 +7314,16 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("References/In-Reply-To が単一引用符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
     }
     if env.refs_plus_lead {
-        render_risks.push("References/In-Reply-To が加符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+        render_risks.push(
+            "References/In-Reply-To が加符で始まります—欄名継続読みと識別子拾いで糸参照がずれます"
+                .to_string(),
+        );
     }
     if env.refs_slash_lead {
-        render_risks.push("References/In-Reply-To が斜線で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+        render_risks.push(
+            "References/In-Reply-To が斜線で始まります—欄名継続読みと識別子拾いで糸参照がずれます"
+                .to_string(),
+        );
     }
     if env.refs_pct_lead {
         render_risks.push("References/In-Reply-To が百分符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
@@ -6702,19 +7341,28 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("References/In-Reply-To が曲折符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
     }
     if env.refs_uscore_lead {
-        render_risks.push("References/In-Reply-To が下線で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+        render_risks.push(
+            "References/In-Reply-To が下線で始まります—欄名継続読みと識別子拾いで糸参照がずれます"
+                .to_string(),
+        );
     }
     if env.refs_backtick_lead {
         render_risks.push("References/In-Reply-To が逆引用符で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
     }
     if env.refs_tilde_lead {
-        render_risks.push("References/In-Reply-To が波線で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+        render_risks.push(
+            "References/In-Reply-To が波線で始まります—欄名継続読みと識別子拾いで糸参照がずれます"
+                .to_string(),
+        );
     }
     if env.refs_lbrace_lead {
         render_risks.push("References/In-Reply-To が開き波括弧で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
     }
     if env.refs_pipe_lead {
-        render_risks.push("References/In-Reply-To が縦線で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
+        render_risks.push(
+            "References/In-Reply-To が縦線で始まります—欄名継続読みと識別子拾いで糸参照がずれます"
+                .to_string(),
+        );
     }
     if env.refs_rbrace_lead {
         render_risks.push("References/In-Reply-To が閉じ波括弧で始まります—欄名継続読みと識別子拾いで糸参照がずれます".to_string());
@@ -6732,52 +7380,97 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("References/In-Reply-To の識別子の前にコメントがあります—コメント剥がし読みと欄破棄で糸参照がずれます".to_string());
     }
     if env.refs_adjacent_angles {
-        render_risks.push("References の識別子が区切りなく連結しています—境目読みと一語読みで糸参照がずれます".to_string());
+        render_risks.push(
+            "References の識別子が区切りなく連結しています—境目読みと一語読みで糸参照がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_star_lead {
-        render_risks.push("Message-ID 系欄が星で始まります—欄名継続読みと識別子拾いで識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄が星で始まります—欄名継続読みと識別子拾いで識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_bslash_lead {
-        render_risks.push("Message-ID 系欄が逆斜線で始まります—欄名継続読みと識別子拾いで識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄が逆斜線で始まります—欄名継続読みと識別子拾いで識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_junk_before_angle {
         render_risks.push("Message-ID 系欄の識別子の前に英数字の語があります—語継続読みと角括弧拾いで識別子がずれます".to_string());
     }
     if env.msgid_no_angle {
-        render_risks.push("Message-ID 系欄に角括弧の識別子がありません—原子読みと欄破棄で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄に角括弧の識別子がありません—原子読みと欄破棄で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_bang {
-        render_risks.push("Message-ID 系欄の識別子内に感嘆符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子内に感嘆符があります—厳密弾きと緩い受理で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_hash {
-        render_risks.push("Message-ID 系欄の識別子内に井桁があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子内に井桁があります—厳密弾きと緩い受理で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_dollar {
-        render_risks.push("Message-ID 系欄の識別子内に通貨符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子内に通貨符があります—厳密弾きと緩い受理で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_star {
-        render_risks.push("Message-ID 系欄の識別子内に星があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子内に星があります—厳密弾きと緩い受理で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_pct {
-        render_risks.push("Message-ID 系欄の識別子内に百分符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子内に百分符があります—厳密弾きと緩い受理で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_caret {
-        render_risks.push("Message-ID 系欄の識別子内に曲折符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子内に曲折符があります—厳密弾きと緩い受理で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_backtick {
-        render_risks.push("Message-ID 系欄の識別子内に逆引用符があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子内に逆引用符があります—厳密弾きと緩い受理で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_tilde {
-        render_risks.push("Message-ID 系欄の識別子内に波線があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子内に波線があります—厳密弾きと緩い受理で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_lbrace {
-        render_risks.push("Message-ID 系欄の識別子内に開き波括弧があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子内に開き波括弧があります—厳密弾きと緩い受理で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_rbrace {
-        render_risks.push("Message-ID 系欄の識別子内に閉じ波括弧があります—厳密弾きと緩い受理で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子内に閉じ波括弧があります—厳密弾きと緩い受理で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_semi {
-        render_risks.push("Message-ID 系欄の識別子内に半コロンがあります—厳密弾きと緩い受理で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子内に半コロンがあります—厳密弾きと緩い受理で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_inner_lt {
         render_risks.push("Message-ID 系欄の識別子内に開き角括弧が重なります—厳密弾きと緩い受理で識別子がずれます".to_string());
@@ -6786,88 +7479,128 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("Message-ID 系欄の識別子が区切りなく連結しています—境目読みと一語読みで識別子がずれます".to_string());
     }
     if env.msgid_word_between_angles {
-        render_risks.push("Message-ID 系欄の識別子の間に語があります—語読み飛ばしと欄破棄で識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子の間に語があります—語読み飛ばしと欄破棄で識別子がずれます"
+                .to_string(),
+        );
     }
     if env.msgid_empty_value {
-        render_risks.push("Message-ID 系欄の値が空です—欄破棄と空識別子受理で識別子照合がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の値が空です—欄破棄と空識別子受理で識別子照合がずれます".to_string(),
+        );
     }
     if env.msgid_dup_pair {
-        render_risks.push("Message-ID 系欄の識別子が反復しています—一意仮定と一覧読みで識別子がずれます".to_string());
+        render_risks.push(
+            "Message-ID 系欄の識別子が反復しています—一意仮定と一覧読みで識別子がずれます"
+                .to_string(),
+        );
     }
     if env.refs_irt_conflict {
         render_risks.push("糸参照欄の末尾識別子と In-Reply-To が食い違っています—返信点の読み分けで糸参照がずれます".to_string());
     }
     if env.resent_msgid_same {
-        render_risks.push("Resent-Message-ID が Message-ID と同一です—同一視と区別読みで識別子がずれます".to_string());
+        render_risks.push(
+            "Resent-Message-ID が Message-ID と同一です—同一視と区別読みで識別子がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to {
-        render_risks.push("Resent-Reply-To 欄が残っています—旧式欄の受理と無視で返信先がずれます".to_string());
+        render_risks.push(
+            "Resent-Reply-To 欄が残っています—旧式欄の受理と無視で返信先がずれます".to_string(),
+        );
     }
     if env.msgid_comment_lead {
         render_risks.push("Message-ID 系欄の識別子の前にコメントがあります—コメント剥がしと欄破棄で識別子がずれます".to_string());
     }
     if env.subject_locale_prefix {
-        render_risks.push("件名が地域の返信・転送接頭語で始まります—接頭語認識の差で糸帰属がずれます".to_string());
+        render_risks.push(
+            "件名が地域の返信・転送接頭語で始まります—接頭語認識の差で糸帰属がずれます".to_string(),
+        );
     }
     if env.resent_no_recipient {
-        render_risks.push("Resent-* 欄に受取欄がありません—体裁作りと正当転送で再送解釈がずれます".to_string());
+        render_risks.push(
+            "Resent-* 欄に受取欄がありません—体裁作りと正当転送で再送解釈がずれます".to_string(),
+        );
     }
     if env.resent_unknown_field {
-        render_risks.push("非規格の Resent-* 欄があります—受理と無視で再送履歴がずれます".to_string());
+        render_risks
+            .push("非規格の Resent-* 欄があります—受理と無視で再送履歴がずれます".to_string());
     }
     if env.resent_no_msgid {
-        render_risks.push("再送欄に識別子がありません—索引付け実装と再送履歴の辿り方がずれます".to_string());
+        render_risks.push(
+            "再送欄に識別子がありません—索引付け実装と再送履歴の辿り方がずれます".to_string(),
+        );
     }
     if env.msgid_case_variant_pair {
-        render_risks.push("大小文字違いの同一識別子が反復されています—別扱いと重複扱いで糸参照がずれます".to_string());
+        render_risks.push(
+            "大小文字違いの同一識別子が反復されています—別扱いと重複扱いで糸参照がずれます"
+                .to_string(),
+        );
     }
     if env.content_id_top {
-        render_risks.push("外側欄に部品識別子があります—cid 解釈系と無視系で埋め込み参照がずれます".to_string());
+        render_risks.push(
+            "外側欄に部品識別子があります—cid 解釈系と無視系で埋め込み参照がずれます".to_string(),
+        );
     }
     if env.to_many_addrs {
-        render_risks.push("宛先欄の宛先数が過剰です—切り詰めて読む実装と届け先の見え方がずれます".to_string());
+        render_risks.push(
+            "宛先欄の宛先数が過剰です—切り詰めて読む実装と届け先の見え方がずれます".to_string(),
+        );
     }
     if env.from_sender_dup {
-        render_risks.push("送信者欄が差出人と同一です—冗長欄の表示有無で差出人表示がずれます".to_string());
+        render_risks
+            .push("送信者欄が差出人と同一です—冗長欄の表示有無で差出人表示がずれます".to_string());
     }
     if env.reply_to_same_as_from {
-        render_risks.push("返信先が差出人と同一です—上書き解釈と冗長無視で返信解釈がずれます".to_string());
+        render_risks
+            .push("返信先が差出人と同一です—上書き解釈と冗長無視で返信解釈がずれます".to_string());
     }
     if env.irt_no_refs {
-        render_risks.push("返信欄が片側しかありません—参照欄だけ辿る実装と糸帰属がずれます".to_string());
+        render_risks
+            .push("返信欄が片側しかありません—参照欄だけ辿る実装と糸帰属がずれます".to_string());
     }
     if env.resent_from_same_as_from {
         render_risks.push("再送信者が差出人と同一です—再送系と通常欄の扱いがずれます".to_string());
     }
     if env.resent_to_same_as_to {
-        render_risks.push("再送先が宛先と同一です—体裁だけの偽転送で届け先履歴がずれます".to_string());
+        render_risks
+            .push("再送先が宛先と同一です—体裁だけの偽転送で届け先履歴がずれます".to_string());
     }
     if env.resent_to_same_as_from {
-        render_risks.push("再送先が差出人と同一です—返信ループ警戒と再送解釈でずれます".to_string());
+        render_risks
+            .push("再送先が差出人と同一です—返信ループ警戒と再送解釈でずれます".to_string());
     }
     if env.resent_sender_same_as_sender {
-        render_risks.push("再送送信者が送信者と同一です—別人再送と同一系畳みでずれます".to_string());
+        render_risks
+            .push("再送送信者が送信者と同一です—別人再送と同一系畳みでずれます".to_string());
     }
     if env.resent_date_same_as_date {
-        render_risks.push("再送日時が元信と同値です—並べ方の違いで履歴の順番がずれます".to_string());
+        render_risks
+            .push("再送日時が元信と同値です—並べ方の違いで履歴の順番がずれます".to_string());
     }
     if env.resent_cc_same_as_cc {
-        render_risks.push("再送副宛が副宛先と同一です—複写転送の兆候で届け先履歴がずれます".to_string());
+        render_risks
+            .push("再送副宛が副宛先と同一です—複写転送の兆候で届け先履歴がずれます".to_string());
     }
     if env.resent_to_same_as_cc {
-        render_risks.push("再送先が副宛先と同一です—役割の格上げで届け先履歴がずれます".to_string());
+        render_risks
+            .push("再送先が副宛先と同一です—役割の格上げで届け先履歴がずれます".to_string());
     }
     if env.resent_from_same_as_sender {
-        render_risks.push("再送者が元信の代行者と同一です—役割の違いで再送履歴がずれます".to_string());
+        render_risks
+            .push("再送者が元信の代行者と同一です—役割の違いで再送履歴がずれます".to_string());
     }
     if env.resent_sender_same_as_from {
-        render_risks.push("再送代行者が差出人と同一です—役割の違いで再送履歴がずれます".to_string());
+        render_risks
+            .push("再送代行者が差出人と同一です—役割の違いで再送履歴がずれます".to_string());
     }
     if env.resent_to_same_as_resent_from {
-        render_risks.push("再送先が再送者と同一です—自己配送の配置で届け先履歴がずれます".to_string());
+        render_risks
+            .push("再送先が再送者と同一です—自己配送の配置で届け先履歴がずれます".to_string());
     }
     if env.resent_cc_same_as_resent_from {
-        render_risks.push("再送副宛が再送者と同一です—役割の重複で履歴の読みがずれます".to_string());
+        render_risks
+            .push("再送副宛が再送者と同一です—役割の重複で履歴の読みがずれます".to_string());
     }
     if env.resent_sender_same_as_resent_from {
         render_risks.push("再送代行が再送者と同一です—冗長重複で再送履歴がずれます".to_string());
@@ -6876,25 +7609,31 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("再送の主副宛が同一です—役割重複で届け先一覧がずれます".to_string());
     }
     if env.resent_cc_same_as_to {
-        render_risks.push("再送副宛が宛先と同一です—宛先役割の重なりで届け先一覧がずれます".to_string());
+        render_risks
+            .push("再送副宛が宛先と同一です—宛先役割の重なりで届け先一覧がずれます".to_string());
     }
     if env.resent_cc_same_as_from {
-        render_risks.push("再送副宛が差出人と同一です—返信ループの配置で届け先履歴がずれます".to_string());
+        render_risks
+            .push("再送副宛が差出人と同一です—返信ループの配置で届け先履歴がずれます".to_string());
     }
     if env.resent_to_same_as_resent_sender {
-        render_risks.push("再送先が再送代行と同一です—自己配送の配置で届け先履歴がずれます".to_string());
+        render_risks
+            .push("再送先が再送代行と同一です—自己配送の配置で届け先履歴がずれます".to_string());
     }
     if env.resent_cc_same_as_resent_sender {
-        render_risks.push("再送副宛が再送代行と同一です—役割重複で届け先一覧がずれます".to_string());
+        render_risks
+            .push("再送副宛が再送代行と同一です—役割重複で届け先一覧がずれます".to_string());
     }
     if env.to_same_as_cc {
-        render_risks.push("宛先が副宛先と同一です—受取役割の重複で届け先一覧がずれます".to_string());
+        render_risks
+            .push("宛先が副宛先と同一です—受取役割の重複で届け先一覧がずれます".to_string());
     }
     if env.reply_to_same_as_to {
         render_risks.push("返信口が宛先と同一です—返信ループの配置で返信先がずれます".to_string());
     }
     if env.from_same_as_to {
-        render_risks.push("差出人が宛先と同一です—自己送信の配置で差出人表示がずれます".to_string());
+        render_risks
+            .push("差出人が宛先と同一です—自己送信の配置で差出人表示がずれます".to_string());
     }
     if env.reply_to_same_as_sender {
         render_risks.push("返信口が代行と同一です—代行への返信で返信先がずれます".to_string());
@@ -6912,205 +7651,327 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("差出人が副宛先と同一です—役割の重複で届け先一覧がずれます".to_string());
     }
     if env.delivered_to_differs_to {
-        render_risks.push("実配達先が宛先と異なります—宛名の化粧で真の届け先がずれます".to_string());
+        render_risks
+            .push("実配達先が宛先と異なります—宛名の化粧で真の届け先がずれます".to_string());
     }
     if env.envelope_to_differs_to {
-        render_risks.push("封書配達先が宛先と異なります—宛名の化粧で届け先解釈がずれます".to_string());
+        render_risks
+            .push("封書配達先が宛先と異なります—宛名の化粧で届け先解釈がずれます".to_string());
     }
     if env.delivered_to_same_as_cc {
         render_risks.push("実配達先が副宛先と同一です—見せかけ宛先で届け先がずれます".to_string());
     }
     if env.return_path_differs_from {
-        render_risks.push("返送先が差出人と異なります—返送先の優先読みで差出人がずれます".to_string());
+        render_risks
+            .push("返送先が差出人と異なります—返送先の優先読みで差出人がずれます".to_string());
     }
     if env.delivered_to_same_as_from {
-        render_risks.push("実配達先が差出人と同一です—自分へ戻る配送で届け先がずれます".to_string());
+        render_risks
+            .push("実配達先が差出人と同一です—自分へ戻る配送で届け先がずれます".to_string());
     }
     if env.delivered_to_same_as_reply_to {
-        render_risks.push("実配達先が返信口と同一です—宛名・返信口・実配の畳みで解釈がずれます".to_string());
+        render_risks.push(
+            "実配達先が返信口と同一です—宛名・返信口・実配の畳みで解釈がずれます".to_string(),
+        );
     }
     if env.envelope_to_same_as_cc {
-        render_risks.push("封書配達先が副宛先と同一です—見せかけ宛先で届け先がずれます".to_string());
+        render_risks
+            .push("封書配達先が副宛先と同一です—見せかけ宛先で届け先がずれます".to_string());
     }
     if env.delivered_to_same_as_sender {
         render_risks.push("実配達先が代行と同一です—代行宛の配送で届け先がずれます".to_string());
     }
     if env.x_orig_from_differs {
-        render_risks.push("元の差出人記録が表示差出人と異なります—書き換え履歴の読みで差出人がずれます".to_string());
+        render_risks.push(
+            "元の差出人記録が表示差出人と異なります—書き換え履歴の読みで差出人がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_subject_differs {
-        render_risks.push("元の件名記録が表示件名と異なります—書き換え履歴の読みで件名がずれます".to_string());
+        render_risks.push(
+            "元の件名記録が表示件名と異なります—書き換え履歴の読みで件名がずれます".to_string(),
+        );
     }
     if env.x_orig_msgid_differs {
-        render_risks.push("元の識別子記録が現識別子と異なります—書き換え履歴の読みで糸参照がずれます".to_string());
+        render_risks.push(
+            "元の識別子記録が現識別子と異なります—書き換え履歴の読みで糸参照がずれます".to_string(),
+        );
     }
     if env.x_orig_date_differs {
-        render_risks.push("元の日時記録が表示日時と異なります—書き換え履歴の読みで履歴がずれます".to_string());
+        render_risks.push(
+            "元の日時記録が表示日時と異なります—書き換え履歴の読みで履歴がずれます".to_string(),
+        );
     }
     if env.x_orig_to_differs {
-        render_risks.push("元の宛先記録が表示宛先と異なります—書き換え履歴の読みで届け先がずれます".to_string());
+        render_risks.push(
+            "元の宛先記録が表示宛先と異なります—書き換え履歴の読みで届け先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_differs {
-        render_risks.push("元の副宛先記録が表示副宛先と異なります—書き換え履歴の読みで届け先がずれます".to_string());
+        render_risks.push(
+            "元の副宛先記録が表示副宛先と異なります—書き換え履歴の読みで届け先がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_sender_differs {
-        render_risks.push("元の代行記録が表示代行者と異なります—書き換え履歴の読みで代行者がずれます".to_string());
+        render_risks.push(
+            "元の代行記録が表示代行者と異なります—書き換え履歴の読みで代行者がずれます".to_string(),
+        );
     }
     if env.x_orig_refs_differs {
-        render_risks.push("元の糸参照記録が現糸参照と異なります—書き換え履歴の読みで糸帰属がずれます".to_string());
+        render_risks.push(
+            "元の糸参照記録が現糸参照と異なります—書き換え履歴の読みで糸帰属がずれます".to_string(),
+        );
     }
     if env.dnt_differs_from {
-        render_risks.push("開封通知の返送先が差出人と異なります—別口への追跡ループで届け先がずれます".to_string());
+        render_risks.push(
+            "開封通知の返送先が差出人と異なります—別口への追跡ループで届け先がずれます".to_string(),
+        );
     }
     if env.rrt_differs_from {
-        render_risks.push("受領通知の返送先が差出人と異なります—別口への追跡ループで届け先がずれます".to_string());
+        render_risks.push(
+            "受領通知の返送先が差出人と異なります—別口への追跡ループで届け先がずれます".to_string(),
+        );
     }
     if env.xrt_differs_from {
-        render_risks.push("閲覧確認の返送先が差出人と異なります—別口への追跡ループで届け先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認の返送先が差出人と異なります—別口への追跡ループで届け先がずれます".to_string(),
+        );
     }
     if env.dnt_differs_reply_to {
-        render_risks.push("開封通知の返送先が返信口と異なります—通知欄と返信口の優先読みで届け先がずれます".to_string());
+        render_risks.push(
+            "開封通知の返送先が返信口と異なります—通知欄と返信口の優先読みで届け先がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_to_differs_to {
-        render_risks.push("表宛先記録が宛先欄と異なります—実受取記録の読みで届け先がずれます".to_string());
+        render_risks
+            .push("表宛先記録が宛先欄と異なります—実受取記録の読みで届け先がずれます".to_string());
     }
     if env.apparently_to_differs_delivered_to {
-        render_risks.push("表宛先記録が実配達先と異なります—配送記録どうしの食い違いで届け先がずれます".to_string());
+        render_risks.push(
+            "表宛先記録が実配達先と異なります—配送記録どうしの食い違いで届け先がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_to_differs_delivered_to {
-        render_risks.push("元宛先記録が実配達先と異なります—配送記録どうしの食い違いで届け先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録が実配達先と異なります—配送記録どうしの食い違いで届け先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_differs_reply_to {
-        render_risks.push("旧式再送返信欄が返信口と異なります—新旧返信欄の優先読みで返信先がずれます".to_string());
+        render_risks.push(
+            "旧式再送返信欄が返信口と異なります—新旧返信欄の優先読みで返信先がずれます".to_string(),
+        );
     }
     if env.env_from_differs_from {
-        render_risks.push("封書差出人記録が表示差出人と異なります—エンベロープ記録の読みで差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録が表示差出人と異なります—エンベロープ記録の読みで差出人がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_from_differs_from {
-        render_risks.push("表差出人記録が表示差出人と異なります—エンベロープ記録の読みで差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録が表示差出人と異なります—エンベロープ記録の読みで差出人がずれます"
+                .to_string(),
+        );
     }
     if env.rrt_differs_reply_to {
-        render_risks.push("受領通知の返送先が返信口と異なります—通知欄と返信口の優先読みで届け先がずれます".to_string());
+        render_risks.push(
+            "受領通知の返送先が返信口と異なります—通知欄と返信口の優先読みで届け先がずれます"
+                .to_string(),
+        );
     }
     if env.xrt_differs_reply_to {
-        render_risks.push("閲覧確認の返送先が返信口と異なります—通知欄と返信口の優先読みで届け先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認の返送先が返信口と異なります—通知欄と返信口の優先読みで届け先がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_marks {
-        render_risks.push("見せかけ再送の残渣欄が残っています—再送履歴の読みをずらす残渣を送信側が書く兆候です".to_string());
+        render_risks.push(
+            "見せかけ再送の残渣欄が残っています—再送履歴の読みをずらす残渣を送信側が書く兆候です"
+                .to_string(),
+        );
     }
     if env.x_orig_bcc_mark {
-        render_risks.push("元の隠し宛先の記録欄が残っています—残渣の読みで届け先がずれます".to_string());
+        render_risks
+            .push("元の隠し宛先の記録欄が残っています—残渣の読みで届け先がずれます".to_string());
     }
     if env.x_orig_cc_mark {
-        render_risks.push("元の副宛先の記録欄が残っています—残渣の読みで届け先がずれます".to_string());
+        render_risks
+            .push("元の副宛先の記録欄が残っています—残渣の読みで届け先がずれます".to_string());
     }
     if env.x_orig_reply_to_mark {
-        render_risks.push("元の返信口の記録欄が残っています—残渣の読みで返信先がずれます".to_string());
+        render_risks
+            .push("元の返信口の記録欄が残っています—残渣の読みで返信先がずれます".to_string());
     }
     if env.fcc_mark {
-        render_risks.push("差出控えの格納欄が残っています—残渣の読みで差出人がずれます".to_string());
+        render_risks
+            .push("差出控えの格納欄が残っています—残渣の読みで差出人がずれます".to_string());
     }
     if env.forwarded_marks {
-        render_risks.push("転送元の残渣欄が残っています—転送履歴の読みをずらす残渣を送信側が書く兆候です".to_string());
+        render_risks.push(
+            "転送元の残渣欄が残っています—転送履歴の読みをずらす残渣を送信側が書く兆候です"
+                .to_string(),
+        );
     }
     if env.apparently_to_same_as_to {
-        render_risks.push("見せかけ宛先が宛先欄と一致します—記録と宛先欄の読みで届け先がずれます".to_string());
+        render_risks.push(
+            "見せかけ宛先が宛先欄と一致します—記録と宛先欄の読みで届け先がずれます".to_string(),
+        );
     }
     if env.x_orig_to_same_as_to {
-        render_risks.push("元の宛先記録が宛先欄と一致します—記録と宛先欄の読みで届け先がずれます".to_string());
+        render_risks.push(
+            "元の宛先記録が宛先欄と一致します—記録と宛先欄の読みで届け先がずれます".to_string(),
+        );
     }
     if env.x_orig_from_same_as_from {
-        render_risks.push("元の差出人記録が差出人欄と一致します—記録と差出人欄の読みで差出人がずれます".to_string());
+        render_risks.push(
+            "元の差出人記録が差出人欄と一致します—記録と差出人欄の読みで差出人がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_subject_same_as_subject {
-        render_risks.push("元の件名記録が件名欄と一致します—記録と件名欄の読みで件名がずれます".to_string());
+        render_risks.push(
+            "元の件名記録が件名欄と一致します—記録と件名欄の読みで件名がずれます".to_string(),
+        );
     }
     if env.x_orig_msgid_same_as_msgid {
-        render_risks.push("元の識別子記録が識別欄と一致します—記録と識別欄の読みで識別子がずれます".to_string());
+        render_risks.push(
+            "元の識別子記録が識別欄と一致します—記録と識別欄の読みで識別子がずれます".to_string(),
+        );
     }
     if env.x_orig_date_same_as_date {
-        render_risks.push("元の日時記録が日時欄と一致します—記録と日時欄の読みで日時がずれます".to_string());
+        render_risks.push(
+            "元の日時記録が日時欄と一致します—記録と日時欄の読みで日時がずれます".to_string(),
+        );
     }
     if env.x_orig_sender_same_as_sender {
-        render_risks.push("元の代行記録が代行欄と一致します—記録と代行欄の読みで差出人がずれます".to_string());
+        render_risks.push(
+            "元の代行記録が代行欄と一致します—記録と代行欄の読みで差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_same_as_cc {
-        render_risks.push("元の副宛記録が副宛先欄と一致します—記録と副宛欄の読みで届け先がずれます".to_string());
+        render_risks.push(
+            "元の副宛記録が副宛先欄と一致します—記録と副宛欄の読みで届け先がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_same_as_reply_to {
-        render_risks.push("元の返信口記録が返信口と一致します—記録と返信口の読みで返信先がずれます".to_string());
+        render_risks.push(
+            "元の返信口記録が返信口と一致します—記録と返信口の読みで返信先がずれます".to_string(),
+        );
     }
     if env.x_orig_refs_same_as_refs {
-        render_risks.push("元の糸参照記録が参照欄と一致します—記録と参照欄の読みで糸参照がずれます".to_string());
+        render_risks.push(
+            "元の糸参照記録が参照欄と一致します—記録と参照欄の読みで糸参照がずれます".to_string(),
+        );
     }
     if env.x_orig_to_differs_apparently_to {
-        render_risks.push("元の宛先記録が見せかけ宛先記録と異なります—記録どうしの読みで届け先がずれます".to_string());
+        render_risks.push(
+            "元の宛先記録が見せかけ宛先記録と異なります—記録どうしの読みで届け先がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_to_differs_envelope_to {
-        render_risks.push("元の宛先記録が封書記録と異なります—記録どうしの読みで届け先がずれます".to_string());
+        render_risks.push(
+            "元の宛先記録が封書記録と異なります—記録どうしの読みで届け先がずれます".to_string(),
+        );
     }
     if env.envelope_to_differs_delivered_to {
-        render_risks.push("封書記録が配達記録と異なります—記録どうしの読みで届け先がずれます".to_string());
+        render_risks
+            .push("封書記録が配達記録と異なります—記録どうしの読みで届け先がずれます".to_string());
     }
     if env.envelope_to_differs_apparently_to {
-        render_risks.push("封書記録が見せかけ宛先記録と異なります—記録どうしの読みで届け先がずれます".to_string());
+        render_risks.push(
+            "封書記録が見せかけ宛先記録と異なります—記録どうしの読みで届け先がずれます".to_string(),
+        );
     }
     if env.return_path_differs_env_from {
-        render_risks.push("返送先が封書差出人記録と異なります—記録どうしの読みで差出人がずれます".to_string());
+        render_risks.push(
+            "返送先が封書差出人記録と異なります—記録どうしの読みで差出人がずれます".to_string(),
+        );
     }
     if env.return_path_differs_apparently_from {
-        render_risks.push("返送先が表差出人記録と異なります—記録どうしの読みで差出人がずれます".to_string());
+        render_risks.push(
+            "返送先が表差出人記録と異なります—記録どうしの読みで差出人がずれます".to_string(),
+        );
     }
     if env.env_from_differs_apparently_from {
-        render_risks.push("封書差出人記録が表差出人記録と異なります—記録どうしの読みで差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録が表差出人記録と異なります—記録どうしの読みで差出人がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_from_differs_env_from {
-        render_risks.push("元の差出人記録が封書差出人記録と異なります—記録どうしの読みで差出人がずれます".to_string());
+        render_risks.push(
+            "元の差出人記録が封書差出人記録と異なります—記録どうしの読みで差出人がずれます"
+                .to_string(),
+        );
     }
     if env.multi_env_to {
-        render_risks.push("封書宛先記録が複数あります—記録の読み分けで届け先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録が複数あります—記録の読み分けで届け先がずれます".to_string());
     }
     if env.multi_apparently_to {
-        render_risks.push("見せかけ宛先記録が複数あります—記録の読み分けで届け先がずれます".to_string());
+        render_risks
+            .push("見せかけ宛先記録が複数あります—記録の読み分けで届け先がずれます".to_string());
     }
     if env.multi_env_from {
-        render_risks.push("封書差出人記録が複数あります—記録の読み分けで差出人がずれます".to_string());
+        render_risks
+            .push("封書差出人記録が複数あります—記録の読み分けで差出人がずれます".to_string());
     }
     if env.multi_apparently_from {
-        render_risks.push("表差出人記録が複数あります—記録の読み分けで差出人がずれます".to_string());
+        render_risks
+            .push("表差出人記録が複数あります—記録の読み分けで差出人がずれます".to_string());
     }
     if env.multi_x_orig_to {
-        render_risks.push("元の宛先記録が複数あります—記録の読み分けで届け先履歴がずれます".to_string());
+        render_risks
+            .push("元の宛先記録が複数あります—記録の読み分けで届け先履歴がずれます".to_string());
     }
     if env.multi_x_orig_from {
-        render_risks.push("元の差出人記録が複数あります—記録の読み分けで差出人履歴がずれます".to_string());
+        render_risks
+            .push("元の差出人記録が複数あります—記録の読み分けで差出人履歴がずれます".to_string());
     }
     if env.multi_x_orig_msgid {
-        render_risks.push("元の識別子記録が複数あります—記録の読み分けで識別子履歴がずれます".to_string());
+        render_risks
+            .push("元の識別子記録が複数あります—記録の読み分けで識別子履歴がずれます".to_string());
     }
     if env.multi_x_orig_subject {
-        render_risks.push("元の件名記録が複数あります—記録の読み分けで件名履歴がずれます".to_string());
+        render_risks
+            .push("元の件名記録が複数あります—記録の読み分けで件名履歴がずれます".to_string());
     }
     if env.multi_x_orig_cc {
-        render_risks.push("元の副宛先記録が複数あります—記録の読み分けで副宛先履歴がずれます".to_string());
+        render_risks
+            .push("元の副宛先記録が複数あります—記録の読み分けで副宛先履歴がずれます".to_string());
     }
     if env.multi_x_orig_reply_to {
-        render_risks.push("元の返信口記録が複数あります—記録の読み分けで返信先履歴がずれます".to_string());
+        render_risks
+            .push("元の返信口記録が複数あります—記録の読み分けで返信先履歴がずれます".to_string());
     }
     if env.multi_x_orig_date {
-        render_risks.push("元の日時記録が複数あります—記録の読み分けで日時履歴がずれます".to_string());
+        render_risks
+            .push("元の日時記録が複数あります—記録の読み分けで日時履歴がずれます".to_string());
     }
     if env.multi_x_orig_refs {
-        render_risks.push("元の糸参照記録が複数あります—記録の読み分けで参照履歴がずれます".to_string());
+        render_risks
+            .push("元の糸参照記録が複数あります—記録の読み分けで参照履歴がずれます".to_string());
     }
     if env.multi_disposition_to {
-        render_risks.push("開封通知の要求先が複数あります—記録の読み分けで通知の行き先がずれます".to_string());
+        render_risks.push(
+            "開封通知の要求先が複数あります—記録の読み分けで通知の行き先がずれます".to_string(),
+        );
     }
     if env.multi_return_receipt_to {
-        render_risks.push("受領通知の要求先が複数あります—記録の読み分けで通知の行き先がずれます".to_string());
+        render_risks.push(
+            "受領通知の要求先が複数あります—記録の読み分けで通知の行き先がずれます".to_string(),
+        );
     }
     if env.multi_confirm_reading {
-        render_risks.push("閲覧確認の要求先が複数あります—記録の読み分けで通知の行き先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認の要求先が複数あります—記録の読み分けで通知の行き先がずれます".to_string(),
+        );
     }
     if env.multi_resent_reply_to {
         render_risks.push("再送返信口が複数あります—記録の読み分けで返信先がずれます".to_string());
@@ -7128,13 +7989,16 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("表差出人記録が空です—空欄の扱いで差出人がずれます".to_string());
     }
     if env.disposition_to_empty {
-        render_risks.push("開封通知の要求先が空です—空欄の扱いで通知の行き先がずれます".to_string());
+        render_risks
+            .push("開封通知の要求先が空です—空欄の扱いで通知の行き先がずれます".to_string());
     }
     if env.return_receipt_to_empty {
-        render_risks.push("受領通知の要求先が空です—空欄の扱いで通知の行き先がずれます".to_string());
+        render_risks
+            .push("受領通知の要求先が空です—空欄の扱いで通知の行き先がずれます".to_string());
     }
     if env.confirm_reading_empty {
-        render_risks.push("閲覧確認の要求先が空です—空欄の扱いで通知の行き先がずれます".to_string());
+        render_risks
+            .push("閲覧確認の要求先が空です—空欄の扱いで通知の行き先がずれます".to_string());
     }
     if env.resent_reply_to_empty {
         render_risks.push("再送返信口が空です—空欄の扱いで返信先がずれます".to_string());
@@ -7200,52 +8064,81 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("優先度欄が空です—空欄の扱いで緊急度表示がずれます".to_string());
     }
     if env.env_to_non_addr {
-        render_risks.push("封書宛先記録が宛名形ではありません—値の読み分けで届け先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録が宛名形ではありません—値の読み分けで届け先がずれます".to_string());
     }
     if env.apparently_to_non_addr {
-        render_risks.push("見せかけ宛先記録が宛名形ではありません—値の読み分けで届け先がずれます".to_string());
+        render_risks.push(
+            "見せかけ宛先記録が宛名形ではありません—値の読み分けで届け先がずれます".to_string(),
+        );
     }
     if env.env_from_non_addr {
-        render_risks.push("封書差出人記録が宛名形ではありません—値の読み分けで差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録が宛名形ではありません—値の読み分けで差出人がずれます".to_string(),
+        );
     }
     if env.apparently_from_non_addr {
-        render_risks.push("表差出人記録が宛名形ではありません—値の読み分けで差出人がずれます".to_string());
+        render_risks
+            .push("表差出人記録が宛名形ではありません—値の読み分けで差出人がずれます".to_string());
     }
     if env.x_orig_to_non_addr {
-        render_risks.push("元宛先記録が宛名形ではありません—値の読み分けで届け先の履歴がずれます".to_string());
+        render_risks.push(
+            "元宛先記録が宛名形ではありません—値の読み分けで届け先の履歴がずれます".to_string(),
+        );
     }
     if env.x_orig_from_non_addr {
-        render_risks.push("元差出人記録が宛名形ではありません—値の読み分けで差出人の履歴がずれます".to_string());
+        render_risks.push(
+            "元差出人記録が宛名形ではありません—値の読み分けで差出人の履歴がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_non_addr {
-        render_risks.push("元副宛先記録が宛名形ではありません—値の読み分けで届け先の履歴がずれます".to_string());
+        render_risks.push(
+            "元副宛先記録が宛名形ではありません—値の読み分けで届け先の履歴がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_non_addr {
-        render_risks.push("元返信口記録が宛名形ではありません—値の読み分けで返信先の履歴がずれます".to_string());
+        render_risks.push(
+            "元返信口記録が宛名形ではありません—値の読み分けで返信先の履歴がずれます".to_string(),
+        );
     }
     if env.disposition_to_non_addr {
-        render_risks.push("開封通知先が宛名形ではありません—値の読み分けで通知の行き先がずれます".to_string());
+        render_risks.push(
+            "開封通知先が宛名形ではありません—値の読み分けで通知の行き先がずれます".to_string(),
+        );
     }
     if env.return_receipt_to_non_addr {
-        render_risks.push("受領通知先が宛名形ではありません—値の読み分けで通知の行き先がずれます".to_string());
+        render_risks.push(
+            "受領通知先が宛名形ではありません—値の読み分けで通知の行き先がずれます".to_string(),
+        );
     }
     if env.confirm_reading_non_addr {
-        render_risks.push("閲覧確認先が宛名形ではありません—値の読み分けで確認の行き先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先が宛名形ではありません—値の読み分けで確認の行き先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_non_addr {
-        render_risks.push("再送返信口が宛名形ではありません—値の読み分けで返信先がずれます".to_string());
+        render_risks
+            .push("再送返信口が宛名形ではありません—値の読み分けで返信先がずれます".to_string());
     }
     if env.delivered_to_non_addr {
-        render_risks.push("配達記録が宛名形ではありません—値の読み分けで届け先の履歴がずれます".to_string());
+        render_risks.push(
+            "配達記録が宛名形ではありません—値の読み分けで届け先の履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_non_addr {
-        render_risks.push("返送先記録が宛名形ではありません—値の読み分けで返送先の評価がずれます".to_string());
+        render_risks.push(
+            "返送先記録が宛名形ではありません—値の読み分けで返送先の評価がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_non_addr {
-        render_risks.push("元受取人記録が宛名形ではありません—値の読み分けで届け先の履歴がずれます".to_string());
+        render_risks.push(
+            "元受取人記録が宛名形ではありません—値の読み分けで届け先の履歴がずれます".to_string(),
+        );
     }
     if env.apparently_resent_non_addr {
-        render_risks.push("再送残渣記録が宛名形ではありません—値の読み分けで残渣の評価がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録が宛名形ではありません—値の読み分けで残渣の評価がずれます".to_string(),
+        );
     }
     if env.env_to_addr_list {
         render_risks.push("封書宛先記録が複数値です—値の割り方で届け先がずれます".to_string());
@@ -7269,7 +8162,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("元宛先記録が複数値です—値の割り方で届け先の履歴がずれます".to_string());
     }
     if env.x_orig_from_addr_list {
-        render_risks.push("元差出人記録が複数値です—値の割り方で差出人の履歴がずれます".to_string());
+        render_risks
+            .push("元差出人記録が複数値です—値の割り方で差出人の履歴がずれます".to_string());
     }
     if env.x_orig_cc_addr_list {
         render_risks.push("元副宛記録が複数値です—値の割り方で届け先の履歴がずれます".to_string());
@@ -7293,55 +8187,69 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("再送残渣記録が複数値です—値の割り方で再送記録がずれます".to_string());
     }
     if env.x_orig_rcpt_to_addr_list {
-        render_risks.push("元受取人記録が複数値です—値の割り方で届け先の履歴がずれます".to_string());
+        render_risks
+            .push("元受取人記録が複数値です—値の割り方で届け先の履歴がずれます".to_string());
     }
     if env.env_to_bracketed {
         render_risks.push("封書宛先記録が括弧囲み値です—括弧の扱いで届け先がずれます".to_string());
     }
     if env.delivered_to_bracketed {
-        render_risks.push("配達記録が括弧囲み値です—括弧の扱いで届け先の履歴がずれます".to_string());
+        render_risks
+            .push("配達記録が括弧囲み値です—括弧の扱いで届け先の履歴がずれます".to_string());
     }
     if env.env_from_bracketed {
-        render_risks.push("封書差出人記録が括弧囲み値です—括弧の扱いで差出人がずれます".to_string());
+        render_risks
+            .push("封書差出人記録が括弧囲み値です—括弧の扱いで差出人がずれます".to_string());
     }
     if env.errors_to_bracketed {
-        render_risks.push("返送先記録が括弧囲み値です—括弧の扱いで返送先の評価がずれます".to_string());
+        render_risks
+            .push("返送先記録が括弧囲み値です—括弧の扱いで返送先の評価がずれます".to_string());
     }
     if env.apparently_to_bracketed {
-        render_risks.push("見せかけ宛先記録が括弧囲み値です—括弧の扱いで届け先がずれます".to_string());
+        render_risks
+            .push("見せかけ宛先記録が括弧囲み値です—括弧の扱いで届け先がずれます".to_string());
     }
     if env.apparently_from_bracketed {
         render_risks.push("表差出人記録が括弧囲み値です—括弧の扱いで差出人がずれます".to_string());
     }
     if env.x_orig_to_bracketed {
-        render_risks.push("元宛先記録が括弧囲み値です—括弧の扱いで届け先の履歴がずれます".to_string());
+        render_risks
+            .push("元宛先記録が括弧囲み値です—括弧の扱いで届け先の履歴がずれます".to_string());
     }
     if env.x_orig_from_bracketed {
-        render_risks.push("元差出人記録が括弧囲み値です—括弧の扱いで差出人の履歴がずれます".to_string());
+        render_risks
+            .push("元差出人記録が括弧囲み値です—括弧の扱いで差出人の履歴がずれます".to_string());
     }
     if env.x_orig_cc_bracketed {
-        render_risks.push("元副宛記録が括弧囲み値です—括弧の扱いで届け先の履歴がずれます".to_string());
+        render_risks
+            .push("元副宛記録が括弧囲み値です—括弧の扱いで届け先の履歴がずれます".to_string());
     }
     if env.x_orig_reply_to_bracketed {
         render_risks.push("元返信口記録が括弧囲み値です—括弧の扱いで返信先がずれます".to_string());
     }
     if env.disposition_to_bracketed {
-        render_risks.push("開封通知先記録が括弧囲み値です—括弧の扱いで通知先がずれます".to_string());
+        render_risks
+            .push("開封通知先記録が括弧囲み値です—括弧の扱いで通知先がずれます".to_string());
     }
     if env.return_receipt_bracketed {
-        render_risks.push("受領通知先記録が括弧囲み値です—括弧の扱いで通知先がずれます".to_string());
+        render_risks
+            .push("受領通知先記録が括弧囲み値です—括弧の扱いで通知先がずれます".to_string());
     }
     if env.confirm_reading_bracketed {
-        render_risks.push("閲覧確認先記録が括弧囲み値です—括弧の扱いで通知先がずれます".to_string());
+        render_risks
+            .push("閲覧確認先記録が括弧囲み値です—括弧の扱いで通知先がずれます".to_string());
     }
     if env.resent_reply_to_bracketed {
-        render_risks.push("再送返信口記録が括弧囲み値です—括弧の扱いで返信先がずれます".to_string());
+        render_risks
+            .push("再送返信口記録が括弧囲み値です—括弧の扱いで返信先がずれます".to_string());
     }
     if env.apparently_resent_bracketed {
-        render_risks.push("再送残渣記録が括弧囲み値です—括弧の扱いで再送記録がずれます".to_string());
+        render_risks
+            .push("再送残渣記録が括弧囲み値です—括弧の扱いで再送記録がずれます".to_string());
     }
     if env.x_orig_rcpt_to_bracketed {
-        render_risks.push("元受取人記録が括弧囲み値です—括弧の扱いで届け先の履歴がずれます".to_string());
+        render_risks
+            .push("元受取人記録が括弧囲み値です—括弧の扱いで届け先の履歴がずれます".to_string());
     }
     if env.env_to_spaced {
         render_risks.push("封書宛先記録が空白入り値です—空白の扱いで届け先がずれます".to_string());
@@ -7350,13 +8258,15 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("配達記録が空白入り値です—空白の扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_spaced {
-        render_risks.push("封書差出人記録が空白入り値です—空白の扱いで差出人履歴がずれます".to_string());
+        render_risks
+            .push("封書差出人記録が空白入り値です—空白の扱いで差出人履歴がずれます".to_string());
     }
     if env.errors_to_spaced {
         render_risks.push("返送先記録が空白入り値です—空白の扱いで返送先がずれます".to_string());
     }
     if env.apparently_to_spaced {
-        render_risks.push("見せ宛記録が空白入り値です—空白の扱いで受取人履歴がずれます".to_string());
+        render_risks
+            .push("見せ宛記録が空白入り値です—空白の扱いで受取人履歴がずれます".to_string());
     }
     if env.apparently_from_spaced {
         render_risks.push("表札記録が空白入り値です—空白の扱いで差出人履歴がずれます".to_string());
@@ -7365,79 +8275,104 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("元宛先記録が空白入り値です—空白の扱いで元受取人がずれます".to_string());
     }
     if env.x_orig_from_spaced {
-        render_risks.push("元差出人記録が空白入り値です—空白の扱いで元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録が空白入り値です—空白の扱いで元差出人がずれます".to_string());
     }
     if env.x_orig_cc_spaced {
         render_risks.push("元副宛記録が空白入り値です—空白の扱いで副宛履歴がずれます".to_string());
     }
     if env.x_orig_reply_to_spaced {
-        render_risks.push("元返信口記録が空白入り値です—空白の扱いで返信先履歴がずれます".to_string());
+        render_risks
+            .push("元返信口記録が空白入り値です—空白の扱いで返信先履歴がずれます".to_string());
     }
     if env.disposition_to_spaced {
-        render_risks.push("開封通知先記録が空白入り値です—空白の扱いで通知先がずれます".to_string());
+        render_risks
+            .push("開封通知先記録が空白入り値です—空白の扱いで通知先がずれます".to_string());
     }
     if env.return_receipt_spaced {
-        render_risks.push("受領通知先記録が空白入り値です—空白の扱いで通知先がずれます".to_string());
+        render_risks
+            .push("受領通知先記録が空白入り値です—空白の扱いで通知先がずれます".to_string());
     }
     if env.confirm_reading_spaced {
-        render_risks.push("閲覧確認先記録が空白入り値です—空白の扱いで通知先がずれます".to_string());
+        render_risks
+            .push("閲覧確認先記録が空白入り値です—空白の扱いで通知先がずれます".to_string());
     }
     if env.resent_reply_to_spaced {
-        render_risks.push("再送返信口記録が空白入り値です—空白の扱いで返信先がずれます".to_string());
+        render_risks
+            .push("再送返信口記録が空白入り値です—空白の扱いで返信先がずれます".to_string());
     }
     if env.apparently_resent_spaced {
-        render_risks.push("再送残渣記録が空白入り値です—空白の扱いで再送記録がずれます".to_string());
+        render_risks
+            .push("再送残渣記録が空白入り値です—空白の扱いで再送記録がずれます".to_string());
     }
     if env.x_orig_rcpt_to_spaced {
-        render_risks.push("元受取人記録が空白入り値です—空白の扱いで届け先の履歴がずれます".to_string());
+        render_risks
+            .push("元受取人記録が空白入り値です—空白の扱いで届け先の履歴がずれます".to_string());
     }
     if env.env_to_dotmal {
-        render_risks.push("封書宛先記録がドット配置違反です—違反の扱いで届け先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録がドット配置違反です—違反の扱いで届け先がずれます".to_string());
     }
     if env.delivered_to_dotmal {
-        render_risks.push("配達記録がドット配置違反です—違反の扱いで配達履歴がずれます".to_string());
+        render_risks
+            .push("配達記録がドット配置違反です—違反の扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_dotmal {
-        render_risks.push("封書差出人記録がドット配置違反です—違反の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録がドット配置違反です—違反の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_dotmal {
-        render_risks.push("返送先記録がドット配置違反です—違反の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録がドット配置違反です—違反の扱いで返送先がずれます".to_string());
     }
     if env.apparently_to_dotmal {
-        render_risks.push("見せ宛記録がドット配置違反です—違反の扱いで受取人履歴がずれます".to_string());
+        render_risks
+            .push("見せ宛記録がドット配置違反です—違反の扱いで受取人履歴がずれます".to_string());
     }
     if env.apparently_from_dotmal {
-        render_risks.push("表札記録がドット配置違反です—違反の扱いで差出人履歴がずれます".to_string());
+        render_risks
+            .push("表札記録がドット配置違反です—違反の扱いで差出人履歴がずれます".to_string());
     }
     if env.x_orig_to_dotmal {
-        render_risks.push("元宛先記録がドット配置違反です—違反の扱いで元受取人がずれます".to_string());
+        render_risks
+            .push("元宛先記録がドット配置違反です—違反の扱いで元受取人がずれます".to_string());
     }
     if env.x_orig_from_dotmal {
-        render_risks.push("元差出人記録がドット配置違反です—違反の扱いで元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録がドット配置違反です—違反の扱いで元差出人がずれます".to_string());
     }
     if env.x_orig_cc_dotmal {
-        render_risks.push("元副宛記録がドット配置違反です—違反の扱いで副宛履歴がずれます".to_string());
+        render_risks
+            .push("元副宛記録がドット配置違反です—違反の扱いで副宛履歴がずれます".to_string());
     }
     if env.x_orig_reply_to_dotmal {
-        render_risks.push("元返信口記録がドット配置違反です—違反の扱いで返信先履歴がずれます".to_string());
+        render_risks
+            .push("元返信口記録がドット配置違反です—違反の扱いで返信先履歴がずれます".to_string());
     }
     if env.disposition_to_dotmal {
-        render_risks.push("開封通知先記録がドット配置違反です—違反の扱いで通知先がずれます".to_string());
+        render_risks
+            .push("開封通知先記録がドット配置違反です—違反の扱いで通知先がずれます".to_string());
     }
     if env.return_receipt_dotmal {
-        render_risks.push("受領通知先記録がドット配置違反です—違反の扱いで通知先がずれます".to_string());
+        render_risks
+            .push("受領通知先記録がドット配置違反です—違反の扱いで通知先がずれます".to_string());
     }
     if env.confirm_reading_dotmal {
-        render_risks.push("閲覧確認先記録がドット配置違反です—違反の扱いで確認先がずれます".to_string());
+        render_risks
+            .push("閲覧確認先記録がドット配置違反です—違反の扱いで確認先がずれます".to_string());
     }
     if env.resent_reply_to_dotmal {
-        render_risks.push("再送返信口記録がドット配置違反です—違反の扱いで返信先がずれます".to_string());
+        render_risks
+            .push("再送返信口記録がドット配置違反です—違反の扱いで返信先がずれます".to_string());
     }
     if env.apparently_resent_dotmal {
-        render_risks.push("再送残渣記録がドット配置違反です—違反の扱いで再送履歴がずれます".to_string());
+        render_risks
+            .push("再送残渣記録がドット配置違反です—違反の扱いで再送履歴がずれます".to_string());
     }
     if env.x_orig_rcpt_to_dotmal {
-        render_risks.push("元受取人記録がドット配置違反です—違反の扱いで受取人履歴がずれます".to_string());
+        render_risks
+            .push("元受取人記録がドット配置違反です—違反の扱いで受取人履歴がずれます".to_string());
     }
     if env.env_to_atdup {
         render_risks.push("封書宛先記録に@が複数です—@の切り分けで封書宛先がずれます".to_string());
@@ -7446,7 +8381,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("配達記録に@が複数です—@の切り分けで配達履歴がずれます".to_string());
     }
     if env.env_from_atdup {
-        render_risks.push("封書差出人記録に@が複数です—@の切り分けで差出人履歴がずれます".to_string());
+        render_risks
+            .push("封書差出人記録に@が複数です—@の切り分けで差出人履歴がずれます".to_string());
     }
     if env.errors_to_atdup {
         render_risks.push("返送先記録に@が複数です—@の切り分けで返送先がずれます".to_string());
@@ -7467,7 +8403,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("元副宛記録に@が複数です—@の切り分けで副宛履歴がずれます".to_string());
     }
     if env.x_orig_reply_to_atdup {
-        render_risks.push("元返信口記録に@が複数です—@の切り分けで返信先履歴がずれます".to_string());
+        render_risks
+            .push("元返信口記録に@が複数です—@の切り分けで返信先履歴がずれます".to_string());
     }
     if env.disposition_to_atdup {
         render_risks.push("開封通知先記録に@が複数です—@の切り分けで通知先がずれます".to_string());
@@ -7485,355 +8422,545 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("再送残渣記録に@が複数です—@の切り分けで再送履歴がずれます".to_string());
     }
     if env.x_orig_rcpt_to_atdup {
-        render_risks.push("元受取人記録に@が複数です—@の切り分けで受取人履歴がずれます".to_string());
+        render_risks
+            .push("元受取人記録に@が複数です—@の切り分けで受取人履歴がずれます".to_string());
     }
     if env.env_to_atside {
-        render_risks.push("封書宛先記録の宛名が片側欠落です—空側の扱いで封書宛先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録の宛名が片側欠落です—空側の扱いで封書宛先がずれます".to_string());
     }
     if env.delivered_to_atside {
-        render_risks.push("配達記録の宛名が片側欠落です—空側の扱いで配達履歴がずれます".to_string());
+        render_risks
+            .push("配達記録の宛名が片側欠落です—空側の扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_atside {
-        render_risks.push("封書差出人記録の宛名が片側欠落です—空側の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名が片側欠落です—空側の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_atside {
-        render_risks.push("返送先記録の宛名が片側欠落です—空側の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名が片側欠落です—空側の扱いで返送先がずれます".to_string());
     }
     if env.apparently_to_atside {
-        render_risks.push("見せ宛記録の宛名が片側欠落です—空側の扱いで見せ宛履歴がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名が片側欠落です—空側の扱いで見せ宛履歴がずれます".to_string());
     }
     if env.apparently_from_atside {
-        render_risks.push("表差出人記録の宛名が片側欠落です—空側の扱いで表差出人がずれます".to_string());
+        render_risks
+            .push("表差出人記録の宛名が片側欠落です—空側の扱いで表差出人がずれます".to_string());
     }
     if env.x_orig_to_atside {
-        render_risks.push("元宛先記録の宛名が片側欠落です—空側の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名が片側欠落です—空側の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_atside {
-        render_risks.push("元差出人記録の宛名が片側欠落です—空側の扱いで元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録の宛名が片側欠落です—空側の扱いで元差出人がずれます".to_string());
     }
     if env.x_orig_cc_atside {
-        render_risks.push("元副宛記録の宛名が片側欠落です—空側の扱いで元副宛先がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名が片側欠落です—空側の扱いで元副宛先がずれます".to_string());
     }
     if env.x_orig_reply_to_atside {
-        render_risks.push("元返信口記録の宛名が片側欠落です—空側の扱いで元返信口がずれます".to_string());
+        render_risks
+            .push("元返信口記録の宛名が片側欠落です—空側の扱いで元返信口がずれます".to_string());
     }
     if env.disposition_to_atside {
-        render_risks.push("開封先記録の宛名が片側欠落です—空側の扱いで通知先がずれます".to_string());
+        render_risks
+            .push("開封先記録の宛名が片側欠落です—空側の扱いで通知先がずれます".to_string());
     }
     if env.return_receipt_atside {
-        render_risks.push("受領先記録の宛名が片側欠落です—空側の扱いで受領通知先がずれます".to_string());
+        render_risks
+            .push("受領先記録の宛名が片側欠落です—空側の扱いで受領通知先がずれます".to_string());
     }
     if env.confirm_reading_atside {
-        render_risks.push("閲覧確認先記録の宛名が片側欠落です—空側の扱いで確認先がずれます".to_string());
+        render_risks
+            .push("閲覧確認先記録の宛名が片側欠落です—空側の扱いで確認先がずれます".to_string());
     }
     if env.resent_reply_to_atside {
-        render_risks.push("再送返信口記録の宛名が片側欠落です—空側の扱いで返信先がずれます".to_string());
+        render_risks
+            .push("再送返信口記録の宛名が片側欠落です—空側の扱いで返信先がずれます".to_string());
     }
     if env.apparently_resent_atside {
-        render_risks.push("再送残渣記録の宛名が片側欠落です—空側の扱いで再送履歴がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名が片側欠落です—空側の扱いで再送履歴がずれます".to_string());
     }
     if env.x_orig_rcpt_to_atside {
-        render_risks.push("元受取人記録の宛名が片側欠落です—空側の扱いで受取人履歴がずれます".to_string());
+        render_risks
+            .push("元受取人記録の宛名が片側欠落です—空側の扱いで受取人履歴がずれます".to_string());
     }
     if env.env_to_semiv {
-        render_risks.push("封書宛先記録の宛名にセミコロンです—区切りの扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名にセミコロンです—区切りの扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_semiv {
-        render_risks.push("配達記録の宛名にセミコロンです—区切りの扱いで配達履歴がずれます".to_string());
+        render_risks
+            .push("配達記録の宛名にセミコロンです—区切りの扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_semiv {
-        render_risks.push("封書差出人記録の宛名にセミコロンです—区切りの扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名にセミコロンです—区切りの扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_semiv {
-        render_risks.push("返送先記録の宛名にセミコロンです—区切りの扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名にセミコロンです—区切りの扱いで返送先がずれます".to_string());
     }
     if env.apparently_to_semiv {
-        render_risks.push("見せ宛記録の宛名にセミコロンです—区切りの扱いで見せ宛履歴がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名にセミコロンです—区切りの扱いで見せ宛履歴がずれます".to_string(),
+        );
     }
     if env.apparently_from_semiv {
-        render_risks.push("表差出人記録の宛名にセミコロンです—区切りの扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名にセミコロンです—区切りの扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_semiv {
-        render_risks.push("元宛先記録の宛名にセミコロンです—区切りの扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名にセミコロンです—区切りの扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_semiv {
-        render_risks.push("元差出人記録の宛名にセミコロンです—区切りの扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名にセミコロンです—区切りの扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_semiv {
-        render_risks.push("元副宛記録の宛名にセミコロンです—区切りの扱いで元副宛先がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名にセミコロンです—区切りの扱いで元副宛先がずれます".to_string());
     }
     if env.x_orig_reply_to_semiv {
-        render_risks.push("元返信口記録の宛名にセミコロンです—区切りの扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名にセミコロンです—区切りの扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_semiv {
-        render_risks.push("開封通知先記録の宛名にセミコロンです—区切りの扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名にセミコロンです—区切りの扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_semiv {
-        render_risks.push("受領通知先記録の宛名にセミコロンです—区切りの扱いで受領通知先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名にセミコロンです—区切りの扱いで受領通知先がずれます".to_string(),
+        );
     }
     if env.confirm_reading_semiv {
-        render_risks.push("閲覧確認先記録の宛名にセミコロンです—区切りの扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名にセミコロンです—区切りの扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_semiv {
-        render_risks.push("再送返信口記録の宛名にセミコロンです—区切りの扱いで再送返信先がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名にセミコロンです—区切りの扱いで再送返信先がずれます".to_string(),
+        );
     }
     if env.apparently_resent_semiv {
-        render_risks.push("再送残渣記録の宛名にセミコロンです—区切りの扱いで再送残渣がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名にセミコロンです—区切りの扱いで再送残渣がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_semiv {
-        render_risks.push("元受取人記録の宛名にセミコロンです—区切りの扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名にセミコロンです—区切りの扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.env_to_pct {
-        render_risks.push("封書宛先記録の宛名にパーセントです—経路の扱いで封書宛先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録の宛名にパーセントです—経路の扱いで封書宛先がずれます".to_string());
     }
     if env.delivered_to_pct {
-        render_risks.push("配達記録の宛名にパーセントです—経路の扱いで配達履歴がずれます".to_string());
+        render_risks
+            .push("配達記録の宛名にパーセントです—経路の扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_pct {
-        render_risks.push("封書差出人記録の宛名にパーセントです—経路の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名にパーセントです—経路の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_pct {
-        render_risks.push("返送先記録の宛名にパーセントです—経路の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名にパーセントです—経路の扱いで返送先がずれます".to_string());
     }
     if env.apparently_to_pct {
-        render_risks.push("見せ宛記録の宛名にパーセントです—経路の扱いで見せ宛履歴がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名にパーセントです—経路の扱いで見せ宛履歴がずれます".to_string());
     }
     if env.apparently_from_pct {
-        render_risks.push("表差出人記録の宛名にパーセントです—経路の扱いで表差出人がずれます".to_string());
+        render_risks
+            .push("表差出人記録の宛名にパーセントです—経路の扱いで表差出人がずれます".to_string());
     }
     if env.x_orig_to_pct {
-        render_risks.push("元宛先記録の宛名にパーセントです—経路の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名にパーセントです—経路の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_pct {
-        render_risks.push("元差出人記録の宛名にパーセントです—経路の扱いで元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録の宛名にパーセントです—経路の扱いで元差出人がずれます".to_string());
     }
     if env.x_orig_cc_pct {
-        render_risks.push("元副宛記録の宛名にパーセントです—経路の扱いで元副宛先がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名にパーセントです—経路の扱いで元副宛先がずれます".to_string());
     }
     if env.x_orig_reply_to_pct {
-        render_risks.push("元返信口記録の宛名にパーセントです—経路の扱いで元返信口がずれます".to_string());
+        render_risks
+            .push("元返信口記録の宛名にパーセントです—経路の扱いで元返信口がずれます".to_string());
     }
     if env.disposition_to_pct {
-        render_risks.push("開封通知先記録の宛名にパーセントです—経路の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名にパーセントです—経路の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_pct {
-        render_risks.push("受領通知先記録の宛名にパーセントです—経路の扱いで受領通知先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名にパーセントです—経路の扱いで受領通知先がずれます".to_string(),
+        );
     }
     if env.confirm_reading_pct {
-        render_risks.push("閲覧確認先記録の宛名にパーセントです—経路の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名にパーセントです—経路の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_pct {
-        render_risks.push("再送返信口記録の宛名にパーセントです—経路の扱いで再送返信先がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名にパーセントです—経路の扱いで再送返信先がずれます".to_string(),
+        );
     }
     if env.apparently_resent_pct {
-        render_risks.push("再送残渣記録の宛名にパーセントです—経路の扱いで再送残渣がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名にパーセントです—経路の扱いで再送残渣がずれます".to_string());
     }
     if env.x_orig_rcpt_to_pct {
-        render_risks.push("元受取人記録の宛名にパーセントです—経路の扱いで元受取人がずれます".to_string());
+        render_risks
+            .push("元受取人記録の宛名にパーセントです—経路の扱いで元受取人がずれます".to_string());
     }
     if env.env_to_bang {
-        render_risks.push("封書宛先記録の宛名にバン記号です—経路の扱いで封書宛先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録の宛名にバン記号です—経路の扱いで封書宛先がずれます".to_string());
     }
     if env.delivered_to_bang {
-        render_risks.push("配達記録の宛名にバン記号です—経路の扱いで配達履歴がずれます".to_string());
+        render_risks
+            .push("配達記録の宛名にバン記号です—経路の扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_bang {
-        render_risks.push("封書差出人記録の宛名にバン記号です—経路の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名にバン記号です—経路の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_bang {
-        render_risks.push("返送先記録の宛名にバン記号です—経路の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名にバン記号です—経路の扱いで返送先がずれます".to_string());
     }
     if env.apparently_to_bang {
-        render_risks.push("見せ宛記録の宛名にバン記号です—経路の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名にバン記号です—経路の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_bang {
         render_risks.push("表札記録の宛名にバン記号です—経路の扱いで表札がずれます".to_string());
     }
     if env.x_orig_to_bang {
-        render_risks.push("元宛先記録の宛名にバン記号です—経路の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名にバン記号です—経路の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_bang {
-        render_risks.push("元差出人記録の宛名にバン記号です—経路の扱いで元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録の宛名にバン記号です—経路の扱いで元差出人がずれます".to_string());
     }
     if env.x_orig_cc_bang {
-        render_risks.push("元副宛記録の宛名にバン記号です—経路の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名にバン記号です—経路の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_bang {
-        render_risks.push("元返信口記録の宛名にバン記号です—経路の扱いで元返信口がずれます".to_string());
+        render_risks
+            .push("元返信口記録の宛名にバン記号です—経路の扱いで元返信口がずれます".to_string());
     }
     if env.disposition_to_bang {
-        render_risks.push("開封通知先記録の宛名にバン記号です—経路の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名にバン記号です—経路の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_bang {
-        render_risks.push("受領通知先記録の宛名にバン記号です—経路の扱いで受領通知先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名にバン記号です—経路の扱いで受領通知先がずれます".to_string(),
+        );
     }
     if env.confirm_reading_bang {
-        render_risks.push("閲覧確認先記録の宛名にバン記号です—経路の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名にバン記号です—経路の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_bang {
-        render_risks.push("再送返信口記録の宛名にバン記号です—経路の扱いで再送返信先がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名にバン記号です—経路の扱いで再送返信先がずれます".to_string(),
+        );
     }
     if env.apparently_resent_bang {
-        render_risks.push("再送残渣記録の宛名にバン記号です—経路の扱いで再送残渣がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名にバン記号です—経路の扱いで再送残渣がずれます".to_string());
     }
     if env.x_orig_rcpt_to_bang {
-        render_risks.push("元受取人記録の宛名にバン記号です—経路の扱いで元受取人がずれます".to_string());
+        render_risks
+            .push("元受取人記録の宛名にバン記号です—経路の扱いで元受取人がずれます".to_string());
     }
     if env.env_to_domlit {
-        render_risks.push("封書宛先記録の宛名にドメインリテラルです—受理の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名にドメインリテラルです—受理の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_domlit {
-        render_risks.push("配達記録の宛名にドメインリテラルです—受理の扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達記録の宛名にドメインリテラルです—受理の扱いで配達履歴がずれます".to_string(),
+        );
     }
     if env.env_from_domlit {
-        render_risks.push("封書差出人記録の宛名にドメインリテラルです—受理の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名にドメインリテラルです—受理の扱いで差出人履歴がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_domlit {
-        render_risks.push("返送先記録の宛名にドメインリテラルです—受理の扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名にドメインリテラルです—受理の扱いで返送先がずれます".to_string(),
+        );
     }
     if env.apparently_to_domlit {
-        render_risks.push("見せ宛記録の宛名にドメインリテラルです—受理の扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名にドメインリテラルです—受理の扱いで見せ宛がずれます".to_string(),
+        );
     }
     if env.apparently_from_domlit {
-        render_risks.push("表札記録の宛名にドメインリテラルです—受理の扱いで表札がずれます".to_string());
+        render_risks
+            .push("表札記録の宛名にドメインリテラルです—受理の扱いで表札がずれます".to_string());
     }
     if env.x_orig_to_domlit {
-        render_risks.push("元宛先記録の宛名にドメインリテラルです—受理の扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名にドメインリテラルです—受理の扱いで元宛先がずれます".to_string(),
+        );
     }
     if env.x_orig_from_domlit {
-        render_risks.push("元差出人記録の宛名にドメインリテラルです—受理の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名にドメインリテラルです—受理の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_domlit {
-        render_risks.push("元副宛記録の宛名にドメインリテラルです—受理の扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名にドメインリテラルです—受理の扱いで元副宛がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_domlit {
-        render_risks.push("元返信口記録の宛名にドメインリテラルです—受理の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名にドメインリテラルです—受理の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_domlit {
-        render_risks.push("開封通知先記録の宛名にドメインリテラルです—受理の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名にドメインリテラルです—受理の扱いで開封通知先がずれます"
+                .to_string(),
+        );
     }
     if env.return_receipt_domlit {
-        render_risks.push("受領通知先記録の宛名にドメインリテラルです—受理の扱いで受領通知先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名にドメインリテラルです—受理の扱いで受領通知先がずれます"
+                .to_string(),
+        );
     }
     if env.confirm_reading_domlit {
-        render_risks.push("閲覧確認先記録の宛名にドメインリテラルです—受理の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名にドメインリテラルです—受理の扱いで閲覧確認先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_domlit {
-        render_risks.push("再送返信口記録の宛名にドメインリテラルです—受理の扱いで再送返信先がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名にドメインリテラルです—受理の扱いで再送返信先がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_domlit {
-        render_risks.push("再送残渣記録の宛名にドメインリテラルです—受理の扱いで再送残渣がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名にドメインリテラルです—受理の扱いで再送残渣がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_domlit {
-        render_risks.push("元受取人記録の宛名にドメインリテラルです—受理の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名にドメインリテラルです—受理の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.env_to_eai {
-        render_risks.push("封書宛先記録の宛名に非ASCII文字です—国際化の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名に非ASCII文字です—国際化の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_eai {
-        render_risks.push("配達記録の宛名に非ASCII文字です—国際化の扱いで配達履歴がずれます".to_string());
+        render_risks
+            .push("配達記録の宛名に非ASCII文字です—国際化の扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_eai {
-        render_risks.push("封書差出人記録の宛名に非ASCII文字です—国際化の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名に非ASCII文字です—国際化の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_eai {
-        render_risks.push("返送先記録の宛名に非ASCII文字です—国際化の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名に非ASCII文字です—国際化の扱いで返送先がずれます".to_string());
     }
     if env.apparently_to_eai {
-        render_risks.push("見せ宛記録の宛名に非ASCII文字です—国際化の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名に非ASCII文字です—国際化の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_eai {
-        render_risks.push("表差出人記録の宛名に非ASCII文字です—国際化の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名に非ASCII文字です—国際化の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_eai {
-        render_risks.push("元宛先記録の宛名に非ASCII文字です—国際化の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名に非ASCII文字です—国際化の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_eai {
-        render_risks.push("元差出人記録の宛名に非ASCII文字です—国際化の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名に非ASCII文字です—国際化の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_eai {
-        render_risks.push("元副宛記録の宛名に非ASCII文字です—国際化の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名に非ASCII文字です—国際化の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_eai {
-        render_risks.push("元返信口記録の宛名に非ASCII文字です—国際化の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名に非ASCII文字です—国際化の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_eai {
-        render_risks.push("開封通知先記録の宛名に非ASCII文字です—国際化の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名に非ASCII文字です—国際化の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_eai {
-        render_risks.push("受領通知先記録の宛名に非ASCII文字です—国際化の扱いで受領通知先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名に非ASCII文字です—国際化の扱いで受領通知先がずれます".to_string(),
+        );
     }
     if env.confirm_reading_eai {
-        render_risks.push("閲覧確認先記録の宛名に非ASCII文字です—国際化の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名に非ASCII文字です—国際化の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_eai {
-        render_risks.push("再送返信口記録の宛名に非ASCII文字です—国際化の扱いで再送返信先がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名に非ASCII文字です—国際化の扱いで再送返信先がずれます".to_string(),
+        );
     }
     if env.apparently_resent_eai {
-        render_risks.push("再送残渣記録の宛名に非ASCII文字です—国際化の扱いで再送残渣がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名に非ASCII文字です—国際化の扱いで再送残渣がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_eai {
-        render_risks.push("元受取人記録の宛名に非ASCII文字です—国際化の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名に非ASCII文字です—国際化の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.env_to_hyph {
-        render_risks.push("封書宛先記録の宛名にラベル端ハイフンです—受理の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名にラベル端ハイフンです—受理の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_hyph {
-        render_risks.push("配達記録の宛名にラベル端ハイフンです—受理の扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達記録の宛名にラベル端ハイフンです—受理の扱いで配達履歴がずれます".to_string(),
+        );
     }
     if env.env_from_hyph {
-        render_risks.push("封書差出人記録の宛名にラベル端ハイフンです—受理の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名にラベル端ハイフンです—受理の扱いで差出人履歴がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_hyph {
-        render_risks.push("返送先記録の宛名にラベル端ハイフンです—受理の扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名にラベル端ハイフンです—受理の扱いで返送先がずれます".to_string(),
+        );
     }
     if env.apparently_to_hyph {
-        render_risks.push("見せ宛記録の宛名にラベル端ハイフンです—受理の扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名にラベル端ハイフンです—受理の扱いで見せ宛がずれます".to_string(),
+        );
     }
     if env.apparently_from_hyph {
-        render_risks.push("表差出人記録の宛名にラベル端ハイフンです—受理の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名にラベル端ハイフンです—受理の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_hyph {
-        render_risks.push("元宛先記録の宛名にラベル端ハイフンです—受理の扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名にラベル端ハイフンです—受理の扱いで元宛先がずれます".to_string(),
+        );
     }
     if env.x_orig_from_hyph {
-        render_risks.push("元差出人記録の宛名にラベル端ハイフンです—受理の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名にラベル端ハイフンです—受理の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_hyph {
-        render_risks.push("元副宛記録の宛名にラベル端ハイフンです—受理の扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名にラベル端ハイフンです—受理の扱いで元副宛がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_hyph {
-        render_risks.push("元返信口記録の宛名にラベル端ハイフンです—受理の扱いで元返信先がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名にラベル端ハイフンです—受理の扱いで元返信先がずれます".to_string(),
+        );
     }
     if env.disposition_to_hyph {
-        render_risks.push("開封通知先記録の宛名にラベル端ハイフンです—受理の扱いで通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名にラベル端ハイフンです—受理の扱いで通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_hyph {
-        render_risks.push("受領通知先記録の宛名にラベル端ハイフンです—受理の扱いで受領通知先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名にラベル端ハイフンです—受理の扱いで受領通知先がずれます"
+                .to_string(),
+        );
     }
     if env.confirm_reading_hyph {
-        render_risks.push("閲覧確認先記録の宛名にラベル端ハイフンです—受理の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名にラベル端ハイフンです—受理の扱いで閲覧確認先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_hyph {
-        render_risks.push("再送返信口記録の宛名にラベル端ハイフンです—受理の扱いで再送返信先がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名にラベル端ハイフンです—受理の扱いで再送返信先がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_hyph {
-        render_risks.push("再送残渣記録の宛名にラベル端ハイフンです—受理の扱いで再送記録がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名にラベル端ハイフンです—受理の扱いで再送記録がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_hyph {
-        render_risks.push("元受取人記録の宛名にラベル端ハイフンです—受理の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名にラベル端ハイフンです—受理の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_bslash {
-        render_risks.push("閲覧確認先記録の宛名に逆斜線です—脱字の解釈で閲覧確認先がずれます".to_string());
+        render_risks
+            .push("閲覧確認先記録の宛名に逆斜線です—脱字の解釈で閲覧確認先がずれます".to_string());
     }
     if env.resent_reply_to_bslash {
-        render_risks.push("再送返信口記録の宛名に逆斜線です—脱字の解釈で再送返信先がずれます".to_string());
+        render_risks
+            .push("再送返信口記録の宛名に逆斜線です—脱字の解釈で再送返信先がずれます".to_string());
     }
     if env.apparently_resent_bslash {
-        render_risks.push("再送残渣記録の宛名に逆斜線です—脱字の解釈で再送記録がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名に逆斜線です—脱字の解釈で再送記録がずれます".to_string());
     }
     if env.x_orig_rcpt_to_bslash {
-        render_risks.push("元受取人記録の宛名に逆斜線です—脱字の解釈で元受取人がずれます".to_string());
+        render_risks
+            .push("元受取人記録の宛名に逆斜線です—脱字の解釈で元受取人がずれます".to_string());
     }
     if env.apparently_to_bslash {
         render_risks.push("見せ宛記録の宛名に逆斜線です—脱字の解釈で見せ宛がずれます".to_string());
@@ -7845,298 +8972,470 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("元宛先記録の宛名に逆斜線です—脱字の解釈で元宛先がずれます".to_string());
     }
     if env.x_orig_from_bslash {
-        render_risks.push("元差出人記録の宛名に逆斜線です—脱字の解釈で元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録の宛名に逆斜線です—脱字の解釈で元差出人がずれます".to_string());
     }
     if env.x_orig_cc_bslash {
         render_risks.push("元副宛記録の宛名に逆斜線です—脱字の解釈で元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_bslash {
-        render_risks.push("元返信口記録の宛名に逆斜線です—脱字の解釈で元返信先がずれます".to_string());
+        render_risks
+            .push("元返信口記録の宛名に逆斜線です—脱字の解釈で元返信先がずれます".to_string());
     }
     if env.disposition_to_bslash {
-        render_risks.push("開封通知先記録の宛名に逆斜線です—脱字の解釈で通知先がずれます".to_string());
+        render_risks
+            .push("開封通知先記録の宛名に逆斜線です—脱字の解釈で通知先がずれます".to_string());
     }
     if env.return_receipt_bslash {
-        render_risks.push("受領通知先記録の宛名に逆斜線です—脱字の解釈で受領通知先がずれます".to_string());
+        render_risks
+            .push("受領通知先記録の宛名に逆斜線です—脱字の解釈で受領通知先がずれます".to_string());
     }
     if env.env_to_bslash {
-        render_risks.push("封書宛先記録の宛名に逆斜線です—脱字の解釈で封書宛先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録の宛名に逆斜線です—脱字の解釈で封書宛先がずれます".to_string());
     }
     if env.delivered_to_bslash {
-        render_risks.push("配達履歴記録の宛名に逆斜線です—脱字の解釈で配達履歴がずれます".to_string());
+        render_risks
+            .push("配達履歴記録の宛名に逆斜線です—脱字の解釈で配達履歴がずれます".to_string());
     }
     if env.env_from_bslash {
-        render_risks.push("封書差出人記録の宛名に逆斜線です—脱字の解釈で差出人履歴がずれます".to_string());
+        render_risks
+            .push("封書差出人記録の宛名に逆斜線です—脱字の解釈で差出人履歴がずれます".to_string());
     }
     if env.errors_to_bslash {
         render_risks.push("返送先記録の宛名に逆斜線です—脱字の解釈で返送先がずれます".to_string());
     }
     if env.env_to_colon {
-        render_risks.push("封書宛先記録の宛名にコロンです—接頭辞の扱いで封書宛先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録の宛名にコロンです—接頭辞の扱いで封書宛先がずれます".to_string());
     }
     if env.delivered_to_colon {
-        render_risks.push("配達履歴記録の宛名にコロンです—接頭辞の扱いで配達履歴がずれます".to_string());
+        render_risks
+            .push("配達履歴記録の宛名にコロンです—接頭辞の扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_colon {
-        render_risks.push("封書差出人記録の宛名にコロンです—接頭辞の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名にコロンです—接頭辞の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_colon {
-        render_risks.push("返送先記録の宛名にコロンです—接頭辞の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名にコロンです—接頭辞の扱いで返送先がずれます".to_string());
     }
     if env.env_to_rparen {
-        render_risks.push("封書宛先記録の宛名に逆括弧です—括弧閉じの扱いで封書宛先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録の宛名に逆括弧です—括弧閉じの扱いで封書宛先がずれます".to_string());
     }
     if env.delivered_to_rparen {
-        render_risks.push("配達履歴記録の宛名に逆括弧です—括弧閉じの扱いで配達履歴がずれます".to_string());
+        render_risks
+            .push("配達履歴記録の宛名に逆括弧です—括弧閉じの扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_rparen {
-        render_risks.push("封書差出人記録の宛名に逆括弧です—括弧閉じの扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名に逆括弧です—括弧閉じの扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_rparen {
-        render_risks.push("返送先記録の宛名に逆括弧です—括弧閉じの扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名に逆括弧です—括弧閉じの扱いで返送先がずれます".to_string());
     }
     if env.env_to_rbracket {
-        render_risks.push("封書宛先記録の宛名に逆角括弧です—角括弧閉じの扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名に逆角括弧です—角括弧閉じの扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_rbracket {
-        render_risks.push("配達履歴記録の宛名に逆角括弧です—角括弧閉じの扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名に逆角括弧です—角括弧閉じの扱いで配達履歴がずれます".to_string(),
+        );
     }
     if env.env_from_rbracket {
-        render_risks.push("封書差出人記録の宛名に逆角括弧です—角括弧閉じの扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名に逆角括弧です—角括弧閉じの扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_rbracket {
-        render_risks.push("返送先記録の宛名に逆角括弧です—角括弧閉じの扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名に逆角括弧です—角括弧閉じの扱いで返送先がずれます".to_string());
     }
     if env.env_to_rbrace {
-        render_risks.push("封書宛先記録の宛名に逆波括弧です—波括弧閉じの扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名に逆波括弧です—波括弧閉じの扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_rbrace {
-        render_risks.push("配達履歴記録の宛名に逆波括弧です—波括弧閉じの扱いで配達先がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名に逆波括弧です—波括弧閉じの扱いで配達先がずれます".to_string(),
+        );
     }
     if env.env_from_rbrace {
-        render_risks.push("封書差出人記録の宛名に逆波括弧です—波括弧閉じの扱いで封書差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名に逆波括弧です—波括弧閉じの扱いで封書差出人がずれます".to_string(),
+        );
     }
     if env.errors_to_rbrace {
-        render_risks.push("返送先記録の宛名に逆波括弧です—波括弧閉じの扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名に逆波括弧です—波括弧閉じの扱いで返送先がずれます".to_string());
     }
     if env.env_to_apos {
-        render_risks.push("封書宛先記録の宛名に逆引用符です—引用符の扱いで封書宛先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録の宛名に逆引用符です—引用符の扱いで封書宛先がずれます".to_string());
     }
     if env.delivered_to_apos {
-        render_risks.push("配達履歴記録の宛名に逆引用符です—引用符の扱いで配達履歴がずれます".to_string());
+        render_risks
+            .push("配達履歴記録の宛名に逆引用符です—引用符の扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_apos {
-        render_risks.push("封書差出人記録の宛名に逆引用符です—引用符の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名に逆引用符です—引用符の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_apos {
-        render_risks.push("返送先記録の宛名に逆引用符です—引用符の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名に逆引用符です—引用符の扱いで返送先がずれます".to_string());
     }
     if env.env_to_qmark {
-        render_risks.push("封書宛先記録の宛名に疑問符です—疑問符の扱いで封書宛先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録の宛名に疑問符です—疑問符の扱いで封書宛先がずれます".to_string());
     }
     if env.delivered_to_qmark {
-        render_risks.push("配達履歴記録の宛名に疑問符です—疑問符の扱いで配達履歴がずれます".to_string());
+        render_risks
+            .push("配達履歴記録の宛名に疑問符です—疑問符の扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_qmark {
-        render_risks.push("封書差出人記録の宛名に疑問符です—疑問符の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名に疑問符です—疑問符の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_qmark {
-        render_risks.push("返送先記録の宛名に疑問符です—疑問符の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名に疑問符です—疑問符の扱いで返送先がずれます".to_string());
     }
     if env.env_to_plus {
-        render_risks.push("封書宛先記録の宛名ドメインにプラスです—プラスの扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインにプラスです—プラスの扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_plus {
-        render_risks.push("配達履歴記録の宛名ドメインにプラスです—プラスの扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ドメインにプラスです—プラスの扱いで配達履歴がずれます".to_string(),
+        );
     }
     if env.env_from_plus {
-        render_risks.push("封書差出人記録の宛名ドメインにプラスです—プラスの扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ドメインにプラスです—プラスの扱いで差出人履歴がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_plus {
-        render_risks.push("返送先記録の宛名ドメインにプラスです—プラスの扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名ドメインにプラスです—プラスの扱いで返送先がずれます".to_string(),
+        );
     }
     if env.env_to_amp {
-        render_risks.push("封書宛先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで封書宛先がずれます"
+                .to_string(),
+        );
     }
     if env.delivered_to_amp {
-        render_risks.push("配達履歴記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで配達履歴がずれます"
+                .to_string(),
+        );
     }
     if env.env_from_amp {
         render_risks.push("封書差出人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで差出人履歴がずれます".to_string());
     }
     if env.errors_to_amp {
-        render_risks.push("返送先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで返送先がずれます"
+                .to_string(),
+        );
     }
     if env.env_to_lbrace {
-        render_risks.push("封書宛先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで封書宛先がずれます"
+                .to_string(),
+        );
     }
     if env.delivered_to_lbrace {
-        render_risks.push("配達履歴記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで配達履歴がずれます"
+                .to_string(),
+        );
     }
     if env.env_from_lbrace {
-        render_risks.push("差出人履歴記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "差出人履歴記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで差出人履歴がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_lbrace {
-        render_risks.push("返送先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで返送先がずれます"
+                .to_string(),
+        );
     }
     if env.env_to_eq {
-        render_risks.push("封書宛先記録の宛名ドメインにイコールです—イコールの扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインにイコールです—イコールの扱いで封書宛先がずれます"
+                .to_string(),
+        );
     }
     if env.delivered_to_eq {
-        render_risks.push("配達履歴記録の宛名ドメインにイコールです—イコールの扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ドメインにイコールです—イコールの扱いで配達履歴がずれます"
+                .to_string(),
+        );
     }
     if env.env_from_eq {
-        render_risks.push("差出人履歴記録の宛名ドメインにイコールです—イコールの扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "差出人履歴記録の宛名ドメインにイコールです—イコールの扱いで差出人履歴がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_eq {
-        render_risks.push("返送先記録の宛名ドメインにイコールです—イコールの扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名ドメインにイコールです—イコールの扱いで返送先がずれます".to_string(),
+        );
     }
     if env.env_to_caret {
-        render_risks.push("封書宛先記録の宛名ドメインにハットです—ハットの扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインにハットです—ハットの扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_caret {
-        render_risks.push("配達履歴記録の宛名ドメインにハットです—ハットの扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ドメインにハットです—ハットの扱いで配達履歴がずれます".to_string(),
+        );
     }
     if env.env_from_caret {
-        render_risks.push("封書差出人記録の宛名ドメインにハットです—ハットの扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ドメインにハットです—ハットの扱いで差出人履歴がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_caret {
-        render_risks.push("返送先記録の宛名ドメインにハットです—ハットの扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名ドメインにハットです—ハットの扱いで返送先がずれます".to_string(),
+        );
     }
     if env.env_to_hash {
-        render_risks.push("封書宛先記録の宛名ドメインに井桁です—井桁の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインに井桁です—井桁の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_hash {
-        render_risks.push("配達履歴記録の宛名ドメインに井桁です—井桁の扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ドメインに井桁です—井桁の扱いで配達履歴がずれます".to_string(),
+        );
     }
     if env.env_from_hash {
-        render_risks.push("封書差出人記録の宛名ドメインに井桁です—井桁の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ドメインに井桁です—井桁の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_hash {
-        render_risks.push("返送先記録の宛名ドメインに井桁です—井桁の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名ドメインに井桁です—井桁の扱いで返送先がずれます".to_string());
     }
     if env.env_to_dollar {
-        render_risks.push("封書宛先記録の宛名ドメインにドル符です—ドル符の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインにドル符です—ドル符の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_dollar {
-        render_risks.push("配達履歴記録の宛名ドメインにドル符です—ドル符の扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ドメインにドル符です—ドル符の扱いで配達履歴がずれます".to_string(),
+        );
     }
     if env.env_from_dollar {
-        render_risks.push("封書差出人記録の宛名ドメインにドル符です—ドル符の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ドメインにドル符です—ドル符の扱いで差出人履歴がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_dollar {
-        render_risks.push("返送先記録の宛名ドメインにドル符です—ドル符の扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名ドメインにドル符です—ドル符の扱いで返送先がずれます".to_string(),
+        );
     }
     if env.env_to_star {
-        render_risks.push("封書宛先記録の宛名ドメインに星です—星の扱いで封書宛先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録の宛名ドメインに星です—星の扱いで封書宛先がずれます".to_string());
     }
     if env.delivered_to_star {
-        render_risks.push("配達履歴記録の宛名ドメインに星です—星の扱いで配達履歴がずれます".to_string());
+        render_risks
+            .push("配達履歴記録の宛名ドメインに星です—星の扱いで配達履歴がずれます".to_string());
     }
     if env.env_from_star {
-        render_risks.push("封書差出人記録の宛名ドメインに星です—星の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ドメインに星です—星の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_star {
-        render_risks.push("返送先記録の宛名ドメインに星です—星の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名ドメインに星です—星の扱いで返送先がずれます".to_string());
     }
     if env.env_to_tilde {
-        render_risks.push("封書宛先記録の宛名ドメインに波線です—波線の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインに波線です—波線の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_tilde {
-        render_risks.push("配達履歴記録の宛名ドメインに波線です—波線の扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ドメインに波線です—波線の扱いで配達履歴がずれます".to_string(),
+        );
     }
     if env.env_from_tilde {
-        render_risks.push("封書差出人記録の宛名ドメインに波線です—波線の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ドメインに波線です—波線の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_tilde {
-        render_risks.push("返送先記録の宛名ドメインに波線です—波線の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名ドメインに波線です—波線の扱いで返送先がずれます".to_string());
     }
     if env.env_to_pipe {
-        render_risks.push("封書宛先記録の宛名ドメインに縦線です—縦線の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインに縦線です—縦線の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_pipe {
-        render_risks.push("配達履歴記録の宛名ドメインに縦線です—縦線の扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ドメインに縦線です—縦線の扱いで配達履歴がずれます".to_string(),
+        );
     }
     if env.env_from_pipe {
-        render_risks.push("封書差出人記録の宛名ドメインに縦線です—縦線の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ドメインに縦線です—縦線の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_pipe {
-        render_risks.push("返送先記録の宛名ドメインに縦線です—縦線の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名ドメインに縦線です—縦線の扱いで返送先がずれます".to_string());
     }
     if env.env_to_underscore {
-        render_risks.push("封書宛先記録の宛名ドメインに低線です—低線の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインに低線です—低線の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_underscore {
-        render_risks.push("配達履歴記録の宛名ドメインに低線です—低線の扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ドメインに低線です—低線の扱いで配達履歴がずれます".to_string(),
+        );
     }
     if env.env_from_underscore {
-        render_risks.push("封書差出人記録の宛名ドメインに低線です—低線の扱いで差出人履歴がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ドメインに低線です—低線の扱いで差出人履歴がずれます".to_string(),
+        );
     }
     if env.errors_to_underscore {
-        render_risks.push("返送先記録の宛名ドメインに低線です—低線の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名ドメインに低線です—低線の扱いで返送先がずれます".to_string());
     }
     if env.env_to_slash {
-        render_risks.push("封書宛先記録の宛名ドメインに斜線です—斜線の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインに斜線です—斜線の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_slash {
-        render_risks.push("配達履歴記録の宛名ドメインに斜線です—斜線の扱いで配達先がずれます".to_string());
+        render_risks
+            .push("配達履歴記録の宛名ドメインに斜線です—斜線の扱いで配達先がずれます".to_string());
     }
     if env.env_from_slash {
-        render_risks.push("封書差出人記録の宛名ドメインに斜線です—斜線の扱いで封書差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ドメインに斜線です—斜線の扱いで封書差出人がずれます".to_string(),
+        );
     }
     if env.errors_to_slash {
-        render_risks.push("返送先記録の宛名ドメインに斜線です—斜線の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名ドメインに斜線です—斜線の扱いで返送先がずれます".to_string());
     }
     if env.env_to_backtick {
-        render_risks.push("封書宛先記録の宛名ドメインに反転符です—反転符の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ドメインに反転符です—反転符の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_backtick {
-        render_risks.push("配達履歴記録の宛名ドメインに反転符です—反転符の扱いで配達先がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ドメインに反転符です—反転符の扱いで配達先がずれます".to_string(),
+        );
     }
     if env.env_from_backtick {
-        render_risks.push("封書差出人記録の宛名ドメインに反転符です—反転符の扱いで封書差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ドメインに反転符です—反転符の扱いで封書差出人がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_backtick {
-        render_risks.push("返送先記録の宛名ドメインに反転符です—反転符の扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名ドメインに反転符です—反転符の扱いで返送先がずれます".to_string(),
+        );
     }
     if env.env_to_slash_local {
-        render_risks.push("封書宛先記録の宛名ローカル部に斜線です—斜線の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ローカル部に斜線です—斜線の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.delivered_to_slash_local {
-        render_risks.push("配達履歴記録の宛名ローカル部に斜線です—斜線の扱いで配達履歴がずれます".to_string());
+        render_risks.push(
+            "配達履歴記録の宛名ローカル部に斜線です—斜線の扱いで配達履歴がずれます".to_string(),
+        );
     }
     if env.env_from_slash_local {
-        render_risks.push("封書差出人記録の宛名ローカル部に斜線です—斜線の扱いで封書差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ローカル部に斜線です—斜線の扱いで封書差出人がずれます".to_string(),
+        );
     }
     if env.errors_to_slash_local {
-        render_risks.push("返送先記録の宛名ローカル部に斜線です—斜線の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名ローカル部に斜線です—斜線の扱いで返送先がずれます".to_string());
     }
     if env.env_to_star_local {
-        render_risks.push("封書宛先記録の宛名ローカル部に星です—星の扱いで封書宛先がずれます".to_string());
+        render_risks
+            .push("封書宛先記録の宛名ローカル部に星です—星の扱いで封書宛先がずれます".to_string());
     }
     if env.env_from_star_local {
-        render_risks.push("封書差出人記録の宛名ローカル部に星です—星の扱いで封書差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ローカル部に星です—星の扱いで封書差出人がずれます".to_string(),
+        );
     }
     if env.errors_to_star_local {
-        render_risks.push("返送先記録の宛名ローカル部に星です—星の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名ローカル部に星です—星の扱いで返送先がずれます".to_string());
     }
     if env.env_to_hash_local {
-        render_risks.push("封書宛先記録の宛名ローカル部に井桁です—井桁の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ローカル部に井桁です—井桁の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.env_from_hash_local {
-        render_risks.push("封書差出人記録の宛名ローカル部に井桁です—井桁の扱いで封書差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ローカル部に井桁です—井桁の扱いで封書差出人がずれます".to_string(),
+        );
     }
     if env.errors_to_hash_local {
-        render_risks.push("返送先記録の宛名ローカル部に井桁です—井桁の扱いで返送先がずれます".to_string());
+        render_risks
+            .push("返送先記録の宛名ローカル部に井桁です—井桁の扱いで返送先がずれます".to_string());
     }
     if env.env_to_quoted_local {
-        render_risks.push("封書宛先記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで封書宛先がずれます"
+                .to_string(),
+        );
     }
     if env.env_from_quoted_local {
-        render_risks.push("封書差出人記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで封書差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで封書差出人がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_quoted_local {
-        render_risks.push("返送先記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで返送先がずれます".to_string(),
+        );
     }
     if env.ms_has_attach_bad {
         render_risks.push("添付標旗欄の値が異形です—標旗値の扱いで経路がずれます".to_string());
@@ -8151,7 +9450,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("送信器欄の値が異形です—送信器値の扱いで経路がずれます".to_string());
     }
     if env.spam_report_bad {
-        render_risks.push("迷惑報告欄の値が異形です—迷惑報告値の扱いで判定経緯がずれます".to_string());
+        render_risks
+            .push("迷惑報告欄の値が異形です—迷惑報告値の扱いで判定経緯がずれます".to_string());
     }
     if env.spam_ver_bad {
         render_risks.push("検査版欄の値が異形です—検査版値の扱いで検査把握がずれます".to_string());
@@ -8160,30 +9460,37 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("巡回跡欄の値が異形です—巡回跡値の扱いで巡回特定がずれます".to_string());
     }
     if env.no_archive_bad {
-        render_risks.push("保存抑止欄の値が異形です—保存抑止値の扱いで保存方針がずれます".to_string());
+        render_risks
+            .push("保存抑止欄の値が異形です—保存抑止値の扱いで保存方針がずれます".to_string());
     }
 
     if env.origin_ip_bad {
-        render_risks.push("起源識別欄の値が異形です—起源識別値の扱いで発信特定がずれます".to_string());
+        render_risks
+            .push("起源識別欄の値が異形です—起源識別値の扱いで発信特定がずれます".to_string());
     }
     if env.abuse_uri_bad {
-        render_risks.push("虐待窓口欄の値が異形です—虐待窓口値の扱いで通報先がずれます".to_string());
+        render_risks
+            .push("虐待窓口欄の値が異形です—虐待窓口値の扱いで通報先がずれます".to_string());
     }
     if env.auto_sub_bad {
-        render_risks.push("自動応答欄の値が異形です—自動応答値の扱いで応答分類がずれます".to_string());
+        render_risks
+            .push("自動応答欄の値が異形です—自動応答値の扱いで応答分類がずれます".to_string());
     }
     if env.auth_sender_bad {
-        render_risks.push("認証送信人欄の値が異形です—認証送信人値の扱いで送信認証がずれます".to_string());
+        render_risks
+            .push("認証送信人欄の値が異形です—認証送信人値の扱いで送信認証がずれます".to_string());
     }
 
     if env.precedence_bad {
-        render_risks.push("優先順位欄の値が異形です—優先順位値の扱いで優先判定がずれます".to_string());
+        render_risks
+            .push("優先順位欄の値が異形です—優先順位値の扱いで優先判定がずれます".to_string());
     }
     if env.x_loop_bad {
         render_risks.push("巡回欄の値が異形です—巡回値の扱いで巡回防止がずれます".to_string());
     }
     if env.uidl_bad {
-        render_risks.push("一意識別欄の値が異形です—一意識別値の扱いで受信管理がずれます".to_string());
+        render_risks
+            .push("一意識別欄の値が異形です—一意識別値の扱いで受信管理がずれます".to_string());
     }
     if env.x_received_bad {
         render_risks.push("副受信欄の値が異形です—副受信値の扱いで経路把握がずれます".to_string());
@@ -8193,33 +9500,40 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("一覧操作欄の値が異形です—操作値の扱いで一覧処理がずれます".to_string());
     }
     if env.unsub_post_bad {
-        render_risks.push("解除投稿欄の値が異形です—解除投稿値の扱いで解除処理がずれます".to_string());
+        render_risks
+            .push("解除投稿欄の値が異形です—解除投稿値の扱いで解除処理がずれます".to_string());
     }
     if env.archived_at_bad {
         render_risks.push("保管先欄の値が異形です—保管先値の扱いで保管参照がずれます".to_string());
     }
     if env.injection_info_bad {
-        render_risks.push("注入情報欄の値が異形です—注入情報値の扱いで投稿記録がずれます".to_string());
+        render_risks
+            .push("注入情報欄の値が異形です—注入情報値の扱いで投稿記録がずれます".to_string());
     }
 
     if env.dnt_opt_bad {
-        render_risks.push("通知選択欄の値が異形です—通知選択値の扱いで通知要求がずれます".to_string());
+        render_risks
+            .push("通知選択欄の値が異形です—通知選択値の扱いで通知要求がずれます".to_string());
     }
     if env.vbr_info_bad {
-        render_risks.push("信託情報欄の値が異形です—信託情報値の扱いで信託照合がずれます".to_string());
+        render_risks
+            .push("信託情報欄の値が異形です—信託情報値の扱いで信託照合がずれます".to_string());
     }
     if env.feedback_type_bad {
-        render_risks.push("反応種別欄の値が異形です—反応種別値の扱いで報告種別がずれます".to_string());
+        render_risks
+            .push("反応種別欄の値が異形です—反応種別値の扱いで報告種別がずれます".to_string());
     }
     if env.feedback_id_bad {
-        render_risks.push("反応識別欄の値が異形です—反応識別値の扱いで報告照合がずれます".to_string());
+        render_risks
+            .push("反応識別欄の値が異形です—反応識別値の扱いで報告照合がずれます".to_string());
     }
 
     if env.spam_flag_bad {
         render_risks.push("迷惑旗欄の値が異形です—迷惑旗値の扱いで迷惑判定がずれます".to_string());
     }
     if env.spam_status_bad {
-        render_risks.push("迷惑状態欄の値が異形です—迷惑状態値の扱いで迷惑判定がずれます".to_string());
+        render_risks
+            .push("迷惑状態欄の値が異形です—迷惑状態値の扱いで迷惑判定がずれます".to_string());
     }
     if env.spam_level_bad {
         render_risks.push("迷惑度欄の値が異形です—迷惑度値の扱いで迷惑判定がずれます".to_string());
@@ -8241,10 +9555,13 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("追討先欄の値が異形です—追討先値の扱いで返信先がずれます".to_string());
     }
     if env.orig_recipient_bad {
-        render_risks.push("元受取人記録欄の値が異形です—受取人記録の扱いで経路がずれます".to_string());
+        render_risks
+            .push("元受取人記録欄の値が異形です—受取人記録の扱いで経路がずれます".to_string());
     }
     if env.final_recipient_bad {
-        render_risks.push("最終受取人記録欄の値が異形です—最終受取人記録の扱いで経路がずれます".to_string());
+        render_risks.push(
+            "最終受取人記録欄の値が異形です—最終受取人記録の扱いで経路がずれます".to_string(),
+        );
     }
     if env.reporting_mta_bad {
         render_risks.push("報告元欄の値が異形です—報告元値の扱いで報告経路がずれます".to_string());
@@ -8253,19 +9570,22 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("通知窓欄の値が異形です—通知窓値の扱いで通知経路がずれます".to_string());
     }
     if env.remote_mta_bad {
-        render_risks.push("遠隔転送欄の値が異形です—遠隔転送値の扱いで配達経路がずれます".to_string());
+        render_risks
+            .push("遠隔転送欄の値が異形です—遠隔転送値の扱いで配達経路がずれます".to_string());
     }
     if env.dsn_status_bad {
         render_risks.push("配送状態欄の値が異形です—状態値の扱いで不達区分がずれます".to_string());
     }
     if env.orig_envid_bad {
-        render_risks.push("元封書識別欄の値が異形です—識別値の扱いで封書同定がずれます".to_string());
+        render_risks
+            .push("元封書識別欄の値が異形です—識別値の扱いで封書同定がずれます".to_string());
     }
     if env.diag_code_bad {
         render_risks.push("診断記録欄の値が異形です—診断値の扱いで不達診断がずれます".to_string());
     }
     if env.orig_msgid_bad {
-        render_risks.push("元識別欄の値が異形です—識別値の扱いで元メール同定がずれます".to_string());
+        render_risks
+            .push("元識別欄の値が異形です—識別値の扱いで元メール同定がずれます".to_string());
     }
     if env.mdn_disposition_bad {
         render_risks.push("処理結果欄の値が異形です—処理値の扱いで開封扱いがずれます".to_string());
@@ -8283,13 +9603,15 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("言語欄の値が異形です—言語値の扱いで翻訳判定がずれます".to_string());
     }
     if env.content_digest_bad {
-        render_risks.push("内容要約記録欄の値が異形です—要約記録値の扱いで検証結果がずれます".to_string());
+        render_risks
+            .push("内容要約記録欄の値が異形です—要約記録値の扱いで検証結果がずれます".to_string());
     }
     if env.content_features_bad {
         render_risks.push("内容特徴欄の値が異形です—特徴値の扱いで特徴判定がずれます".to_string());
     }
     if env.display_ctrl_bad {
-        render_risks.push("表示名に制御文字・不可視文字が混ざっています—名の見え方がずれます".to_string());
+        render_risks
+            .push("表示名に制御文字・不可視文字が混ざっています—名の見え方がずれます".to_string());
     }
     if env.display_domain_bad {
         render_risks.push("表示名がドメイン形です—名の扱いで送信者がずれます".to_string());
@@ -8301,13 +9623,16 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("表示名が長すぎます—名の扱いで送信者がずれます".to_string());
     }
     if env.recv_spf_bad {
-        render_risks.push("素朴判定欄の値が異形です—素朴判定値の扱いで送信域判定がずれます".to_string());
+        render_risks
+            .push("素朴判定欄の値が異形です—素朴判定値の扱いで送信域判定がずれます".to_string());
     }
     if env.tls_required_bad {
-        render_risks.push("暗号必須欄の値が異形です—暗号必須値の扱いで暗号経路がずれます".to_string());
+        render_risks
+            .push("暗号必須欄の値が異形です—暗号必須値の扱いで暗号経路がずれます".to_string());
     }
     if env.req_rcpt_bad {
-        render_risks.push("受取人時限欄の値が異形です—受取人時限値の扱いで宛先検証がずれます".to_string());
+        render_risks
+            .push("受取人時限欄の値が異形です—受取人時限値の扱いで宛先検証がずれます".to_string());
     }
     if env.bimi_mark_bad {
         render_risks.push("印章欄の値が異形です—印章値の扱いで印章表示がずれます".to_string());
@@ -8330,7 +9655,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("表示名に生の非ascii文字が混ざっています—名の読みがずれます".to_string());
     }
     if env.display_ew_danger {
-        render_risks.push("表示名の符号化語が構造文字に復号されます—名の境界がずれます".to_string());
+        render_risks
+            .push("表示名の符号化語が構造文字に復号されます—名の境界がずれます".to_string());
     }
     if env.display_inner_quote {
         render_risks.push("表示名に内側鉤括弧が混ざっています—名の切れ目がずれます".to_string());
@@ -8342,7 +9668,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("件名がゼロ幅文字を含みます—ゼロ幅の扱いで件名がずれます".to_string());
     }
     if env.subject_bidi {
-        render_risks.push("件名が双方向制御文字を含みます—双方向制御の扱いで件名がずれます".to_string());
+        render_risks
+            .push("件名が双方向制御文字を含みます—双方向制御の扱いで件名がずれます".to_string());
     }
     if env.subject_tag_chars {
         render_risks.push("件名がタグ文字を含みます—タグ文字の扱いで件名がずれます".to_string());
@@ -8363,7 +9690,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("件名がHTML片を含みます—HTML片の扱いで件名がずれます".to_string());
     }
     if env.subject_raw_nonascii {
-        render_risks.push("件名に符号化されない非ASCII文字があります—生文字の扱いで件名がずれます".to_string());
+        render_risks.push(
+            "件名に符号化されない非ASCII文字があります—生文字の扱いで件名がずれます".to_string(),
+        );
     }
     if env.subject_url {
         render_risks.push("件名にURL形文字列があります—誘導URLの扱いで件名がずれます".to_string());
@@ -8372,31 +9701,38 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("件名に閉じない括弧があります—括弧の扱いで件名がずれます".to_string());
     }
     if env.subject_long_ew {
-        render_risks.push("件名に過長な符号化語があります—符号化語の扱いで件名がずれます".to_string());
+        render_risks
+            .push("件名に過長な符号化語があります—符号化語の扱いで件名がずれます".to_string());
     }
     if env.authres_fail {
-        render_risks.push("認証結果に失敗判定があります—失敗判定の扱いで認証がずれます".to_string());
+        render_risks
+            .push("認証結果に失敗判定があります—失敗判定の扱いで認証がずれます".to_string());
     }
     if env.authres_bad_verdict {
-        render_risks.push("認証結果に未規定の判定値があります—判定値の扱いで認証がずれます".to_string());
+        render_risks
+            .push("認証結果に未規定の判定値があります—判定値の扱いで認証がずれます".to_string());
     }
     if env.arc_cv_bad {
         render_risks.push("ARC封印の合否値が異形です—合否値の扱いで認証がずれます".to_string());
     }
     if env.dkim_sig_no_d {
-        render_risks.push("署名欄に署名者がありません—署名者欠落の扱いで認証がずれます".to_string());
+        render_risks
+            .push("署名欄に署名者がありません—署名者欠落の扱いで認証がずれます".to_string());
     }
     if env.dkim_sig_no_s {
-        render_risks.push("署名欄に選択子がありません—選択子欠落の扱いで認証がずれます".to_string());
+        render_risks
+            .push("署名欄に選択子がありません—選択子欠落の扱いで認証がずれます".to_string());
     }
     if env.dkim_sig_no_b {
-        render_risks.push("署名欄に署名値がありません—署名値欠落の扱いで認証がずれます".to_string());
+        render_risks
+            .push("署名欄に署名値がありません—署名値欠落の扱いで認証がずれます".to_string());
     }
     if env.arc_seal_bad_i {
         render_risks.push("ARC封印の番号値が異形です—連鎖番号の扱いで認証がずれます".to_string());
     }
     if env.arc_chain_incomplete {
-        render_risks.push("ARC記録の組が揃っていません—記録組欠落の扱いで認証がずれます".to_string());
+        render_risks
+            .push("ARC記録の組が揃っていません—記録組欠落の扱いで認証がずれます".to_string());
     }
     if env.auto_submitted_bad {
         render_risks.push("自動応答欄の値が未規定です—応答値の扱いで経路がずれます".to_string());
@@ -8429,868 +9765,1426 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("判定記録欄の値が異形です—判定値の扱いで経路がずれます".to_string());
     }
     if env.env_to_backtick_local {
-        render_risks.push("封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ローカル部に反転符です—反転符の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.env_from_backtick_local {
-        render_risks.push("封書差出人記録の宛名ローカル部に反転符です—反転符の扱いで封書差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ローカル部に反転符です—反転符の扱いで封書差出人がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_backtick_local {
-        render_risks.push("返送先記録の宛名ローカル部に反転符です—反転符の扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名ローカル部に反転符です—反転符の扱いで返送先がずれます".to_string(),
+        );
     }
     if env.env_to_caret_local {
-        render_risks.push("封書宛先記録の宛名ローカル部にハットです—ハットの扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ローカル部にハットです—ハットの扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.env_from_caret_local {
-        render_risks.push("封書差出人記録の宛名ローカル部にハットです—ハットの扱いで封書差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ローカル部にハットです—ハットの扱いで封書差出人がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_caret_local {
-        render_risks.push("返送先記録の宛名ローカル部にハットです—ハットの扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名ローカル部にハットです—ハットの扱いで返送先がずれます".to_string(),
+        );
     }
     if env.env_to_dollar_local {
-        render_risks.push("封書宛先記録の宛名ローカル部にドル符です—ドル符の扱いで封書宛先がずれます".to_string());
+        render_risks.push(
+            "封書宛先記録の宛名ローカル部にドル符です—ドル符の扱いで封書宛先がずれます".to_string(),
+        );
     }
     if env.env_from_dollar_local {
-        render_risks.push("封書差出人記録の宛名ローカル部にドル符です—ドル符の扱いで封書差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名ローカル部にドル符です—ドル符の扱いで封書差出人がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_dollar_local {
-        render_risks.push("返送先記録の宛名ローカル部にドル符です—ドル符の扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名ローカル部にドル符です—ドル符の扱いで返送先がずれます".to_string(),
+        );
     }
     if env.env_to_unclosed {
-        render_risks.push("封書宛記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで封書宛がずれます".to_string());
+        render_risks.push(
+            "封書宛記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで封書宛がずれます".to_string(),
+        );
     }
     if env.env_from_unclosed {
-        render_risks.push("封書差出人記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで封書差出人がずれます".to_string());
+        render_risks.push(
+            "封書差出人記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで封書差出人がずれます"
+                .to_string(),
+        );
     }
     if env.errors_to_unclosed {
-        render_risks.push("返送先記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで返送先がずれます".to_string());
+        render_risks.push(
+            "返送先記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで返送先がずれます".to_string(),
+        );
     }
     if env.apparently_to_rbracket {
-        render_risks.push("見せ宛記録の宛名に逆角括弧です—角括弧閉じの扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名に逆角括弧です—角括弧閉じの扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_rbracket {
-        render_risks.push("表差出人記録の宛名に逆角括弧です—角括弧閉じの扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名に逆角括弧です—角括弧閉じの扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_rbracket {
-        render_risks.push("元宛先記録の宛名に逆角括弧です—角括弧閉じの扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名に逆角括弧です—角括弧閉じの扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_rbracket {
-        render_risks.push("元差出人記録の宛名に逆角括弧です—角括弧閉じの扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名に逆角括弧です—角括弧閉じの扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_rbrace {
-        render_risks.push("見せ宛記録の宛名に逆波括弧です—波括弧閉じの扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名に逆波括弧です—波括弧閉じの扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_rbrace {
-        render_risks.push("表差出人記録の宛名に逆波括弧です—波括弧閉じの扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名に逆波括弧です—波括弧閉じの扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_rbrace {
-        render_risks.push("元宛先記録の宛名に逆波括弧です—波括弧閉じの扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名に逆波括弧です—波括弧閉じの扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_rbrace {
-        render_risks.push("元差出人記録の宛名に逆波括弧です—波括弧閉じの扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名に逆波括弧です—波括弧閉じの扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_apos {
-        render_risks.push("見せ宛記録の宛名に逆引用符です—引用符の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名に逆引用符です—引用符の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_apos {
-        render_risks.push("表差出人記録の宛名に逆引用符です—引用符の扱いで表札記録がずれます".to_string());
+        render_risks
+            .push("表差出人記録の宛名に逆引用符です—引用符の扱いで表札記録がずれます".to_string());
     }
     if env.x_orig_to_apos {
-        render_risks.push("元宛先記録の宛名に逆引用符です—引用符の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名に逆引用符です—引用符の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_apos {
-        render_risks.push("元差出人記録の宛名に逆引用符です—引用符の扱いで元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録の宛名に逆引用符です—引用符の扱いで元差出人がずれます".to_string());
     }
     if env.apparently_to_qmark {
-        render_risks.push("見せ宛記録の宛名に疑問符です—疑問符の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名に疑問符です—疑問符の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_qmark {
-        render_risks.push("表差出人記録の宛名に疑問符です—疑問符の扱いで表差出人がずれます".to_string());
+        render_risks
+            .push("表差出人記録の宛名に疑問符です—疑問符の扱いで表差出人がずれます".to_string());
     }
     if env.x_orig_to_qmark {
-        render_risks.push("元宛先記録の宛名に疑問符です—疑問符の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名に疑問符です—疑問符の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_qmark {
-        render_risks.push("元差出人記録の宛名に疑問符です—疑問符の扱いで元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録の宛名に疑問符です—疑問符の扱いで元差出人がずれます".to_string());
     }
     if env.apparently_to_plus {
-        render_risks.push("見せ宛記録の宛名ドメインにプラスです—プラスの扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名ドメインにプラスです—プラスの扱いで見せ宛がずれます".to_string(),
+        );
     }
     if env.apparently_from_plus {
-        render_risks.push("表差出人記録の宛名ドメインにプラスです—プラスの扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインにプラスです—プラスの扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_plus {
-        render_risks.push("元宛先記録の宛名ドメインにプラスです—プラスの扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名ドメインにプラスです—プラスの扱いで元宛先がずれます".to_string(),
+        );
     }
     if env.x_orig_from_plus {
-        render_risks.push("元差出人記録の宛名ドメインにプラスです—プラスの扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインにプラスです—プラスの扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_lbrace {
-        render_risks.push("見せ宛記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで見せ宛がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_from_lbrace {
-        render_risks.push("表差出人記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで表差出人がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_to_lbrace {
-        render_risks.push("元宛先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元宛先がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_from_lbrace {
-        render_risks.push("元差出人記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元差出人がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_to_eq {
-        render_risks.push("見せ宛記録の宛名ドメインにイコールです—イコールの扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名ドメインにイコールです—イコールの扱いで見せ宛がずれます".to_string(),
+        );
     }
     if env.apparently_from_eq {
-        render_risks.push("表差出人記録の宛名ドメインにイコールです—イコールの扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインにイコールです—イコールの扱いで表差出人がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_to_eq {
-        render_risks.push("元宛先記録の宛名ドメインにイコールです—イコールの扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名ドメインにイコールです—イコールの扱いで元宛先がずれます".to_string(),
+        );
     }
     if env.x_orig_from_eq {
-        render_risks.push("元差出人記録の宛名ドメインにイコールです—イコールの扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインにイコールです—イコールの扱いで元差出人がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_to_caret {
-        render_risks.push("見せ宛記録の宛名ドメインにハットです—ハットの扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名ドメインにハットです—ハットの扱いで見せ宛がずれます".to_string(),
+        );
     }
     if env.apparently_from_caret {
-        render_risks.push("表差出人記録の宛名ドメインにハットです—ハットの扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインにハットです—ハットの扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_caret {
-        render_risks.push("元宛先記録の宛名ドメインにハットです—ハットの扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名ドメインにハットです—ハットの扱いで元宛先がずれます".to_string(),
+        );
     }
     if env.x_orig_from_caret {
-        render_risks.push("元差出人記録の宛名ドメインにハットです—ハットの扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインにハットです—ハットの扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_hash {
-        render_risks.push("見せ宛記録の宛名ドメインに井桁です—井桁の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名ドメインに井桁です—井桁の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_hash {
-        render_risks.push("表差出人記録の宛名ドメインに井桁です—井桁の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインに井桁です—井桁の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_hash {
-        render_risks.push("元宛先記録の宛名ドメインに井桁です—井桁の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名ドメインに井桁です—井桁の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_hash {
-        render_risks.push("元差出人記録の宛名ドメインに井桁です—井桁の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインに井桁です—井桁の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_dollar {
-        render_risks.push("見せ宛記録の宛名ドメインにドル符です—ドル符の扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名ドメインにドル符です—ドル符の扱いで見せ宛がずれます".to_string(),
+        );
     }
     if env.apparently_from_dollar {
-        render_risks.push("表差出人記録の宛名ドメインにドル符です—ドル符の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインにドル符です—ドル符の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_dollar {
-        render_risks.push("元宛先記録の宛名ドメインにドル符です—ドル符の扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名ドメインにドル符です—ドル符の扱いで元宛先がずれます".to_string(),
+        );
     }
     if env.x_orig_from_dollar {
-        render_risks.push("元差出人記録の宛名ドメインにドル符です—ドル符の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインにドル符です—ドル符の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_star {
-        render_risks.push("見せ宛記録の宛名ドメインに星です—星の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名ドメインに星です—星の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_star {
-        render_risks.push("表差出人記録の宛名ドメインに星です—星の扱いで表差出人がずれます".to_string());
+        render_risks
+            .push("表差出人記録の宛名ドメインに星です—星の扱いで表差出人がずれます".to_string());
     }
     if env.x_orig_to_star {
-        render_risks.push("元宛先記録の宛名ドメインに星です—星の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名ドメインに星です—星の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_star {
-        render_risks.push("元差出人記録の宛名ドメインに星です—星の扱いで元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録の宛名ドメインに星です—星の扱いで元差出人がずれます".to_string());
     }
     if env.apparently_to_tilde {
-        render_risks.push("見せ宛記録の宛名ドメインに波線です—波線の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名ドメインに波線です—波線の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_tilde {
-        render_risks.push("表差出人記録の宛名ドメインに波線です—波線の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインに波線です—波線の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_tilde {
-        render_risks.push("元宛先記録の宛名ドメインに波線です—波線の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名ドメインに波線です—波線の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_tilde {
-        render_risks.push("元差出人記録の宛名ドメインに波線です—波線の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインに波線です—波線の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_pipe {
-        render_risks.push("見せ宛記録の宛名ドメインに縦線です—縦線の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名ドメインに縦線です—縦線の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_pipe {
-        render_risks.push("表差出人記録の宛名ドメインに縦線です—縦線の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインに縦線です—縦線の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_pipe {
-        render_risks.push("元宛先記録の宛名ドメインに縦線です—縦線の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名ドメインに縦線です—縦線の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_pipe {
-        render_risks.push("元差出人記録の宛名ドメインに縦線です—縦線の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインに縦線です—縦線の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_amp {
-        render_risks.push("見せ宛記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで見せ宛がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_from_amp {
-        render_risks.push("表差出人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで表差出人がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_to_amp {
-        render_risks.push("元宛先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元宛先がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_from_amp {
-        render_risks.push("元差出人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元差出人がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_to_slash {
-        render_risks.push("見せ宛記録の宛名ドメインに斜線です—斜線の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名ドメインに斜線です—斜線の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_slash {
-        render_risks.push("表差出人記録の宛名ドメインに斜線です—斜線の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインに斜線です—斜線の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_slash {
-        render_risks.push("元宛先記録の宛名ドメインに斜線です—斜線の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名ドメインに斜線です—斜線の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_slash {
-        render_risks.push("元差出人記録の宛名ドメインに斜線です—斜線の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインに斜線です—斜線の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_backtick {
-        render_risks.push("見せ宛記録の宛名ドメインに反転符です—反転符の扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名ドメインに反転符です—反転符の扱いで見せ宛がずれます".to_string(),
+        );
     }
     if env.apparently_from_backtick {
-        render_risks.push("表差出人記録の宛名ドメインに反転符です—反転符の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインに反転符です—反転符の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_backtick {
-        render_risks.push("元宛先記録の宛名ドメインに反転符です—反転符の扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名ドメインに反転符です—反転符の扱いで元宛先がずれます".to_string(),
+        );
     }
     if env.x_orig_from_backtick {
-        render_risks.push("元差出人記録の宛名ドメインに反転符です—反転符の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインに反転符です—反転符の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_underscore {
-        render_risks.push("見せ宛記録の宛名ドメインに低線です—低線の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名ドメインに低線です—低線の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_underscore {
-        render_risks.push("表差出人記録の宛名ドメインに低線です—低線の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ドメインに低線です—低線の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_underscore {
-        render_risks.push("元宛先記録の宛名ドメインに低線です—低線の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名ドメインに低線です—低線の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_underscore {
-        render_risks.push("元差出人記録の宛名ドメインに低線です—低線の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ドメインに低線です—低線の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_slash_local {
-        render_risks.push("見せ宛記録の宛名ローカル部に斜線です—斜線の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名ローカル部に斜線です—斜線の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_slash_local {
-        render_risks.push("表差出人記録の宛名ローカル部に斜線です—斜線の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ローカル部に斜線です—斜線の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_slash_local {
-        render_risks.push("元宛先記録の宛名ローカル部に斜線です—斜線の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名ローカル部に斜線です—斜線の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_slash_local {
-        render_risks.push("元差出人記録の宛名ローカル部に斜線です—斜線の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ローカル部に斜線です—斜線の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_star_local {
-        render_risks.push("見せ宛記録の宛名ローカル部に星です—星の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名ローカル部に星です—星の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_star_local {
-        render_risks.push("表差出人記録の宛名ローカル部に星です—星の扱いで表差出人がずれます".to_string());
+        render_risks
+            .push("表差出人記録の宛名ローカル部に星です—星の扱いで表差出人がずれます".to_string());
     }
     if env.x_orig_to_star_local {
-        render_risks.push("元宛先記録の宛名ローカル部に星です—星の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名ローカル部に星です—星の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_star_local {
-        render_risks.push("元差出人記録の宛名ローカル部に星です—星の扱いで元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録の宛名ローカル部に星です—星の扱いで元差出人がずれます".to_string());
     }
     if env.apparently_to_dollar_local {
-        render_risks.push("見せ宛記録の宛名ローカル部にドル符です—ドル符の扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名ローカル部にドル符です—ドル符の扱いで見せ宛がずれます".to_string(),
+        );
     }
     if env.apparently_from_dollar_local {
-        render_risks.push("表差出人記録の宛名ローカル部にドル符です—ドル符の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ローカル部にドル符です—ドル符の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_dollar_local {
-        render_risks.push("元宛先記録の宛名ローカル部にドル符です—ドル符の扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名ローカル部にドル符です—ドル符の扱いで元宛先がずれます".to_string(),
+        );
     }
     if env.x_orig_from_dollar_local {
-        render_risks.push("元差出人記録の宛名ローカル部にドル符です—ドル符の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ローカル部にドル符です—ドル符の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_hash_local {
-        render_risks.push("見せ宛記録の宛名ローカル部に井桁です—井桁の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名ローカル部に井桁です—井桁の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_hash_local {
-        render_risks.push("表差出人記録の宛名ローカル部に井桁です—井桁の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ローカル部に井桁です—井桁の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_hash_local {
-        render_risks.push("元宛先記録の宛名ローカル部に井桁です—井桁の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名ローカル部に井桁です—井桁の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_hash_local {
-        render_risks.push("元差出人記録の宛名ローカル部に井桁です—井桁の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ローカル部に井桁です—井桁の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_backtick_local {
-        render_risks.push("見せ宛記録の宛名ローカル部に反転符です—反転符の扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名ローカル部に反転符です—反転符の扱いで見せ宛がずれます".to_string(),
+        );
     }
     if env.apparently_from_backtick_local {
-        render_risks.push("表差出人記録の宛名ローカル部に反転符です—反転符の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ローカル部に反転符です—反転符の扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_backtick_local {
-        render_risks.push("元宛先記録の宛名ローカル部に反転符です—反転符の扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名ローカル部に反転符です—反転符の扱いで元宛先がずれます".to_string(),
+        );
     }
     if env.x_orig_from_backtick_local {
-        render_risks.push("元差出人記録の宛名ローカル部に反転符です—反転符の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ローカル部に反転符です—反転符の扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_caret_local {
-        render_risks.push("見せ宛記録の宛名ローカル部にハットです—ハットの扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名ローカル部にハットです—ハットの扱いで見せ宛がずれます".to_string(),
+        );
     }
     if env.apparently_from_caret_local {
-        render_risks.push("表差出人記録の宛名ローカル部にハットです—ハットの扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ローカル部にハットです—ハットの扱いで表差出人がずれます".to_string(),
+        );
     }
     if env.x_orig_to_caret_local {
-        render_risks.push("元宛先記録の宛名ローカル部にハットです—ハットの扱いで元宛先がずれます".to_string());
+        render_risks.push(
+            "元宛先記録の宛名ローカル部にハットです—ハットの扱いで元宛先がずれます".to_string(),
+        );
     }
     if env.x_orig_from_caret_local {
-        render_risks.push("元差出人記録の宛名ローカル部にハットです—ハットの扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ローカル部にハットです—ハットの扱いで元差出人がずれます".to_string(),
+        );
     }
     if env.apparently_to_quoted_local {
-        render_risks.push("見せ宛記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで見せ宛がずれます".to_string());
+        render_risks.push(
+            "見せ宛記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで見せ宛がずれます".to_string(),
+        );
     }
     if env.apparently_from_quoted_local {
-        render_risks.push("表差出人記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで表差出人がずれます".to_string());
+        render_risks.push(
+            "表差出人記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで表差出人がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_to_quoted_local {
-        render_risks.push("元宛記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで元宛がずれます".to_string());
+        render_risks.push(
+            "元宛記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで元宛がずれます".to_string(),
+        );
     }
     if env.x_orig_from_quoted_local {
-        render_risks.push("元差出人記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで元差出人がずれます".to_string());
+        render_risks.push(
+            "元差出人記録の宛名ローカル部が鉤括弧囲みです—鉤括弧の扱いで元差出人がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_cc_rbracket {
-        render_risks.push("元副宛記録の宛名に逆角括弧です—角括弧閉じの扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名に逆角括弧です—角括弧閉じの扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_rbracket {
-        render_risks.push("元返信口記録の宛名に逆角括弧です—角括弧閉じの扱いで元返信先がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名に逆角括弧です—角括弧閉じの扱いで元返信先がずれます".to_string(),
+        );
     }
     if env.disposition_to_rbracket {
-        render_risks.push("開封通知先記録の宛名に逆角括弧です—角括弧閉じの扱いで開封先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名に逆角括弧です—角括弧閉じの扱いで開封先がずれます".to_string(),
+        );
     }
     if env.return_receipt_rbracket {
-        render_risks.push("受領通知先記録の宛名に逆角括弧です—角括弧閉じの扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名に逆角括弧です—角括弧閉じの扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_rbrace {
-        render_risks.push("元副宛記録の宛名に逆波括弧です—波括弧閉じの扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名に逆波括弧です—波括弧閉じの扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_rbrace {
-        render_risks.push("元返信口記録の宛名に逆波括弧です—波括弧閉じの扱いで元返信先がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名に逆波括弧です—波括弧閉じの扱いで元返信先がずれます".to_string(),
+        );
     }
     if env.disposition_to_rbrace {
-        render_risks.push("開封通知先記録の宛名に逆波括弧です—波括弧閉じの扱いで開封先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名に逆波括弧です—波括弧閉じの扱いで開封先がずれます".to_string(),
+        );
     }
     if env.return_receipt_rbrace {
-        render_risks.push("受領通知先記録の宛名に逆波括弧です—波括弧閉じの扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名に逆波括弧です—波括弧閉じの扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_apos {
-        render_risks.push("元副宛記録の宛名に逆引用符です—引用符の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名に逆引用符です—引用符の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_apos {
-        render_risks.push("元返信口記録の宛名に逆引用符です—引用符の扱いで元返信先がずれます".to_string());
+        render_risks
+            .push("元返信口記録の宛名に逆引用符です—引用符の扱いで元返信先がずれます".to_string());
     }
     if env.disposition_to_apos {
-        render_risks.push("開封通知先記録の宛名に逆引用符です—引用符の扱いで開封先がずれます".to_string());
+        render_risks
+            .push("開封通知先記録の宛名に逆引用符です—引用符の扱いで開封先がずれます".to_string());
     }
     if env.return_receipt_apos {
-        render_risks.push("受領通知先記録の宛名に逆引用符です—引用符の扱いで受領先がずれます".to_string());
+        render_risks
+            .push("受領通知先記録の宛名に逆引用符です—引用符の扱いで受領先がずれます".to_string());
     }
     if env.x_orig_cc_qmark {
-        render_risks.push("元副宛記録の宛名に疑問符です—疑問符の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名に疑問符です—疑問符の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_qmark {
-        render_risks.push("元返信口記録の宛名に疑問符です—疑問符の扱いで元返信口がずれます".to_string());
+        render_risks
+            .push("元返信口記録の宛名に疑問符です—疑問符の扱いで元返信口がずれます".to_string());
     }
     if env.disposition_to_qmark {
-        render_risks.push("開封通知先記録の宛名に疑問符です—疑問符の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名に疑問符です—疑問符の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_qmark {
-        render_risks.push("受領通知先記録の宛名に疑問符です—疑問符の扱いで受領先がずれます".to_string());
+        render_risks
+            .push("受領通知先記録の宛名に疑問符です—疑問符の扱いで受領先がずれます".to_string());
     }
     if env.x_orig_cc_plus {
-        render_risks.push("元副宛記録の宛名ドメインにプラスです—プラスの扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名ドメインにプラスです—プラスの扱いで元副宛がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_plus {
-        render_risks.push("元返信口記録の宛名ドメインにプラスです—プラスの扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインにプラスです—プラスの扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_plus {
-        render_risks.push("開封通知先記録の宛名ドメインにプラスです—プラスの扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインにプラスです—プラスの扱いで開封通知先がずれます"
+                .to_string(),
+        );
     }
     if env.return_receipt_plus {
-        render_risks.push("受領通知先記録の宛名ドメインにプラスです—プラスの扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインにプラスです—プラスの扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_caret {
-        render_risks.push("元副宛記録の宛名ドメインにハットです—ハットの扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名ドメインにハットです—ハットの扱いで元副宛がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_caret {
-        render_risks.push("元返信口記録の宛名ドメインにハットです—ハットの扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインにハットです—ハットの扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_caret {
-        render_risks.push("開封通知先記録の宛名ドメインにハットです—ハットの扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインにハットです—ハットの扱いで開封通知先がずれます"
+                .to_string(),
+        );
     }
     if env.return_receipt_caret {
-        render_risks.push("受領通知先記録の宛名ドメインにハットです—ハットの扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインにハットです—ハットの扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_hash {
-        render_risks.push("元副宛記録の宛名ドメインに井桁です—井桁の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名ドメインに井桁です—井桁の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_hash {
-        render_risks.push("元返信口記録の宛名ドメインに井桁です—井桁の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインに井桁です—井桁の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_hash {
-        render_risks.push("開封通知先記録の宛名ドメインに井桁です—井桁の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインに井桁です—井桁の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_hash {
-        render_risks.push("受領通知先記録の宛名ドメインに井桁です—井桁の扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインに井桁です—井桁の扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_dollar {
-        render_risks.push("元副宛記録の宛名ドメインにドル符です—ドル符の扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名ドメインにドル符です—ドル符の扱いで元副宛がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_dollar {
-        render_risks.push("元返信口記録の宛名ドメインにドル符です—ドル符の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインにドル符です—ドル符の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_dollar {
-        render_risks.push("開封通知先記録の宛名ドメインにドル符です—ドル符の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインにドル符です—ドル符の扱いで開封通知先がずれます"
+                .to_string(),
+        );
     }
     if env.return_receipt_dollar {
-        render_risks.push("受領通知先記録の宛名ドメインにドル符です—ドル符の扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインにドル符です—ドル符の扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_star {
-        render_risks.push("元副宛記録の宛名ドメインに星です—星の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名ドメインに星です—星の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_star {
-        render_risks.push("元返信口記録の宛名ドメインに星です—星の扱いで元返信口がずれます".to_string());
+        render_risks
+            .push("元返信口記録の宛名ドメインに星です—星の扱いで元返信口がずれます".to_string());
     }
     if env.disposition_to_star {
-        render_risks.push("開封通知先記録の宛名ドメインに星です—星の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインに星です—星の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_star {
-        render_risks.push("受領通知先記録の宛名ドメインに星です—星の扱いで受領先がずれます".to_string());
+        render_risks
+            .push("受領通知先記録の宛名ドメインに星です—星の扱いで受領先がずれます".to_string());
     }
     if env.x_orig_cc_slash {
-        render_risks.push("元副宛記録の宛名ドメインに斜線です—斜線の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名ドメインに斜線です—斜線の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_slash {
-        render_risks.push("元返信口記録の宛名ドメインに斜線です—斜線の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインに斜線です—斜線の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_slash {
-        render_risks.push("開封通知先記録の宛名ドメインに斜線です—斜線の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインに斜線です—斜線の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_slash {
-        render_risks.push("受領通知先記録の宛名ドメインに斜線です—斜線の扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインに斜線です—斜線の扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_backtick {
-        render_risks.push("元副宛記録の宛名ドメインに反転符です—反転符の扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名ドメインに反転符です—反転符の扱いで元副宛がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_backtick {
-        render_risks.push("元返信口記録の宛名ドメインに反転符です—反転符の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインに反転符です—反転符の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_backtick {
-        render_risks.push("開封通知先記録の宛名ドメインに反転符です—反転符の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインに反転符です—反転符の扱いで開封通知先がずれます"
+                .to_string(),
+        );
     }
     if env.return_receipt_backtick {
-        render_risks.push("受領通知先記録の宛名ドメインに反転符です—反転符の扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインに反転符です—反転符の扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_underscore {
-        render_risks.push("元副宛記録の宛名ドメインに低線です—低線の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名ドメインに低線です—低線の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_underscore {
-        render_risks.push("元返信口記録の宛名ドメインに低線です—低線の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインに低線です—低線の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_underscore {
-        render_risks.push("開封通知先記録の宛名ドメインに低線です—低線の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインに低線です—低線の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_underscore {
-        render_risks.push("受領通知先記録の宛名ドメインに低線です—低線の扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインに低線です—低線の扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_slash_local {
-        render_risks.push("元副宛記録の宛名ローカル部に斜線です—斜線の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名ローカル部に斜線です—斜線の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_slash_local {
-        render_risks.push("元返信口記録の宛名ローカル部に斜線です—斜線の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ローカル部に斜線です—斜線の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_slash_local {
-        render_risks.push("開封通知先記録の宛名ローカル部に斜線です—斜線の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ローカル部に斜線です—斜線の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_slash_local {
-        render_risks.push("受領先記録の宛名ローカル部に斜線です—斜線の扱いで受領先がずれます".to_string());
+        render_risks
+            .push("受領先記録の宛名ローカル部に斜線です—斜線の扱いで受領先がずれます".to_string());
     }
     if env.x_orig_cc_star_local {
-        render_risks.push("元副宛記録の宛名ローカル部に星です—星の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名ローカル部に星です—星の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_star_local {
-        render_risks.push("元返信口記録の宛名ローカル部に星です—星の扱いで元返信口がずれます".to_string());
+        render_risks
+            .push("元返信口記録の宛名ローカル部に星です—星の扱いで元返信口がずれます".to_string());
     }
     if env.disposition_to_star_local {
-        render_risks.push("開封通知先記録の宛名ローカル部に星です—星の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ローカル部に星です—星の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_star_local {
-        render_risks.push("受領先記録の宛名ローカル部に星です—星の扱いで受領先がずれます".to_string());
+        render_risks
+            .push("受領先記録の宛名ローカル部に星です—星の扱いで受領先がずれます".to_string());
     }
     if env.x_orig_cc_dollar_local {
-        render_risks.push("元副宛記録の宛名ローカル部にドル符です—ドル符の扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名ローカル部にドル符です—ドル符の扱いで元副宛がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_dollar_local {
-        render_risks.push("元返信口記録の宛名ローカル部にドル符です—ドル符の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ローカル部にドル符です—ドル符の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_dollar_local {
-        render_risks.push("開封通知先記録の宛名ローカル部にドル符です—ドル符の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ローカル部にドル符です—ドル符の扱いで開封通知先がずれます"
+                .to_string(),
+        );
     }
     if env.return_receipt_dollar_local {
-        render_risks.push("受領先記録の宛名ローカル部にドル符です—ドル符の扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領先記録の宛名ローカル部にドル符です—ドル符の扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_caret_local {
-        render_risks.push("元副宛記録の宛名ローカル部にハットです—ハットの扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名ローカル部にハットです—ハットの扱いで元副宛がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_caret_local {
-        render_risks.push("元返信口記録の宛名ローカル部にハットです—ハットの扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ローカル部にハットです—ハットの扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_caret_local {
-        render_risks.push("開封通知先記録の宛名ローカル部にハットです—ハットの扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ローカル部にハットです—ハットの扱いで開封通知先がずれます"
+                .to_string(),
+        );
     }
     if env.return_receipt_caret_local {
-        render_risks.push("受領先記録の宛名ローカル部にハットです—ハットの扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領先記録の宛名ローカル部にハットです—ハットの扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_hash_local {
-        render_risks.push("元副宛記録の宛名ローカル部に井桁です—井桁の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名ローカル部に井桁です—井桁の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_hash_local {
-        render_risks.push("元返信口記録の宛名ローカル部に井桁です—井桁の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ローカル部に井桁です—井桁の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_hash_local {
-        render_risks.push("開封通知先記録の宛名ローカル部に井桁です—井桁の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ローカル部に井桁です—井桁の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_hash_local {
-        render_risks.push("受領先記録の宛名ローカル部に井桁です—井桁の扱いで受領先がずれます".to_string());
+        render_risks
+            .push("受領先記録の宛名ローカル部に井桁です—井桁の扱いで受領先がずれます".to_string());
     }
     if env.x_orig_cc_backtick_local {
-        render_risks.push("元副宛記録の宛名ローカル部に反転符です—反転符の扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名ローカル部に反転符です—反転符の扱いで元副宛がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_backtick_local {
-        render_risks.push("元返信口記録の宛名ローカル部に反転符です—反転符の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ローカル部に反転符です—反転符の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_backtick_local {
-        render_risks.push("開封通知先記録の宛名ローカル部に反転符です—反転符の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ローカル部に反転符です—反転符の扱いで開封通知先がずれます"
+                .to_string(),
+        );
     }
     if env.return_receipt_backtick_local {
-        render_risks.push("受領先記録の宛名ローカル部に反転符です—反転符の扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領先記録の宛名ローカル部に反転符です—反転符の扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_pipe {
-        render_risks.push("元副宛記録の宛名ドメインに縦線です—縦線の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名ドメインに縦線です—縦線の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_pipe {
-        render_risks.push("元返信口記録の宛名ドメインに縦線です—縦線の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインに縦線です—縦線の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_pipe {
-        render_risks.push("開封通知先記録の宛名ドメインに縦線です—縦線の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインに縦線です—縦線の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_pipe {
-        render_risks.push("受領通知先記録の宛名ドメインに縦線です—縦線の扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインに縦線です—縦線の扱いで受領先がずれます".to_string(),
+        );
     }
     if env.x_orig_cc_amp {
-        render_risks.push("元副宛記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元副宛がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_reply_to_amp {
-        render_risks.push("元返信口記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元返信口がずれます"
+                .to_string(),
+        );
     }
     if env.disposition_to_amp {
         render_risks.push("開封通知先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで開封通知先がずれます".to_string());
     }
     if env.return_receipt_amp {
-        render_risks.push("受領通知先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで受領先がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_cc_lbrace {
-        render_risks.push("元副宛記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元副宛がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_reply_to_lbrace {
-        render_risks.push("元返信口記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元返信口がずれます"
+                .to_string(),
+        );
     }
     if env.disposition_to_lbrace {
-        render_risks.push("開封通知先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで開封通知先がずれます"
+                .to_string(),
+        );
     }
     if env.return_receipt_lbrace {
-        render_risks.push("受領通知先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで受領先がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_cc_eq {
-        render_risks.push("元副宛記録の宛名ドメインにイコールです—イコールの扱いで元副宛がずれます".to_string());
+        render_risks.push(
+            "元副宛記録の宛名ドメインにイコールです—イコールの扱いで元副宛がずれます".to_string(),
+        );
     }
     if env.x_orig_reply_to_eq {
-        render_risks.push("元返信口記録の宛名ドメインにイコールです—イコールの扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインにイコールです—イコールの扱いで元返信口がずれます"
+                .to_string(),
+        );
     }
     if env.disposition_to_eq {
-        render_risks.push("開封通知先記録の宛名ドメインにイコールです—イコールの扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインにイコールです—イコールの扱いで開封通知先がずれます"
+                .to_string(),
+        );
     }
     if env.return_receipt_eq {
-        render_risks.push("受領通知先記録の宛名ドメインにイコールです—イコールの扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインにイコールです—イコールの扱いで受領先がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_cc_tilde {
-        render_risks.push("元副宛記録の宛名ドメインに波線です—波線の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名ドメインに波線です—波線の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_tilde {
-        render_risks.push("元返信口記録の宛名ドメインに波線です—波線の扱いで元返信口がずれます".to_string());
+        render_risks.push(
+            "元返信口記録の宛名ドメインに波線です—波線の扱いで元返信口がずれます".to_string(),
+        );
     }
     if env.disposition_to_tilde {
-        render_risks.push("開封通知先記録の宛名ドメインに波線です—波線の扱いで開封通知先がずれます".to_string());
+        render_risks.push(
+            "開封通知先記録の宛名ドメインに波線です—波線の扱いで開封通知先がずれます".to_string(),
+        );
     }
     if env.return_receipt_tilde {
-        render_risks.push("受領通知先記録の宛名ドメインに波線です—波線の扱いで受領先がずれます".to_string());
+        render_risks.push(
+            "受領通知先記録の宛名ドメインに波線です—波線の扱いで受領先がずれます".to_string(),
+        );
     }
     if env.confirm_reading_rbracket {
-        render_risks.push("閲覧確認先記録の宛名に逆角括弧です—角括弧閉じの扱いで閲覧先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名に逆角括弧です—角括弧閉じの扱いで閲覧先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_rbracket {
-        render_risks.push("再送返信口記録の宛名に逆角括弧です—角括弧閉じの扱いで再送先がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名に逆角括弧です—角括弧閉じの扱いで再送先がずれます".to_string(),
+        );
     }
     if env.apparently_resent_rbracket {
-        render_risks.push("再送残渣記録の宛名に逆角括弧です—角括弧閉じの扱いで再送宛がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名に逆角括弧です—角括弧閉じの扱いで再送宛がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_rbracket {
-        render_risks.push("元受取人記録の宛名に逆角括弧です—角括弧閉じの扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名に逆角括弧です—角括弧閉じの扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_rbrace {
-        render_risks.push("閲覧確認先記録の宛名に逆波括弧です—波括弧閉じの扱いで閲覧先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名に逆波括弧です—波括弧閉じの扱いで閲覧先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_rbrace {
-        render_risks.push("再送返信口記録の宛名に逆波括弧です—波括弧閉じの扱いで再送先がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名に逆波括弧です—波括弧閉じの扱いで再送先がずれます".to_string(),
+        );
     }
     if env.apparently_resent_rbrace {
-        render_risks.push("再送残渣記録の宛名に逆波括弧です—波括弧閉じの扱いで再送宛がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名に逆波括弧です—波括弧閉じの扱いで再送宛がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_rbrace {
-        render_risks.push("元受取人記録の宛名に逆波括弧です—波括弧閉じの扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名に逆波括弧です—波括弧閉じの扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_apos {
-        render_risks.push("閲覧確認先記録の宛名に逆引用符です—引用符の扱いで閲覧先がずれます".to_string());
+        render_risks
+            .push("閲覧確認先記録の宛名に逆引用符です—引用符の扱いで閲覧先がずれます".to_string());
     }
     if env.resent_reply_to_apos {
-        render_risks.push("再送返信口記録の宛名に逆引用符です—引用符の扱いで再送先がずれます".to_string());
+        render_risks
+            .push("再送返信口記録の宛名に逆引用符です—引用符の扱いで再送先がずれます".to_string());
     }
     if env.apparently_resent_apos {
-        render_risks.push("再送残渣記録の宛名に逆引用符です—引用符の扱いで再送宛がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名に逆引用符です—引用符の扱いで再送宛がずれます".to_string());
     }
     if env.x_orig_rcpt_to_apos {
-        render_risks.push("元受取人記録の宛名に逆引用符です—引用符の扱いで元受取人がずれます".to_string());
+        render_risks
+            .push("元受取人記録の宛名に逆引用符です—引用符の扱いで元受取人がずれます".to_string());
     }
     if env.confirm_reading_qmark {
-        render_risks.push("閲覧確認先記録の宛名に疑問符です—疑問符の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名に疑問符です—疑問符の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_qmark {
-        render_risks.push("再送返信口記録の宛名に疑問符です—疑問符の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名に疑問符です—疑問符の扱いで再送返信口がずれます".to_string(),
+        );
     }
     if env.apparently_resent_qmark {
-        render_risks.push("再送残渣記録の宛名に疑問符です—疑問符の扱いで再送宛がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名に疑問符です—疑問符の扱いで再送宛がずれます".to_string());
     }
     if env.x_orig_rcpt_to_qmark {
-        render_risks.push("元受取人記録の宛名に疑問符です—疑問符の扱いで元受取人がずれます".to_string());
+        render_risks
+            .push("元受取人記録の宛名に疑問符です—疑問符の扱いで元受取人がずれます".to_string());
     }
     if env.confirm_reading_plus {
-        render_risks.push("閲覧確認先記録の宛名ドメインにプラスです—プラスの扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインにプラスです—プラスの扱いで閲覧確認先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_plus {
-        render_risks.push("再送返信口記録の宛名ドメインにプラスです—プラスの扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインにプラスです—プラスの扱いで再送返信口がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_plus {
-        render_risks.push("再送残渣記録の宛名ドメインにプラスです—プラスの扱いで再送宛がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ドメインにプラスです—プラスの扱いで再送宛がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_plus {
-        render_risks.push("元受取人記録の宛名ドメインにプラスです—プラスの扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインにプラスです—プラスの扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_caret {
-        render_risks.push("閲覧確認先記録の宛名ドメインにハットです—ハットの扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインにハットです—ハットの扱いで閲覧確認先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_caret {
-        render_risks.push("再送返信口記録の宛名ドメインにハットです—ハットの扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインにハットです—ハットの扱いで再送返信口がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_caret {
-        render_risks.push("再送残渣記録の宛名ドメインにハットです—ハットの扱いで再送宛がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ドメインにハットです—ハットの扱いで再送宛がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_caret {
-        render_risks.push("元受取人記録の宛名ドメインにハットです—ハットの扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインにハットです—ハットの扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_hash {
-        render_risks.push("閲覧確認先記録の宛名ドメインに井桁です—井桁の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインに井桁です—井桁の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_hash {
-        render_risks.push("再送返信口記録の宛名ドメインに井桁です—井桁の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインに井桁です—井桁の扱いで再送返信口がずれます".to_string(),
+        );
     }
     if env.apparently_resent_hash {
-        render_risks.push("再送残渣記録の宛名ドメインに井桁です—井桁の扱いで再送宛がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名ドメインに井桁です—井桁の扱いで再送宛がずれます".to_string());
     }
     if env.x_orig_rcpt_to_hash {
-        render_risks.push("元受取人記録の宛名ドメインに井桁です—井桁の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインに井桁です—井桁の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_dollar {
-        render_risks.push("閲覧確認先記録の宛名ドメインにドル符です—ドル符の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインにドル符です—ドル符の扱いで閲覧確認先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_dollar {
-        render_risks.push("再送返信口記録の宛名ドメインにドル符です—ドル符の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインにドル符です—ドル符の扱いで再送返信口がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_dollar {
-        render_risks.push("再送残渣記録の宛名ドメインにドル符です—ドル符の扱いで再送宛がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ドメインにドル符です—ドル符の扱いで再送宛がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_dollar {
-        render_risks.push("元受取人記録の宛名ドメインにドル符です—ドル符の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインにドル符です—ドル符の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_star {
-        render_risks.push("閲覧確認先記録の宛名ドメインに星です—星の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインに星です—星の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_star {
-        render_risks.push("再送返信口記録の宛名ドメインに星です—星の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインに星です—星の扱いで再送返信口がずれます".to_string(),
+        );
     }
     if env.apparently_resent_star {
-        render_risks.push("再送残渣記録の宛名ドメインに星です—星の扱いで再送宛がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名ドメインに星です—星の扱いで再送宛がずれます".to_string());
     }
     if env.x_orig_rcpt_to_star {
-        render_risks.push("元受取人記録の宛名ドメインに星です—星の扱いで元受取人がずれます".to_string());
+        render_risks
+            .push("元受取人記録の宛名ドメインに星です—星の扱いで元受取人がずれます".to_string());
     }
     if env.confirm_reading_slash {
-        render_risks.push("閲覧確認先記録の宛名ドメインに斜線です—斜線の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインに斜線です—斜線の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_slash {
-        render_risks.push("再送返信口記録の宛名ドメインに斜線です—斜線の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインに斜線です—斜線の扱いで再送返信口がずれます".to_string(),
+        );
     }
     if env.apparently_resent_slash {
-        render_risks.push("再送残渣記録の宛名ドメインに斜線です—斜線の扱いで再送宛がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名ドメインに斜線です—斜線の扱いで再送宛がずれます".to_string());
     }
     if env.x_orig_rcpt_to_slash {
-        render_risks.push("元受取人記録の宛名ドメインに斜線です—斜線の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインに斜線です—斜線の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_backtick {
-        render_risks.push("閲覧確認先記録の宛名ドメインに反転符です—反転符の扱いで閲覧先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインに反転符です—反転符の扱いで閲覧先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_backtick {
-        render_risks.push("再送返信口記録の宛名ドメインに反転符です—反転符の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインに反転符です—反転符の扱いで再送返信口がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_backtick {
-        render_risks.push("再送残渣記録の宛名ドメインに反転符です—反転符の扱いで再送宛がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ドメインに反転符です—反転符の扱いで再送宛がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_backtick {
-        render_risks.push("元受取人記録の宛名ドメインに反転符です—反転符の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインに反転符です—反転符の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_underscore {
-        render_risks.push("閲覧確認先記録の宛名ドメインに低線です—低線の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインに低線です—低線の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_underscore {
-        render_risks.push("再送返信口記録の宛名ドメインに低線です—低線の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインに低線です—低線の扱いで再送返信口がずれます".to_string(),
+        );
     }
     if env.apparently_resent_underscore {
-        render_risks.push("再送残渣記録の宛名ドメインに低線です—低線の扱いで再送宛がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名ドメインに低線です—低線の扱いで再送宛がずれます".to_string());
     }
     if env.x_orig_rcpt_to_underscore {
-        render_risks.push("元受取人記録の宛名ドメインに低線です—低線の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインに低線です—低線の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_slash_local {
-        render_risks.push("閲覧確認先記録の宛名ローカル部に斜線です—斜線の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ローカル部に斜線です—斜線の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_slash_local {
-        render_risks.push("再送返信口記録の宛名ローカル部に斜線です—斜線の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ローカル部に斜線です—斜線の扱いで再送返信口がずれます".to_string(),
+        );
     }
     if env.apparently_resent_slash_local {
-        render_risks.push("再送残渣記録の宛名ローカル部に斜線です—斜線の扱いで再送残渣がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ローカル部に斜線です—斜線の扱いで再送残渣がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_slash_local {
-        render_risks.push("元受取人記録の宛名ローカル部に斜線です—斜線の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ローカル部に斜線です—斜線の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_star_local {
-        render_risks.push("閲覧確認先記録の宛名ローカル部に星です—星の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ローカル部に星です—星の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_star_local {
-        render_risks.push("再送返信口記録の宛名ローカル部に星です—星の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ローカル部に星です—星の扱いで再送返信口がずれます".to_string(),
+        );
     }
     if env.apparently_resent_star_local {
-        render_risks.push("再送残渣記録の宛名ローカル部に星です—星の扱いで再送宛がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名ローカル部に星です—星の扱いで再送宛がずれます".to_string());
     }
     if env.x_orig_rcpt_to_star_local {
-        render_risks.push("元受取人記録の宛名ローカル部に星です—星の扱いで元受取人がずれます".to_string());
+        render_risks
+            .push("元受取人記録の宛名ローカル部に星です—星の扱いで元受取人がずれます".to_string());
     }
     if env.confirm_reading_unclosed {
-        render_risks.push("閲覧確認先記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで閲覧確認先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_unclosed {
-        render_risks.push("再送返信口記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで再送返信口がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_unclosed {
-        render_risks.push("再送宛記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで再送宛がずれます".to_string());
+        render_risks.push(
+            "再送宛記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで再送宛がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_unclosed {
-        render_risks.push("元受取人記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名が未閉塞の鉤括弧です—鉤括弧閉じの扱いで元受取人がずれます"
+                .to_string(),
+        );
     }
     if env.confirm_reading_hash_local {
-        render_risks.push("閲覧確認先記録の宛名ローカル部に井桁です—井桁の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ローカル部に井桁です—井桁の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_hash_local {
-        render_risks.push("再送返信口記録の宛名ローカル部に井桁です—井桁の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ローカル部に井桁です—井桁の扱いで再送返信口がずれます".to_string(),
+        );
     }
     if env.apparently_resent_hash_local {
-        render_risks.push("再送残渣記録の宛名ローカル部に井桁です—井桁の扱いで再送残渣がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ローカル部に井桁です—井桁の扱いで再送残渣がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_hash_local {
-        render_risks.push("元受取人記録の宛名ローカル部に井桁です—井桁の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ローカル部に井桁です—井桁の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_backtick_local {
-        render_risks.push("閲覧確認先記録の宛名ローカル部に反転符です—反転符の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ローカル部に反転符です—反転符の扱いで閲覧確認先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_backtick_local {
-        render_risks.push("再送返信口記録の宛名ローカル部に反転符です—反転符の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ローカル部に反転符です—反転符の扱いで再送返信口がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_backtick_local {
-        render_risks.push("再送残渣記録の宛名ローカル部に反転符です—反転符の扱いで再送残渣がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ローカル部に反転符です—反転符の扱いで再送残渣がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_backtick_local {
-        render_risks.push("元受取人記録の宛名ローカル部に反転符です—反転符の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ローカル部に反転符です—反転符の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_dollar_local {
-        render_risks.push("閲覧確認先記録の宛名ローカル部にドル符です—ドル符の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ローカル部にドル符です—ドル符の扱いで閲覧確認先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_dollar_local {
-        render_risks.push("再送返信口記録の宛名ローカル部にドル符です—ドル符の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ローカル部にドル符です—ドル符の扱いで再送返信口がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_dollar_local {
-        render_risks.push("再送残渣記録の宛名ローカル部にドル符です—ドル符の扱いで再送残渣がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ローカル部にドル符です—ドル符の扱いで再送残渣がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_dollar_local {
-        render_risks.push("元受取人記録の宛名ローカル部にドル符です—ドル符の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ローカル部にドル符です—ドル符の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_caret_local {
-        render_risks.push("閲覧確認先記録の宛名ローカル部にハットです—ハットの扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ローカル部にハットです—ハットの扱いで閲覧確認先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_caret_local {
-        render_risks.push("再送返信口記録の宛名ローカル部にハットです—ハットの扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ローカル部にハットです—ハットの扱いで再送返信口がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_caret_local {
-        render_risks.push("再送残渣記録の宛名ローカル部にハットです—ハットの扱いで再送残渣がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ローカル部にハットです—ハットの扱いで再送残渣がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_caret_local {
-        render_risks.push("元受取人記録の宛名ローカル部にハットです—ハットの扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ローカル部にハットです—ハットの扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_pipe {
-        render_risks.push("閲覧確認先記録の宛名ドメインに縦線です—縦線の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインに縦線です—縦線の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_pipe {
-        render_risks.push("再送返信口記録の宛名ドメインに縦線です—縦線の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインに縦線です—縦線の扱いで再送返信口がずれます".to_string(),
+        );
     }
     if env.apparently_resent_pipe {
-        render_risks.push("再送残渣記録の宛名ドメインに縦線です—縦線の扱いで再送宛がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名ドメインに縦線です—縦線の扱いで再送宛がずれます".to_string());
     }
     if env.x_orig_rcpt_to_pipe {
-        render_risks.push("元受取人記録の宛名ドメインに縦線です—縦線の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインに縦線です—縦線の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.confirm_reading_lbrace {
-        render_risks.push("閲覧確認先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで閲覧確認先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_lbrace {
-        render_risks.push("再送返信口記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで再送返信口がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_lbrace {
-        render_risks.push("再送残渣記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで再送宛がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで再送宛がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_rcpt_to_lbrace {
-        render_risks.push("元受取人記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインに開き波括弧です—開き波括弧の扱いで元受取人がずれます"
+                .to_string(),
+        );
     }
     if env.confirm_reading_eq {
-        render_risks.push("閲覧確認先記録の宛名ドメインにイコールです—イコールの扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインにイコールです—イコールの扱いで閲覧確認先がずれます"
+                .to_string(),
+        );
     }
     if env.resent_reply_to_eq {
-        render_risks.push("再送返信口記録の宛名ドメインにイコールです—イコールの扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインにイコールです—イコールの扱いで再送返信口がずれます"
+                .to_string(),
+        );
     }
     if env.apparently_resent_eq {
-        render_risks.push("再送残渣記録の宛名ドメインにイコールです—イコールの扱いで再送宛がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ドメインにイコールです—イコールの扱いで再送宛がずれます".to_string(),
+        );
     }
     if env.x_orig_rcpt_to_eq {
-        render_risks.push("元受取人記録の宛名ドメインにイコールです—イコールの扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインにイコールです—イコールの扱いで元受取人がずれます"
+                .to_string(),
+        );
     }
     if env.confirm_reading_amp {
         render_risks.push("閲覧確認先記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで閲覧確認先がずれます".to_string());
@@ -9299,94 +11193,133 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("再送返信口記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで再送返信口がずれます".to_string());
     }
     if env.apparently_resent_amp {
-        render_risks.push("再送残渣記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで再送宛がずれます".to_string());
+        render_risks.push(
+            "再送残渣記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで再送宛がずれます"
+                .to_string(),
+        );
     }
     if env.x_orig_rcpt_to_amp {
-        render_risks.push("元受取人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインにアンパサンドです—アンパサンドの扱いで元受取人がずれます"
+                .to_string(),
+        );
     }
     if env.confirm_reading_tilde {
-        render_risks.push("閲覧確認先記録の宛名ドメインに波線です—波線の扱いで閲覧確認先がずれます".to_string());
+        render_risks.push(
+            "閲覧確認先記録の宛名ドメインに波線です—波線の扱いで閲覧確認先がずれます".to_string(),
+        );
     }
     if env.resent_reply_to_tilde {
-        render_risks.push("再送返信口記録の宛名ドメインに波線です—波線の扱いで再送返信口がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名ドメインに波線です—波線の扱いで再送返信口がずれます".to_string(),
+        );
     }
     if env.apparently_resent_tilde {
-        render_risks.push("再送残渣記録の宛名ドメインに波線です—波線の扱いで再送宛がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名ドメインに波線です—波線の扱いで再送宛がずれます".to_string());
     }
     if env.x_orig_rcpt_to_tilde {
-        render_risks.push("元受取人記録の宛名ドメインに波線です—波線の扱いで元受取人がずれます".to_string());
+        render_risks.push(
+            "元受取人記録の宛名ドメインに波線です—波線の扱いで元受取人がずれます".to_string(),
+        );
     }
     if env.apparently_to_rparen {
-        render_risks.push("見せ宛記録の宛名に逆括弧です—括弧閉じの扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名に逆括弧です—括弧閉じの扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_rparen {
-        render_risks.push("表差出人記録の宛名に逆括弧です—括弧閉じの扱いで表差出人がずれます".to_string());
+        render_risks
+            .push("表差出人記録の宛名に逆括弧です—括弧閉じの扱いで表差出人がずれます".to_string());
     }
     if env.x_orig_to_rparen {
-        render_risks.push("元宛先記録の宛名に逆括弧です—括弧閉じの扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名に逆括弧です—括弧閉じの扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_rparen {
-        render_risks.push("元差出人記録の宛名に逆括弧です—括弧閉じの扱いで元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録の宛名に逆括弧です—括弧閉じの扱いで元差出人がずれます".to_string());
     }
     if env.x_orig_cc_rparen {
-        render_risks.push("元副宛記録の宛名に逆括弧です—括弧閉じの扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名に逆括弧です—括弧閉じの扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_rparen {
-        render_risks.push("元返信口記録の宛名に逆括弧です—括弧閉じの扱いで元返信先がずれます".to_string());
+        render_risks
+            .push("元返信口記録の宛名に逆括弧です—括弧閉じの扱いで元返信先がずれます".to_string());
     }
     if env.disposition_to_rparen {
-        render_risks.push("開封通知先記録の宛名に逆括弧です—括弧閉じの扱いで開封先がずれます".to_string());
+        render_risks
+            .push("開封通知先記録の宛名に逆括弧です—括弧閉じの扱いで開封先がずれます".to_string());
     }
     if env.return_receipt_rparen {
-        render_risks.push("受領通知先記録の宛名に逆括弧です—括弧閉じの扱いで受領先がずれます".to_string());
+        render_risks
+            .push("受領通知先記録の宛名に逆括弧です—括弧閉じの扱いで受領先がずれます".to_string());
     }
     if env.confirm_reading_rparen {
-        render_risks.push("閲覧確認先記録の宛名に逆括弧です—括弧閉じの扱いで確認先がずれます".to_string());
+        render_risks
+            .push("閲覧確認先記録の宛名に逆括弧です—括弧閉じの扱いで確認先がずれます".to_string());
     }
     if env.resent_reply_to_rparen {
-        render_risks.push("再送返信口記録の宛名に逆括弧です—括弧閉じの扱いで再送返信先がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名に逆括弧です—括弧閉じの扱いで再送返信先がずれます".to_string(),
+        );
     }
     if env.apparently_resent_rparen {
-        render_risks.push("再送残渣記録の宛名に逆括弧です—括弧閉じの扱いで再送履歴がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名に逆括弧です—括弧閉じの扱いで再送履歴がずれます".to_string());
     }
     if env.x_orig_rcpt_to_rparen {
-        render_risks.push("元受取人記録の宛名に逆括弧です—括弧閉じの扱いで元返信先がずれます".to_string());
+        render_risks
+            .push("元受取人記録の宛名に逆括弧です—括弧閉じの扱いで元返信先がずれます".to_string());
     }
     if env.apparently_to_colon {
-        render_risks.push("見せ宛記録の宛名にコロンです—接頭辞の扱いで見せ宛がずれます".to_string());
+        render_risks
+            .push("見せ宛記録の宛名にコロンです—接頭辞の扱いで見せ宛がずれます".to_string());
     }
     if env.apparently_from_colon {
-        render_risks.push("表差出人記録の宛名にコロンです—接頭辞の扱いで表札がずれます".to_string());
+        render_risks
+            .push("表差出人記録の宛名にコロンです—接頭辞の扱いで表札がずれます".to_string());
     }
     if env.x_orig_to_colon {
-        render_risks.push("元宛先記録の宛名にコロンです—接頭辞の扱いで元宛先がずれます".to_string());
+        render_risks
+            .push("元宛先記録の宛名にコロンです—接頭辞の扱いで元宛先がずれます".to_string());
     }
     if env.x_orig_from_colon {
-        render_risks.push("元差出人記録の宛名にコロンです—接頭辞の扱いで元差出人がずれます".to_string());
+        render_risks
+            .push("元差出人記録の宛名にコロンです—接頭辞の扱いで元差出人がずれます".to_string());
     }
     if env.x_orig_cc_colon {
-        render_risks.push("元副宛記録の宛名にコロンです—接頭辞の扱いで元副宛がずれます".to_string());
+        render_risks
+            .push("元副宛記録の宛名にコロンです—接頭辞の扱いで元副宛がずれます".to_string());
     }
     if env.x_orig_reply_to_colon {
-        render_risks.push("元返信口記録の宛名にコロンです—接頭辞の扱いで元返信先がずれます".to_string());
+        render_risks
+            .push("元返信口記録の宛名にコロンです—接頭辞の扱いで元返信先がずれます".to_string());
     }
     if env.disposition_to_colon {
-        render_risks.push("開封通知先記録の宛名にコロンです—接頭辞の扱いで通知先がずれます".to_string());
+        render_risks
+            .push("開封通知先記録の宛名にコロンです—接頭辞の扱いで通知先がずれます".to_string());
     }
     if env.return_receipt_colon {
-        render_risks.push("受領通知先記録の宛名にコロンです—接頭辞の扱いで受領先がずれます".to_string());
+        render_risks
+            .push("受領通知先記録の宛名にコロンです—接頭辞の扱いで受領先がずれます".to_string());
     }
     if env.confirm_reading_colon {
-        render_risks.push("閲覧確認先記録の宛名にコロンです—接頭辞の扱いで確認先がずれます".to_string());
+        render_risks
+            .push("閲覧確認先記録の宛名にコロンです—接頭辞の扱いで確認先がずれます".to_string());
     }
     if env.resent_reply_to_colon {
-        render_risks.push("再送返信口記録の宛名にコロンです—接頭辞の扱いで再送返信先がずれます".to_string());
+        render_risks.push(
+            "再送返信口記録の宛名にコロンです—接頭辞の扱いで再送返信先がずれます".to_string(),
+        );
     }
     if env.apparently_resent_colon {
-        render_risks.push("再送残渣記録の宛名にコロンです—接頭辞の扱いで再送履歴がずれます".to_string());
+        render_risks
+            .push("再送残渣記録の宛名にコロンです—接頭辞の扱いで再送履歴がずれます".to_string());
     }
     if env.x_orig_rcpt_to_colon {
-        render_risks.push("元受取人記録の宛名にコロンです—接頭辞の扱いで元受取人がずれます".to_string());
+        render_risks
+            .push("元受取人記録の宛名にコロンです—接頭辞の扱いで元受取人がずれます".to_string());
     }
     if env.autocrypt_bad {
         render_risks.push("暗号交渉欄の値が異形です—交渉値の扱いで鍵提示がずれます".to_string());
@@ -9401,397 +11334,609 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push("追従先欄の値が異形です—追従値の扱いで返信経路がずれます".to_string());
     }
     if env.x_quarantine_bad {
-        render_risks.push("検疫識別欄の値が括弧識別形でないです—検疫値の扱いで照合がずれます".to_string());
+        render_risks
+            .push("検疫識別欄の値が括弧識別形でないです—検疫値の扱いで照合がずれます".to_string());
     }
     if env.x_dcc_bad {
-        render_risks.push("照合集計欄の値が局;機;件数形でないです—集計値の扱いで経路評価がずれます".to_string());
+        render_risks.push(
+            "照合集計欄の値が局;機;件数形でないです—集計値の扱いで経路評価がずれます".to_string(),
+        );
     }
     if env.ms_sidres_bad {
-        render_risks.push("送信者判定欄の値が語彙外です—判定値の扱いで発信元評価がずれます".to_string());
+        render_risks
+            .push("送信者判定欄の値が語彙外です—判定値の扱いで発信元評価がずれます".to_string());
     }
     if env.x_mgun_bad {
         render_risks.push("配信機印欄の値が異形です—機印値の扱いで経路評価がずれます".to_string());
     }
     if env.x_sieve_bad {
-        render_risks.push("転送記録欄の値が宛名形でないです—転送値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("転送記録欄の値が宛名形でないです—転送値の扱いで経路評価がずれます".to_string());
     }
     if env.x_resolved_bad {
-        render_risks.push("配達記録欄の値が宛名形でないです—配達値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("配達記録欄の値が宛名形でないです—配達値の扱いで経路評価がずれます".to_string());
     }
     if env.x_sesrc_bad {
-        render_risks.push("受領記録欄の値が受領トークン形でないです—受領値の扱いで照合がずれます".to_string());
+        render_risks.push(
+            "受領記録欄の値が受領トークン形でないです—受領値の扱いで照合がずれます".to_string(),
+        );
     }
     if env.x_envsnd_bad {
-        render_risks.push("封書差出人欄の値が宛名形でないです—封書値の扱いで経路評価がずれます".to_string());
+        render_risks.push(
+            "封書差出人欄の値が宛名形でないです—封書値の扱いで経路評価がずれます".to_string(),
+        );
     }
     if env.content_ttype_bad {
-        render_risks.push("翻訳種別欄の値が語彙外です—翻訳値の扱いで内容評価がずれます".to_string());
+        render_risks
+            .push("翻訳種別欄の値が語彙外です—翻訳値の扱いで内容評価がずれます".to_string());
     }
     if env.content_dur_bad {
-        render_risks.push("長尺欄の値が数値形でないです—長尺値の扱いで内容評価がずれます".to_string());
+        render_risks
+            .push("長尺欄の値が数値形でないです—長尺値の扱いで内容評価がずれます".to_string());
     }
     if env.content_styp_bad {
-        render_risks.push("既定媒型欄の値が媒体型形でないです—媒型値の扱いで内容評価がずれます".to_string());
+        render_risks.push(
+            "既定媒型欄の値が媒体型形でないです—媒型値の扱いで内容評価がずれます".to_string(),
+        );
     }
     if env.x_ses_bad {
-        render_risks.push("送出記録欄の値が版号印形でないです—送出値の扱いで経路評価がずれます".to_string());
+        render_risks.push(
+            "送出記録欄の値が版号印形でないです—送出値の扱いで経路評価がずれます".to_string(),
+        );
     }
     if env.conversion_bad {
-        render_risks.push("変換指定欄の値が語彙外です—変換値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("変換指定欄の値が語彙外です—変換値の扱いで経路評価がずれます".to_string());
     }
     if env.conversion_loss_bad {
-        render_risks.push("損失変換欄の値が語彙外です—損失値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("損失変換欄の値が語彙外です—損失値の扱いで経路評価がずれます".to_string());
     }
     if env.message_type_bad {
-        render_risks.push("報告種別欄の値が語彙外です—種別値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("報告種別欄の値が語彙外です—種別値の扱いで経路評価がずれます".to_string());
     }
     if env.read_rec_bad {
         render_risks.push("閲読記録欄の値が異形です—閲読値の扱いで経路評価がずれます".to_string());
     }
     if env.ms_pcl_bad {
-        render_risks.push("疑い度欄の値が数値形でないです—疑い値の扱いで発信元評価がずれます".to_string());
+        render_risks
+            .push("疑い度欄の値が数値形でないです—疑い値の扱いで発信元評価がずれます".to_string());
     }
     if env.ms_ctmid_bad {
-        render_risks.push("越境識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
+        render_risks
+            .push("越境識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
     }
     if env.ms_prvscid_bad {
         render_risks.push("照合鍵欄の値が16進形でないです—鍵値の扱いで照合がずれます".to_string());
     }
     if env.ms_entity_bad {
-        render_risks.push("越境由来欄の値が語彙外です—由来値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("越境由来欄の値が語彙外です—由来値の扱いで経路評価がずれます".to_string());
     }
     if env.xip_asf_bad {
-        render_risks.push("機器判定欄の値が真偽形でないです—判定値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("機器判定欄の値が真偽形でないです—判定値の扱いで経路評価がずれます".to_string());
     }
     if env.xip_av_bad {
-        render_risks.push("機器検査欄の値が連接形でないです—検査値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("機器検査欄の値が連接形でないです—検査値の扱いで経路評価がずれます".to_string());
     }
     if env.xip_asr_bad {
-        render_risks.push("機器結果欄の値が符号形でないです—結果値の扱いで照合がずれます".to_string());
+        render_risks
+            .push("機器結果欄の値が符号形でないです—結果値の扱いで照合がずれます".to_string());
     }
     if env.xpp_sdet_bad {
-        render_risks.push("機器詳細欄の値が連接形でないです—詳細値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("機器詳細欄の値が連接形でないです—詳細値の扱いで経路評価がずれます".to_string());
     }
     if env.ms_msre_bad {
-        render_risks.push("代理送信欄の値が宛名形でないです—代理値の扱いで発信元評価がずれます".to_string());
+        render_risks.push(
+            "代理送信欄の値が宛名形でないです—代理値の扱いで発信元評価がずれます".to_string(),
+        );
     }
     if env.ms_pmi_bad {
-        render_risks.push("親識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
+        render_risks
+            .push("親識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
     }
     if env.ms_fwdl_bad {
-        render_risks.push("転送巡回欄の値が宛名形でないです—巡回値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("転送巡回欄の値が宛名形でないです—巡回値の扱いで経路評価がずれます".to_string());
     }
     if env.xep_bcf_bad {
-        render_risks.push("Bcc処理欄の値がGUID形でないです—処理値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("Bcc処理欄の値がGUID形でないです—処理値の扱いで経路評価がずれます".to_string());
     }
     if env.ms_ptt_bad {
-        render_risks.push("輸送種別欄の値が語彙外です—輸送分類の扱いで経路判定がずれます".to_string());
+        render_risks
+            .push("輸送種別欄の値が語彙外です—輸送分類の扱いで経路判定がずれます".to_string());
     }
     if env.ms_authas_bad {
-        render_risks.push("認証主体欄の値が語彙外です—主体判定の扱いで発信元評価がずれます".to_string());
+        render_risks
+            .push("認証主体欄の値が語彙外です—主体判定の扱いで発信元評価がずれます".to_string());
     }
     if env.ms_ct_oat_bad {
-        render_risks.push("越境到着欄の値が日時形でないです—到着時刻の扱いで経路時系列がずれます".to_string());
+        render_risks.push(
+            "越境到着欄の値が日時形でないです—到着時刻の扱いで経路時系列がずれます".to_string(),
+        );
     }
     if env.ms_prvs_bad {
-        render_risks.push("報酬識別欄の値が16進形でないです—識別値の扱いで照合がずれます".to_string());
+        render_risks
+            .push("報酬識別欄の値が16進形でないです—識別値の扱いで照合がずれます".to_string());
     }
     if env.ms_ct_id_bad {
-        render_risks.push("越境識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
+        render_risks
+            .push("越境識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
     }
     if env.ms_ct_ip_bad {
-        render_risks.push("越境接続欄の値がIP形でないです—接続値の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("越境接続欄の値がIP形でないです—接続値の扱いで経路評価がずれます".to_string());
     }
     if env.ms_ct_authas_bad {
-        render_risks.push("越境認証主体欄の値が語彙外です—主体判定の扱いで発信元評価がずれます".to_string());
+        render_risks.push(
+            "越境認証主体欄の値が語彙外です—主体判定の扱いで発信元評価がずれます".to_string(),
+        );
     }
     if env.ms_ct_asrc_bad {
-        render_risks.push("越境認証元欄の値がホスト名形でないです—認証元の扱いで経路評価がずれます".to_string());
+        render_risks.push(
+            "越境認証元欄の値がホスト名形でないです—認証元の扱いで経路評価がずれます".to_string(),
+        );
     }
     if env.x_amzrc_bad {
-        render_risks.push("元宛記録欄の値が宛名形でないです—元宛の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("元宛記録欄の値が宛名形でないです—元宛の扱いで経路評価がずれます".to_string());
     }
     if env.x_fbl_bad {
-        render_risks.push("報告機名欄の値がトークン形でないです—報告機の扱いで照合がずれます".to_string());
+        render_risks
+            .push("報告機名欄の値がトークン形でないです—報告機の扱いで照合がずれます".to_string());
     }
     if env.x_mcs_bad {
-        render_risks.push("疑い度欄の値が整数形でないです—疑い度の扱いで発信元評価がずれます".to_string());
+        render_risks
+            .push("疑い度欄の値が整数形でないです—疑い度の扱いで発信元評価がずれます".to_string());
     }
     if env.x_hamr_bad {
-        render_risks.push("判定経緯欄の値が報告構造形でないです—経緯の扱いで発信元評価がずれます".to_string());
+        render_risks.push(
+            "判定経緯欄の値が報告構造形でないです—経緯の扱いで発信元評価がずれます".to_string(),
+        );
     }
     if env.ms_dir_bad {
-        render_risks.push("輸送方向欄の値が語彙外です—方向判定の扱いで発信元評価がずれます".to_string());
+        render_risks
+            .push("輸送方向欄の値が語彙外です—方向判定の扱いで発信元評価がずれます".to_string());
     }
     if env.ms_authmech_bad {
-        render_risks.push("認証方式欄の値が番号形でないです—方式判定の扱いで経路評価がずれます".to_string());
+        render_risks.push(
+            "認証方式欄の値が番号形でないです—方式判定の扱いで経路評価がずれます".to_string(),
+        );
     }
     if env.ms_corr_id_bad {
-        render_risks.push("関連識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
+        render_risks
+            .push("関連識別欄の値がGUID形でないです—識別値の扱いで照合がずれます".to_string());
     }
     if env.ms_exp_time_bad {
-        render_risks.push("失効開始欄の値が日時形でないです—失効時刻の扱いで経路時系列がずれます".to_string());
+        render_risks.push(
+            "失効開始欄の値が日時形でないです—失効時刻の扱いで経路時系列がずれます".to_string(),
+        );
     }
     if env.xsl_bad {
-        render_risks.push("SocketLabs配送印欄の値が識別子形でないです—配送記録の扱いで照合がずれます".to_string());
+        render_risks.push(
+            "SocketLabs配送印欄の値が識別子形でないです—配送記録の扱いで照合がずれます".to_string(),
+        );
     }
     if env.xcit_bad {
-        render_risks.push("CanIt処理印欄の値が識別子形でないです—検査機記録の扱いで照合がずれます".to_string());
+        render_risks.push(
+            "CanIt処理印欄の値が識別子形でないです—検査機記録の扱いで照合がずれます".to_string(),
+        );
     }
     if env.xoc_bad {
-        render_risks.push("発信端末印欄の値が識別子形でないです—発信端末記録の扱いで照合がずれます".to_string());
+        render_risks.push(
+            "発信端末印欄の値が識別子形でないです—発信端末記録の扱いで照合がずれます".to_string(),
+        );
     }
     if env.xmlid_bad {
-        render_risks.push("郵送識別印欄の値が識別子形でないです—郵送記録の扱いで照合がずれます".to_string());
+        render_risks.push(
+            "郵送識別印欄の値が識別子形でないです—郵送記録の扱いで照合がずれます".to_string(),
+        );
     }
     if env.x4_dr_bad {
-        render_risks.push("配送報告欄の値が語彙外です—報告指定の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("配送報告欄の値が語彙外です—報告指定の扱いで経路評価がずれます".to_string());
     }
     if env.x4_ora_bad {
-        render_risks.push("返送対象欄の値が宛名形でないです—返送先の扱いで照合がずれます".to_string());
+        render_risks
+            .push("返送対象欄の値が宛名形でないです—返送先の扱いで照合がずれます".to_string());
     }
     if env.x4_oeit_bad {
-        render_risks.push("元符号種別欄の値が種別連接形でないです—符号種別の扱いで変換評価がずれます".to_string());
+        render_risks.push(
+            "元符号種別欄の値が種別連接形でないです—符号種別の扱いで変換評価がずれます".to_string(),
+        );
     }
     if env.x4_cid_bad {
-        render_risks.push("本文識別欄の値が印字トークン形でないです—識別記録の扱いで照合がずれます".to_string());
+        render_risks.push(
+            "本文識別欄の値が印字トークン形でないです—識別記録の扱いで照合がずれます".to_string(),
+        );
     }
     if env.news_lines_bad {
-        render_risks.push("記事行数欄の値が整数形でないです—行数の扱いで記事把握がずれます".to_string());
+        render_risks
+            .push("記事行数欄の値が整数形でないです—行数の扱いで記事把握がずれます".to_string());
     }
     if env.x_sg_bad {
-        render_risks.push("配送識別欄の値が長トークン形でないです—識別の扱いで照合がずれます".to_string());
+        render_risks
+            .push("配送識別欄の値が長トークン形でないです—識別の扱いで照合がずれます".to_string());
     }
     if env.pics_bad {
-        render_risks.push("評価記録欄の値が評価構文形でないです—評価の扱いで内容分類がずれます".to_string());
+        render_risks.push(
+            "評価記録欄の値が評価構文形でないです—評価の扱いで内容分類がずれます".to_string(),
+        );
     }
     if env.old_rp_bad {
-        render_risks.push("返送記録欄の値が宛名形でないです—返送先の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("返送記録欄の値が宛名形でないです—返送先の扱いで経路評価がずれます".to_string());
     }
     if env.x4_defd_bad {
-        render_risks.push("留置時刻欄の値が日時形でないです—留置時刻の扱いで経路時系列がずれます".to_string());
+        render_risks.push(
+            "留置時刻欄の値が日時形でないです—留置時刻の扱いで経路時系列がずれます".to_string(),
+        );
     }
     if env.x4_ldt_bad {
-        render_risks.push("最終期限欄の値が日時形でないです—期限の扱いで経路時系列がずれます".to_string());
+        render_risks
+            .push("最終期限欄の値が日時形でないです—期限の扱いで経路時系列がずれます".to_string());
     }
     if env.x4_altr_bad {
-        render_risks.push("代宛先欄の値が宛名形でないです—代宛先の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("代宛先欄の値が宛名形でないです—代宛先の扱いで経路評価がずれます".to_string());
     }
     if env.x4_pndr_bad {
-        render_risks.push("報告抑止欄の値が語彙外です—抑止指定の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("報告抑止欄の値が語彙外です—抑止指定の扱いで経路評価がずれます".to_string());
     }
     if env.x4_cr_bad {
-        render_risks.push("内容返却欄の値が語彙外です—返却指示の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("内容返却欄の値が語彙外です—返却指示の扱いで経路評価がずれます".to_string());
     }
     if env.x4_cc_bad {
-        render_risks.push("対応鍵欄の値が印字トークン形でないです—対応関係の扱いで照合がずれます".to_string());
+        render_risks.push(
+            "対応鍵欄の値が印字トークン形でないです—対応関係の扱いで照合がずれます".to_string(),
+        );
     }
     if env.x4_org_bad {
-        render_risks.push("交換元欄の値が宛名形でないです—交換元の扱いで照合がずれます".to_string());
+        render_risks
+            .push("交換元欄の値が宛名形でないです—交換元の扱いで照合がずれます".to_string());
     }
     if env.x4_trc_bad {
-        render_risks.push("追跡記録欄の値が大括弧くくり形でないです—追跡記録の扱いで経路評価がずれます".to_string());
+        render_risks.push(
+            "追跡記録欄の値が大括弧くくり形でないです—追跡記録の扱いで経路評価がずれます"
+                .to_string(),
+        );
     }
     if env.x4_roc_bad {
-        render_risks.push("本文返却指定欄の値が語彙外です—返却指定の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("本文返却指定欄の値が語彙外です—返却指定の扱いで経路評価がずれます".to_string());
     }
     if env.x4_inc_bad {
-        render_risks.push("抜粋指定欄の値が語彙外です—抜粋指定の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("抜粋指定欄の値が語彙外です—抜粋指定の扱いで経路評価がずれます".to_string());
     }
     if env.x4_afwd_bad {
-        render_risks.push("自動転送指定欄の値が語彙外です—転送指定の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("自動転送指定欄の値が語彙外です—転送指定の扱いで経路評価がずれます".to_string());
     }
     if env.x4_obs_bad {
-        render_risks.push("廃棄指示欄の値が識別子連接形でないです—廃棄対象の扱いで照合がずれます".to_string());
+        render_risks.push(
+            "廃棄指示欄の値が識別子連接形でないです—廃棄対象の扱いで照合がずれます".to_string(),
+        );
     }
     if env.xpm_mid_bad {
-        render_risks.push("配送業者識別欄の値がトークン形でないです—配送記録の扱いで照合がずれます".to_string());
+        render_risks.push(
+            "配送業者識別欄の値がトークン形でないです—配送記録の扱いで照合がずれます".to_string(),
+        );
     }
     if env.xpm_rcpt_bad {
-        render_risks.push("配送業者宛先欄の値が宛名形でないです—配送記録の扱いで照合がずれます".to_string());
+        render_risks.push(
+            "配送業者宛先欄の値が宛名形でないです—配送記録の扱いで照合がずれます".to_string(),
+        );
     }
     if env.xexc_bad {
-        render_risks.push("署印処理欄の値が真偽語彙外です—署印処理の扱いで経路評価がずれます".to_string());
+        render_risks
+            .push("署印処理欄の値が真偽語彙外です—署印処理の扱いで経路評価がずれます".to_string());
     }
     if env.xmid_bad {
-        render_risks.push("配送識別欄の値が識別子形でないです—配送記録の扱いで照合がずれます".to_string());
+        render_risks
+            .push("配送識別欄の値が識別子形でないです—配送記録の扱いで照合がずれます".to_string());
     }
     if env.rver_bad {
-        render_risks.push("中継版号欄の値が 版号 局名 形でないです—中継記録の扱いで経路時系列がずれます".to_string());
+        render_risks.push(
+            "中継版号欄の値が 版号 局名 形でないです—中継記録の扱いで経路時系列がずれます"
+                .to_string(),
+        );
     }
     if env.pver_bad {
-        render_risks.push("投稿版号欄の値が 版号 局名 形でないです—投稿記録の扱いで経路時系列がずれます".to_string());
+        render_risks.push(
+            "投稿版号欄の値が 版号 局名 形でないです—投稿記録の扱いで経路時系列がずれます"
+                .to_string(),
+        );
     }
     if env.drcv_bad {
-        render_risks.push("到着日時欄の値が日時形でないです—到着記録の扱いで経路時系列がずれます".to_string());
+        render_risks.push(
+            "到着日時欄の値が日時形でないです—到着記録の扱いで経路時系列がずれます".to_string(),
+        );
     }
     if env.xdto_bad {
-        render_risks.push("配達宛先欄の値が宛名形でないです—配達記録の扱いで照合がずれます".to_string());
+        render_risks
+            .push("配達宛先欄の値が宛名形でないです—配達記録の扱いで照合がずれます".to_string());
     }
     if env.xoemail_bad {
-        render_risks.push("発信宛名欄の値が宛名形でないです—発信記録の扱いで発信元照合がずれます".to_string());
+        render_risks.push(
+            "発信宛名欄の値が宛名形でないです—発信記録の扱いで発信元照合がずれます".to_string(),
+        );
     }
     if env.xsentto_bad {
-        render_risks.push("配送宛名欄の値が宛名形でないです—配送記録の扱いで宛先照合がずれます".to_string());
+        render_risks.push(
+            "配送宛名欄の値が宛名形でないです—配送記録の扱いで宛先照合がずれます".to_string(),
+        );
     }
     if env.xodom_bad {
-        render_risks.push("発信局名欄の値が局名形でないです—発信記録の扱いで発信局特定がずれます".to_string());
+        render_risks.push(
+            "発信局名欄の値が局名形でないです—発信記録の扱いで発信局特定がずれます".to_string(),
+        );
     }
     if env.xmuuid_bad {
-        render_risks.push("配送識別欄の値がGUID形でないです—配送記録の扱いで照合がずれます".to_string());
+        render_risks
+            .push("配送識別欄の値がGUID形でないです—配送記録の扱いで照合がずれます".to_string());
     }
     if env.xsdby_bad {
-        render_risks.push("検疫機署名欄の値が単一印字トークンでないです—検査記録の扱いで検査機照合がずれます".to_string());
+        render_risks.push(
+            "検疫機署名欄の値が単一印字トークンでないです—検査記録の扱いで検査機照合がずれます"
+                .to_string(),
+        );
     }
     if env.xsdpt_bad {
-        render_risks.push("検疫機工数欄の値が数値形でないです—検査記録の扱いで計時照合がずれます".to_string());
+        render_risks.push(
+            "検疫機工数欄の値が数値形でないです—検査記録の扱いで計時照合がずれます".to_string(),
+        );
     }
     if env.xsdbar_bad {
-        render_risks.push("検疫機目盛欄の値がプラス/マイナス列でないです—検査記録の扱いで目盛照合がずれます".to_string());
+        render_risks.push(
+            "検疫機目盛欄の値がプラス/マイナス列でないです—検査記録の扱いで目盛照合がずれます"
+                .to_string(),
+        );
     }
     if env.xamsc_bad {
-        render_risks.push("検疫機得点欄の値が数値形でないです—検査記録の扱いで得点照合がずれます".to_string());
+        render_risks.push(
+            "検疫機得点欄の値が数値形でないです—検査記録の扱いで得点照合がずれます".to_string(),
+        );
     }
     if env.xmsip_bad {
-        render_risks.push("発信接続元欄の値がIPアドレス形でないです—組織記録の扱いで発信元特定がずれます".to_string());
+        render_risks.push(
+            "発信接続元欄の値がIPアドレス形でないです—組織記録の扱いで発信元特定がずれます"
+                .to_string(),
+        );
     }
     if env.xmsmbx_bad {
-        render_risks.push("元受信箱欄の値がGUID形でないです—組織記録の扱いで受信箱照合がずれます".to_string());
+        render_risks.push(
+            "元受信箱欄の値がGUID形でないです—組織記録の扱いで受信箱照合がずれます".to_string(),
+        );
     }
     if env.xraddr_bad {
-        render_risks.push("接続元欄の値がIPアドレス形でないです—配送記録の扱いで発信元特定がずれます".to_string());
+        render_risks.push(
+            "接続元欄の値がIPアドレス形でないです—配送記録の扱いで発信元特定がずれます".to_string(),
+        );
     }
     if env.xrtpath_bad {
-        render_risks.push("返送先裏控欄の値が宛名形でないです—返送記録の扱いで宛先照合がずれます".to_string());
+        render_risks.push(
+            "返送先裏控欄の値が宛名形でないです—返送記録の扱いで宛先照合がずれます".to_string(),
+        );
     }
     if env.xsaef_bad {
-        render_risks.push("検疫機元宛欄の値が宛名形でないです—検査記録の扱いで送信元照合がずれます".to_string());
+        render_risks.push(
+            "検疫機元宛欄の値が宛名形でないです—検査記録の扱いで送信元照合がずれます".to_string(),
+        );
     }
     if env.xsaer_bad {
-        render_risks.push("検疫機宛先欄の値が宛名連接形でないです—検査記録の扱いで宛先照合がずれます".to_string());
+        render_risks.push(
+            "検疫機宛先欄の値が宛名連接形でないです—検査記録の扱いで宛先照合がずれます".to_string(),
+        );
     }
     if env.xsaev_bad {
-        render_risks.push("検疫機版号欄の値が版号形でないです—検査記録の扱いで検疫機識別がずれます".to_string());
+        render_risks.push(
+            "検疫機版号欄の値が版号形でないです—検査記録の扱いで検疫機識別がずれます".to_string(),
+        );
     }
     if env.xsaes_bad {
-        render_risks.push("検疫機走査印欄の値が Yes/No 始まりでないです—検査記録の扱いで走査確認がずれます".to_string());
+        render_risks.push(
+            "検疫機走査印欄の値が Yes/No 始まりでないです—検査記録の扱いで走査確認がずれます"
+                .to_string(),
+        );
     }
     if env.xmsf_bad {
-        render_risks.push("走査機封書元宛欄の値が宛名形でないです—検査記録の扱いで送信元照合がずれます".to_string());
+        render_risks.push(
+            "走査機封書元宛欄の値が宛名形でないです—検査記録の扱いで送信元照合がずれます"
+                .to_string(),
+        );
     }
     if env.xmst_bad {
-        render_risks.push("走査機封書宛先欄の値が宛名連接形でないです—検査記録の扱いで宛先照合がずれます".to_string());
+        render_risks.push(
+            "走査機封書宛先欄の値が宛名連接形でないです—検査記録の扱いで宛先照合がずれます"
+                .to_string(),
+        );
     }
     if env.xmsid_bad {
-        render_risks.push("走査機識別欄の値が単一印字トークンでないです—検査記録の扱いで書留照合がずれます".to_string());
+        render_risks.push(
+            "走査機識別欄の値が単一印字トークンでないです—検査記録の扱いで書留照合がずれます"
+                .to_string(),
+        );
     }
     if env.xmssc_bad {
         render_risks.push("走査機判定詳細欄の値が spam/not spam 始まりでないです—検査記録の扱いで判定確認がずれます".to_string());
     }
     if env.xrpid_bad {
-        render_risks.push("走査機番号欄の値が単一印字トークンでないです—検査記録の扱いで書留照合がずれます".to_string());
+        render_risks.push(
+            "走査機番号欄の値が単一印字トークンでないです—検査記録の扱いで書留照合がずれます"
+                .to_string(),
+        );
     }
     if env.xrpsc_bad {
-        render_risks.push("走査機得点欄の値が数値形でないです—検査記録の扱いで得点照合がずれます".to_string());
+        render_risks.push(
+            "走査機得点欄の値が数値形でないです—検査記録の扱いで得点照合がずれます".to_string(),
+        );
     }
     if env.xrpv_bad {
-        render_risks.push("走査機版号欄の値が版号形でないです—検査記録の扱いで走査機識別がずれます".to_string());
+        render_risks.push(
+            "走査機版号欄の値が版号形でないです—検査記録の扱いで走査機識別がずれます".to_string(),
+        );
     }
     if env.xrpaddr_bad {
-        render_risks.push("走査機封書欄の値が宛名連接形でないです—検査記録の扱いで封書照合がずれます".to_string());
+        render_risks.push(
+            "走査機封書欄の値が宛名連接形でないです—検査記録の扱いで封書照合がずれます".to_string(),
+        );
     }
     if env.xsdcv_bad {
         render_risks.push("検疫機名乗り欄の値が SpamAssassin 始まりでないです—検査記録の扱いで検査機照合がずれます".to_string());
     }
     if env.xamaddr_bad {
-        render_risks.push("検疫機元封書欄の値が宛名連接形でないです—検査記録の扱いで元封書照合がずれます".to_string());
+        render_risks.push(
+            "検疫機元封書欄の値が宛名連接形でないです—検査記録の扱いで元封書照合がずれます"
+                .to_string(),
+        );
     }
     if env.xamcv_bad {
         render_risks.push("検疫機版号名乗り欄の値が Amavisd 始まりでないです—検査記録の扱いで走査機識別がずれます".to_string());
     }
     if env.xrpusr_bad {
-        render_risks.push("検疫機使用者欄の値が単一印字トークンでないです—検査記録の扱いで使用者照合がずれます".to_string());
+        render_risks.push(
+            "検疫機使用者欄の値が単一印字トークンでないです—検査記録の扱いで使用者照合がずれます"
+                .to_string(),
+        );
     }
     if env.xbcenv_bad {
-        render_risks.push("検疫網封書欄の値が宛名形でないです—検査記録の扱いで封書照合がずれます".to_string());
+        render_risks.push(
+            "検疫網封書欄の値が宛名形でないです—検査記録の扱いで封書照合がずれます".to_string(),
+        );
     }
     if env.xbcip_bad {
-        render_risks.push("検疫網接続元欄の値がIPアドレス形でないです—検査記録の扱いで接続元特定がずれます".to_string());
+        render_risks.push(
+            "検疫網接続元欄の値がIPアドレス形でないです—検査記録の扱いで接続元特定がずれます"
+                .to_string(),
+        );
     }
     if env.xbctime_bad {
-        render_risks.push("検疫網開始刻印欄の値が数値形でないです—検査記録の扱いで時刻照合がずれます".to_string());
+        render_risks.push(
+            "検疫網開始刻印欄の値が数値形でないです—検査記録の扱いで時刻照合がずれます".to_string(),
+        );
     }
     if env.xbcspam_bad {
-        render_risks.push("検疫網迷惑印欄の値が Yes/No でないです—検査記録の扱いで判定確認がずれます".to_string());
+        render_risks.push(
+            "検疫網迷惑印欄の値が Yes/No でないです—検査記録の扱いで判定確認がずれます".to_string(),
+        );
     }
     if env.msos_bad {
-        render_risks.push("組織元寸法欄の値が整数形でないです—組織記録の扱いで寸法照合がずれます".to_string());
+        render_risks.push(
+            "組織元寸法欄の値が整数形でないです—組織記録の扱いで寸法照合がずれます".to_string(),
+        );
     }
     if env.msst_bad {
-        render_risks.push("組織閾値欄の値が整数形でないです—組織記録の扱いで閾値照合がずれます".to_string());
+        render_risks.push(
+            "組織閾値欄の値が整数形でないです—組織記録の扱いで閾値照合がずれます".to_string(),
+        );
     }
     if env.mscts_bad {
-        render_risks.push("組織越境除去欄の値が true/false でないです—組織記録の扱いで除去照合がずれます".to_string());
+        render_risks.push(
+            "組織越境除去欄の値が true/false でないです—組織記録の扱いで除去照合がずれます"
+                .to_string(),
+        );
     }
     if env.msoip_bad {
-        render_risks.push("組織元接続IP欄の値がIP形でないです—組織記録の扱いで接続元照合がずれます".to_string());
+        render_risks.push(
+            "組織元接続IP欄の値がIP形でないです—組織記録の扱いで接続元照合がずれます".to_string(),
+        );
     }
     if env.xmdsc_bad {
-        render_risks.push("検疫機得点欄の値が数値形でないです—検疫記録の扱いで得点照合がずれます".to_string());
+        render_risks.push(
+            "検疫機得点欄の値が数値形でないです—検疫記録の扱いで得点照合がずれます".to_string(),
+        );
     }
     if env.xmato_bad {
-        render_risks.push("変換記録欄の値が from 型 to 型 でないです—変換記録の扱いで変換照合がずれます".to_string());
+        render_risks.push(
+            "変換記録欄の値が from 型 to 型 でないです—変換記録の扱いで変換照合がずれます"
+                .to_string(),
+        );
     }
     if env.xsrc_bad {
-        render_risks.push("中継国欄の値が国コード連接形でないです—中継記録の扱いで国コード照合がずれます".to_string());
+        render_risks.push(
+            "中継国欄の値が国コード連接形でないです—中継記録の扱いで国コード照合がずれます"
+                .to_string(),
+        );
     }
     if env.xeid_bad {
-        render_risks.push("封書識別欄の値が単一印字トークンでないです—封書記録の扱いで識別照合がずれます".to_string());
+        render_risks.push(
+            "封書識別欄の値が単一印字トークンでないです—封書記録の扱いで識別照合がずれます"
+                .to_string(),
+        );
     }
     if env.msorc_bad {
-        render_risks.push("組織元宛先欄の値が宛名形でないです—組織記録の扱いで宛先照合がずれます".to_string());
+        render_risks.push(
+            "組織元宛先欄の値が宛名形でないです—組織記録の扱いで宛先照合がずれます".to_string(),
+        );
     }
     if env.msoat_bad {
-        render_risks.push("組織元到着欄の値が日時形でないです—組織記録の扱いで到着照合がずれます".to_string());
+        render_risks.push(
+            "組織元到着欄の値が日時形でないです—組織記録の扱いで到着照合がずれます".to_string(),
+        );
     }
     if env.mslob_bad {
-        render_risks.push("組織認証元欄の値がホスト名形でないです—組織記録の扱いで認証元照合がずれます".to_string());
+        render_risks.push(
+            "組織認証元欄の値がホスト名形でないです—組織記録の扱いで認証元照合がずれます"
+                .to_string(),
+        );
     }
     if env.msav_bad {
-        render_risks.push("組織検査印欄の値が単一印字トークンでないです—組織記録の扱いで検査印照合がずれます".to_string());
+        render_risks.push(
+            "組織検査印欄の値が単一印字トークンでないです—組織記録の扱いで検査印照合がずれます"
+                .to_string(),
+        );
     }
     if env.xpip_bad {
-        render_risks.push("発信原局欄の値が IPv4 形でないです—経路記録の扱いで発信元特定がずれます".to_string());
+        render_risks.push(
+            "発信原局欄の値が IPv4 形でないです—経路記録の扱いで発信元特定がずれます".to_string(),
+        );
     }
     if env.xomsg_bad {
-        render_risks.push("書換前識別欄の値が識別子形でないです—識別記録の扱いで追跡がずれます".to_string());
+        render_risks.push(
+            "書換前識別欄の値が識別子形でないです—識別記録の扱いで追跡がずれます".to_string(),
+        );
     }
     if env.xbadrs_bad {
-        render_risks.push("返送記録欄の値が宛名形でないです—返送記録の扱いで照合がずれます".to_string());
+        render_risks
+            .push("返送記録欄の値が宛名形でないです—返送記録の扱いで照合がずれます".to_string());
     }
     if env.xvhost_bad {
-        render_risks.push("仮想局欄の値が単一局名形でないです—配送記録の扱いで経路把握がずれます".to_string());
+        render_risks.push(
+            "仮想局欄の値が単一局名形でないです—配送記録の扱いで経路把握がずれます".to_string(),
+        );
     }
     if env.xrfrom_bad {
-        render_risks.push("実差出人欄の値が宛名形でないです—転送記録の扱いで差出人照合がずれます".to_string());
+        render_risks.push(
+            "実差出人欄の値が宛名形でないです—転送記録の扱いで差出人照合がずれます".to_string(),
+        );
     }
     if env.xrto_bad {
-        render_risks.push("実宛先欄の値が宛名形でないです—転送記録の扱いで宛先照合がずれます".to_string());
+        render_risks
+            .push("実宛先欄の値が宛名形でないです—転送記録の扱いで宛先照合がずれます".to_string());
     }
     if env.xfby_bad {
-        render_risks.push("転送局欄の値が局名形でないです—転送記録の扱いで経路特定がずれます".to_string());
+        render_risks
+            .push("転送局欄の値が局名形でないです—転送記録の扱いで経路特定がずれます".to_string());
     }
     if env.xfhost_bad {
-        render_risks.push("転送経路局欄の値が局名形でないです—転送記録の扱いで経路特定がずれます".to_string());
+        render_risks.push(
+            "転送経路局欄の値が局名形でないです—転送記録の扱いで経路特定がずれます".to_string(),
+        );
     }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
         && attachment_scans.iter().any(|a| {
-            kaname_render::magic_bytes::is_nested_email_attachment(
-                &a.filename,
-                &a.declared_mime,
-            )
+            kaname_render::magic_bytes::is_nested_email_attachment(&a.filename, &a.declared_mime)
         })
     {
         render_risks.push(
@@ -10471,7 +12616,10 @@ fn contains_phone_number(text: &str) -> bool {
     let mut found = false;
     for c in text.chars() {
         let is_num = c.is_ascii_digit() || ('０'..='９').contains(&c);
-        let is_sep = matches!(c, '-' | '‐' | 'ー' | '−' | ' ' | '　' | '(' | ')' | '（' | '）');
+        let is_sep = matches!(
+            c,
+            '-' | '‐' | 'ー' | '−' | ' ' | '　' | '(' | ')' | '（' | '）'
+        );
         if is_num {
             digits += 1;
             in_run = true;
@@ -11023,7 +13171,9 @@ mod tests {
             r.bec_signals
         );
         assert!(
-            r.bec_signals.iter().any(|s| s.contains("送金") || s.contains("緊急")),
+            r.bec_signals
+                .iter()
+                .any(|s| s.contains("送金") || s.contains("緊急")),
             "HTML 本文の金融/緊急キーワードがシグナル化されるべき: {:?}",
             r.bec_signals
         );
@@ -11050,7 +13200,9 @@ mod tests {
         );
         let r = analyze_raw_email(eml.as_bytes()).await?;
         assert!(
-            r.bec_signals.iter().any(|s| s.contains("送金") || s.contains("緊急")),
+            r.bec_signals
+                .iter()
+                .any(|s| s.contains("送金") || s.contains("緊急")),
             "salt で分断されたキーワードを復元して検出すべき: {:?}",
             r.bec_signals
         );
@@ -11086,7 +13238,9 @@ mod tests {
             --alt--\r\n";
         let r = analyze_raw_email(eml).await?;
         assert!(
-            r.bec_signals.iter().any(|s| s.contains("送金") || s.contains("緊急")),
+            r.bec_signals
+                .iter()
+                .any(|s| s.contains("送金") || s.contains("緊急")),
             "text/plain のデコイに関わらず HTML 側の攻撃文を検出すべき: {:?}",
             r.bec_signals
         );
@@ -12066,7 +14220,9 @@ mod tests {
         ));
         assert!(has_devicelogin_lure("visit devicelogin and enter code"));
         // 正規の連絡文・別の login ページ誘導は対象外
-        assert!(!has_devicelogin_lure("ログインは https://portal.example.com/login から"));
+        assert!(!has_devicelogin_lure(
+            "ログインは https://portal.example.com/login から"
+        ));
         assert!(!has_devicelogin_lure("資料を添付しました"));
     }
 
@@ -12076,13 +14232,19 @@ mod tests {
         assert!(has_llm_preamble(
             "Here is the message formatted and divided into sections:\n\nSubject: ..."
         ));
-        assert!(has_llm_preamble("Here is a professional email for your request:\n..."));
-        assert!(has_llm_preamble("ご依頼のメール本文を作成しました。\n\n件名: ..."));
+        assert!(has_llm_preamble(
+            "Here is a professional email for your request:\n..."
+        ));
+        assert!(has_llm_preamble(
+            "ご依頼のメール本文を作成しました。\n\n件名: ..."
+        ));
         // 冒頭 400 文字以降の出現は対象外 (転送・引用に含まれうる)
         let far = format!("{}{}", "x".repeat(500), "Here is the message");
         assert!(!has_llm_preamble(&far));
         // 人間の書き出しは対象外
-        assert!(!has_llm_preamble("お世話になっております。資料を添付します"));
+        assert!(!has_llm_preamble(
+            "お世話になっております。資料を添付します"
+        ));
         assert!(!has_llm_preamble("Meeting notes attached."));
     }
 
@@ -12090,12 +14252,16 @@ mod tests {
     fn has_external_protocol_uri_はアプリ起動スキームを検出する() {
         // Follina (ms-msdt) / Windows Search (search-ms) / App Installer
         assert!(has_external_protocol_uri("参照: ms-msdt:/id PCWDiagnostic"));
-        assert!(has_external_protocol_uri("open search-ms:query=invoice&crumb=..."));
+        assert!(has_external_protocol_uri(
+            "open search-ms:query=invoice&crumb=..."
+        ));
         assert!(has_external_protocol_uri(
             "ms-appinstaller:?source=https://evil.example/p.appinstaller"
         ));
         // http/https URL や通常文は対象外
-        assert!(!has_external_protocol_uri("https://example.com/login を開いてください"));
+        assert!(!has_external_protocol_uri(
+            "https://example.com/login を開いてください"
+        ));
         assert!(!has_external_protocol_uri("資料を添付しました"));
         // 大文字のスキームも検出
         assert!(has_external_protocol_uri("MS-MSDT:/id PCWDiagnostic"));
@@ -12104,11 +14270,15 @@ mod tests {
     #[test]
     fn has_subscription_uri_は購読スキームを検出する() {
         // D1267 — webcal:/feed: 購読チャネル
-        assert!(has_subscription_uri("このカレンダーを購読: webcal://evil.example/spam.ics"));
+        assert!(has_subscription_uri(
+            "このカレンダーを購読: webcal://evil.example/spam.ics"
+        ));
         assert!(has_subscription_uri("feed:https://evil.example/rss.xml"));
         assert!(has_subscription_uri("FEEDs://evil.example/x"));
         // 正規文では不発火
-        assert!(!has_subscription_uri("https://example.com/feed を開いてください"));
+        assert!(!has_subscription_uri(
+            "https://example.com/feed を開いてください"
+        ));
         assert!(!has_subscription_uri("資料を添付しました"));
     }
 
@@ -12119,7 +14289,7 @@ mod tests {
         assert!(has_suspicious_local_part("a\u{200D}b@example.jp")); // ZWJ
         assert!(has_suspicious_local_part("sup\u{FEFF}port@example.com")); // ZWNBSP
         assert!(has_suspicious_local_part("sa\u{E0061}les@example.com")); // タグ文字
-        // 正規アドレスは不発火
+                                                                          // 正規アドレスは不発火
         assert!(!has_suspicious_local_part("alice@example.com"));
         assert!(!has_suspicious_local_part("j.taro@example.co.jp"));
         // 全キリルローカル部 (ラテン混在なし) は対象外
@@ -12132,19 +14302,21 @@ mod tests {
     #[test]
     fn has_suspicious_subject_chars_は件名の回避文字を検出する() {
         // D1276 — 件名の文字種変換回避
-        assert!(has_suspicious_subject_chars("\u{1D400}mazon アカウント停止"));
+        assert!(has_suspicious_subject_chars(
+            "\u{1D400}mazon アカウント停止"
+        ));
         assert!(has_suspicious_subject_chars("Re: inv\u{E0001}oice"));
         assert!(has_suspicious_subject_chars("\u{24B6}mazon からのお知らせ"));
         assert!(has_suspicious_subject_chars("inv\u{200D}oice")); // ZWJ
         assert!(has_suspicious_subject_chars("inv\u{043E}ice")); // キリル о
-        // D1282 — soft hyphen/word joiner 系 (SANS 32428)
+                                                                 // D1282 — soft hyphen/word joiner 系 (SANS 32428)
         assert!(has_suspicious_subject_chars("\u{00AD}important notice"));
         assert!(has_suspicious_subject_chars("your\u{2060}account"));
         assert!(has_suspicious_subject_chars("p\u{115F}assword")); // Hangul filler
-        // D1302: bidi override/isolate
+                                                                   // D1302: bidi override/isolate
         assert!(has_suspicious_subject_chars("Re: \u{202E}ecivres 請求"));
         assert!(has_suspicious_subject_chars("accou\u{2067}nt")); // isolate
-        // 正規件名・全角・日本語は不発火
+                                                                  // 正規件名・全角・日本語は不発火
         assert!(!has_suspicious_subject_chars("【請求書】2026年9月分"));
         assert!(!has_suspicious_subject_chars("Re: ＡＢＣプロジェクト"));
         assert!(!has_suspicious_subject_chars("週次レポート"));
@@ -13881,9 +16053,7 @@ fn bec_detector() -> kaname_bec::BecDetector {
     // DKIM 署名の独立検証: システムの DNS リゾルバが引ける環境でのみ有効化する
     // (引けない環境では従来どおりヘッダベースの判定のみ)。
     match kaname_bec::dkim_verify::UdpDkimKeyResolver::system() {
-        Some(resolver) => {
-            detector.with_dkim_resolver(std::sync::Arc::new(resolver))
-        }
+        Some(resolver) => detector.with_dkim_resolver(std::sync::Arc::new(resolver)),
         None => detector,
     }
 }

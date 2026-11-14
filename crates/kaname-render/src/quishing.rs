@@ -176,17 +176,17 @@ impl QuishingDefense {
         let url_rewriters: HashSet<&'static str> = [
             // 剥がしに失敗した場合のフォールバック (本則は unwrap で復元)
             "safelinks.protection.outlook.com", // Microsoft SafeLinks
-            "urldefense.com",                  // Proofpoint URL Defense
+            "urldefense.com",                   // Proofpoint URL Defense
             "urldefense.proofpoint.com",
             // 宛先をサーバ側でしか復元できない書き換えサービス
-            "linkprotect.cudasvc.com",   // Barracuda Link Protection
-            "secure-web.cisco.com",      // Cisco Secure Email
-            "clicktime.trendmicro.com",  // Trend Micro ClickTime
-            "protection.sophos.com",     // Sophos Email
-            "websense.com",              // Forcepoint/Websense
-            "wsed.org",                  // Websense Email Security
-            "mimecastprotect.com",       // Mimecast URL Protection
-            "avanan.net",                // Check Point Avanan
+            "linkprotect.cudasvc.com",  // Barracuda Link Protection
+            "secure-web.cisco.com",     // Cisco Secure Email
+            "clicktime.trendmicro.com", // Trend Micro ClickTime
+            "protection.sophos.com",    // Sophos Email
+            "websense.com",             // Forcepoint/Websense
+            "wsed.org",                 // Websense Email Security
+            "mimecastprotect.com",      // Mimecast URL Protection
+            "avanan.net",               // Check Point Avanan
         ]
         .into_iter()
         .collect();
@@ -414,9 +414,7 @@ impl QuishingDefense {
         //    また Unicode を直接含むホストも同型のホモグラフ経路。
         //    正規 IDN (日本語ドメイン等) も存在するが、未検査では絞り込め
         //    ないため Suspicious (審査してから開け、という水準) に倒す。
-        if domain.split('.').any(|l| l.starts_with("xn--"))
-            || !domain.is_ascii()
-        {
+        if domain.split('.').any(|l| l.starts_with("xn--")) || !domain.is_ascii() {
             return UrlReputation::Suspicious;
         }
 
@@ -701,9 +699,7 @@ fn unwrap_protected_url(url: &str) -> Option<String> {
     {
         let dest = query_param(url, "domain").map(|v| percent_decode(&v))?;
         // ドメインとして妥当な形だけを受け付ける (クエリ混入を防ぐ)
-        if !dest.is_empty()
-            && !dest.contains(['/', '?', '&', '#', '@', ' '])
-            && dest.contains('.')
+        if !dest.is_empty() && !dest.contains(['/', '?', '&', '#', '@', ' ']) && dest.contains('.')
         {
             return Some(format!("https://{dest}"));
         }
@@ -790,10 +786,7 @@ fn unwrap_protected_url(url: &str) -> Option<String> {
         return None;
     }
 
-    if domain == "l.facebook.com"
-        || domain == "lm.facebook.com"
-        || domain == "l.instagram.com"
-    {
+    if domain == "l.facebook.com" || domain == "lm.facebook.com" || domain == "l.instagram.com" {
         // l.facebook.com/l.php?u=<percent>
         return query_param(url, "u")
             .map(|v| html_unescape(&percent_decode(&v)))
@@ -1591,7 +1584,8 @@ mod tests {
     fn urldefense_v2_unwraps_to_inner() {
         let d = QuishingDefense::new();
         // v2 形式: - → %, _ → /  (ドメイン内の . はそのまま残る)
-        let wrapped = "https://urldefense.com/v2/url?u=https-3a__evil-2dcorp.tk_login&d=DwMFAg&c=xyz";
+        let wrapped =
+            "https://urldefense.com/v2/url?u=https-3a__evil-2dcorp.tk_login&d=DwMFAg&c=xyz";
         // 復元後 https://evil-corp.tk/login → .tk 自由 TLD で Suspicious
         assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
     }
@@ -1651,7 +1645,8 @@ mod tests {
     fn google_translate_unwraps_u_param() {
         let d = QuishingDefense::new();
         // D1274 — translate.google.com/translate?u= 経由の宛先隠し
-        let wrapped = "https://translate.google.com/translate?sl=auto&tl=en&u=https%3A%2F%2Fevil.tk%2Flogin";
+        let wrapped =
+            "https://translate.google.com/translate?sl=auto&tl=en&u=https%3A%2F%2Fevil.tk%2Flogin";
         assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
     }
 
@@ -1726,11 +1721,7 @@ mod tests {
             "https://-lead.example.com/",
             "https://lead-.example.com/",
         ] {
-            assert_eq!(
-                d.evaluate_url(u),
-                UrlReputation::Suspicious,
-                "未検出: {u}"
-            );
+            assert_eq!(d.evaluate_url(u), UrlReputation::Suspicious, "未検出: {u}");
         }
     }
 
@@ -1755,8 +1746,7 @@ mod tests {
     #[test]
     fn linkedin_slink_unwraps_url_param() {
         let d = QuishingDefense::new();
-        let wrapped =
-            "https://www.linkedin.com/slink?code=abc&url=https%3A%2F%2Fevil.tk%2Flogin";
+        let wrapped = "https://www.linkedin.com/slink?code=abc&url=https%3A%2F%2Fevil.tk%2Flogin";
         assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
     }
 
@@ -1816,10 +1806,10 @@ mod tests {
     fn double_wrapped_url_still_evaluates_inner() {
         let d = QuishingDefense::new();
         // SafeLinks が urldefense を包む二重ラッパ (複数ゲートウェイ通過)
-        let inner_defense = "https%3A%2F%2Furldefense.com%2Fv2%2Furl%3Fu%3Dhttps-3a__evil-2dcorp.tk%26d%3D1";
-        let wrapped = format!(
-            "https://nam04.safelinks.protection.outlook.com/?url={inner_defense}"
-        );
+        let inner_defense =
+            "https%3A%2F%2Furldefense.com%2Fv2%2Furl%3Fu%3Dhttps-3a__evil-2dcorp.tk%26d%3D1";
+        let wrapped =
+            format!("https://nam04.safelinks.protection.outlook.com/?url={inner_defense}");
         assert_eq!(d.evaluate_url(&wrapped), UrlReputation::Suspicious);
     }
 

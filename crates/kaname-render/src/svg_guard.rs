@@ -674,7 +674,8 @@ mod tests {
         let svg = r#"<svg><circle cx="5" cy="5" r="4" fill="red"/></svg>"#;
         let scan = scan_svg(svg);
         assert!(
-            !scan.risks
+            !scan
+                .risks
                 .iter()
                 .any(|r| matches!(r, SvgRisk::HiddenContent { .. })),
             "通常の SVG を非表示要素と誤検出した"
