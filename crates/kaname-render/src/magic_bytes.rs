@@ -368,7 +368,13 @@ pub fn pdf_active_markers(bytes: &[u8]) -> Vec<&'static str> {
 #[must_use]
 pub fn pdf_embedded_markers(bytes: &[u8]) -> Vec<&'static str> {
     let mut found = Vec::new();
-    for marker in ["/EmbeddedFile", "/RichMedia", "/XFA", "/SubmitForm", "/ImportData"] {
+    for marker in [
+        "/EmbeddedFile",
+        "/RichMedia",
+        "/XFA",
+        "/SubmitForm",
+        "/ImportData",
+    ] {
         if contains_pdf_token(bytes, marker.as_bytes()) {
             found.push(marker);
         }
@@ -981,7 +987,10 @@ mod tests {
     #[test]
     fn nested_email_attachments_detected() {
         assert!(is_nested_email_attachment("fwd.eml", "message/rfc822"));
-        assert!(is_nested_email_attachment("outlook.msg", "application/octet-stream"));
+        assert!(is_nested_email_attachment(
+            "outlook.msg",
+            "application/octet-stream"
+        ));
         assert!(is_nested_email_attachment("inner", "message/rfc822"));
         assert!(is_nested_email_attachment(
             "inner",
@@ -1129,10 +1138,14 @@ mod tests {
     #[test]
     fn exotic_message_subtypes_flagged() {
         assert!(is_exotic_message_subtype("message/external-body"));
-        assert!(is_exotic_message_subtype("message/external-body; access-type=URL; URL=\"http://e/x\""));
+        assert!(is_exotic_message_subtype(
+            "message/external-body; access-type=URL; URL=\"http://e/x\""
+        ));
         assert!(is_exotic_message_subtype("message/partial"));
         assert!(is_exotic_message_subtype("message/delivery-status"));
-        assert!(is_exotic_message_subtype("Message/Disposition-Notification"));
+        assert!(is_exotic_message_subtype(
+            "Message/Disposition-Notification"
+        ));
         // 転送添付と通常型は対象外
         assert!(!is_exotic_message_subtype("message/rfc822"));
         assert!(!is_exotic_message_subtype("application/pdf"));

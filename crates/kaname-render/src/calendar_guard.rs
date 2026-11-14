@@ -930,12 +930,14 @@ END:VCALENDAR"#;
             .any(|r| matches!(r, CalendarRisk::MethodSpoof { .. })));
         // METHOD:REQUEST (正当な招待) は不発火
         let ok = "BEGIN:VCALENDAR\nMETHOD:REQUEST\nBEGIN:VEVENT\nUID:m@x\nSUMMARY:定例\nEND:VEVENT\nEND:VCALENDAR";
-        assert!(!g.analyze(ok)
+        assert!(!g
+            .analyze(ok)
             .risks
             .iter()
             .any(|r| matches!(r, CalendarRisk::MethodSpoof { .. })));
         // METHOD 無しも不発火
-        assert!(!g.analyze(NORMAL_ICS)
+        assert!(!g
+            .analyze(NORMAL_ICS)
             .risks
             .iter()
             .any(|r| matches!(r, CalendarRisk::MethodSpoof { .. })));

@@ -206,17 +206,36 @@ impl HtmlSmugglingDetector {
         // や FakeCaptcha との複合で Critical になる (calculate_risk 参照)。
         let run_lure_phrases = [
             // Windows 実行ダイアログ誘導 (ClickFix 定番)
-            "win+r", "win + r", "windows+r", "windows + r",
-            "windows key", "press the windows", "run dialog", "open run",
-            "ファイル名を指定して実行", "コマンドプロンプトを開", "ターミナルを開",
+            "win+r",
+            "win + r",
+            "windows+r",
+            "windows + r",
+            "windows key",
+            "press the windows",
+            "run dialog",
+            "open run",
+            "ファイル名を指定して実行",
+            "コマンドプロンプトを開",
+            "ターミナルを開",
             // Explorer アドレスバーへの貼り付け誘導 (FileFix 定番)
-            "address bar", "アドレスバー", "エクスプローラー",
+            "address bar",
+            "アドレスバー",
+            "エクスプローラー",
             // コピー→貼り付けの実行手順
-            "ctrl+v", "ctrl + v", "press ctrl", "paste into", "paste it in",
-            "paste the copied", "copy-paste", "貼り付け",
+            "ctrl+v",
+            "ctrl + v",
+            "press ctrl",
+            "paste into",
+            "paste it in",
+            "paste the copied",
+            "copy-paste",
+            "貼り付け",
             // 「検証・修復」を装う定型フレーズ
-            "to verify", "verify yourself", "prove you are human",
-            "fix this problem", "complete the verification",
+            "to verify",
+            "verify yourself",
+            "prove you are human",
+            "fix this problem",
+            "complete the verification",
         ];
         if run_lure_phrases.iter().any(|p| lower.contains(p)) {
             signals.push(SmugglingSignal::RunDialogLure);
