@@ -9,6 +9,8 @@
 
 import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { ImageGenPanel } from "./ImageGenPanel";
+import type { GeneratedImage } from "./imagegen";
 
 // D1 Phase 3: MLS 会話が成立している相手 (kaname-ui::commands::MlsPeer)
 interface MlsPeer {
@@ -38,6 +40,9 @@ export const Compose = (props: ComposeProps) => {
   // 送信前 DLP の Warn 所見 (mail_send は Block のみ止めるため、
   // 警告は送信ボタン経由の事前チェックで表示する)。
   const [dlpWarnings,  setDlpWarnings]  = createSignal<string[]>([]);
+
+  // 画像生成パネル (Drop 統合) で添付に追加された生成画像。
+  const [attachedImages, setAttachedImages] = createSignal<GeneratedImage[]>([]);
 
   // D1 Phase 3/4: MLS 会話が成立している相手一覧。
   // 単一宛先が会話を持つときだけ「MLS で暗号化」選択肢を出す。
@@ -119,12 +124,29 @@ export const Compose = (props: ComposeProps) => {
     }
     try {
       if (useMls() && mlsPeer()) {
+        if (attachedImages().length > 0) {
+          // MLS 送信経路 (mls_send_encrypted) は添付に未対応。黙って画像を
+          // 落とすことはせず、利用者に選択を促す。
+          setError("生成画像の添付は MLS 暗号化送信では使えません。MLS を外すか、添付を外してください");
+          setSending(false);
+          return;
+        }
         // MLS E2E: 実件名・本文はエンベロープ内にのみ封入され、
         // 外側メールにはプレースホルダのみ出る。DLP は実本文で済ませた。
         await invoke("mls_send_encrypted", {
           to:      mlsPeer()!.email,
           subject: subject(),
           body:    body(),
+        });
+      } else if (attachedImages().length > 0) {
+        // 生成画像つき送信。送信前 DLP と監査は mail_send と同じ
+        // send_mail_core を通る (添付の MIME 種別も DLP 評価対象)。
+        await invoke("mail_send_with_images", {
+          from:    from(),
+          to:      toList,
+          subject: subject(),
+          body:    body(),
+          images:  attachedImages().map(a => ({ base64: a.base64 })),
         });
       } else {
         await invoke("mail_send", {
@@ -285,6 +307,54 @@ export const Compose = (props: ComposeProps) => {
           "border-radius": "6px",
         }}
       />
+
+      {/* 添付中の生成画像 */}
+      <Show when={attachedImages().length > 0}>
+        <div style={{
+          padding: "8px 16px 0",
+          display: "flex",
+          gap: "6px",
+          "flex-wrap": "wrap",
+          "align-items": "center",
+        }}>
+          <span style={{ "font-size": "11px", color: "#8B96A5" }}>添付画像:</span>
+          <For each={attachedImages()}>
+            {(img, i) => (
+              <span style={{
+                display: "inline-flex",
+                "align-items": "center",
+                gap: "6px",
+                background: "#12181F",
+                border: "1px solid #2A3441",
+                "border-radius": "9999px",
+                padding: "2px 6px 2px 10px",
+                "font-size": "11px",
+                color: "#F5F7FA",
+              }}>
+                generated-image-{i() + 1}
+                <button
+                  onClick={() =>
+                    setAttachedImages(attachedImages().filter(a => a.base64 !== img.base64))}
+                  aria-label="添付を外す"
+                  style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    color: "#8B96A5", "font-size": "13px", padding: "0 2px",
+                    "line-height": "1",
+                  }}
+                >×</button>
+              </span>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      {/* 画像生成パネル (Drop 統合) */}
+      <div style={{ "max-height": "45%", "overflow-y": "auto", "flex-shrink": "0" }}>
+        <ImageGenPanel
+          attached={attachedImages()}
+          onAttachedChange={setAttachedImages}
+        />
+      </div>
 
       {/* エラー */}
       <Show when={error()}>
