@@ -264,58 +264,6 @@ async fn ai_model_download(expected_sha256: String) -> Result<&'static str, Stri
     commands::ai_model_download(expected_sha256).await
 }
 
-// ── 画像生成 (Drop 統合) ────────────────────────────────────────────────
-// 接続先は利用者自身の画像生成エンドポイント (A1111 互換)。
-// API キーはメモリ内にのみ保持され、永続化されない。
-
-#[tauri::command]
-async fn imagegen_get_config() -> commands::ImageGenConfig {
-    commands::imagegen_get_config().await
-}
-
-#[tauri::command]
-async fn imagegen_set_config(
-    base_url: String,
-    model: String,
-    api_key: Option<String>,
-) -> Result<commands::ImageGenConfig, String> {
-    commands::imagegen_set_config(base_url, model, api_key).await
-}
-
-#[tauri::command]
-async fn imagegen_clear_api_key() -> Result<(), String> {
-    commands::imagegen_clear_api_key().await
-}
-
-#[tauri::command]
-async fn imagegen_generate(
-    req: commands::ImageGenRequest,
-) -> Result<commands::ImageGenResult, String> {
-    commands::imagegen_generate(req).await
-}
-
-#[tauri::command]
-async fn imagegen_history_list() -> Vec<commands::ImageGenHistoryEntry> {
-    commands::imagegen_history_list().await
-}
-
-#[tauri::command]
-async fn imagegen_history_save(entries: Vec<commands::ImageGenHistoryEntry>) -> Result<(), String> {
-    commands::imagegen_history_save(entries).await
-}
-
-/// 生成画像を添付してメールを送信する (送信前 DLP・監査は通常送信と同一経路)。
-#[tauri::command]
-async fn mail_send_with_images(
-    from: String,
-    to: Vec<String>,
-    subject: String,
-    body: String,
-    images: Vec<commands::SendImageInput>,
-) -> Result<String, String> {
-    commands::mail_send_with_images(from, to, subject, body, images).await
-}
-
 // ── MLS E2E 暗号化 (D1 Phase 4) ─────────────────────────────────────────
 
 #[tauri::command]
@@ -500,14 +448,6 @@ fn main() {
             ai_model_status,
             ai_llm_start,
             ai_model_download,
-            // 画像生成 (Drop 統合)
-            imagegen_get_config,
-            imagegen_set_config,
-            imagegen_clear_api_key,
-            imagegen_generate,
-            imagegen_history_list,
-            imagegen_history_save,
-            mail_send_with_images,
             // MLS E2E 暗号化 (D1 Phase 4)
             mls_init,
             mls_status,
