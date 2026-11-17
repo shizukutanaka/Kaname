@@ -1,0 +1,23 @@
+# Third-Party Licenses
+
+This file lists all third-party software included in Kaname binary distributions.
+Generated automatically by `cargo-about`. Do not edit manually.
+
+---
+
+{{#each licenses}}
+## {{name}}
+
+Used by:
+{{#each used_by}}  - {{crate.name}} {{crate.version}}
+{{/each}}
+
+License: {{name}}
+
+```
+{{text}}
+```
+
+---
+
+{{/each}}

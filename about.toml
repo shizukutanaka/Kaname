@@ -2,9 +2,9 @@
 #
 # 第三者ライセンス開示の自動生成。SOC2 監査で要求される SBOM の一部。
 #
-# 実行: cargo about generate -c about.toml --output-file LICENSE-THIRD-PARTY.md
+# 実行: cargo about generate -c about.toml about.hbs --output-file LICENSE-THIRD-PARTY.md
 #
-# CI: .github/workflows/ci.yml で自動実行され、リリースアーティファクトに含める
+# CI: .github/workflows/sbom.yml で自動実行され、リリースアーティファクトに含める
 
 # ライセンスを取得するクレート
 accepted = [
@@ -20,44 +20,22 @@ accepted = [
     "MPL-2.0",
     "Zlib",
     "Unlicense",
+    # webpki-roots (Mozilla のルート証明書ストア) のライセンス
+    "CDLA-Permissive-2.0",
 ]
 
-# プライベート/ワークスペース内クレートを除外
+# ビルド時/開発時のみの依存を除外
 ignore-build-dependencies   = true
 ignore-dev-dependencies     = true
 ignore-transitive-dependencies = false
 
-# ワークスペース内のクレートはスキップ (自身のコード)
-[workarounds]
-ring = ["ring"]
+# ワークスペース内のクレートはスキップ (自身のコード。
+# 各クレートは publish = false のため private として扱われる)
+private = { ignore = true }
 
-# 出力テンプレート
-[output]
-template = """
-# Third-Party Licenses
+# 現行の cargo-about (0.9 系) では workarounds は組み込み回避策の
+# 名前を並べる配列で指定する
+workarounds = ["ring"]
 
-This file lists all third-party software included in Kaname binary distributions.
-Generated automatically by `cargo-about`. Do not edit manually.
-
-Last updated: {{datestamp}}
-Total dependencies: {{licenses_count}}
-
----
-
-{{#each licenses}}
-## {{name}}
-
-Used by:
-{{#each used_by}}  - {{crate.name}} {{crate.version}}
-{{/each}}
-
-License: {{name}}
-
-```
-{{text}}
-```
-
----
-
-{{/each}}
-"""
+# 出力テンプレートは about.hbs (現行の cargo-about では設定ファイルに
+# テンプレートを埋め込めず、生成コマンドの引数で .hbs ファイルを渡す)

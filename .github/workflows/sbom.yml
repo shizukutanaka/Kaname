@@ -36,12 +36,14 @@ jobs:
             --override-filename rust-sbom
 
       # cargo-about で第三者ライセンス開示を生成
+      # 0.9 系では CLI が cli feature の背後にあり、付けないと
+      # バイナリがインストールされず `cargo about` が存在しない
       - name: Install cargo-about
-        run: cargo install cargo-about --locked
+        run: cargo install cargo-about --locked --features cli
 
       - name: Generate license disclosure
         run: |
-          cargo about generate -c about.toml --output-file LICENSE-THIRD-PARTY.md
+          cargo about generate -c about.toml about.hbs --output-file LICENSE-THIRD-PARTY.md
 
       # 結果アップロード
       - name: Upload Rust SBOM
