@@ -24,6 +24,7 @@
 
 | 文書 | 内容 |
 |---|---|
+| [specifications/mls-mail-spec.md](specifications/mls-mail-spec.md) | MLS メール (MLS をメールで運ぶ方式の相互運用仕様) |
 | [specifications/dual-llm-spec.md](specifications/dual-llm-spec.md) | Dual-LLM 型安全フレームワーク |
 | [specifications/bec-scoring-spec.md](specifications/bec-scoring-spec.md) | BEC スコアリング |
 | [specifications/oobv-spec.md](specifications/oobv-spec.md) | Out-of-Band Verification |
