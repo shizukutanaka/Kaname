@@ -69,6 +69,22 @@
 
 ---
 
+## Breeze との役割分担
+
+姉妹プロジェクト [Breeze](https://github.com/shizukutanaka/Breeze) は
+ブラウザ型の E2EE メッセンジャーで、リアルタイムの会話・通話を担います。
+Kaname は非同期のメール — 正式な文書性のある通信と、メール脅威
+(BEC / DLP 等) の防御 — を担います。
+
+- リアルタイムの会話・通話 → **Breeze**
+- 正式な文書性のある通信・メール脅威の防御 → **Kaname**
+
+Kaname に IM 機能は足さず、Breeze にメール機能は足しません。
+Kaname の MLS はチャット技術ではなく、メールというカテゴリの暗号化方式です
+(方式の仕様: [`docs/specifications/mls-mail-spec.md`](docs/specifications/mls-mail-spec.md))。
+
+---
+
 ## なぜ Kaname か
 
 2026年の脅威モデルは2010年代とは全く異なる。しかし既存のメールクライアントはすべて旧時代の設計のままだ。
