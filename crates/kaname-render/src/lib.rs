@@ -16994,8 +16994,12 @@ fn has_midbody_mbox_from_t(text: &str) -> bool {
         let l = l.trim_end();
         l.starts_with("From ")
             && l.contains('@')
-            && l[l.len().saturating_sub(5)..]
-                .chars()
+            // #883: 末尾5「バイト」のスライスは、行末にマルチバイト文字
+            // (lossy 変換の U+FFFD 等) があると文字境界でない位置を切り
+            // パニックした (fuzz: mime_parser)。末尾5「文字」で数える。
+            && l.chars()
+                .rev()
+                .take(5)
                 .filter(|c| c.is_ascii_digit())
                 .count()
                 >= 4
@@ -110258,6 +110262,26 @@ mod tests {
         ));
         // メッセージ先頭の From 行は D1308 の領分 — 本文側は不発火
         assert!(!has_midbody_mbox_from(b"Subject: a\r\n\r\nplain body\r\n"));
+    }
+
+    #[test]
+    fn midbody_mbox_from_は行末のマルチバイト文字でパニックしない() {
+        // #883: 末尾5バイトのスライスが文字境界でない位置を切り
+        // パニックしていた (fuzz: mime_parser)。実クラッシュ入力で
+        // parse 全体が落ちないこと。
+        let bytes = include_bytes!(
+            "../../../fuzz/corpus/mime_parser/crash-fb7a7ae3377a6f88e0bc9b8342da26724bfd4726"
+        );
+        let _ = parse(bytes);
+        // 不正バイト列が lossy 変換で U+FFFD になり行末に並ぶ形でも
+        // パニックしない。
+        assert!(!has_midbody_mbox_from(
+            "Subject: a\r\n\r\nFrom a@b \u{fffd}\u{fffd}\r\n".as_bytes()
+        ));
+        // 年を含む本物の mbox 行は引き続き検出する。
+        assert!(has_midbody_mbox_from(
+            b"Subject: a\r\n\r\nFrom mallory@evil.example Mon Sep 22 2025\r\n"
+        ));
     }
 
     #[test]
