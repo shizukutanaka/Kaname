@@ -14634,6 +14634,58 @@ mod v02_tests {
         Ok(())
     }
 
+    /// 添付はメール本文と同じく最上位の保護対象なので、作成時点から
+    /// 所有者だけが読み書きできることを固定する (write→chmod の窓を作らない)。
+    #[cfg(unix)]
+    #[test]
+    fn write_uniqueは添付を0600で作成する() -> Result<(), String> {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
+        let path = write_unique(dir.path(), "report.pdf", b"first").map_err(|e| e.to_string())?;
+        let mode = std::fs::metadata(&path)
+            .map_err(|e| e.to_string())?
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600, "添付は 0600 であるべき: {mode:o}");
+        Ok(())
+    }
+
+    /// 共有 `/tmp` 配下の隔離ディレクトリは所有者のみが辿れる 0700 に矯正し、
+    /// symlink 経由で第三者のディレクトリを chmod しないことを固定する。
+    #[cfg(unix)]
+    #[test]
+    fn attachment_quarantine_dir_inは0700に矯正しsymlinkを拒否する() -> Result<(), String> {
+        use std::os::unix::fs::PermissionsExt as _;
+        let base = tempfile::tempdir().map_err(|e| e.to_string())?;
+        let dir = attachment_quarantine_dir_in(base.path()).map_err(|e| e.to_string())?;
+        let mode = std::fs::metadata(&dir)
+            .map_err(|e| e.to_string())?
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o700, "隔離 dir は 0700 であるべき: {mode:o}");
+
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| e.to_string())?;
+        let again = attachment_quarantine_dir_in(base.path()).map_err(|e| e.to_string())?;
+        assert_eq!(again, dir);
+        let mode = std::fs::metadata(&dir)
+            .map_err(|e| e.to_string())?
+            .permissions()
+            .mode();
+        assert_eq!(
+            mode & 0o777,
+            0o700,
+            "0755 は 0700 に矯正されるべき: {mode:o}"
+        );
+
+        let base2 = tempfile::tempdir().map_err(|e| e.to_string())?;
+        let target = tempfile::tempdir().map_err(|e| e.to_string())?;
+        std::os::unix::fs::symlink(target.path(), base2.path().join("kaname-attachments"))
+            .map_err(|e| e.to_string())?;
+        assert!(attachment_quarantine_dir_in(base2.path()).is_err());
+        Ok(())
+    }
+
     /// D88: セレモニーが上限を超えるとき、終端のものは追い出され
     /// 有効な Pending が上限を超える場合のみエラーになることを固定。
     #[tokio::test]
@@ -16966,10 +17018,8 @@ pub async fn mail_download_attachment(
         // 隔離ディレクトリ (アプリの一時領域) に書く。
         // ファイル名はサニタイズし、パストラバーサルを防ぐ。
         let safe_name = sanitize_filename(&filename);
-        let dir = std::env::temp_dir().join("kaname-attachments");
-        if let Err(e) = std::fs::create_dir_all(&dir) {
-            return Err(format!("保存先を作成できません: {e}"));
-        }
+        let dir = attachment_quarantine_dir()
+            .map_err(|e| format!("保存先を安全に作成できません: {e}"))?;
         let path = write_unique(&dir, &safe_name, &bytes)
             .map_err(|e| format!("保存に失敗しました: {e}"))?;
         Some(path.to_string_lossy().into_owned())
@@ -17051,6 +17101,46 @@ fn sanitize_filename(name: &str) -> String {
     }
 }
 
+/// 添付の隔離ディレクトリを作成し、Unix では所有者のみが辿れる 0700 に固定する。
+///
+/// `/tmp` は共有ディレクトリなので、通常の umask では 0755 の隔離ディレクトリと
+/// 0644 の添付が他ローカルユーザーから読める。事前に置かれた symlink を chmod で
+/// 辿って第三者のディレクトリを変更しないよう、symlink は拒否する。
+fn attachment_quarantine_dir() -> Result<std::path::PathBuf, std::io::Error> {
+    attachment_quarantine_dir_in(&std::env::temp_dir())
+}
+
+fn attachment_quarantine_dir_in(
+    base: &std::path::Path,
+) -> Result<std::path::PathBuf, std::io::Error> {
+    let dir = base.join("kaname-attachments");
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt as _;
+        builder.mode(0o700);
+    }
+    builder.create(&dir)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let metadata = std::fs::symlink_metadata(&dir)?;
+        if metadata.file_type().is_symlink() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "添付の隔離先がシンボリックリンクです",
+            ));
+        }
+        if metadata.permissions().mode() & 0o777 != 0o700 {
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
+        }
+    }
+
+    Ok(dir)
+}
+
 /// 既存ファイルを上書きせず、同名があれば `name (1).ext` の形で別名にする。
 ///
 /// 別メール由来の同名添付で先に保存したファイルを黙って上書きしないため
@@ -17065,17 +17155,21 @@ fn write_unique(
         Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
         _ => (name.to_string(), String::new()),
     };
+    let mut open_options = std::fs::OpenOptions::new();
+    open_options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        open_options.mode(0o600);
+    }
+
     for i in 0..1000u32 {
         let candidate = if i == 0 {
             dir.join(name)
         } else {
             dir.join(format!("{stem} ({i}){ext}"))
         };
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&candidate)
-        {
+        match open_options.open(&candidate) {
             Ok(mut f) => {
                 use std::io::Write as _;
                 f.write_all(bytes)?;
